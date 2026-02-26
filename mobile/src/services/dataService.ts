@@ -1,0 +1,494 @@
+import { callFn } from '../lib/supabase/functions';
+import { logger } from '../utils/logger';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+
+// Veri tipleri
+export interface TesisData {
+  id: string;
+  tesisAdi: string;
+  paket: string;
+  kota: number;
+  kullanilanKota: number;
+  kbsTuru?: string;
+  /** Kimlik bildirimi (KBS) bu tesis için yapılandırıldı mı */
+  kbsConnected?: boolean;
+  address?: string;
+  latitude?: number;
+  longitude?: number;
+  ozet: {
+    toplamOda: number;
+    doluOda: number;
+    bugunGiris: number;
+    bugunCikis: number;
+    hataliBildirim: number;
+  };
+}
+
+export interface OdaData {
+  id: string;
+  odaNumarasi: string;
+  odaTipi: string;
+  kapasite: number;
+  fotograf?: string;
+  durum: 'bos' | 'dolu' | 'temizlik' | 'bakim';
+  fiyat?: number;
+  /** Tek kaynak: uygulama. true = şu anda odada (KBS’e bağlı değil). */
+  odadaMi?: boolean;
+  misafir?: {
+    id: string;
+    ad: string;
+    soyad: string;
+    girisTarihi: string;
+    cikisTarihi?: string;
+  };
+  kbsDurumu?: string;
+  kbsHataMesaji?: string;
+}
+
+export interface MisafirData {
+  id: string;
+  ad: string;
+  soyad: string;
+  kimlikNo: string;
+  pasaportNo?: string;
+  dogumTarihi: string;
+  uyruk: string;
+  girisTarihi: string;
+  cikisTarihi?: string;
+  odaId: string;
+  odaNumarasi: string;
+}
+
+// Uygulama prefix'i (AsyncStorage izolasyonu için)
+// app.config.js'deki slug kullanılıyor: "mykbs"
+const APP_PREFIX = 'mykbs';
+
+// Cache anahtarları (uygulama prefix'i ile)
+const CACHE_KEYS = {
+  TESIS: `@${APP_PREFIX}:data:tesis`,
+  ODALAR: `@${APP_PREFIX}:data:odalar`,
+  MISAFIRLER: `@${APP_PREFIX}:data:misafirler`,
+  LAST_SYNC: `@${APP_PREFIX}:data:lastSync`,
+};
+
+// Cache süresi: odalar için 45 sn (sekme geçişi hızlı, veri güncel)
+const CACHE_DURATION = 45 * 1000;
+
+export type DataServiceTokenProvider = () => Promise<string | null> | string | null;
+
+let tokenProvider: DataServiceTokenProvider | null = null;
+
+/** Edge Function çağrıları için token (AsyncStorage'taki TOKEN/SUPABASE_TOKEN). AuthContext girişte ayarlar. */
+export function setDataServiceTokenProvider(provider: DataServiceTokenProvider | null) {
+  tokenProvider = provider;
+}
+
+async function getAccessToken(): Promise<string | null> {
+  if (!tokenProvider) return null;
+  const t = tokenProvider();
+  return t instanceof Promise ? t : Promise.resolve(t);
+}
+
+class DataService {
+  private tesisCache: TesisData | null = null;
+  private odalarCache: Map<string, OdaData[]> = new Map(); // filtre -> odalar
+  private misafirlerCache: MisafirData[] | null = null;
+  private lastSync: Date | null = null;
+  private syncInProgress = false;
+  private listeners: Map<string, Set<Function>> = new Map();
+
+  constructor() {
+    this.loadCache();
+  }
+
+  /**
+   * Cache'i yükle
+   */
+  private async loadCache() {
+    try {
+      const [tesisStr, odalarStr, misafirlerStr, lastSyncStr] = await Promise.all([
+        AsyncStorage.getItem(CACHE_KEYS.TESIS),
+        AsyncStorage.getItem(CACHE_KEYS.ODALAR),
+        AsyncStorage.getItem(CACHE_KEYS.MISAFIRLER),
+        AsyncStorage.getItem(CACHE_KEYS.LAST_SYNC),
+      ]);
+
+      if (tesisStr) {
+        this.tesisCache = JSON.parse(tesisStr);
+      }
+
+      if (odalarStr) {
+        const odalarData = JSON.parse(odalarStr);
+        Object.entries(odalarData).forEach(([key, value]) => {
+          this.odalarCache.set(key, value as OdaData[]);
+        });
+      }
+
+      if (misafirlerStr) {
+        this.misafirlerCache = JSON.parse(misafirlerStr);
+      }
+
+      if (lastSyncStr) {
+        this.lastSync = new Date(lastSyncStr);
+      }
+
+      logger.log('Cache loaded', {
+        hasTesis: !!this.tesisCache,
+        odalarFilters: this.odalarCache.size,
+        hasMisafirler: !!this.misafirlerCache,
+        lastSync: this.lastSync,
+      });
+    } catch (error) {
+      logger.error('Cache load error', error);
+    }
+  }
+
+  /**
+   * Cache'i kaydet
+   */
+  private async saveCache() {
+    try {
+      const odalarData: Record<string, OdaData[]> = {};
+      this.odalarCache.forEach((value, key) => {
+        odalarData[key] = value;
+      });
+
+      await Promise.all([
+        this.tesisCache
+          ? AsyncStorage.setItem(CACHE_KEYS.TESIS, JSON.stringify(this.tesisCache))
+          : Promise.resolve(),
+        AsyncStorage.setItem(CACHE_KEYS.ODALAR, JSON.stringify(odalarData)),
+        this.misafirlerCache
+          ? AsyncStorage.setItem(CACHE_KEYS.MISAFIRLER, JSON.stringify(this.misafirlerCache))
+          : Promise.resolve(),
+        AsyncStorage.setItem(CACHE_KEYS.LAST_SYNC, new Date().toISOString()),
+      ]);
+
+      logger.log('Cache saved');
+    } catch (error) {
+      logger.error('Cache save error', error);
+    }
+  }
+
+  /**
+   * Cache geçerli mi kontrol et
+   */
+  isCacheValid(): boolean {
+    if (!this.lastSync) return false;
+    const now = new Date();
+    const diff = now.getTime() - this.lastSync.getTime();
+    return diff < CACHE_DURATION;
+  }
+
+  /**
+   * Listener ekle
+   */
+  subscribe(event: string, callback: Function) {
+    if (!this.listeners.has(event)) {
+      this.listeners.set(event, new Set());
+    }
+    this.listeners.get(event)!.add(callback);
+
+    // Unsubscribe fonksiyonu döndür
+    return () => {
+      const callbacks = this.listeners.get(event);
+      if (callbacks) {
+        callbacks.delete(callback);
+      }
+    };
+  }
+
+  /**
+   * Event yayınla
+   */
+  private emit(event: string, data?: any) {
+    const callbacks = this.listeners.get(event);
+    if (callbacks) {
+      callbacks.forEach((callback) => {
+        try {
+          callback(data);
+        } catch (error) {
+          logger.error('Listener error', error);
+        }
+      });
+    }
+  }
+
+  /**
+   * Tesis bilgilerini getir
+   */
+  async getTesis(forceRefresh = false): Promise<TesisData | null> {
+    try {
+      // Cache geçerliyse ve force refresh değilse cache'den dön
+      if (!forceRefresh && this.isCacheValid() && this.tesisCache) {
+        logger.log('Returning tesis from cache');
+        return this.tesisCache;
+      }
+
+      logger.log('Fetching tesis from API (Supabase)');
+      const accessToken = await getAccessToken();
+      logger.log('[dataService] facilities_list çağrılıyor', { hasToken: !!accessToken });
+      const responseData = await callFn<{ tesis: any; ozet: any }>('facilities_list', {}, accessToken);
+      const tesisData: TesisData = {
+        id: responseData.tesis.id,
+        tesisAdi: responseData.tesis.tesisAdi,
+        paket: responseData.tesis.paket,
+        kota: responseData.tesis.kota,
+        kullanilanKota: responseData.tesis.kullanilanKota,
+        kbsTuru: responseData.tesis.kbsTuru,
+        kbsConnected: responseData.tesis.kbsConnected,
+        address: responseData.tesis.address,
+        latitude: responseData.tesis.latitude,
+        longitude: responseData.tesis.longitude,
+        ozet: responseData.ozet,
+      };
+
+      this.tesisCache = tesisData;
+      await this.saveCache();
+      this.emit('tesis:updated', tesisData);
+
+      return tesisData;
+    } catch (error: any) {
+      logger.error('Get tesis error', error);
+      
+      // Hata durumunda cache'den dön
+      if (this.tesisCache) {
+        logger.log('Returning tesis from cache due to error');
+        return this.tesisCache;
+      }
+
+      throw error;
+    }
+  }
+
+  /**
+   * Odaları getir (filtreli)
+   */
+  async getOdalar(filtre: string = 'tumu', forceRefresh = false): Promise<OdaData[]> {
+    try {
+      const cacheKey = `odalar:${filtre}`;
+
+      // Cache geçerliyse ve force refresh değilse cache'den dön
+      if (!forceRefresh && this.isCacheValid() && this.odalarCache.has(cacheKey)) {
+        const cached = this.odalarCache.get(cacheKey);
+        if (cached) {
+          logger.log('Returning odalar from cache', { filtre, count: cached.length });
+          return cached;
+        }
+      }
+
+      logger.log('Fetching odalar from API (Supabase)', { filtre });
+      const accessToken = await getAccessToken();
+      logger.log('[dataService] rooms_list çağrılıyor', { filtre, hasToken: !!accessToken });
+      const odalarResponse = await callFn<{ odalar?: any[] }>('rooms_list', { filtre }, accessToken);
+      const odalar: OdaData[] = (odalarResponse?.odalar || []).map((oda: any) => ({
+        id: oda.id,
+        odaNumarasi: oda.odaNumarasi,
+        odaTipi: oda.odaTipi || 'Standart Oda',
+        kapasite: oda.kapasite || 2,
+        fotograf: oda.fotograf,
+        durum: oda.durum || 'bos',
+        fiyat: oda.fiyat,
+        odadaMi: oda.odadaMi ?? (oda.durum === 'dolu' && !!oda.misafir),
+        misafir: oda.misafir
+          ? {
+              id: oda.misafir.id,
+              ad: oda.misafir.ad,
+              soyad: oda.misafir.soyad,
+              girisTarihi: oda.misafir.girisTarihi,
+              cikisTarihi: oda.misafir.cikisTarihi,
+            }
+          : undefined,
+        kbsDurumu: oda.kbsDurumu,
+        kbsHataMesaji: oda.kbsHataMesaji,
+      }));
+
+      this.odalarCache.set(cacheKey, odalar);
+      await this.saveCache();
+      this.emit('odalar:updated', { filtre, odalar });
+
+      return odalar;
+    } catch (error: any) {
+      logger.error('Get odalar error', error);
+
+      // Hata durumunda cache'den dön
+      const cacheKey = `odalar:${filtre}`;
+      if (this.odalarCache.has(cacheKey)) {
+        const cached = this.odalarCache.get(cacheKey);
+        if (cached) {
+          logger.log('Returning odalar from cache due to error', { filtre });
+          return cached;
+        }
+      }
+
+      throw error;
+    }
+  }
+
+  /**
+   * Misafirleri getir
+   */
+  async getMisafirler(forceRefresh = false): Promise<MisafirData[]> {
+    try {
+      // Cache geçerliyse ve force refresh değilse cache'den dön
+      if (!forceRefresh && this.isCacheValid() && this.misafirlerCache) {
+        logger.log('Returning misafirler from cache', { count: this.misafirlerCache.length });
+        return this.misafirlerCache;
+      }
+
+      logger.log('Fetching misafirler from API');
+      // TODO: Backend'de misafirler endpoint'i eklenmeli
+      // Şimdilik odalardan misafirleri çıkarıyoruz
+      const odalar = await this.getOdalar('tumu', forceRefresh);
+      const misafirler: MisafirData[] = odalar
+        .filter((oda) => oda.misafir)
+        .map((oda) => ({
+          id: oda.misafir!.id,
+          ad: oda.misafir!.ad,
+          soyad: oda.misafir!.soyad,
+          kimlikNo: '', // Backend'den gelmiyor
+          pasaportNo: undefined,
+          dogumTarihi: '',
+          uyruk: '',
+          girisTarihi: oda.misafir!.girisTarihi,
+          cikisTarihi: oda.misafir!.cikisTarihi,
+          odaId: oda.id,
+          odaNumarasi: oda.odaNumarasi,
+        }));
+
+      this.misafirlerCache = misafirler;
+      await this.saveCache();
+      this.emit('misafirler:updated', misafirler);
+
+      return misafirler;
+    } catch (error: any) {
+      logger.error('Get misafirler error', error);
+
+      // Hata durumunda cache'den dön
+      if (this.misafirlerCache) {
+        logger.log('Returning misafirler from cache due to error');
+        return this.misafirlerCache;
+      }
+
+      throw error;
+    }
+  }
+
+  /**
+   * Tüm verileri senkronize et
+   */
+  async syncAll(forceRefresh = false): Promise<{
+    tesis: TesisData | null;
+    odalar: OdaData[];
+    misafirler: MisafirData[];
+  }> {
+    if (this.syncInProgress && !forceRefresh) {
+      logger.log('Sync already in progress, waiting...');
+      // Mevcut sync bitene kadar bekle
+      while (this.syncInProgress) {
+        await new Promise((resolve) => setTimeout(resolve, 100));
+      }
+      return {
+        tesis: this.tesisCache,
+        odalar: this.odalarCache.get('odalar:tumu') || [],
+        misafirler: this.misafirlerCache || [],
+      };
+    }
+
+    this.syncInProgress = true;
+    try {
+      logger.log('Starting full sync', { forceRefresh });
+
+      const [tesis, odalar, misafirler] = await Promise.all([
+        this.getTesis(forceRefresh),
+        this.getOdalar('tumu', forceRefresh),
+        this.getMisafirler(forceRefresh),
+      ]);
+
+      this.lastSync = new Date();
+      await this.saveCache();
+      this.emit('sync:completed', { tesis, odalar, misafirler });
+
+      logger.log('Full sync completed', {
+        hasTesis: !!tesis,
+        odalarCount: odalar.length,
+        misafirlerCount: misafirler.length,
+      });
+
+      return { tesis, odalar, misafirler };
+    } catch (error) {
+      logger.error('Sync error', error);
+      this.emit('sync:error', error);
+      throw error;
+    } finally {
+      this.syncInProgress = false;
+    }
+  }
+
+  /**
+   * Oda güncelle (local cache)
+   */
+  updateOda(odaId: string, updates: Partial<OdaData>) {
+    this.odalarCache.forEach((odalar, key) => {
+      const updated = odalar.map((oda) => (oda.id === odaId ? { ...oda, ...updates } : oda));
+      this.odalarCache.set(key, updated);
+    });
+    this.saveCache();
+    this.emit('oda:updated', { odaId, updates });
+  }
+
+  /**
+   * Cache'i temizle
+   */
+  async clearCache() {
+    try {
+      await Promise.all([
+        AsyncStorage.removeItem(CACHE_KEYS.TESIS),
+        AsyncStorage.removeItem(CACHE_KEYS.ODALAR),
+        AsyncStorage.removeItem(CACHE_KEYS.MISAFIRLER),
+        AsyncStorage.removeItem(CACHE_KEYS.LAST_SYNC),
+      ]);
+
+      this.tesisCache = null;
+      this.odalarCache.clear();
+      this.misafirlerCache = null;
+      this.lastSync = null;
+
+      logger.log('Cache cleared');
+      this.emit('cache:cleared');
+    } catch (error) {
+      logger.error('Clear cache error', error);
+    }
+  }
+
+  /**
+   * Cache durumunu al
+   */
+  getCacheStatus() {
+    return {
+      hasTesis: !!this.tesisCache,
+      odalarFilters: this.odalarCache.size,
+      hasMisafirler: !!this.misafirlerCache,
+      lastSync: this.lastSync,
+      isValid: this.isCacheValid(),
+    };
+  }
+
+  /**
+   * Cache'den tesis verisini al (hata durumunda kullanım için)
+   */
+  getCachedTesis(): TesisData | null {
+    return this.tesisCache;
+  }
+
+  /**
+   * Cache'den odalar verisini al (hata durumunda kullanım için)
+   */
+  getCachedOdalar(filtre: string = 'tumu'): OdaData[] | null {
+    const cacheKey = `odalar:${filtre}`;
+    return this.odalarCache.get(cacheKey) || null;
+  }
+}
+
+export const dataService = new DataService();
+

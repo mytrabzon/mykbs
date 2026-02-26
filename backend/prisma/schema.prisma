@@ -1,0 +1,247 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = "file:./dev.db"
+}
+
+// Tesis (Otel) Modeli
+model Tesis {
+  id                String   @id @default(cuid())
+  tesisAdi          String
+  yetkiliAdSoyad    String
+  telefon           String   // WhatsApp numarası
+  email             String
+  il                String
+  ilce              String
+  adres             String
+  odaSayisi         Int
+  tesisTuru         String   // otel, pansiyon, apart, diğer
+  vergiNo           String?
+  unvan             String?
+  web               String?
+  instagram         String?
+  not               String?
+  
+  // KBS Bilgileri
+  kbsTuru           String?  // jandarma, polis
+  kbsTesisKodu      String?
+  kbsWebServisSifre String?  @map("kbs_web_servis_sifre")
+  ipKisitAktif      Boolean  @default(false)
+  ipAdresleri       String   @default("") // SQLite için string olarak değiştirildi
+  
+  // Aktivasyon
+  tesisKodu         String   @unique
+  aktivasyonSifre   String?
+  aktivasyonSifreExpiresAt DateTime?
+  durum             String   @default("incelemede") // incelemede, onaylandi, aktif, pasif
+  
+  // Paket ve Kota
+  paket             String   @default("deneme") // deneme, standart, pro
+  kota              Int      @default(500)
+  kullanilanKota    Int      @default(0)
+  kotaResetTarihi   DateTime?
+  
+  // İlişkiler
+  kullanicilar      Kullanici[]
+  odalar            Oda[]
+  bildirimler       Bildirim[]
+  loglar            Log[]
+  hatalar           Hata[]
+  auditLogs         AuditLog[]
+  
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+}
+
+// Kullanıcı Modeli
+model Kullanici {
+  id                String   @id @default(cuid())
+  tesisId           String
+  adSoyad           String
+  telefon           String
+  email             String?
+  sifre             String?  // Hash'lenmiş şifre (email/telefon girişi için)
+  pin               String?  // Hash'lenmiş PIN (eski sistem)
+  biyometriAktif    Boolean  @default(false)
+  rol               String   @default("resepsiyon") // sahip, yonetici, resepsiyon
+  
+  // Yetkiler
+  checkInYetki      Boolean  @default(true)
+  odaDegistirmeYetki Boolean @default(true)
+  bilgiDuzenlemeYetki Boolean @default(true)
+  
+  tesis             Tesis    @relation(fields: [tesisId], references: [id], onDelete: Cascade)
+  
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+  
+  @@index([tesisId])
+  @@index([email])
+  @@index([telefon])
+}
+
+// Oda Modeli
+model Oda {
+  id                String   @id @default(cuid())
+  tesisId           String
+  odaNumarasi       String
+  odaTipi           String   // 1+1, 2 kişilik, vb.
+  kapasite          Int
+  fotograf          String?
+  not               String?
+  durum             String   @default("bos") // bos, dolu
+  
+  tesis             Tesis    @relation(fields: [tesisId], references: [id], onDelete: Cascade)
+  misafirler        Misafir[]
+  
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+  
+  @@unique([tesisId, odaNumarasi])
+  @@index([tesisId])
+}
+
+// Misafir Modeli
+model Misafir {
+  id                String   @id @default(cuid())
+  odaId             String
+  tesisId           String
+  ad                String
+  soyad             String
+  kimlikNo          String   // Maskeli saklanacak
+  pasaportNo        String?  // Maskeli saklanacak
+  dogumTarihi       DateTime
+  uyruk             String
+  girisTarihi       DateTime @default(now())
+  cikisTarihi       DateTime?
+  
+  oda               Oda      @relation(fields: [odaId], references: [id], onDelete: Cascade)
+  bildirimler       Bildirim[]
+  
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+  
+  @@index([tesisId])
+  @@index([odaId])
+}
+
+// KBS Bildirim Modeli
+model Bildirim {
+  id                String   @id @default(cuid())
+  tesisId           String
+  misafirId         String
+  durum             String   // basarili, beklemede, hatali
+  hataMesaji        String?
+  denemeSayisi      Int      @default(0)
+  sonDenemeTarihi   DateTime?
+  kbsTuru           String   // jandarma, polis
+  kbsYanit          String?  // KBS'den gelen yanıt (SQLite için string)
+  
+  tesis             Tesis    @relation(fields: [tesisId], references: [id], onDelete: Cascade)
+  misafir           Misafir  @relation(fields: [misafirId], references: [id], onDelete: Cascade)
+  
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+  
+  @@index([tesisId])
+  @@index([misafirId])
+  @@index([durum])
+}
+
+// Log Modeli
+model Log {
+  id                String   @id @default(cuid())
+  tesisId           String
+  islem             String   // check-in, check-out, oda-degistir, ayar-degistir
+  detay             String?  // SQLite için string
+  kullaniciId       String?
+  basarili          Boolean  @default(true)
+  
+  tesis             Tesis    @relation(fields: [tesisId], references: [id], onDelete: Cascade)
+  
+  createdAt         DateTime  @default(now())
+  
+  @@index([tesisId])
+  @@index([createdAt])
+}
+
+// Hata Modeli
+model Hata {
+  id                String   @id @default(cuid())
+  tesisId           String
+  bildirimId        String?
+  hataTipi          String   // kbs-baglanti, kbs-yanit, ocr, nfc, diger
+  hataMesaji        String
+  durum             String   @default("acik") // acik, cozuldu
+  cozumNotu         String?
+  
+  tesis             Tesis    @relation(fields: [tesisId], references: [id], onDelete: Cascade)
+  
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+  
+  @@index([tesisId])
+  @@index([durum])
+}
+
+// Audit Log Modeli
+model AuditLog {
+  id                String   @id @default(cuid())
+  tesisId           String
+  kullaniciId       String?
+  islem             String   // kim, ne zaman, neyi değiştirdi
+  eskiDeger         String?  // SQLite için string
+  yeniDeger         String?  // SQLite için string
+  
+  tesis             Tesis    @relation(fields: [tesisId], references: [id], onDelete: Cascade)
+  
+  createdAt         DateTime  @default(now())
+  
+  @@index([tesisId])
+  @@index([createdAt])
+}
+
+// OTP (One-Time Password) Modeli
+model OTP {
+  id                String   @id @default(cuid())
+  telefon           String
+  otp               String   // 6 haneli OTP kodu
+  kullaniciId       String?  // Eğer kayıtlı kullanıcı varsa
+  islemTipi         String   // kayit, giris
+  durum             String   @default("beklemede") // beklemede, dogrulandi, iptal
+  denemeSayisi      Int      @default(0)
+  expiresAt         DateTime // OTP süresi (5 dakika)
+  
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+  
+  @@index([telefon])
+  @@index([otp])
+  @@index([expiresAt])
+  @@index([durum])
+}
+
+// KYC Doğrulama (MRZ / NFC roadmap)
+model KycVerification {
+  id              String   @id @default(cuid())
+  userId          String?  // Opsiyonel: backend kullanıcı eşleşirse
+  type            String   // MRZ
+  passportLast4   String   // Son 4 karakter (maskeli)
+  birthDate       String   // ISO
+  expiryDate      String   // ISO
+  issuingCountry String?
+  status          String   @default("PENDING") // PENDING, VERIFIED, REJECTED
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([userId])
+  @@index([status])
+  @@index([createdAt])
+}
+

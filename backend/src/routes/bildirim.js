@@ -1,0 +1,378 @@
+const express = require('express');
+const { PrismaClient } = require('@prisma/client');
+const { authenticate } = require('../middleware/auth');
+const { createKBSService } = require('../services/kbs');
+const PDFDocument = require('pdfkit');
+const fs = require('fs');
+const path = require('path');
+const prisma = new PrismaClient();
+
+const router = express.Router();
+
+router.use(authenticate);
+
+/**
+ * Bildirimleri listele
+ */
+router.get('/', async (req, res) => {
+  try {
+    const { durum, limit = 50, offset = 0 } = req.query;
+
+    const where = { tesisId: req.tesis.id };
+    if (durum) {
+      where.durum = durum;
+    }
+
+    const bildirimler = await prisma.bildirim.findMany({
+      where,
+      include: {
+        misafir: {
+          select: {
+            id: true,
+            ad: true,
+            soyad: true,
+            kimlikNo: true,
+            pasaportNo: true
+          }
+        }
+      },
+      orderBy: { createdAt: 'desc' },
+      take: parseInt(limit),
+      skip: parseInt(offset)
+    });
+
+    res.json({ bildirimler });
+  } catch (error) {
+    console.error('Bildirim listesi hatası:', error);
+    res.status(500).json({ message: 'Bildirimler alınamadı', error: error.message });
+  }
+});
+
+/**
+ * Toplu bildirim gönder (seçili misafirler için)
+ */
+router.post('/toplu-gonder', async (req, res) => {
+  try {
+    const { misafirIds } = req.body; // Array of misafir IDs
+
+    if (!misafirIds || !Array.isArray(misafirIds) || misafirIds.length === 0) {
+      return res.status(400).json({ message: 'Misafir ID\'leri gerekli' });
+    }
+
+    if (!req.tesis.kbsTuru || !req.tesis.kbsTesisKodu || !req.tesis.kbsWebServisSifre) {
+      return res.status(400).json({ message: 'KBS ayarları eksik' });
+    }
+
+    // Seçili misafirleri getir
+    const misafirler = await prisma.misafir.findMany({
+      where: {
+        id: { in: misafirIds },
+        tesisId: req.tesis.id,
+        cikisTarihi: null // Sadece aktif misafirler
+      },
+      include: {
+        oda: true,
+        bildirimler: {
+          orderBy: { createdAt: 'desc' },
+          take: 1
+        }
+      }
+    });
+
+    if (misafirler.length === 0) {
+      return res.status(404).json({ message: 'Aktif misafir bulunamadı' });
+    }
+
+    const kbsService = createKBSService(req.tesis);
+    const sonuclar = [];
+
+    // Her misafir için bildirim gönder
+    for (const misafir of misafirler) {
+      try {
+        const kbsResult = await kbsService.bildirimGonder({
+          ad: misafir.ad,
+          soyad: misafir.soyad,
+          kimlikNo: misafir.kimlikNo,
+          pasaportNo: misafir.pasaportNo,
+          dogumTarihi: misafir.dogumTarihi,
+          uyruk: misafir.uyruk,
+          girisTarihi: misafir.girisTarihi,
+          odaNumarasi: misafir.oda.odaNumarasi
+        });
+
+        // Bildirim kaydı oluştur veya güncelle
+        const mevcutBildirim = misafir.bildirimler[0];
+        if (mevcutBildirim) {
+          await prisma.bildirim.update({
+            where: { id: mevcutBildirim.id },
+            data: {
+              durum: kbsResult.durum,
+              hataMesaji: kbsResult.hataMesaji || null,
+              denemeSayisi: { increment: 1 },
+              sonDenemeTarihi: new Date(),
+              kbsYanit: kbsResult.yanit || null
+            }
+          });
+        } else {
+          await prisma.bildirim.create({
+            data: {
+              tesisId: req.tesis.id,
+              misafirId: misafir.id,
+              durum: kbsResult.durum,
+              hataMesaji: kbsResult.hataMesaji || null,
+              kbsTuru: req.tesis.kbsTuru,
+              kbsYanit: kbsResult.yanit || null
+            }
+          });
+        }
+
+        // Kota kontrolü
+        if (kbsResult.success && req.tesis.kullanilanKota < req.tesis.kota) {
+          await prisma.tesis.update({
+            where: { id: req.tesis.id },
+            data: { kullanilanKota: { increment: 1 } }
+          });
+        }
+
+        sonuclar.push({
+          misafirId: misafir.id,
+          ad: misafir.ad,
+          soyad: misafir.soyad,
+          odaNumarasi: misafir.oda.odaNumarasi,
+          durum: kbsResult.durum,
+          basarili: kbsResult.success,
+          hataMesaji: kbsResult.hataMesaji || null
+        });
+      } catch (error) {
+        sonuclar.push({
+          misafirId: misafir.id,
+          ad: misafir.ad,
+          soyad: misafir.soyad,
+          odaNumarasi: misafir.oda.odaNumarasi,
+          durum: 'hatali',
+          basarili: false,
+          hataMesaji: error.message
+        });
+      }
+    }
+
+    const basariliSayisi = sonuclar.filter(r => r.basarili).length;
+    const hataliSayisi = sonuclar.filter(r => !r.basarili).length;
+
+    res.json({
+      message: `Toplu bildirim tamamlandı: ${basariliSayisi} başarılı, ${hataliSayisi} hatalı`,
+      toplam: sonuclar.length,
+      basarili: basariliSayisi,
+      hatali: hataliSayisi,
+      sonuclar
+    });
+  } catch (error) {
+    console.error('Toplu bildirim hatası:', error);
+    res.status(500).json({ message: 'Toplu bildirim başarısız', error: error.message });
+  }
+});
+
+/**
+ * Bildirimi tekrar dene
+ */
+router.post('/:bildirimId/tekrar-dene', async (req, res) => {
+  try {
+    const { bildirimId } = req.params;
+
+    const bildirim = await prisma.bildirim.findFirst({
+      where: {
+        id: bildirimId,
+        tesisId: req.tesis.id
+      },
+      include: {
+        misafir: {
+          include: {
+            oda: true
+          }
+        }
+      }
+    });
+
+    if (!bildirim) {
+      return res.status(404).json({ message: 'Bildirim bulunamadı' });
+    }
+
+    if (req.tesis.kbsTuru && req.tesis.kbsTesisKodu && req.tesis.kbsWebServisSifre) {
+      try {
+        const kbsService = createKBSService(req.tesis);
+        const kbsResult = await kbsService.bildirimGonder({
+          ad: bildirim.misafir.ad,
+          soyad: bildirim.misafir.soyad,
+          kimlikNo: bildirim.misafir.kimlikNo,
+          pasaportNo: bildirim.misafir.pasaportNo,
+          dogumTarihi: bildirim.misafir.dogumTarihi,
+          uyruk: bildirim.misafir.uyruk,
+          girisTarihi: bildirim.misafir.girisTarihi,
+          odaNumarasi: bildirim.misafir.oda.odaNumarasi
+        });
+
+        await prisma.bildirim.update({
+          where: { id: bildirimId },
+          data: {
+            durum: kbsResult.durum,
+            hataMesaji: kbsResult.hataMesaji || null,
+            denemeSayisi: { increment: 1 },
+            sonDenemeTarihi: new Date(),
+            kbsYanit: kbsResult.yanit || null
+          }
+        });
+
+        res.json({
+          message: 'Bildirim tekrar denendi',
+          durum: kbsResult.durum
+        });
+      } catch (error) {
+        await prisma.bildirim.update({
+          where: { id: bildirimId },
+          data: {
+            durum: 'hatali',
+            hataMesaji: error.message,
+            denemeSayisi: { increment: 1 },
+            sonDenemeTarihi: new Date()
+          }
+        });
+
+        res.status(500).json({
+          message: 'Bildirim gönderilemedi',
+          error: error.message
+        });
+      }
+    } else {
+      res.status(400).json({ message: 'KBS ayarları eksik' });
+    }
+  } catch (error) {
+    console.error('Tekrar deneme hatası:', error);
+    res.status(500).json({ message: 'İşlem başarısız', error: error.message });
+  }
+});
+
+/**
+ * Misafir bildirimi için PDF oluştur
+ */
+router.get('/:bildirimId/pdf', async (req, res) => {
+  try {
+    const { bildirimId } = req.params;
+
+    const bildirim = await prisma.bildirim.findFirst({
+      where: {
+        id: bildirimId,
+        tesisId: req.tesis.id
+      },
+      include: {
+        misafir: {
+          include: {
+            oda: true
+          }
+        },
+        tesis: {
+          select: {
+            tesisAdi: true,
+            adres: true,
+            telefon: true,
+            email: true
+          }
+        }
+      }
+    });
+
+    if (!bildirim) {
+      return res.status(404).json({ message: 'Bildirim bulunamadı' });
+    }
+
+    // PDF oluştur
+    const doc = new PDFDocument({
+      size: 'A4',
+      margins: { top: 50, bottom: 50, left: 50, right: 50 }
+    });
+
+    // Response headers
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="bildirim_${bildirimId}.pdf"`);
+
+    // PDF'i response'a pipe et
+    doc.pipe(res);
+
+    // Tesis bilgileri
+    doc.fontSize(16).font('Helvetica-Bold').text(bildirim.tesis.tesisAdi, { align: 'center' });
+    doc.moveDown(0.5);
+    doc.fontSize(10).font('Helvetica').text(bildirim.tesis.adres || '', { align: 'center' });
+    doc.text(`Tel: ${bildirim.tesis.telefon || ''} | Email: ${bildirim.tesis.email || ''}`, { align: 'center' });
+    doc.moveDown(1);
+
+    // Başlık
+    doc.fontSize(14).font('Helvetica-Bold').text('KBS BİLDİRİM BELGESİ', { align: 'center' });
+    doc.moveDown(1);
+
+    // Çizgi
+    doc.moveTo(50, doc.y).lineTo(550, doc.y).stroke();
+    doc.moveDown(1);
+
+    // Misafir bilgileri
+    doc.fontSize(12).font('Helvetica-Bold').text('MİSAFİR BİLGİLERİ', { underline: true });
+    doc.moveDown(0.5);
+    doc.fontSize(10).font('Helvetica');
+    
+    doc.text(`Ad Soyad: ${bildirim.misafir.ad} ${bildirim.misafir.soyad}`);
+    doc.text(`Oda Numarası: ${bildirim.misafir.oda.odaNumarasi}`);
+    doc.text(`Uyruk: ${bildirim.misafir.uyruk}`);
+    doc.text(`Doğum Tarihi: ${new Date(bildirim.misafir.dogumTarihi).toLocaleDateString('tr-TR')}`);
+    doc.text(`Giriş Tarihi: ${new Date(bildirim.misafir.girisTarihi).toLocaleDateString('tr-TR')}`);
+    
+    if (bildirim.misafir.kimlikNo) {
+      // Maskeli göster
+      const maskedKimlik = bildirim.misafir.kimlikNo.replace(/(\d{3})(\d{5})(\d{3})/, '$1*****$3');
+      doc.text(`TC Kimlik No: ${maskedKimlik}`);
+    }
+    if (bildirim.misafir.pasaportNo) {
+      // Maskeli göster
+      const maskedPasaport = bildirim.misafir.pasaportNo.replace(/(.{2})(.{4})(.*)/, '$1****$3');
+      doc.text(`Pasaport No: ${maskedPasaport}`);
+    }
+
+    doc.moveDown(1);
+
+    // Bildirim bilgileri
+    doc.fontSize(12).font('Helvetica-Bold').text('BİLDİRİM BİLGİLERİ', { underline: true });
+    doc.moveDown(0.5);
+    doc.fontSize(10).font('Helvetica');
+    
+    doc.text(`KBS Türü: ${bildirim.kbsTuru === 'jandarma' ? 'Jandarma' : 'Polis'}`);
+    doc.text(`Durum: ${bildirim.durum === 'basarili' ? 'Başarılı' : bildirim.durum === 'hatali' ? 'Hatalı' : 'Beklemede'}`);
+    doc.text(`Oluşturulma Tarihi: ${new Date(bildirim.createdAt).toLocaleDateString('tr-TR')} ${new Date(bildirim.createdAt).toLocaleTimeString('tr-TR')}`);
+    
+    if (bildirim.hataMesaji) {
+      doc.moveDown(0.5);
+      doc.font('Helvetica-Bold').text('Hata Mesajı:', { underline: true });
+      doc.font('Helvetica').text(bildirim.hataMesaji);
+    }
+
+    if (bildirim.denemeSayisi > 0) {
+      doc.text(`Deneme Sayısı: ${bildirim.denemeSayisi}`);
+      if (bildirim.sonDenemeTarihi) {
+        doc.text(`Son Deneme: ${new Date(bildirim.sonDenemeTarihi).toLocaleDateString('tr-TR')} ${new Date(bildirim.sonDenemeTarihi).toLocaleTimeString('tr-TR')}`);
+      }
+    }
+
+    doc.moveDown(2);
+
+    // Alt bilgi
+    doc.fontSize(8).font('Helvetica').text(
+      `Bu belge ${new Date().toLocaleDateString('tr-TR')} tarihinde oluşturulmuştur.`,
+      { align: 'center' }
+    );
+
+    // PDF'i bitir
+    doc.end();
+  } catch (error) {
+    console.error('PDF oluşturma hatası:', error);
+    res.status(500).json({ message: 'PDF oluşturulamadı', error: error.message });
+  }
+});
+
+module.exports = router;
+

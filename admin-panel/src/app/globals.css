@@ -1,0 +1,780 @@
+* {
+  box-sizing: border-box;
+  padding: 0;
+  margin: 0;
+}
+
+html,
+body {
+  max-width: 100vw;
+  overflow-x: hidden;
+}
+
+body {
+  color: rgb(var(--foreground-rgb));
+  background: var(--kbs-bg);
+}
+
+:root {
+  --foreground-rgb: 0, 0, 0;
+  --background-start-rgb: 214, 219, 220;
+  --background-end-rgb: 255, 255, 255;
+  /* KBS Design System — Kurumsal Dinamik Tema */
+  --kbs-bg: #060810;
+  --kbs-bg-deep: #030508;
+  --kbs-surface: rgba(15, 23, 42, 0.72);
+  --kbs-surface-elevated: rgba(30, 41, 59, 0.88);
+  --kbs-border: rgba(148, 163, 184, 0.12);
+  --kbs-border-bright: rgba(148, 163, 184, 0.28);
+  --kbs-text: #f1f5f9;
+  --kbs-text-muted: #94a3b8;
+  --kbs-accent: #22d3ee;
+  --kbs-accent-secondary: #a78bfa;
+  --kbs-accent-dim: rgba(34, 211, 238, 0.18);
+  --kbs-success: #34d399;
+  --kbs-warning: #fbbf24;
+  --kbs-danger: #f87171;
+  --kbs-glow: 0 0 48px rgba(34, 211, 238, 0.18);
+  --kbs-glow-strong: 0 0 60px rgba(34, 211, 238, 0.25);
+  --kbs-nav-blur: 16px;
+  --kbs-card-tilt: 8deg;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --foreground-rgb: 255, 255, 255;
+    --background-start-rgb: 0, 0, 0;
+    --background-end-rgb: 0, 0, 0;
+  }
+}
+
+/* ---------- KBS Animations — Dinamik Kurumsal ---------- */
+@keyframes kbs-fade-in-up {
+  from {
+    opacity: 0;
+    transform: translateY(24px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes kbs-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes kbs-pulse-dot {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.6; transform: scale(1.12); }
+}
+
+@keyframes kbs-shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+@keyframes kbs-glow-pulse {
+  0%, 100% { box-shadow: 0 0 20px rgba(34, 211, 238, 0.2); }
+  50% { box-shadow: 0 0 40px rgba(34, 211, 238, 0.4); }
+}
+
+@keyframes kbs-grid-move {
+  0% { transform: translate(0, 0) scale(1); }
+  100% { transform: translate(40px, 40px) scale(1.02); }
+}
+
+@keyframes kbs-number-pop {
+  0% { transform: scale(0.88); opacity: 0; }
+  55% { transform: scale(1.08); opacity: 1; }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+/* Floating blobs — alışılmadık arka plan hareketi */
+@keyframes kbs-blob-1 {
+  0%, 100% { transform: translate(0, 0) scale(1) rotate(0deg); }
+  33% { transform: translate(4%, -6%) scale(1.05) rotate(3deg); }
+  66% { transform: translate(-3%, 4%) scale(0.98) rotate(-2deg); }
+}
+
+@keyframes kbs-blob-2 {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  50% { transform: translate(-5%, 5%) scale(1.08); }
+}
+
+@keyframes kbs-blob-3 {
+  0%, 100% { transform: translate(0, 0) rotate(0deg); }
+  25% { transform: translate(3%, 2%) rotate(5deg); }
+  75% { transform: translate(-2%, -3%) rotate(-4deg); }
+}
+
+/* Gradient shift — canlı arka plan */
+@keyframes kbs-gradient-shift {
+  0% { opacity: 1; filter: hue-rotate(0deg); }
+  50% { opacity: 0.95; }
+  100% { opacity: 1; filter: hue-rotate(0deg); }
+}
+
+/* Hero gradient border döngüsü */
+@keyframes kbs-hero-border-spin {
+  to { transform: rotate(360deg); }
+}
+
+/* Nav link underline slide */
+@keyframes kbs-nav-underline {
+  from { transform: scaleX(0); }
+  to { transform: scaleX(1); }
+}
+
+/* Kart giriş — hafif scale + blur */
+@keyframes kbs-card-enter {
+  from {
+    opacity: 0;
+    transform: translateY(16px) scale(0.98);
+    filter: blur(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+    filter: blur(0);
+  }
+}
+
+/* Tablo satırı girişi */
+@keyframes kbs-row-enter {
+  from {
+    opacity: 0;
+    transform: translateX(-12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+/* ---------- KBS Layout ---------- */
+.kbs-lobby {
+  min-height: 100vh;
+  position: relative;
+  background: var(--kbs-bg);
+}
+
+.kbs-bg-canvas {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.kbs-bg-gradient {
+  position: absolute;
+  width: 160%;
+  height: 160%;
+  top: -30%;
+  left: -30%;
+  background:
+    radial-gradient(ellipse 70% 45% at 50% -15%, rgba(34, 211, 238, 0.14), transparent 50%),
+    radial-gradient(ellipse 55% 35% at 85% 75%, rgba(167, 139, 250, 0.1), transparent 45%),
+    radial-gradient(ellipse 45% 28% at 15% 65%, rgba(34, 211, 238, 0.08), transparent 40%);
+  animation: kbs-gradient-shift 8s ease-in-out infinite;
+}
+
+/* Floating blobs — cam efektli hareketli şekiller */
+.kbs-bg-blobs {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+}
+
+.kbs-blob {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(72px);
+  opacity: 0.5;
+  pointer-events: none;
+}
+
+.kbs-blob--1 {
+  width: min(70vw, 480px);
+  height: min(70vw, 480px);
+  top: -15%;
+  right: -10%;
+  background: radial-gradient(circle, rgba(34, 211, 238, 0.25) 0%, transparent 70%);
+  animation: kbs-blob-1 18s ease-in-out infinite;
+}
+
+.kbs-blob--2 {
+  width: min(50vw, 320px);
+  height: min(50vw, 320px);
+  bottom: -10%;
+  left: -5%;
+  background: radial-gradient(circle, rgba(167, 139, 250, 0.2) 0%, transparent 70%);
+  animation: kbs-blob-2 22s ease-in-out infinite 1s;
+}
+
+.kbs-blob--3 {
+  width: min(40vw, 260px);
+  height: min(40vw, 260px);
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  background: radial-gradient(circle, rgba(34, 211, 238, 0.12) 0%, transparent 65%);
+  animation: kbs-blob-3 15s ease-in-out infinite 0.5s;
+}
+
+.kbs-bg-grid {
+  position: absolute;
+  inset: 0;
+  background-image:
+    linear-gradient(rgba(148, 163, 184, 0.04) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(148, 163, 184, 0.04) 1px, transparent 1px);
+  background-size: 56px 56px;
+  animation: kbs-grid-move 50s linear infinite;
+}
+
+.kbs-nav {
+  position: relative;
+  z-index: 10;
+  margin-bottom: 0;
+  padding: 1rem 1.5rem;
+  background: rgba(15, 23, 42, 0.75);
+  -webkit-backdrop-filter: blur(var(--kbs-nav-blur));
+  backdrop-filter: blur(var(--kbs-nav-blur));
+  border-bottom: 1px solid var(--kbs-border);
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.2);
+}
+
+.kbs-nav-inner {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  max-width: 1280px;
+  margin: 0 auto;
+}
+
+.kbs-logo {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  font-weight: 700;
+  font-size: 1.25rem;
+  color: var(--kbs-text);
+  letter-spacing: 0.02em;
+}
+
+.kbs-logo-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--kbs-accent);
+  box-shadow: 0 0 12px var(--kbs-accent);
+  animation: kbs-pulse-dot 2s ease-in-out infinite;
+}
+
+.kbs-nav-links {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.kbs-nav-link {
+  position: relative;
+  padding: 0.5rem 1rem;
+  border-radius: 8px;
+  color: var(--kbs-text-muted);
+  text-decoration: none;
+  font-size: 0.9rem;
+  font-weight: 500;
+  transition: color 0.25s, background 0.25s;
+}
+
+.kbs-nav-link::after {
+  content: '';
+  position: absolute;
+  left: 1rem;
+  right: 1rem;
+  bottom: 0.35rem;
+  height: 2px;
+  background: linear-gradient(90deg, var(--kbs-accent), var(--kbs-accent-secondary));
+  border-radius: 2px;
+  transform: scaleX(0);
+  transform-origin: center;
+  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.kbs-nav-link:hover {
+  color: var(--kbs-text);
+  background: var(--kbs-accent-dim);
+}
+
+.kbs-nav-link:hover::after {
+  animation: kbs-nav-underline 0.35s ease-out forwards;
+}
+
+.kbs-btn-logout {
+  padding: 0.5rem 1rem;
+  border-radius: 8px;
+  border: 1px solid rgba(248, 113, 113, 0.4);
+  background: rgba(248, 113, 113, 0.15);
+  color: var(--kbs-danger);
+  font-size: 0.9rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.2s, transform 0.15s;
+}
+
+.kbs-btn-logout:hover {
+  background: rgba(248, 113, 113, 0.25);
+  transform: translateY(-1px);
+}
+
+.kbs-main {
+  position: relative;
+  z-index: 5;
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: 2rem 1.5rem;
+}
+
+/* Hero — dinamik gradient ve halka */
+.kbs-hero {
+  text-align: center;
+  padding: 2.5rem 1rem 3rem;
+  animation: kbs-fade-in-up 0.9s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.kbs-hero-wrap {
+  position: relative;
+  display: inline-block;
+}
+
+.kbs-hero-border {
+  position: absolute;
+  inset: -2px;
+  border-radius: 20px;
+  padding: 2px;
+  background: conic-gradient(from 0deg, var(--kbs-accent), var(--kbs-accent-secondary), var(--kbs-accent));
+  background-size: 200% 200%;
+  animation: kbs-hero-border-spin 6s linear infinite;
+  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  opacity: 0.6;
+  pointer-events: none;
+}
+
+.kbs-hero-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.4rem 1rem;
+  margin-bottom: 1rem;
+  background: var(--kbs-accent-dim);
+  border: 1px solid var(--kbs-border-bright);
+  border-radius: 999px;
+  font-size: 0.8rem;
+  color: var(--kbs-accent);
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  box-shadow: 0 0 24px rgba(34, 211, 238, 0.15);
+}
+
+.kbs-hero-badge-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--kbs-accent);
+  animation: kbs-pulse-dot 1.5s ease-in-out infinite;
+}
+
+.kbs-hero-title {
+  font-size: clamp(1.85rem, 4.5vw, 2.75rem);
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  margin-bottom: 0.5rem;
+  background: linear-gradient(120deg, #f1f5f9 0%, #cbd5e1 40%, #22d3ee 100%);
+  background-size: 200% auto;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  animation: kbs-shimmer 6s ease-in-out infinite;
+}
+
+.kbs-hero-sub {
+  font-size: 1.05rem;
+  color: var(--kbs-text-muted);
+  font-weight: 400;
+  max-width: 420px;
+  margin: 0 auto;
+}
+
+/* Stat cards grid */
+.kbs-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 1.25rem;
+  margin-bottom: 2rem;
+  perspective: 1200px;
+}
+
+.kbs-stat-card {
+  --delay: 0ms;
+  padding: 1.5rem;
+  background: var(--kbs-surface);
+  border: 1px solid var(--kbs-border);
+  border-radius: 16px;
+  -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: blur(12px);
+  animation: kbs-card-enter 0.7s cubic-bezier(0.34, 1.56, 0.64, 1) backwards;
+  animation-delay: var(--delay);
+  transition: transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.4s, border-color 0.3s;
+  transform-style: preserve-3d;
+}
+
+.kbs-stat-card:hover {
+  transform: translateY(-6px) rotateX(2deg) rotateY(-2deg);
+  box-shadow: var(--kbs-glow-strong);
+  border-color: rgba(34, 211, 238, 0.35);
+}
+
+.kbs-stat-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 1rem;
+}
+
+.kbs-stat-label {
+  font-size: 0.85rem;
+  color: var(--kbs-text-muted);
+  font-weight: 500;
+}
+
+.kbs-stat-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.kbs-stat-icon svg {
+  width: 22px;
+  height: 22px;
+}
+
+.kbs-stat-value {
+  font-size: 2rem;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  animation: kbs-number-pop 0.5s ease-out backwards;
+  animation-delay: calc(var(--delay) + 0.2s);
+}
+
+.kbs-stat-card--total .kbs-stat-icon { background: rgba(148, 163, 184, 0.2); }
+.kbs-stat-card--total .kbs-stat-icon svg { stroke: #94a3b8; }
+.kbs-stat-card--total .kbs-stat-value { color: #e2e8f0; }
+
+.kbs-stat-card--active .kbs-stat-icon { background: rgba(52, 211, 153, 0.2); }
+.kbs-stat-card--active .kbs-stat-icon svg { stroke: var(--kbs-success); }
+.kbs-stat-card--active .kbs-stat-value { color: var(--kbs-success); }
+
+.kbs-stat-card--notif .kbs-stat-icon { background: rgba(34, 211, 238, 0.2); }
+.kbs-stat-card--notif .kbs-stat-icon svg { stroke: var(--kbs-accent); }
+.kbs-stat-card--notif .kbs-stat-value { color: var(--kbs-accent); }
+
+.kbs-stat-card--error .kbs-stat-icon { background: rgba(248, 113, 113, 0.2); }
+.kbs-stat-card--error .kbs-stat-icon svg { stroke: var(--kbs-danger); }
+.kbs-stat-card--error .kbs-stat-value { color: var(--kbs-danger); }
+
+/* Kota table card */
+.kbs-section {
+  animation: kbs-fade-in-up 0.6s ease-out 0.3s backwards;
+}
+
+.kbs-card {
+  padding: 1.5rem;
+  background: var(--kbs-surface);
+  border: 1px solid var(--kbs-border);
+  border-radius: 16px;
+  -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: blur(12px);
+  transition: box-shadow 0.35s, border-color 0.35s;
+}
+
+.kbs-card:hover {
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2), 0 0 0 1px rgba(34, 211, 238, 0.08);
+  border-color: var(--kbs-border-bright);
+}
+
+.kbs-card-title {
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: var(--kbs-text);
+  margin-bottom: 1rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.kbs-table-wrap {
+  overflow-x: auto;
+  border-radius: 12px;
+  border: 1px solid var(--kbs-border);
+}
+
+.kbs-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9rem;
+}
+
+.kbs-table th {
+  padding: 0.85rem 1rem;
+  text-align: left;
+  font-weight: 600;
+  color: var(--kbs-text-muted);
+  background: rgba(15, 23, 42, 0.8);
+  border-bottom: 1px solid var(--kbs-border);
+}
+
+.kbs-table td {
+  padding: 0.85rem 1rem;
+  border-bottom: 1px solid var(--kbs-border);
+  color: var(--kbs-text);
+}
+
+.kbs-table tbody tr {
+  transition: background 0.25s, transform 0.2s;
+  animation: kbs-row-enter 0.45s ease-out backwards;
+}
+
+.kbs-table tbody tr:nth-child(1) { animation-delay: 0.05s; }
+.kbs-table tbody tr:nth-child(2) { animation-delay: 0.1s; }
+.kbs-table tbody tr:nth-child(3) { animation-delay: 0.15s; }
+.kbs-table tbody tr:nth-child(4) { animation-delay: 0.2s; }
+.kbs-table tbody tr:nth-child(5) { animation-delay: 0.25s; }
+.kbs-table tbody tr:nth-child(n+6) { animation-delay: 0.3s; }
+
+.kbs-table tbody tr:hover {
+  background: rgba(34, 211, 238, 0.06);
+}
+
+.kbs-table td:last-child {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  color: var(--kbs-warning);
+}
+
+/* Loading state */
+.kbs-loading {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--kbs-bg);
+}
+
+.kbs-loading-inner {
+  text-align: center;
+}
+
+.kbs-loading-spinner {
+  width: 48px;
+  height: 48px;
+  margin: 0 auto 1rem;
+  border: 3px solid var(--kbs-border);
+  border-top-color: var(--kbs-accent);
+  border-radius: 50%;
+  animation: kbs-spin 0.9s linear infinite;
+}
+
+@keyframes kbs-spin {
+  to { transform: rotate(360deg); }
+}
+
+.kbs-loading-text {
+  color: var(--kbs-text-muted);
+  font-size: 0.95rem;
+}
+
+.kbs-stat-card--d0 { --delay: 0ms; }
+.kbs-stat-card--d1 { --delay: 80ms; }
+.kbs-stat-card--d2 { --delay: 160ms; }
+.kbs-stat-card--d3 { --delay: 240ms; }
+
+.kbs-card-empty-text {
+  color: var(--kbs-text-muted);
+  font-size: 0.95rem;
+}
+
+/* ---------- Login lobby — aynı kurumsal dinamik tema ---------- */
+.kbs-lobby-login {
+  min-height: 100vh;
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--kbs-bg);
+  overflow: hidden;
+}
+
+.kbs-lobby-login .kbs-bg-canvas {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+}
+
+.kbs-login-card {
+  position: relative;
+  z-index: 10;
+  width: 100%;
+  max-width: 420px;
+  padding: 2.5rem;
+  background: var(--kbs-surface);
+  border: 1px solid var(--kbs-border);
+  border-radius: 24px;
+  -webkit-backdrop-filter: blur(20px);
+  backdrop-filter: blur(20px);
+  box-shadow: 0 24px 48px rgba(0, 0, 0, 0.35), 0 0 0 1px rgba(255, 255, 255, 0.05);
+  animation: kbs-card-enter 0.8s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.kbs-login-title {
+  text-align: center;
+  font-size: 1.75rem;
+  font-weight: 800;
+  color: var(--kbs-text);
+  letter-spacing: -0.02em;
+  margin-bottom: 1.75rem;
+  background: linear-gradient(135deg, #f1f5f9, var(--kbs-accent));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.kbs-login-tabs {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 1.5rem;
+}
+
+.kbs-login-tab {
+  flex: 1;
+  padding: 0.65rem 1rem;
+  border: 1px solid var(--kbs-border);
+  border-radius: 12px;
+  background: transparent;
+  color: var(--kbs-text-muted);
+  font-size: 0.9rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.25s;
+}
+
+.kbs-login-tab:hover {
+  color: var(--kbs-text);
+  border-color: var(--kbs-border-bright);
+}
+
+.kbs-login-tab.active {
+  background: var(--kbs-accent-dim);
+  border-color: var(--kbs-accent);
+  color: var(--kbs-accent);
+  box-shadow: 0 0 20px rgba(34, 211, 238, 0.15);
+}
+
+.kbs-input {
+  width: 100%;
+  padding: 0.9rem 1rem;
+  margin-bottom: 1rem;
+  background: rgba(15, 23, 42, 0.6);
+  border: 1px solid var(--kbs-border);
+  border-radius: 12px;
+  color: var(--kbs-text);
+  font-size: 1rem;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.kbs-input::placeholder {
+  color: var(--kbs-text-muted);
+}
+
+.kbs-input:focus {
+  outline: none;
+  border-color: var(--kbs-accent);
+  box-shadow: 0 0 0 3px var(--kbs-accent-dim);
+}
+
+.kbs-btn-primary {
+  width: 100%;
+  padding: 0.9rem 1.25rem;
+  margin-top: 0.25rem;
+  background: linear-gradient(135deg, var(--kbs-accent), #06b6d4);
+  border: none;
+  border-radius: 12px;
+  color: #0b0f1a;
+  font-size: 1rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: transform 0.2s, box-shadow 0.3s, opacity 0.2s;
+}
+
+.kbs-btn-primary:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px rgba(34, 211, 238, 0.4);
+}
+
+.kbs-btn-primary:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+}
+
+/* Sayfa başlıkları (alt sayfalar) */
+.kbs-page-title {
+  font-size: 1.75rem;
+  font-weight: 800;
+  color: var(--kbs-text);
+  letter-spacing: -0.02em;
+  margin-bottom: 0.5rem;
+  animation: kbs-fade-in-up 0.5s ease-out;
+}
+
+.kbs-page-sub {
+  color: var(--kbs-text-muted);
+  margin-bottom: 1.5rem;
+  animation: kbs-fade-in-up 0.5s ease-out 0.1s backwards;
+}
+
+.kbs-select {
+  padding: 0.6rem 1rem;
+  margin-bottom: 1rem;
+  background: var(--kbs-surface);
+  border: 1px solid var(--kbs-border);
+  border-radius: 10px;
+  color: var(--kbs-text);
+  font-size: 0.95rem;
+  cursor: pointer;
+  transition: border-color 0.2s;
+}
+
+.kbs-select:focus {
+  outline: none;
+  border-color: var(--kbs-accent);
+}
+
+.kbs-badge {
+  display: inline-block;
+  padding: 0.35rem 0.75rem;
+  border-radius: 8px;
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+.kbs-badge--sent { background: rgba(52, 211, 153, 0.2); color: var(--kbs-success); }
+.kbs-badge--failed { background: rgba(248, 113, 113, 0.2); color: var(--kbs-danger); }
+.kbs-badge--queued { background: rgba(251, 191, 36, 0.2); color: var(--kbs-warning); }

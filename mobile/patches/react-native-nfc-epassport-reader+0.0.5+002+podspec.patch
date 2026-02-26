@@ -1,0 +1,19 @@
+diff --git a/node_modules/react-native-nfc-epassport-reader/react-native-nfc-epassport-reader.podspec b/node_modules/react-native-nfc-epassport-reader/react-native-nfc-epassport-reader.podspec
+--- a/node_modules/react-native-nfc-epassport-reader/react-native-nfc-epassport-reader.podspec
++++ b/node_modules/react-native-nfc-epassport-reader/react-native-nfc-epassport-reader.podspec
+@@ -12,7 +12,8 @@ Pod::Spec.new do |s|
+   s.license      = "Apache License 2.0"
+   s.platform     = :ios, "13.0"
+   s.source       = { :git => "https://github.com/uranashel44/nfc.git" }
+-  s.source_files = "ios/**/*.{h,m}"
++  # Only include module + NFCPassportReader; exclude epassport/ (example app) to avoid duplicate PassportUtils.swift
++  s.source_files = "ios/*.{h,m,swift}", "ios/NFCPassportReader/**/*.{h,m,swift}"
+   s.swift_version = "5.0"
+   s.xcconfig     = { 'OTHER_LDFLAGS' => '-weak_framework CryptoKit -weak_framework CoreNFC',
+   'ENABLE_BITCODE' => '"NO' }
+@@ -23,5 +24,6 @@ Pod::Spec.new do |s|
+   s.user_target_xcconfig = { 'EXCLUDED_ARCHS[sdk=iphonesimulator*]' => 'arm64' }
+ 
+   s.dependency 'React-Core'
++  s.dependency 'OpenSSL-Universal', '1.1.180'
+ end

@@ -1,0 +1,12 @@
+# Supabase local files
+.temp/
+.branches/
+*.log
+
+# Environment files
+.env
+.env.local
+
+# Supabase CLI cache
+.supabase/
+

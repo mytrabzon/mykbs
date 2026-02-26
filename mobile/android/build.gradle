@@ -1,0 +1,48 @@
+// Top-level build file where you can add configuration options common to all sub-projects/modules.
+
+buildscript {
+  repositories {
+    google()
+    mavenCentral()
+  }
+  dependencies {
+    classpath('com.android.tools.build:gradle')
+    classpath('com.facebook.react:react-native-gradle-plugin')
+    // Kotlin version from gradle.properties (must match React Native's libs.versions.toml)
+    def kotlinVersion = findProperty('android.kotlinVersion') ?: '2.1.20'
+    classpath("org.jetbrains.kotlin:kotlin-gradle-plugin:${kotlinVersion}")
+    // KSP version - must match Kotlin (e.g. 2.1.20-2.0.0 for Kotlin 2.1.20)
+    def kspVersion = findProperty('android.kspVersion') ?: "${kotlinVersion}-2.0.0"
+    classpath("com.google.devtools.ksp:symbol-processing-gradle-plugin:${kspVersion}")
+  }
+}
+
+allprojects {
+  repositories {
+    google()
+    mavenCentral()
+    maven { url 'https://www.jitpack.io' }
+  }
+  // Resolve duplicate Bouncy Castle: substitute bcprov-jdk15on with bcprov-jdk15to18 so only one artifact is used
+  configurations.all {
+    resolutionStrategy {
+      force 'org.bouncycastle:bcprov-jdk15to18:1.78.1'
+      dependencySubstitution {
+        substitute module('org.bouncycastle:bcprov-jdk15on') using module('org.bouncycastle:bcprov-jdk15to18:1.78.1')
+      }
+    }
+    exclude group: 'org.bouncycastle', module: 'bcprov-jdk15on'
+  }
+}
+
+apply plugin: "expo-root-project"
+apply plugin: "com.facebook.react.rootproject"
+
+// Read SDK versions from gradle.properties
+ext {
+    minSdkVersion = findProperty('android.minSdkVersion')?.toInteger() ?: 23
+    compileSdkVersion = findProperty('android.compileSdkVersion')?.toInteger() ?: 35
+    targetSdkVersion = findProperty('android.targetSdkVersion')?.toInteger() ?: 35
+    buildToolsVersion = findProperty('android.buildToolsVersion') ?: "35.0.0"
+    ndkVersion = findProperty('android.ndkVersion') ?: "27.0.12077973"
+}

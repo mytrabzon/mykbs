@@ -1,0 +1,47 @@
+# EAS Build ignore file
+# Files and directories to exclude from EAS Build uploads
+
+# Use CNG/Prebuild so app.config.js (plugins, blocklist, etc.) is synced
+/android
+/ios
+
+# Gradle cache and lock files (when not using /android ignore)
+android/.gradle/
+android/.gradle/**
+android/build/
+android/app/build/
+android/**/*.lock
+
+# Node modules (already excluded by default, but explicit)
+node_modules/
+
+# Build artifacts
+*.apk
+*.aab
+*.ap_
+*.dex
+
+# IDE files
+.idea/
+.vscode/
+*.iml
+*.ipr
+*.iws
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Temporary files
+*.tmp
+*.temp
+*.swp
+*.swo
+*~
+

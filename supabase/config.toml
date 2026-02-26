@@ -1,0 +1,55 @@
+# Supabase Edge Functions Configuration
+# Proje bağlantısı: supabase link --project-ref iuxnpxszfvyrdifchwvr
+
+[functions.trpc]
+verify_jwt = false
+
+[functions.health]
+verify_jwt = false
+
+# Kayıt ve OTP akışları oturum gerektirmez
+[functions.auth_request_otp]
+verify_jwt = false
+
+[functions.auth_verify_otp]
+verify_jwt = false
+
+# Giriş ve başvuru da oturumsuz çalışır
+[functions.auth_login]
+verify_jwt = false
+
+[functions.auth_aktivasyon]
+verify_jwt = false
+
+[functions.auth_basvuru]
+verify_jwt = false
+
+# Backend'in anon key ile SMS gönderebilmesi için
+[functions.send-sms]
+verify_jwt = false
+
+[functions.auth_supabase_phone_session]
+verify_jwt = false
+
+# Gateway JWT doğrulaması kapalı; auth fonksiyon içinde requireAuth/getUser ile yapılıyor (ES256 uyumu için)
+[functions.facilities_list]
+verify_jwt = false
+
+[functions.rooms_list]
+verify_jwt = false
+
+[functions.push_register_token]
+verify_jwt = false
+
+[functions.settings_get]
+verify_jwt = false
+
+[functions.settings_update]
+verify_jwt = false
+
+[functions.community_post_list]
+verify_jwt = false
+
+[functions.in_app_notifications_list]
+verify_jwt = false
+

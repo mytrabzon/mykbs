@@ -1,0 +1,271 @@
+const express = require('express');
+const { PrismaClient } = require('@prisma/client');
+const { authenticate } = require('../middleware/auth');
+const { maskAdSoyad } = require('../utils/mask');
+const prisma = new PrismaClient();
+
+const router = express.Router();
+
+router.use(authenticate);
+
+/**
+ * Tüm odaları listele (filtreli)
+ */
+router.get('/', async (req, res) => {
+  try {
+    const { filtre } = req.query; // tumu, bos, dolu, hatali
+
+    const where = { tesisId: req.tesis.id };
+
+    if (filtre === 'bos') {
+      where.durum = 'bos';
+    } else if (filtre === 'dolu') {
+      where.durum = 'dolu';
+    }
+
+    const odalar = await prisma.oda.findMany({
+      where,
+      include: {
+        misafirler: {
+          where: { cikisTarihi: null },
+          orderBy: { girisTarihi: 'desc' },
+          take: 1,
+          include: {
+            bildirimler: {
+              orderBy: { createdAt: 'desc' },
+              take: 1
+            }
+          }
+        }
+      },
+      orderBy: { odaNumarasi: 'asc' }
+    });
+
+    // Hatalı bildirim filtresi
+    let filteredOdalar = odalar;
+    if (filtre === 'hatali') {
+      filteredOdalar = odalar.filter(oda => {
+        const sonBildirim = oda.misafirler[0]?.bildirimler[0];
+        return sonBildirim && sonBildirim.durum === 'hatali';
+      });
+    }
+
+    const formattedOdalar = filteredOdalar.map(oda => {
+      const misafir = oda.misafirler[0];
+      const bildirim = misafir?.bildirimler[0];
+      const maskedName = misafir ? maskAdSoyad(misafir.ad, misafir.soyad) : null;
+      const odadaMi = !!(misafir && !misafir.cikisTarihi);
+
+      return {
+        id: oda.id,
+        odaNumarasi: oda.odaNumarasi,
+        odaTipi: oda.odaTipi,
+        kapasite: oda.kapasite,
+        fotograf: oda.fotograf,
+        durum: oda.durum,
+        odadaMi,
+        misafir: misafir ? {
+          id: misafir.id,
+          ad: maskedName.ad,
+          soyad: maskedName.soyad,
+          girisTarihi: misafir.girisTarihi
+        } : null,
+        kbsDurumu: bildirim ? bildirim.durum : null
+      };
+    });
+
+    res.json({ odalar: formattedOdalar });
+  } catch (error) {
+    console.error('Oda listesi hatası:', error);
+    res.status(500).json({ message: 'Odalar alınamadı', error: error.message });
+  }
+});
+
+/**
+ * Oda detayı
+ */
+router.get('/:odaId', async (req, res) => {
+  try {
+    const oda = await prisma.oda.findFirst({
+      where: {
+        id: req.params.odaId,
+        tesisId: req.tesis.id
+      },
+      include: {
+        misafirler: {
+          where: { cikisTarihi: null },
+          include: {
+            bildirimler: {
+              orderBy: { createdAt: 'desc' },
+              take: 1
+            }
+          }
+        }
+      }
+    });
+
+    if (!oda) {
+      return res.status(404).json({ message: 'Oda bulunamadı' });
+    }
+
+    res.json({ oda });
+  } catch (error) {
+    console.error('Oda detay hatası:', error);
+    res.status(500).json({ message: 'Oda bilgisi alınamadı', error: error.message });
+  }
+});
+
+/**
+ * Yeni oda ekle
+ */
+router.post('/', async (req, res) => {
+  try {
+    // Rol kontrolü
+    if (!['sahip', 'yonetici'].includes(req.user.rol)) {
+      return res.status(403).json({ message: 'Bu işlem için yetkiniz yok' });
+    }
+
+    const { odaNumarasi, odaTipi, kapasite, fotograf, not } = req.body;
+
+    if (!odaNumarasi || !kapasite) {
+      return res.status(400).json({ message: 'Oda numarası ve kapasite gerekli' });
+    }
+
+    // Aynı oda numarası kontrolü
+    const existing = await prisma.oda.findUnique({
+      where: {
+        tesisId_odaNumarasi: {
+          tesisId: req.tesis.id,
+          odaNumarasi
+        }
+      }
+    });
+
+    if (existing) {
+      return res.status(400).json({ message: 'Bu oda numarası zaten kullanılıyor' });
+    }
+
+    const oda = await prisma.oda.create({
+      data: {
+        tesisId: req.tesis.id,
+        odaNumarasi,
+        odaTipi: odaTipi || '',
+        kapasite: parseInt(kapasite),
+        fotograf,
+        not
+      }
+    });
+
+    // Log
+    await prisma.log.create({
+      data: {
+        tesisId: req.tesis.id,
+        kullaniciId: req.user.id,
+        islem: 'oda-ekle',
+        detay: { odaNumarasi, kapasite }
+      }
+    });
+
+    res.status(201).json({ message: 'Oda eklendi', oda });
+  } catch (error) {
+    console.error('Oda ekleme hatası:', error);
+    res.status(500).json({ message: 'Oda eklenemedi', error: error.message });
+  }
+});
+
+/**
+ * Oda güncelle
+ */
+router.put('/:odaId', async (req, res) => {
+  try {
+    // Rol kontrolü
+    if (!['sahip', 'yonetici'].includes(req.user.rol)) {
+      return res.status(403).json({ message: 'Bu işlem için yetkiniz yok' });
+    }
+
+    const { odaTipi, kapasite, fotograf, not } = req.body;
+
+    const oda = await prisma.oda.update({
+      where: {
+        id: req.params.odaId,
+        tesisId: req.tesis.id
+      },
+      data: {
+        odaTipi,
+        kapasite: kapasite ? parseInt(kapasite) : undefined,
+        fotograf,
+        not
+      }
+    });
+
+    // Log
+    await prisma.log.create({
+      data: {
+        tesisId: req.tesis.id,
+        kullaniciId: req.user.id,
+        islem: 'oda-guncelle',
+        detay: { odaId: oda.id }
+      }
+    });
+
+    res.json({ message: 'Oda güncellendi', oda });
+  } catch (error) {
+    console.error('Oda güncelleme hatası:', error);
+    res.status(500).json({ message: 'Oda güncellenemedi', error: error.message });
+  }
+});
+
+/**
+ * Oda sil
+ */
+router.delete('/:odaId', async (req, res) => {
+  try {
+    // Rol kontrolü
+    if (!['sahip', 'yonetici'].includes(req.user.rol)) {
+      return res.status(403).json({ message: 'Bu işlem için yetkiniz yok' });
+    }
+
+    // Dolu oda kontrolü
+    const oda = await prisma.oda.findFirst({
+      where: {
+        id: req.params.odaId,
+        tesisId: req.tesis.id
+      },
+      include: {
+        misafirler: {
+          where: { cikisTarihi: null }
+        }
+      }
+    });
+
+    if (!oda) {
+      return res.status(404).json({ message: 'Oda bulunamadı' });
+    }
+
+    if (oda.misafirler.length > 0) {
+      return res.status(400).json({ message: 'Dolu oda silinemez' });
+    }
+
+    await prisma.oda.delete({
+      where: { id: oda.id }
+    });
+
+    // Log
+    await prisma.log.create({
+      data: {
+        tesisId: req.tesis.id,
+        kullaniciId: req.user.id,
+        islem: 'oda-sil',
+        detay: { odaNumarasi: oda.odaNumarasi }
+      }
+    });
+
+    res.json({ message: 'Oda silindi' });
+  } catch (error) {
+    console.error('Oda silme hatası:', error);
+    res.status(500).json({ message: 'Oda silinemedi', error: error.message });
+  }
+});
+
+module.exports = router;
+

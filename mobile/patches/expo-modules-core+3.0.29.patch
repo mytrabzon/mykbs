@@ -1,0 +1,1030 @@
+diff --git a/node_modules/expo-modules-core/build/Refs.d.ts b/node_modules/expo-modules-core/build/Refs.d.ts
+deleted file mode 100644
+index 3bf0284..0000000
+--- a/node_modules/expo-modules-core/build/Refs.d.ts
++++ /dev/null
+@@ -1,8 +0,0 @@
+-import { type RefObject } from 'react';
+-/**
+- * Create a React ref object that is friendly for snapshots.
+- * It will be represented as `[React.ref]` in snapshots.
+- * @returns A React ref object.
+- */
+-export declare function createSnapshotFriendlyRef<T>(): RefObject<T | null>;
+-//# sourceMappingURL=Refs.d.ts.map
+\ No newline at end of file
+diff --git a/node_modules/expo-modules-core/build/SharedObject.d.ts b/node_modules/expo-modules-core/build/SharedObject.d.ts
+deleted file mode 100644
+index 0b732fa..0000000
+--- a/node_modules/expo-modules-core/build/SharedObject.d.ts
++++ /dev/null
+@@ -1,5 +0,0 @@
+-import { EventsMap } from './ts-declarations/EventEmitter';
+-import type { ExpoGlobal } from './ts-declarations/global';
+-export type SharedObject<TEventsMap extends EventsMap = Record<never, never>> = typeof ExpoGlobal.SharedObject<TEventsMap>;
+-export declare const SharedObject: typeof ExpoGlobal.SharedObject;
+-//# sourceMappingURL=SharedObject.d.ts.map
+\ No newline at end of file
+diff --git a/node_modules/expo-modules-core/build/SharedRef.d.ts b/node_modules/expo-modules-core/build/SharedRef.d.ts
+deleted file mode 100644
+index 9671294..0000000
+--- a/node_modules/expo-modules-core/build/SharedRef.d.ts
++++ /dev/null
+@@ -1,5 +0,0 @@
+-import { EventsMap } from './ts-declarations/EventEmitter';
+-import type { ExpoGlobal } from './ts-declarations/global';
+-export type SharedRef<TNativeRefType extends string = 'unknown', TEventsMap extends EventsMap = Record<never, never>> = typeof ExpoGlobal.SharedRef<TNativeRefType, TEventsMap>;
+-export declare const SharedRef: typeof ExpoGlobal.SharedRef;
+-//# sourceMappingURL=SharedRef.d.ts.map
+\ No newline at end of file
+diff --git a/node_modules/expo-modules-core/build/TurboModuleToExpoModuleProxy.d.ts b/node_modules/expo-modules-core/build/TurboModuleToExpoModuleProxy.d.ts
+deleted file mode 100644
+index 8551bd7..0000000
+--- a/node_modules/expo-modules-core/build/TurboModuleToExpoModuleProxy.d.ts
++++ /dev/null
+@@ -1,3 +0,0 @@
+-import type { TurboModule } from 'react-native';
+-export declare function createTurboModuleToExpoProxy(turboModule: TurboModule | null, name: string): null;
+-//# sourceMappingURL=TurboModuleToExpoModuleProxy.d.ts.map
+\ No newline at end of file
+diff --git a/node_modules/expo-modules-core/build/TurboModuleToExpoModuleProxy.native.d.ts b/node_modules/expo-modules-core/build/TurboModuleToExpoModuleProxy.native.d.ts
+deleted file mode 100644
+index b6e4c71..0000000
+--- a/node_modules/expo-modules-core/build/TurboModuleToExpoModuleProxy.native.d.ts
++++ /dev/null
+@@ -1,3 +0,0 @@
+-import type { TurboModule } from 'react-native';
+-export declare function createTurboModuleToExpoProxy(turboModule: TurboModule | null, name: string): any;
+-//# sourceMappingURL=TurboModuleToExpoModuleProxy.native.d.ts.map
+\ No newline at end of file
+diff --git a/node_modules/expo-modules-core/build/TypedArrays.types.d.ts b/node_modules/expo-modules-core/build/TypedArrays.types.d.ts
+deleted file mode 100644
+index 90c2f28..0000000
+--- a/node_modules/expo-modules-core/build/TypedArrays.types.d.ts
++++ /dev/null
+@@ -1,9 +0,0 @@
+-/** A union type for all integer based [`TypedArray` objects](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/TypedArray#typedarray_objects). */
+-export type IntBasedTypedArray = Int8Array | Int16Array | Int32Array;
+-/** A union type for all unsigned integer based [`TypedArray` objects](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/TypedArray#typedarray_objects). */
+-export type UintBasedTypedArray = Uint8Array | Uint8ClampedArray | Uint16Array | Uint32Array;
+-/** A union type for all floating point based [`TypedArray` objects](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/TypedArray#typedarray_objects). */
+-export type FloatBasedTypedArray = Float32Array | Float64Array;
+-/** A [`TypedArray`](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/TypedArray) describes an array-like view of an underlying binary data buffer. */
+-export type TypedArray = IntBasedTypedArray | UintBasedTypedArray | FloatBasedTypedArray;
+-//# sourceMappingURL=TypedArrays.types.d.ts.map
+\ No newline at end of file
+diff --git a/node_modules/expo-modules-core/build/errors/UnavailabilityError.d.ts b/node_modules/expo-modules-core/build/errors/UnavailabilityError.d.ts
+deleted file mode 100644
+index 1a1a175..0000000
+--- a/node_modules/expo-modules-core/build/errors/UnavailabilityError.d.ts
++++ /dev/null
+@@ -1,10 +0,0 @@
+-import { CodedError } from './CodedError';
+-/**
+- * A class for errors to be thrown when a property is accessed which is
+- * unavailable, unsupported, or not currently implemented on the running
+- * platform.
+- */
+-export declare class UnavailabilityError extends CodedError {
+-    constructor(moduleName: string, propertyName: string);
+-}
+-//# sourceMappingURL=UnavailabilityError.d.ts.map
+\ No newline at end of file
+diff --git a/node_modules/expo-modules-core/build/hooks/useReleasingSharedObject.d.ts b/node_modules/expo-modules-core/build/hooks/useReleasingSharedObject.d.ts
+deleted file mode 100644
+index ed6f344..0000000
+--- a/node_modules/expo-modules-core/build/hooks/useReleasingSharedObject.d.ts
++++ /dev/null
+@@ -1,7 +0,0 @@
+-import { DependencyList } from 'react';
+-import type { SharedObject } from '../ts-declarations/SharedObject';
+-/**
+- * Returns a shared object, which is automatically cleaned up when the component is unmounted.
+- */
+-export declare function useReleasingSharedObject<TSharedObject extends SharedObject>(factory: () => TSharedObject, dependencies: DependencyList): TSharedObject;
+-//# sourceMappingURL=useReleasingSharedObject.d.ts.map
+\ No newline at end of file
+diff --git a/node_modules/expo-modules-core/build/registerWebModule.d.ts b/node_modules/expo-modules-core/build/registerWebModule.d.ts
+deleted file mode 100644
+index cdc99e0..0000000
+--- a/node_modules/expo-modules-core/build/registerWebModule.d.ts
++++ /dev/null
+@@ -1,9 +0,0 @@
+-import type { NativeModule } from './ts-declarations/NativeModule';
+-/**
+- * Registers a web module.
+- * @param moduleImplementation A class that extends `NativeModule`. The class is registered under `globalThis.expo.modules[className]`.
+- * @param moduleName – a name to register the module under `globalThis.expo.modules[className]`.
+- * @returns A singleton instance of the class passed into arguments.
+- */
+-export declare function registerWebModule<EventsMap extends Record<never, never>, ModuleType extends typeof NativeModule<EventsMap>>(moduleImplementation: ModuleType, moduleName: string): ModuleType;
+-//# sourceMappingURL=registerWebModule.d.ts.map
+\ No newline at end of file
+diff --git a/node_modules/expo-modules-core/build/reload.d.ts b/node_modules/expo-modules-core/build/reload.d.ts
+deleted file mode 100644
+index c1d1d0c..0000000
+--- a/node_modules/expo-modules-core/build/reload.d.ts
++++ /dev/null
+@@ -1,10 +0,0 @@
+-/**
+- * Reloads the app. This method works for both release and debug builds.
+- *
+- * Unlike [`Updates.reloadAsync()`](/versions/latest/sdk/updates/#updatesreloadasync),
+- * this function does not use a new update even if one is available. It only reloads the app using the same JavaScript bundle that is currently running.
+- *
+- * @param reason The reason for reloading the app. This is used only for some platforms.
+- */
+-export declare function reloadAppAsync(reason?: string): Promise<void>;
+-//# sourceMappingURL=reload.d.ts.map
+\ No newline at end of file
+diff --git a/node_modules/expo-modules-core/build/requireNativeModule.d.ts b/node_modules/expo-modules-core/build/requireNativeModule.d.ts
+deleted file mode 100644
+index 552b7d8..0000000
+--- a/node_modules/expo-modules-core/build/requireNativeModule.d.ts
++++ /dev/null
+@@ -1,19 +0,0 @@
+-/**
+- * Imports the native module registered with given name. In the first place it tries to load
+- * the module installed through the JSI host object and then falls back to the bridge proxy module.
+- * Notice that the modules loaded from the proxy may not support some features like synchronous functions.
+- *
+- * @param moduleName Name of the requested native module.
+- * @returns Object representing the native module.
+- * @throws Error when there is no native module with given name.
+- */
+-export declare function requireNativeModule<ModuleType = any>(moduleName: string): ModuleType;
+-/**
+- * Imports the native module registered with the given name. The same as `requireNativeModule`,
+- * but returns `null` when the module cannot be found instead of throwing an error.
+- *
+- * @param moduleName Name of the requested native module.
+- * @returns Object representing the native module or `null` when it cannot be found.
+- */
+-export declare function requireOptionalNativeModule<ModuleType = any>(moduleName: string): ModuleType | null;
+-//# sourceMappingURL=requireNativeModule.d.ts.map
+\ No newline at end of file
+diff --git a/node_modules/expo-modules-core/build/requireNativeModule.web.d.ts b/node_modules/expo-modules-core/build/requireNativeModule.web.d.ts
+deleted file mode 100644
+index 978a85e..0000000
+--- a/node_modules/expo-modules-core/build/requireNativeModule.web.d.ts
++++ /dev/null
+@@ -1,3 +0,0 @@
+-export declare function requireNativeModule<ModuleType = any>(moduleName: string): ModuleType;
+-export declare function requireOptionalNativeModule<ModuleType = any>(moduleName: string): ModuleType | null;
+-//# sourceMappingURL=requireNativeModule.web.d.ts.map
+\ No newline at end of file
+diff --git a/node_modules/expo-modules-core/build/sweet/setUpJsLogger.fx.d.ts b/node_modules/expo-modules-core/build/sweet/setUpJsLogger.fx.d.ts
+deleted file mode 100644
+index 2025471..0000000
+--- a/node_modules/expo-modules-core/build/sweet/setUpJsLogger.fx.d.ts
++++ /dev/null
+@@ -1,2 +0,0 @@
+-export {};
+-//# sourceMappingURL=setUpJsLogger.fx.d.ts.map
+\ No newline at end of file
+diff --git a/node_modules/expo-modules-core/build/sweet/setUpJsLogger.fx.web.d.ts b/node_modules/expo-modules-core/build/sweet/setUpJsLogger.fx.web.d.ts
+deleted file mode 100644
+index c3f96ba..0000000
+--- a/node_modules/expo-modules-core/build/sweet/setUpJsLogger.fx.web.d.ts
++++ /dev/null
+@@ -1,2 +0,0 @@
+-export {};
+-//# sourceMappingURL=setUpJsLogger.fx.web.d.ts.map
+\ No newline at end of file
+diff --git a/node_modules/expo-modules-core/build/ts-declarations/SharedObject.d.ts b/node_modules/expo-modules-core/build/ts-declarations/SharedObject.d.ts
+deleted file mode 100644
+index 30075d3..0000000
+--- a/node_modules/expo-modules-core/build/ts-declarations/SharedObject.d.ts
++++ /dev/null
+@@ -1,20 +0,0 @@
+-import type { EventEmitter, EventsMap } from './EventEmitter';
+-/**
+- * Base class for all shared objects that extends the {@link EventEmitter} class.
+- * The implementation is written in C++, installed through JSI and common for mobile platforms.
+- */
+-export declare class SharedObject<TEventsMap extends EventsMap = Record<never, never>> extends EventEmitter<TEventsMap> implements EventEmitter<TEventsMap> {
+-    /**
+-     * A function that detaches the JS and native objects to let the native object deallocate
+-     * before the JS object gets deallocated by the JS garbage collector. Any subsequent calls to native
+-     * functions of the object will throw an error as it is no longer associated with its native counterpart.
+-     *
+-     * In most cases, you should never need to use this function, except some specific performance-critical cases when
+-     * manual memory management makes sense and the native object is known to exclusively retain some native memory
+-     * (such as binary data or image bitmap). Before calling this function, you should ensure that nothing else will use
+-     * this object later on. Shared objects created by React hooks are usually automatically released in the effect's cleanup phase,
+-     * for example: `useVideoPlayer()` from `expo-video` and `useImage()` from `expo-image`.
+-     */
+-    release(): void;
+-}
+-//# sourceMappingURL=SharedObject.d.ts.map
+\ No newline at end of file
+diff --git a/node_modules/expo-modules-core/build/ts-declarations/SharedRef.d.ts b/node_modules/expo-modules-core/build/ts-declarations/SharedRef.d.ts
+deleted file mode 100644
+index 2ead4ee..0000000
+--- a/node_modules/expo-modules-core/build/ts-declarations/SharedRef.d.ts
++++ /dev/null
+@@ -1,24 +0,0 @@
+-import type { EventsMap } from './EventEmitter';
+-import type { SharedObject } from './SharedObject';
+-/**
+- * A {@link SharedObject} that holds a reference to any native object. Allows passing references
+- * to native instances among different independent libraries.
+- *
+- * For instance, `ImageRef` from `expo-image` references a [Drawable](https://developer.android.com/reference/android/graphics/drawable/Drawable)
+- * on Android and an [UIImage](https://developer.apple.com/documentation/uikit/uiimage) on iOS. Since both types are common on these platforms,
+- * different native modules can use them without depending on each other. In particular, this enables the `expo-image-manipulator` to pass the resulted image
+- * directly to the image view from `expo-image` without any additional writes and reads from the file system.
+- */
+-export declare class SharedRef<TNativeRefType extends string = 'unknown', TEventsMap extends EventsMap = Record<never, never>> extends SharedObject<TEventsMap> implements SharedObject<TEventsMap> {
+-    /**
+-     * A dummy private property with the given generic type. It is required for TypeScript to correctly infer this subtype.
+-     * @private
+-     * @deprecated
+-     */
+-    _TNativeRefType_DONT_USE_IT?: TNativeRefType;
+-    /**
+-     * The type of the native reference.
+-     */
+-    nativeRefType: string;
+-}
+-//# sourceMappingURL=SharedRef.d.ts.map
+\ No newline at end of file
+diff --git a/node_modules/expo-modules-core/build/uuid/lib/sha1.d.ts b/node_modules/expo-modules-core/build/uuid/lib/sha1.d.ts
+deleted file mode 100644
+index 1db372a..0000000
+--- a/node_modules/expo-modules-core/build/uuid/lib/sha1.d.ts
++++ /dev/null
+@@ -1,3 +0,0 @@
+-declare function sha1(bytes: number[] | string): number[];
+-export default sha1;
+-//# sourceMappingURL=sha1.d.ts.map
+\ No newline at end of file
+diff --git a/node_modules/expo-modules-core/build/uuid/lib/v35.d.ts b/node_modules/expo-modules-core/build/uuid/lib/v35.d.ts
+deleted file mode 100644
+index ecbb8fe..0000000
+--- a/node_modules/expo-modules-core/build/uuid/lib/v35.d.ts
++++ /dev/null
+@@ -1,7 +0,0 @@
+-export default function (name: string, version: number, hashfunc: (bytes: number[] | string) => number[]): {
+-    (value: number[] | string, namespace: number[] | string, buf?: number[], offset?: number): string;
+-    name: string;
+-    DNS: string;
+-    URL: string;
+-};
+-//# sourceMappingURL=v35.d.ts.map
+\ No newline at end of file
+diff --git a/node_modules/expo-modules-core/build/uuid/uuid.types.d.ts b/node_modules/expo-modules-core/build/uuid/uuid.types.d.ts
+deleted file mode 100644
+index c4b8c3f..0000000
+--- a/node_modules/expo-modules-core/build/uuid/uuid.types.d.ts
++++ /dev/null
+@@ -1,24 +0,0 @@
+-/**
+- * Collection of utilities used for generating Universally Unique Identifiers.
+- */
+-export type UUID = {
+-    /**
+-     * A UUID generated randomly.
+-     */
+-    v4: () => string;
+-    /**
+-     * A UUID generated based on the `value` and `namespace` parameters, which always produces the same result for the same inputs.
+-     */
+-    v5: (name: string, namespace: string | number[]) => string;
+-    namespace: typeof Uuidv5Namespace;
+-};
+-/**
+- * Default namespaces for UUID v5 defined in RFC 4122
+- */
+-export declare enum Uuidv5Namespace {
+-    dns = "6ba7b810-9dad-11d1-80b4-00c04fd430c8",
+-    url = "6ba7b811-9dad-11d1-80b4-00c04fd430c8",
+-    oid = "6ba7b812-9dad-11d1-80b4-00c04fd430c8",
+-    x500 = "6ba7b814-9dad-11d1-80b4-00c04fd430c8"
+-}
+-//# sourceMappingURL=uuid.types.d.ts.map
+\ No newline at end of file
+diff --git a/node_modules/expo-modules-core/src/NativeViewManagerAdapter.native.tsx b/node_modules/expo-modules-core/src/NativeViewManagerAdapter.native.tsx
+index 61646f8..1e2dc02 100644
+--- a/node_modules/expo-modules-core/src/NativeViewManagerAdapter.native.tsx
++++ b/node_modules/expo-modules-core/src/NativeViewManagerAdapter.native.tsx
+@@ -4,32 +4,17 @@
+ 
+ 'use client';
+ 
+-import { type Component, type ComponentType, createRef, PureComponent } from 'react';
+-import {
+-  findNodeHandle,
+-  type HostComponent,
+-  type NativeMethods,
+-  NativeModules,
+-} from 'react-native';
++import { type ComponentType, createRef, PureComponent } from 'react';
++import { findNodeHandle, type HostComponent, NativeModules } from 'react-native';
+ import { get as componentRegistryGet } from 'react-native/Libraries/NativeComponent/NativeComponentRegistry';
+ 
+ import { requireNativeModule } from './requireNativeModule';
+ 
+-// To make the transition from React Native's `requireNativeComponent` to Expo's
+-// `requireNativeViewManager` as easy as possible, `requireNativeViewManager` is a drop-in
+-// replacement for `requireNativeComponent`.
+-//
+-// For each view manager, we create a wrapper component that accepts all the props available to
+-// the author of the universal module. This wrapper component splits the props into two sets: props
+-// passed to React Native's View (ex: style, testID) and custom view props, which are passed to the
+-// adapter view component in a prop called `proxiedProperties`.
+-
+ /**
+  * A map that caches registered native components.
+  */
+ const nativeComponentsCache = new Map<string, HostComponent<any>>();
+ 
+-// TODO(@kitten): Optimally, this is defined on ExpoGlobal, but we treat `__expo_app_identifier__` as internal
+ declare namespace globalThis {
+   const expo:
+     | undefined
+@@ -45,9 +30,6 @@ declare namespace globalThis {
+       };
+ }
+ 
+-/**
+- * Requires a React Native component using the static view config from an Expo module.
+- */
+ function requireNativeComponent<Props>(
+   moduleName: string,
+   viewName?: string
+@@ -59,12 +41,12 @@ function requireNativeComponent<Props>(
+     ? `ViewManagerAdapter_${moduleName}_${viewName}${viewNameSuffix}`
+     : `ViewManagerAdapter_${moduleName}${viewNameSuffix}`;
+ 
+-  return componentRegistryGet<Props>(nativeViewName, () => {
++  return componentRegistryGet(nativeViewName, () => {
+     const expoViewConfig = globalThis.expo?.getViewConfig(moduleName, viewName);
+ 
+     if (!expoViewConfig) {
+       console.warn(
+-        'Unable to get the view config for %s from module &s',
++        'Unable to get the view config for %s from module %s',
+         viewName ?? 'default view',
+         moduleName
+       );
+@@ -77,11 +59,6 @@ function requireNativeComponent<Props>(
+   });
+ }
+ 
+-/**
+- * Requires a React Native component from cache if possible. This prevents
+- * "Tried to register two views with the same name" errors on fast refresh, but
+- * also when there are multiple versions of the same package with native component.
+- */
+ function requireCachedNativeComponent<Props>(
+   moduleName: string,
+   viewName?: string
+@@ -104,14 +81,12 @@ export function requireNativeViewManager<P>(
+   moduleName: string,
+   viewName?: string
+ ): ComponentType<P> {
+-  const { viewManagersMetadata } = NativeModules.NativeUnimoduleProxy;
+-
+-  const viewManagerConfig = viewManagersMetadata?.[moduleName];
++  const { viewManagersMetadata } = NativeModules.NativeUnimoduleProxy ?? {};
+ 
+-  if (__DEV__ && !viewManagerConfig) {
++  if (__DEV__ && viewManagersMetadata && !viewManagersMetadata[moduleName]) {
+     const exportedViewManagerNames = Object.keys(viewManagersMetadata).join(', ');
+     console.warn(
+-      `The native view manager for module(${moduleName}) ${viewName ? ` required by name (${viewName})` : ''}) from NativeViewManagerAdapter isn't exported by expo-modules-core. Views of this type may not render correctly. Exported view managers: [${exportedViewManagerNames}].`
++      `The native view manager for module(${moduleName})${viewName ? ` required by name (${viewName})` : ''} from NativeViewManagerAdapter isn't exported by expo-modules-core. Exported view managers: [${exportedViewManagerNames}].`
+     );
+   }
+ 
+@@ -120,10 +95,8 @@ export function requireNativeViewManager<P>(
+   class NativeComponent extends PureComponent<P> {
+     static displayName = viewName ? viewName : moduleName;
+ 
+-    nativeRef = createRef<Component & NativeMethods>();
++    nativeRef = createRef<any>();
+ 
+-    // This will be accessed from native when the prototype functions are called,
+-    // in order to find the associated native view.
+     nativeTag: number | null = null;
+ 
+     componentDidMount(): void {
+@@ -138,18 +111,13 @@ export function requireNativeViewManager<P>(
+   try {
+     const nativeModule = requireNativeModule(moduleName);
+     const nativeViewPrototype =
+-      nativeModule.ViewPrototypes[viewName ? `${moduleName}_${viewName}` : moduleName];
++      nativeModule.ViewPrototypes?.[viewName ? `${moduleName}_${viewName}` : moduleName];
+     if (nativeViewPrototype) {
+-      // Assign native view functions to the component prototype, so they can be accessed from the ref.
+       Object.assign(NativeComponent.prototype, nativeViewPrototype);
+     }
+   } catch {
+-    // `requireNativeModule` may throw an error when the native module cannot be found.
+-    // In some tests we don't mock the entire modules, but we do want to mock native views. For now,
+-    // until we still have to support the legacy modules proxy and don't have better ways to mock,
+-    // let's just gracefully skip assigning the prototype functions.
+-    // See: https://github.com/expo/expo/blob/main/packages/expo-modules-core/src/__tests__/NativeViewManagerAdapter-test.native.tsx
++    // Skip assigning prototype when native module not found (e.g. in tests).
+   }
+ 
+-  return NativeComponent;
++  return NativeComponent as ComponentType<P>;
+ }
+diff --git a/node_modules/expo-modules-core/src/NativeViewManagerAdapter.ts b/node_modules/expo-modules-core/src/NativeViewManagerAdapter.ts
+new file mode 100644
+index 0000000..a363a74
+--- /dev/null
++++ b/node_modules/expo-modules-core/src/NativeViewManagerAdapter.ts
+@@ -0,0 +1,16 @@
++'use client';
++
++import React from 'react';
++
++/**
++ * Web stub: requireNativeViewManager is not available on web.
++ * A drop-in replacement for `requireNativeComponent`.
++ */
++export function requireNativeViewManager<P = any>(
++  _moduleName: string,
++  _viewName?: string
++): React.ComponentType<P> {
++  return function PlaceholderNativeView() {
++    return null;
++  } as React.ComponentType<P>;
++}
+diff --git a/node_modules/expo-modules-core/src/Refs.ts b/node_modules/expo-modules-core/src/Refs.ts
+index b8b92ce..2e87f1a 100644
+--- a/node_modules/expo-modules-core/src/Refs.ts
++++ b/node_modules/expo-modules-core/src/Refs.ts
+@@ -5,6 +5,6 @@ import { createRef, type RefObject } from 'react';
+  * It will be represented as `[React.ref]` in snapshots.
+  * @returns A React ref object.
+  */
+-export function createSnapshotFriendlyRef<T>(): RefObject<T | null> {
+-  return createRef<T>();
++export function createSnapshotFriendlyRef(): RefObject<null> {
++  return createRef();
+ }
+diff --git a/node_modules/expo-modules-core/src/SharedRef.ts b/node_modules/expo-modules-core/src/SharedRef.ts
+index 0b0129a..6a9c58c 100644
+--- a/node_modules/expo-modules-core/src/SharedRef.ts
++++ b/node_modules/expo-modules-core/src/SharedRef.ts
+@@ -9,5 +9,5 @@ ensureNativeModulesAreInstalled();
+ export type SharedRef<
+   TNativeRefType extends string = 'unknown',
+   TEventsMap extends EventsMap = Record<never, never>,
+-> = typeof ExpoGlobal.SharedRef<TNativeRefType, TEventsMap>;
++> = typeof ExpoGlobal.SharedRef;
+ export const SharedRef: typeof ExpoGlobal.SharedRef = globalThis.expo.SharedRef;
+diff --git a/node_modules/expo-modules-core/src/TurboModuleToExpoModuleProxy.native.ts b/node_modules/expo-modules-core/src/TurboModuleToExpoModuleProxy.native.ts
+deleted file mode 100644
+index 0f695a9..0000000
+--- a/node_modules/expo-modules-core/src/TurboModuleToExpoModuleProxy.native.ts
++++ /dev/null
+@@ -1,31 +0,0 @@
+-// Copyright © 2024 650 Industries.
+-import type { TurboModule, EventSubscription } from 'react-native';
+-
+-export function createTurboModuleToExpoProxy(turboModule: TurboModule | null, name: string) {
+-  if (!turboModule) return null;
+-
+-  const expoModuleProxy: any = {
+-    __turboModule: turboModule,
+-  };
+-
+-  Object.keys(Object.getPrototypeOf(turboModule)).forEach((prop) => {
+-    expoModuleProxy[prop] = (turboModule as any)[prop];
+-  });
+-
+-  if (turboModule.getConstants) {
+-    const constants = turboModule.getConstants();
+-    Object.keys(constants).forEach((prop) => {
+-      expoModuleProxy[prop] = (constants as any)[prop];
+-    });
+-  }
+-
+-  expoModuleProxy.addListener = (
+-    eventName: string,
+-    listener: (...args: any[]) => any
+-  ): EventSubscription => {
+-    const eventEmitter = (turboModule as any)[eventName];
+-    return eventEmitter(listener);
+-  };
+-
+-  return expoModuleProxy;
+-}
+diff --git a/node_modules/expo-modules-core/src/hooks/useReleasingSharedObject.ts b/node_modules/expo-modules-core/src/hooks/useReleasingSharedObject.ts
+index 426fa71..8e4951b 100644
+--- a/node_modules/expo-modules-core/src/hooks/useReleasingSharedObject.ts
++++ b/node_modules/expo-modules-core/src/hooks/useReleasingSharedObject.ts
+@@ -1,19 +1,22 @@
+ 'use client';
+ 
+-import { DependencyList, useRef, useMemo, useEffect } from 'react';
++import { DependencyList, useEffect, useMemo, useRef } from 'react';
+ 
+-import type { SharedObject } from '../ts-declarations/SharedObject';
++interface Releasable {
++  release(): void;
++}
+ 
+ /**
+  * Returns a shared object, which is automatically cleaned up when the component is unmounted.
+  */
+-export function useReleasingSharedObject<TSharedObject extends SharedObject>(
++export function useReleasingSharedObject<TSharedObject extends Releasable>(
+   factory: () => TSharedObject,
+   dependencies: DependencyList
+ ): TSharedObject {
+   const objectRef = useRef<TSharedObject | null>(null);
++  const objectRefToRelease = useRef<TSharedObject | null>(null);
+   const isFastRefresh = useRef(false);
+-  const previousDependencies = useRef<DependencyList>(dependencies);
++  const previousDependencies = useRef(dependencies);
+ 
+   if (objectRef.current == null) {
+     objectRef.current = factory();
+@@ -23,12 +26,12 @@ export function useReleasingSharedObject<TSharedObject extends SharedObject>(
+     let newObject = objectRef.current;
+     const dependenciesAreEqual =
+       previousDependencies.current?.length === dependencies.length &&
+-      dependencies.every((value, index) => value === previousDependencies.current[index]);
++      dependencies.every(
++        (value, index) => value === previousDependencies.current?.[index]
++      );
+ 
+-    // If the dependencies have changed, release the previous object and create a new one, otherwise this has been called
+-    // because of an unrelated fast refresh, and we don't want to release the object.
+     if (!newObject || !dependenciesAreEqual) {
+-      objectRef.current?.release();
++      objectRefToRelease.current = objectRef.current;
+       newObject = factory();
+       objectRef.current = newObject;
+       previousDependencies.current = dependencies;
+@@ -36,15 +39,20 @@ export function useReleasingSharedObject<TSharedObject extends SharedObject>(
+     return newObject;
+   }, dependencies);
+ 
++  useEffect(() => {
++    if (objectRefToRelease.current) {
++      objectRefToRelease.current.release();
++      objectRefToRelease.current = null;
++    }
++  }, [object]);
++
+   useMemo(() => {
+     isFastRefresh.current = true;
+   }, []);
+ 
+   useEffect(() => {
+     isFastRefresh.current = false;
+-
+     return () => {
+-      // This will be called on every fast refresh and on unmount, but we only want to release the object on unmount.
+       if (!isFastRefresh.current && objectRef.current) {
+         objectRef.current.release();
+       }
+diff --git a/node_modules/expo-modules-core/src/registerWebModule.ts b/node_modules/expo-modules-core/src/registerWebModule.ts
+index 8beec4e..ce530d9 100644
+--- a/node_modules/expo-modules-core/src/registerWebModule.ts
++++ b/node_modules/expo-modules-core/src/registerWebModule.ts
+@@ -4,13 +4,12 @@ import type { NativeModule } from './ts-declarations/NativeModule';
+ /**
+  * Registers a web module.
+  * @param moduleImplementation A class that extends `NativeModule`. The class is registered under `globalThis.expo.modules[className]`.
+- * @param moduleName – a name to register the module under `globalThis.expo.modules[className]`.
++ * @param moduleName A name to register the module under `globalThis.expo.modules[className]`.
+  * @returns A singleton instance of the class passed into arguments.
+  */
+-
+ export function registerWebModule<
+-  EventsMap extends Record<never, never>,
+-  ModuleType extends typeof NativeModule<EventsMap>,
++  EventsMap extends Record<string, unknown>,
++  ModuleType extends typeof NativeModule,
+ >(moduleImplementation: ModuleType, moduleName: string): ModuleType {
+   ensureNativeModulesAreInstalled();
+ 
+diff --git a/node_modules/expo-modules-core/src/reload.ts b/node_modules/expo-modules-core/src/reload.ts
+index e5a5c75..9fccd2c 100644
+--- a/node_modules/expo-modules-core/src/reload.ts
++++ b/node_modules/expo-modules-core/src/reload.ts
+@@ -6,6 +6,8 @@
+  *
+  * @param reason The reason for reloading the app. This is used only for some platforms.
+  */
+-export async function reloadAppAsync(reason: string = 'Reloaded from JS call'): Promise<void> {
++export async function reloadAppAsync(
++  reason: string = 'Reloaded from JS call'
++): Promise<void> {
+   await globalThis.expo?.reloadAppAsync(reason);
+ }
+diff --git a/node_modules/expo-modules-core/src/requireNativeModule.web.ts b/node_modules/expo-modules-core/src/requireNativeModule.web.ts
+deleted file mode 100644
+index 30795d6..0000000
+--- a/node_modules/expo-modules-core/src/requireNativeModule.web.ts
++++ /dev/null
+@@ -1,20 +0,0 @@
+-export function requireNativeModule<ModuleType = any>(moduleName: string): ModuleType {
+-  const nativeModule = requireOptionalNativeModule<ModuleType>(moduleName);
+-  if (nativeModule != null) {
+-    return nativeModule;
+-  }
+-  if (typeof window === 'undefined') {
+-    // For SSR, we expect not to have native modules available, but to avoid crashing from SSR resolutions, we return an empty object.
+-    return {} as ModuleType;
+-  }
+-  throw new Error(`Cannot find native module '${moduleName}'`);
+-}
+-
+-export function requireOptionalNativeModule<ModuleType = any>(
+-  moduleName: string
+-): ModuleType | null {
+-  if (typeof globalThis.ExpoDomWebView === 'object' && globalThis?.expo?.modules != null) {
+-    return globalThis.expo?.modules?.[moduleName] ?? null;
+-  }
+-  return null;
+-}
+diff --git a/node_modules/expo-modules-core/src/sweet/setUpJsLogger.fx.ts b/node_modules/expo-modules-core/src/sweet/setUpJsLogger.fx.ts
+index 58faf73..bda3440 100644
+--- a/node_modules/expo-modules-core/src/sweet/setUpJsLogger.fx.ts
++++ b/node_modules/expo-modules-core/src/sweet/setUpJsLogger.fx.ts
+@@ -1,50 +1,56 @@
+-import NativeJSLogger from './NativeJSLogger';
+-import Platform from '../Platform';
+ import { CodedError } from '../errors/CodedError';
++import { requireOptionalNativeModule } from '../requireNativeModule';
+ 
+ type LogListener = {
+   action: (...data: any[]) => void;
+   eventName: string;
+ };
+ 
+-if (__DEV__ && (Platform.OS === 'android' || Platform.OS === 'ios') && NativeJSLogger) {
+-  const onNewException: LogListener = {
+-    eventName: 'ExpoModulesCoreJSLogger.onNewError',
+-    action: console.error,
+-  };
+-
+-  const onNewWarning: LogListener = {
+-    eventName: 'ExpoModulesCoreJSLogger.onNewWarning',
+-    action: console.warn,
+-  };
+-
+-  const onNewDebug: LogListener = {
+-    eventName: 'ExpoModulesCoreJSLogger.onNewDebug',
+-    action: console.debug,
+-  };
+-
+-  const onNewInfo: LogListener = {
+-    eventName: 'ExpoModulesCoreJSLogger.onNewInfo',
+-    action: console.info,
+-  };
+-
+-  const onNewTrace: LogListener = {
+-    eventName: 'ExpoModulesCoreJSLogger.onNewTrace',
+-    action: console.trace,
+-  };
+-
+-  const listeners: LogListener[] = [
+-    onNewException,
+-    onNewWarning,
+-    onNewDebug,
+-    onNewInfo,
+-    onNewTrace,
+-  ];
+-
+-  for (const listener of listeners) {
+-    NativeJSLogger.addListener(listener.eventName, ({ message }: { message: string }) => {
+-      listener.action(message);
+-    });
++if (
++  __DEV__ &&
++  typeof window !== 'undefined' &&
++  (process.env.EXPO_OS === 'android' || process.env.EXPO_OS === 'ios')
++) {
++  const NativeJSLogger = requireOptionalNativeModule('ExpoModulesCoreJSLogger');
++  if (NativeJSLogger) {
++    const onNewException: LogListener = {
++      eventName: 'ExpoModulesCoreJSLogger.onNewError',
++      action: console.error,
++    };
++
++    const onNewWarning: LogListener = {
++      eventName: 'ExpoModulesCoreJSLogger.onNewWarning',
++      action: console.warn,
++    };
++
++    const onNewDebug: LogListener = {
++      eventName: 'ExpoModulesCoreJSLogger.onNewDebug',
++      action: console.debug,
++    };
++
++    const onNewInfo: LogListener = {
++      eventName: 'ExpoModulesCoreJSLogger.onNewInfo',
++      action: console.info,
++    };
++
++    const onNewTrace: LogListener = {
++      eventName: 'ExpoModulesCoreJSLogger.onNewTrace',
++      action: console.trace,
++    };
++
++    const listeners: LogListener[] = [
++      onNewException,
++      onNewWarning,
++      onNewDebug,
++      onNewInfo,
++      onNewTrace,
++    ];
++
++    for (const listener of listeners) {
++      NativeJSLogger.addListener(listener.eventName, ({ message }: { message: string }) => {
++        listener.action(message);
++      });
++    }
+   }
+ }
+ 
+diff --git a/node_modules/expo-modules-core/src/sweet/setUpJsLogger.fx.web.ts b/node_modules/expo-modules-core/src/sweet/setUpJsLogger.fx.web.ts
+deleted file mode 100644
+index e69de29..0000000
+diff --git a/node_modules/expo-modules-core/src/ts-declarations/SharedObject.ts b/node_modules/expo-modules-core/src/ts-declarations/SharedObject.ts
+deleted file mode 100644
+index 3faab1a..0000000
+--- a/node_modules/expo-modules-core/src/ts-declarations/SharedObject.ts
++++ /dev/null
+@@ -1,23 +0,0 @@
+-import type { EventEmitter, EventsMap } from './EventEmitter';
+-
+-/**
+- * Base class for all shared objects that extends the {@link EventEmitter} class.
+- * The implementation is written in C++, installed through JSI and common for mobile platforms.
+- */
+-export declare class SharedObject<TEventsMap extends EventsMap = Record<never, never>>
+-  extends EventEmitter<TEventsMap>
+-  implements EventEmitter<TEventsMap>
+-{
+-  /**
+-   * A function that detaches the JS and native objects to let the native object deallocate
+-   * before the JS object gets deallocated by the JS garbage collector. Any subsequent calls to native
+-   * functions of the object will throw an error as it is no longer associated with its native counterpart.
+-   *
+-   * In most cases, you should never need to use this function, except some specific performance-critical cases when
+-   * manual memory management makes sense and the native object is known to exclusively retain some native memory
+-   * (such as binary data or image bitmap). Before calling this function, you should ensure that nothing else will use
+-   * this object later on. Shared objects created by React hooks are usually automatically released in the effect's cleanup phase,
+-   * for example: `useVideoPlayer()` from `expo-video` and `useImage()` from `expo-image`.
+-   */
+-  release(): void;
+-}
+diff --git a/node_modules/expo-modules-core/src/ts-declarations/SharedRef.ts b/node_modules/expo-modules-core/src/ts-declarations/SharedRef.ts
+deleted file mode 100644
+index ac6ba2d..0000000
+--- a/node_modules/expo-modules-core/src/ts-declarations/SharedRef.ts
++++ /dev/null
+@@ -1,31 +0,0 @@
+-import type { EventsMap } from './EventEmitter';
+-import type { SharedObject } from './SharedObject';
+-
+-/**
+- * A {@link SharedObject} that holds a reference to any native object. Allows passing references
+- * to native instances among different independent libraries.
+- *
+- * For instance, `ImageRef` from `expo-image` references a [Drawable](https://developer.android.com/reference/android/graphics/drawable/Drawable)
+- * on Android and an [UIImage](https://developer.apple.com/documentation/uikit/uiimage) on iOS. Since both types are common on these platforms,
+- * different native modules can use them without depending on each other. In particular, this enables the `expo-image-manipulator` to pass the resulted image
+- * directly to the image view from `expo-image` without any additional writes and reads from the file system.
+- */
+-export declare class SharedRef<
+-    TNativeRefType extends string = 'unknown',
+-    TEventsMap extends EventsMap = Record<never, never>,
+-  >
+-  extends SharedObject<TEventsMap>
+-  implements SharedObject<TEventsMap>
+-{
+-  /**
+-   * A dummy private property with the given generic type. It is required for TypeScript to correctly infer this subtype.
+-   * @private
+-   * @deprecated
+-   */
+-  _TNativeRefType_DONT_USE_IT?: TNativeRefType;
+-
+-  /**
+-   * The type of the native reference.
+-   */
+-  nativeRefType: string;
+-}
+diff --git a/node_modules/expo-modules-core/src/uuid/lib/sha1.ts b/node_modules/expo-modules-core/src/uuid/lib/sha1.ts
+deleted file mode 100644
+index ebb42d9..0000000
+--- a/node_modules/expo-modules-core/src/uuid/lib/sha1.ts
++++ /dev/null
+@@ -1,110 +0,0 @@
+-// Adapted from Chris Veness' SHA1 code at
+-// http://www.movable-type.co.uk/scripts/sha1.html
+-'use strict';
+-
+-function f(s: number, x: number, y: number, z: number) {
+-  switch (s) {
+-    case 0:
+-      return (x & y) ^ (~x & z);
+-    case 1:
+-      return x ^ y ^ z;
+-    case 2:
+-      return (x & y) ^ (x & z) ^ (y & z);
+-    case 3:
+-      return x ^ y ^ z;
+-    default:
+-      return 0;
+-  }
+-}
+-
+-function ROTL(x: number, n: number) {
+-  return (x << n) | (x >>> (32 - n));
+-}
+-
+-function sha1(bytes: number[] | string) {
+-  const K = [0x5a827999, 0x6ed9eba1, 0x8f1bbcdc, 0xca62c1d6];
+-  const H = [0x67452301, 0xefcdab89, 0x98badcfe, 0x10325476, 0xc3d2e1f0];
+-
+-  if (typeof bytes == 'string') {
+-    const msg = unescape(encodeURIComponent(bytes)); // UTF8 escape
+-    bytes = new Array(msg.length);
+-    for (let i = 0; i < msg.length; i++) bytes[i] = msg.charCodeAt(i);
+-  }
+-
+-  bytes.push(0x80);
+-
+-  const l = bytes.length / 4 + 2;
+-  const N = Math.ceil(l / 16);
+-  const M = new Array(N);
+-
+-  for (let i = 0; i < N; i++) {
+-    M[i] = new Array(16);
+-    for (let j = 0; j < 16; j++) {
+-      M[i][j] =
+-        (bytes[i * 64 + j * 4] << 24) |
+-        (bytes[i * 64 + j * 4 + 1] << 16) |
+-        (bytes[i * 64 + j * 4 + 2] << 8) |
+-        bytes[i * 64 + j * 4 + 3];
+-    }
+-  }
+-
+-  M[N - 1][14] = ((bytes.length - 1) * 8) / Math.pow(2, 32);
+-  M[N - 1][14] = Math.floor(M[N - 1][14]);
+-  M[N - 1][15] = ((bytes.length - 1) * 8) & 0xffffffff;
+-
+-  for (let i = 0; i < N; i++) {
+-    const W = new Array(80);
+-
+-    for (let t = 0; t < 16; t++) W[t] = M[i][t];
+-    for (let t = 16; t < 80; t++) {
+-      W[t] = ROTL(W[t - 3] ^ W[t - 8] ^ W[t - 14] ^ W[t - 16], 1);
+-    }
+-
+-    let a = H[0];
+-    let b = H[1];
+-    let c = H[2];
+-    let d = H[3];
+-    let e = H[4];
+-
+-    for (let t = 0; t < 80; t++) {
+-      const s = Math.floor(t / 20);
+-      const T = (ROTL(a, 5) + f(s, b, c, d) + e + K[s] + W[t]) >>> 0;
+-      e = d;
+-      d = c;
+-      c = ROTL(b, 30) >>> 0;
+-      b = a;
+-      a = T;
+-    }
+-
+-    H[0] = (H[0] + a) >>> 0;
+-    H[1] = (H[1] + b) >>> 0;
+-    H[2] = (H[2] + c) >>> 0;
+-    H[3] = (H[3] + d) >>> 0;
+-    H[4] = (H[4] + e) >>> 0;
+-  }
+-
+-  return [
+-    (H[0] >> 24) & 0xff,
+-    (H[0] >> 16) & 0xff,
+-    (H[0] >> 8) & 0xff,
+-    H[0] & 0xff,
+-    (H[1] >> 24) & 0xff,
+-    (H[1] >> 16) & 0xff,
+-    (H[1] >> 8) & 0xff,
+-    H[1] & 0xff,
+-    (H[2] >> 24) & 0xff,
+-    (H[2] >> 16) & 0xff,
+-    (H[2] >> 8) & 0xff,
+-    H[2] & 0xff,
+-    (H[3] >> 24) & 0xff,
+-    (H[3] >> 16) & 0xff,
+-    (H[3] >> 8) & 0xff,
+-    H[3] & 0xff,
+-    (H[4] >> 24) & 0xff,
+-    (H[4] >> 16) & 0xff,
+-    (H[4] >> 8) & 0xff,
+-    H[4] & 0xff,
+-  ];
+-}
+-
+-export default sha1;
+diff --git a/node_modules/expo-modules-core/src/uuid/lib/v35.ts b/node_modules/expo-modules-core/src/uuid/lib/v35.ts
+deleted file mode 100644
+index 35a7764..0000000
+--- a/node_modules/expo-modules-core/src/uuid/lib/v35.ts
++++ /dev/null
+@@ -1,67 +0,0 @@
+-import bytesToUuid from './bytesToUuid';
+-
+-function uuidToBytes(uuid: string) {
+-  // Note: We assume we're being passed a valid uuid string
+-  const bytes: number[] = [];
+-  uuid.replace(/[a-fA-F0-9]{2}/g, (hex: string) => {
+-    bytes.push(parseInt(hex, 16));
+-    return '';
+-  });
+-
+-  return bytes;
+-}
+-
+-function stringToBytes(str: string) {
+-  str = unescape(encodeURIComponent(str)); // UTF8 escape
+-  const bytes: number[] = new Array(str.length);
+-  for (let i = 0; i < str.length; i++) {
+-    bytes[i] = str.charCodeAt(i);
+-  }
+-  return bytes;
+-}
+-
+-export default function (
+-  name: string,
+-  version: number,
+-  hashfunc: (bytes: number[] | string) => number[]
+-) {
+-  const generateUUID = function (
+-    value: number[] | string,
+-    namespace: number[] | string,
+-    buf?: number[],
+-    offset?: number
+-  ): string {
+-    const off = (buf && offset) || 0;
+-
+-    if (typeof value == 'string') value = stringToBytes(value);
+-    if (typeof namespace == 'string') namespace = uuidToBytes(namespace);
+-
+-    if (!Array.isArray(value)) throw TypeError('value must be an array of bytes');
+-    if (!Array.isArray(namespace) || namespace.length !== 16)
+-      throw TypeError('namespace must be uuid string or an Array of 16 byte values');
+-
+-    // Per 4.3
+-    const bytes = hashfunc(namespace.concat(value));
+-    bytes[6] = (bytes[6] & 0x0f) | version;
+-    bytes[8] = (bytes[8] & 0x3f) | 0x80;
+-
+-    if (buf) {
+-      for (let idx = 0; idx < 16; ++idx) {
+-        buf[off + idx] = bytes[idx];
+-      }
+-    }
+-
+-    return bytesToUuid(bytes);
+-  };
+-
+-  // Function#name is not settable on some platforms (#270)
+-  try {
+-    generateUUID.name = name;
+-  } catch {}
+-
+-  // Pre-defined namespaces, per Appendix C
+-  generateUUID.DNS = '6ba7b810-9dad-11d1-80b4-00c04fd430c8';
+-  generateUUID.URL = '6ba7b811-9dad-11d1-80b4-00c04fd430c8';
+-
+-  return generateUUID;
+-}
+diff --git a/node_modules/expo-modules-core/src/uuid/uuid.types.ts b/node_modules/expo-modules-core/src/uuid/uuid.types.ts
+index 8fed037..254058f 100644
+--- a/node_modules/expo-modules-core/src/uuid/uuid.types.ts
++++ b/node_modules/expo-modules-core/src/uuid/uuid.types.ts
+@@ -17,7 +17,6 @@ export type UUID = {
+  * Default namespaces for UUID v5 defined in RFC 4122
+  */
+ export enum Uuidv5Namespace {
+-  // Source of the UUIDs: https://datatracker.ietf.org/doc/html/rfc4122
+   dns = '6ba7b810-9dad-11d1-80b4-00c04fd430c8',
+   url = '6ba7b811-9dad-11d1-80b4-00c04fd430c8',
+   oid = '6ba7b812-9dad-11d1-80b4-00c04fd430c8',
+diff --git a/node_modules/expo-modules-core/types.d.ts b/node_modules/expo-modules-core/types.d.ts
+deleted file mode 100644
+index 2415697..0000000
+--- a/node_modules/expo-modules-core/types.d.ts
++++ /dev/null
+@@ -1,4 +0,0 @@
+-export type { EventEmitter } from './build/ts-declarations/EventEmitter';
+-export type { SharedObject } from './build/ts-declarations/SharedObject';
+-export type { SharedRef } from './build/ts-declarations/SharedRef';
+-export type { NativeModule } from './build/ts-declarations/NativeModule';

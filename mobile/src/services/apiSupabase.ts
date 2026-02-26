@@ -1,0 +1,319 @@
+/**
+ * Tek backend: Supabase Edge Functions veya KBS Node backend (EXPO_PUBLIC_BACKEND_URL).
+ * BACKEND_URL tanımlıysa health + checkin/checkout Node backend'e gider.
+ */
+import { callFn, EdgeFunctionError } from '../lib/supabase/functions';
+import { logger } from '../utils/logger';
+
+function getBackendUrl(): string {
+  if (typeof process !== 'undefined' && process.env?.EXPO_PUBLIC_BACKEND_URL) {
+    return (process.env.EXPO_PUBLIC_BACKEND_URL || '').replace(/\/$/, '');
+  }
+  try {
+    const Constants = require('expo-constants').default;
+    const url = Constants.expoConfig?.extra?.backendUrl ?? '';
+    return String(url).replace(/\/$/, '');
+  } catch {
+    return '';
+  }
+}
+
+export type ApiTokenProvider = () => Promise<string | null> | string | null;
+
+let tokenProvider: ApiTokenProvider | null = null;
+let onUnauthorized: (() => void) | null = null;
+
+export function setApiTokenProvider(provider: ApiTokenProvider | null) {
+  tokenProvider = provider;
+}
+
+/** 401 alındığında çağrılır (oturum geçersiz / süresi dolmuş). AuthContext logout kaydeder. */
+export function setOnUnauthorized(callback: (() => void) | null) {
+  onUnauthorized = callback;
+}
+
+async function getToken(): Promise<string | null> {
+  if (!tokenProvider) return null;
+  const t = tokenProvider();
+  return t instanceof Promise ? t : Promise.resolve(t);
+}
+
+function parsePath(path: string): { pathname: string; query: Record<string, string> } {
+  const [pathname, qs] = path.split('?');
+  const query: Record<string, string> = {};
+  if (qs) {
+    qs.split('&').forEach((p) => {
+      const [k, v] = p.split('=');
+      if (k && v) query[decodeURIComponent(k)] = decodeURIComponent(v);
+    });
+  }
+  return { pathname: pathname || '', query };
+}
+
+/** Axios-benzeri response: { data } */
+function toResponse<T>(data: T): { data: T } {
+  return { data };
+}
+
+/** Hata yakalayıp axios-benzeri error.response ile fırlat; 401 ise onUnauthorized çağır (checkin/checkout'ta lobiye atmamak için skip edilebilir) */
+function wrapError(err: unknown): never {
+  if (err instanceof EdgeFunctionError) {
+    const skipAuthRedirect = (err as EdgeFunctionError & { skipAuthRedirect?: boolean }).skipAuthRedirect;
+    if (err.status === 401 && !skipAuthRedirect && onUnauthorized) {
+      try {
+        onUnauthorized();
+      } catch (e) {
+        logger.error('onUnauthorized error', e);
+      }
+    }
+    throw Object.assign(new Error(err.message), {
+      response: { status: err.status, data: err.data },
+      message: err.message,
+    });
+  }
+  throw err;
+}
+
+export const api = {
+  defaults: { headers: { common: {} as Record<string, string> } },
+
+  async get(path: string, _config?: { timeout?: number }) {
+    const { pathname, query } = parsePath(path);
+    const token = await getToken();
+    try {
+      if (pathname === '/health' || pathname === 'health') {
+        const backendUrl = getBackendUrl();
+        if (backendUrl) {
+          const r = await fetch(`${backendUrl}/health`, { method: 'GET' });
+          const data = await r.json().catch(() => ({}));
+          return toResponse(data || { ok: true, status: 'ok' });
+        }
+        const res = await callFn<{ status?: string }>('health', {}, null);
+        return toResponse(res || { status: 'ok' });
+      }
+      if (pathname === '/tesis' || pathname === 'tesis') {
+        const res = await callFn('facilities_list', {}, token);
+        return toResponse(res as { tesis: unknown; ozet: unknown });
+      }
+      if (pathname.startsWith('/tesis/kbs') || pathname === 'tesis/kbs') {
+        const res = await callFn('settings_get', {}, token);
+        return toResponse(res);
+      }
+      if (pathname === '/oda' || pathname === 'oda') {
+        const filtre = query.filtre || 'tumu';
+        const res = await callFn<{ odalar?: unknown[] }>('rooms_list', { filtre }, token);
+        return toResponse({ odalar: res?.odalar ?? res ?? [] });
+      }
+      const odaMatch = pathname.match(/^\/?oda\/([^/]+)$/);
+      if (odaMatch) {
+        const res = await callFn('room_get', { id: odaMatch[1] }, token);
+        return toResponse(res);
+      }
+      logger.warn('[apiSupabase] Unmapped GET', path);
+      const res = await callFn('facilities_list', {}, token);
+      return toResponse(res);
+    } catch (e) {
+      wrapError(e);
+    }
+  },
+
+  async post(path: string, body?: Record<string, unknown> | FormData, _config?: { headers?: Record<string, string>; timeout?: number }) {
+    const pathname = path.replace(/\?.*$/, '');
+    const token = await getToken();
+    const payload: Record<string, unknown> = body && !(body instanceof FormData) ? body as Record<string, unknown> : {};
+
+    try {
+      if (pathname === '/auth/giris' || pathname === 'auth/giris') {
+        const res = await callFn('auth_login', payload, null);
+        return toResponse(res);
+      }
+      if (pathname === '/auth/aktivasyon' || pathname === 'auth/aktivasyon') {
+        const res = await callFn('auth_aktivasyon', payload, null);
+        return toResponse(res);
+      }
+      if (pathname === '/auth/pin' || pathname === 'auth/pin') {
+        const res = await callFn('auth_pin', payload, token);
+        return toResponse(res);
+      }
+      if (pathname === '/auth/sifre' || pathname === 'auth/sifre') {
+        const res = await callFn('auth_sifre', payload, token);
+        return toResponse(res);
+      }
+      if (pathname === '/auth/giris/yeni' || pathname === 'auth/giris/yeni') {
+        const res = await callFn('auth_request_otp', payload, null);
+        return toResponse(res);
+      }
+      if (pathname === '/auth/giris/otp-iste' || pathname === 'auth/giris/otp-iste') {
+        const res = await callFn('auth_request_otp', payload, null);
+        return toResponse(res);
+      }
+      if (pathname === '/auth/giris/otp-dogrula' || pathname === 'auth/giris/otp-dogrula') {
+        const res = await callFn('auth_verify_otp', payload, null);
+        return toResponse(res);
+      }
+      if (pathname === '/auth/supabase-phone-session' || pathname === 'auth/supabase-phone-session') {
+        const res = await callFn('auth_supabase_phone_session', payload, null);
+        return toResponse(res);
+      }
+      if (pathname === '/auth/kayit' || pathname === 'auth/kayit') {
+        const res = await callFn('auth_request_otp', payload, null);
+        return toResponse(res);
+      }
+      if (pathname === '/auth/kayit/otp-iste' || pathname === 'auth/kayit/otp-iste') {
+        const backendUrl = getBackendUrl();
+        if (backendUrl) {
+          const r = await fetch(`${backendUrl}/auth/kayit/otp-iste`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ telefon: payload.telefon }),
+          });
+          const data = await r.json().catch(() => ({}));
+          if (!r.ok) throw Object.assign(new Error((data as { message?: string }).message || 'SMS gönderilemedi'), { response: { status: r.status, data } });
+          return toResponse(data);
+        }
+        const res = await callFn('auth_request_otp', { ...payload, islemTipi: 'kayit' }, null);
+        return toResponse(res);
+      }
+      if (pathname === '/auth/kayit/dogrula' || pathname === 'auth/kayit/dogrula') {
+        const backendUrl = getBackendUrl();
+        if (backendUrl) {
+          const r = await fetch(`${backendUrl}/auth/kayit/dogrula`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+          });
+          const data = await r.json().catch(() => ({}));
+          if (!r.ok) throw Object.assign(new Error((data as { message?: string }).message || 'Kayıt tamamlanamadı'), { response: { status: r.status, data } });
+          return toResponse(data);
+        }
+        const res = await callFn('auth_verify_otp', payload, null);
+        return toResponse(res);
+      }
+      if (pathname === '/auth/kayit/supabase-create' || pathname === 'auth/kayit/supabase-create') {
+        const backendUrl = getBackendUrl();
+        if (!backendUrl) throw new Error('Kayıt için backend adresi gerekli');
+        const r = await fetch(`${backendUrl}/auth/kayit/supabase-create`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+        const data = await r.json().catch(() => ({}));
+        if (!r.ok) throw Object.assign(new Error((data as { message?: string }).message || 'Kayıt tamamlanamadı'), { response: { status: r.status, data } });
+        return toResponse(data);
+      }
+      if (pathname === '/auth/basvuru' || pathname === 'auth/basvuru') {
+        const res = await callFn('auth_basvuru', payload, null);
+        return toResponse(res);
+      }
+      if (pathname === '/nfc/okut' || pathname === 'nfc/okut') {
+        const res = await callFn('nfc_read', payload, token);
+        return toResponse(res);
+      }
+      if (pathname === '/ocr/okut' || pathname === 'ocr/okut') {
+        if (body instanceof FormData) {
+          const imagePart = body.get('image') as { uri?: string } | null;
+          const uri = imagePart?.uri;
+          if (uri) {
+            try {
+              const FileSystem = require('expo-file-system').default;
+              const base64 = await FileSystem.readAsStringAsync(uri, {
+                encoding: FileSystem.EncodingType.Base64,
+              });
+              payload.imageBase64 = base64;
+            } catch (e) {
+              logger.error('OCR image read error', e);
+            }
+          }
+        }
+        const res = await callFn('document_scan', payload, token);
+        return toResponse(res);
+      }
+      if (pathname === '/misafir/checkin' || pathname === 'misafir/checkin') {
+        const backendUrl = getBackendUrl();
+        if (backendUrl && token) {
+          const r = await fetch(`${backendUrl}/api/checkin`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+            body: JSON.stringify(payload),
+          });
+          const data = await r.json().catch(() => ({}));
+          if (!r.ok) {
+            const e = new EdgeFunctionError((data as { message?: string })?.message || 'Check-in başarısız', r.status, undefined, data);
+            (e as EdgeFunctionError & { skipAuthRedirect?: boolean }).skipAuthRedirect = true;
+            throw e;
+          }
+          return toResponse({ success: true, message: (data as { message?: string })?.message || 'Check-in kaydedildi', guestId: (data as { guestId?: string })?.guestId });
+        }
+        const res = await callFn('checkin_create', payload, token);
+        return toResponse(res);
+      }
+      if (pathname.includes('/kyc/mrz-verify') || pathname.includes('kyc/mrz-verify')) {
+        const res = await callFn('document_scan', payload, token);
+        return toResponse(res);
+      }
+      if (pathname === '/tesis/kbs/test' || pathname === 'tesis/kbs/test') {
+        const res = await callFn('settings_kbs_test', {}, token);
+        return toResponse(res);
+      }
+      if (pathname === '/notification_submit' || pathname === 'notification_submit') {
+        const res = await callFn('notification_submit', payload, token);
+        return toResponse(res);
+      }
+      const checkoutMatch = pathname.match(/^\/?misafir\/checkout\/([^/]+)$/);
+      if (checkoutMatch) {
+        const guestId = checkoutMatch[1];
+        const backendUrl = getBackendUrl();
+        if (backendUrl && token) {
+          const r = await fetch(`${backendUrl}/api/checkout/${guestId}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+            body: JSON.stringify({}),
+          });
+          const data = await r.json().catch(() => ({}));
+          if (!r.ok) {
+            const e = new EdgeFunctionError((data as { message?: string })?.message || 'Çıkış başarısız', r.status, undefined, data);
+            (e as EdgeFunctionError & { skipAuthRedirect?: boolean }).skipAuthRedirect = true;
+            throw e;
+          }
+          return toResponse({ success: true, message: (data as { message?: string })?.message || 'Çıkış yapıldı' });
+        }
+        const res = await callFn('checkout', { misafirId: guestId }, token);
+        return toResponse(res);
+      }
+      logger.warn('[apiSupabase] Unmapped POST', path);
+      return toResponse(await callFn(pathname.replace(/^\//, '').replace(/\//g, '_'), payload, token));
+    } catch (e) {
+      wrapError(e);
+    }
+  },
+
+  async put(path: string, body?: Record<string, unknown>) {
+    const pathname = path.replace(/\?.*$/, '');
+    const token = await getToken();
+    try {
+      if (pathname === '/tesis/kbs' || pathname === 'tesis/kbs') {
+        const res = await callFn('settings_update', (body || {}) as Record<string, unknown>, token);
+        return toResponse(res);
+      }
+      logger.warn('[apiSupabase] Unmapped PUT', path);
+      return toResponse(await callFn('settings_update', (body || {}) as Record<string, unknown>, token));
+    } catch (e) {
+      wrapError(e);
+    }
+  },
+
+  async delete(path: string) {
+    const token = await getToken();
+    const match = path.match(/\/misafir\/checkout\/([^/]+)/);
+    if (match) {
+      try {
+        const res = await callFn('checkout', { misafirId: match[1] }, token);
+        return toResponse(res);
+      } catch (e) {
+        wrapError(e);
+      }
+    }
+    logger.warn('[apiSupabase] Unmapped DELETE', path);
+    return toResponse({});
+  },
+};
