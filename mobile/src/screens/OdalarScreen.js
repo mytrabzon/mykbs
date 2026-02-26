@@ -16,26 +16,18 @@ import {
 } from 'react-native';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { useAuth } from '../context/AuthContext';
+import { useTheme } from '../context/ThemeContext';
 import { api, getBackendUrl, getApiErrorMessage } from '../services/api';
+import { getHealthUrl } from '../config/api';
 import { dataService } from '../services/dataService';
+import { backendHealth } from '../services/backendHealth';
 import websocketService from '../services/websocket';
 import Toast from 'react-native-toast-message';
 import { logger } from '../utils/logger';
-import { Ionicons, MaterialIcons, FontAwesome5 } from '@expo/vector-icons';
+import { Ionicons, MaterialIcons } from '@expo/vector-icons';
 import { theme } from '../theme';
-
-// Lobi — kurumsal dinamik tema (admin panel ile uyumlu)
-const lobby = {
-  bg: '#060810',
-  surface: 'rgba(15, 23, 42, 0.92)',
-  surfaceCard: 'rgba(30, 41, 59, 0.85)',
-  border: 'rgba(148, 163, 184, 0.2)',
-  text: '#f1f5f9',
-  textMuted: '#94a3b8',
-  accent: '#22d3ee',
-  accentPurple: '#a78bfa',
-  glow: 'rgba(34, 211, 238, 0.25)',
-};
+import AppHeader from '../components/AppHeader';
+import BackendErrorScreen from '../components/BackendErrorScreen';
 
 // Oda kartı için memoized component
 const OdaCard = React.memo(({ item, onPress, getStatusColor, getStatusIcon, getKBSDurumIcon, getKBSDurumText }) => (
@@ -186,6 +178,7 @@ function LiveDotPulse() {
 
 export default function OdalarScreen() {
   const navigation = useNavigation();
+  const { colors } = useTheme();
   const { tesis, token, user, isLoading: authLoading } = useAuth();
   const [odalar, setOdalar] = useState([]);
   const [ozet, setOzet] = useState(null);
@@ -194,11 +187,24 @@ export default function OdalarScreen() {
   const [filterLoading, setFilterLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [liveUpdates, setLiveUpdates] = useState([]);
+  const [backendStatus, setBackendStatus] = useState({ isOnline: null, lastChecked: null, error: null });
+  const [lastLoadErrorType, setLastLoadErrorType] = useState(null); // 'auth' | 'network' | 'path' | null
+  const [showDebugUrls, setShowDebugUrls] = useState(__DEV__);
   const appState = useRef(AppState.currentState);
   const flatListRef = useRef(null);
-  
-  // Memoized values
+
   const loading = initialLoading || filterLoading;
+
+  // Backend health dinle: test başarılı olunca state resetlensin (sticky overlay kalkar)
+  useEffect(() => {
+    const unsub = backendHealth.onStatusChange((status) => {
+      if (status.isOnline) {
+        setBackendStatus((p) => ({ ...p, isOnline: true, lastChecked: status.lastChecked, error: null }));
+        setLastLoadErrorType(null);
+      }
+    });
+    return unsub;
+  }, []);
 
   // Mount: AppState listener + cleanup
   useEffect(() => {
@@ -473,33 +479,44 @@ export default function OdalarScreen() {
         setOzet(tesis.ozet);
       }
       setOdalar(odalar || []);
-      logger.log('Odalar data loaded successfully', { 
-        odaCount: odalar?.length || 0
-      });
+      if ((odalar || []).length > 0) setBackendStatus((p) => ({ ...p, isOnline: true }));
+      logger.log('Odalar data loaded successfully', { odaCount: odalar?.length || 0 });
     } catch (error) {
       logger.error('Load data error', error);
-      
-      // Network error için özel mesaj
-      if (error.message === 'Network Error' || error.code === 'ERR_NETWORK') {
-        // İlk yüklemede ise boş liste göster ve kullanıcıya bilgi ver
+      const status = error.response?.status ?? error.status;
+      const isAuth = status === 401 || status === 403;
+      const isPath = status === 404;
+      const isNetwork =
+        error.message === 'Network Error' ||
+        error.code === 'ERR_NETWORK' ||
+        (status >= 500 && status < 600);
+      if (isAuth) {
+        setLastLoadErrorType('auth');
+        setBackendStatus((p) => ({ ...p, isOnline: true })); // backend DOWN değil, oturum sorunu
+      } else if (isPath) {
+        setLastLoadErrorType('path');
+        setBackendStatus((p) => ({ ...p, isOnline: true }));
+      } else if (isNetwork) {
+        setLastLoadErrorType('network');
         if (isInitial) {
           setOdalar([]);
           setOzet(null);
-          // Kullanıcıya bilgi ver (Toast gösterme, sadece log)
-          logger.warn('Network error on initial load - showing empty state');
+          setBackendStatus({ isOnline: false, lastChecked: new Date(), error: error.message });
+          logger.warn('Network/5xx on initial load - showing empty state');
         } else {
           Toast.show({
             type: 'error',
             text1: 'Bağlantı Hatası',
-            text2: 'Backend sunucusuna erişilemiyor. Lütfen backend sunucusunun çalıştığından emin olun.',
+            text2: 'Sunucuya erişilemiyor. İnterneti veya sunucu adresini kontrol edin.',
             visibilityTime: 4000,
           });
         }
       } else {
+        setLastLoadErrorType(null);
         const msg = getApiErrorMessage(error);
         Toast.show({
           type: 'error',
-          text1: error.response?.status === 401 || error.response?.status === 403 ? 'Oturum' : error.response?.status === 404 ? 'Endpoint' : 'Hata',
+          text1: isAuth ? 'Oturum' : isPath ? 'Endpoint' : 'Hata',
           text2: error.response?.data?.message || msg,
           visibilityTime: 3000,
         });
@@ -631,29 +648,6 @@ export default function OdalarScreen() {
     navigation.navigate('CheckIn');
   };
 
-  // Admin paneli - sadece bu kullanıcı (UUID ile)
-  const ADMIN_USER_ID = '57a7ce11-b979-4614-9521-dbf12d1138e0';
-  const isAdminUser = useMemo(() => {
-    if (!user) return false;
-    return user.id === ADMIN_USER_ID || user.uid === ADMIN_USER_ID;
-  }, [user]);
-
-  // Admin paneline yönlendirme
-  const handleAdminPanel = useCallback(() => {
-    try {
-      logger.button('Admin Panel', 'clicked');
-      navigation.navigate('AdminPanel');
-    } catch (error) {
-      logger.error('Admin panel navigation error', error);
-      Toast.show({
-        type: 'error',
-        text1: 'Hata',
-        text2: 'Admin paneline yönlendirilemedi',
-        visibilityTime: 3000,
-      });
-    }
-  }, [navigation]);
-
   // Memoized filter options
   const filterOptions = useMemo(() => [
     { key: 'tumu', label: 'Tümü', icon: 'grid' },
@@ -665,114 +659,81 @@ export default function OdalarScreen() {
 
   if (initialLoading) {
     return (
-      <View style={styles.loadingContainer}>
-        <StatusBar barStyle="light-content" backgroundColor={lobby.bg} />
+      <View style={[styles.loadingContainer, { backgroundColor: colors.background }]}>
+        <StatusBar barStyle={colors.background === '#0B1220' ? 'light-content' : 'dark-content'} backgroundColor={colors.primary} />
         <View style={styles.loadingContent}>
-          <ActivityIndicator size="large" color={lobby.accent} />
-          <Text style={styles.loadingText}>Odalar yükleniyor...</Text>
+          <ActivityIndicator size="large" color={colors.primary} />
+          <Text style={[styles.loadingText, { color: colors.textSecondary }]}>Odalar yükleniyor...</Text>
         </View>
       </View>
     );
   }
 
   return (
-    <View style={styles.container}>
-      <StatusBar barStyle="light-content" backgroundColor={lobby.bg} />
-      
-      {/* Header (Lobi) — kurumsal dinamik */}
-      <View style={styles.lobbyHeader}>
-        <View style={styles.lobbyHeaderAccent} />
-        <View style={styles.headerContent}>
-          <View>
-            <View style={styles.lobbyTitleRow}>
-              <View style={styles.lobbyDot} />
-              <Text style={styles.lobbyHeaderTitle}>Odalar</Text>
-            </View>
-            <Text style={styles.lobbyHeaderSubtitle}>
-              {tesis?.tesisAdi || tesis?.adi || 'Tesisiniz'}
-            </Text>
-            {(user?.adSoyad || user?.email || user?.telefon) && (
-              <Text style={styles.lobbyHeaderUserLine} numberOfLines={1}>
-                {[user?.adSoyad, user?.email, user?.telefon].filter(Boolean).join(' • ')}
-              </Text>
-            )}
-          </View>
-          <View style={styles.headerButtons}>
-            {isAdminUser && (
-              <TouchableOpacity 
-                style={[styles.lobbyHeaderButton, styles.lobbyAdminButton]}
-                onPress={handleAdminPanel}
-              >
-                <Ionicons name="settings-outline" size={20} color={lobby.text} />
-              </TouchableOpacity>
-            )}
-            <TouchableOpacity style={styles.lobbyHeaderButton}>
-              <Ionicons name="notifications-outline" size={20} color={lobby.textMuted} />
-            </TouchableOpacity>
-          </View>
-        </View>
-      </View>
+    <View style={[styles.container, { backgroundColor: colors.background }]}>
+      <StatusBar barStyle={colors.background === '#0B1220' ? 'light-content' : 'dark-content'} backgroundColor={colors.surface} />
+      <AppHeader
+        title="Odalar"
+        tesis={tesis}
+        backendOnline={odalar.length > 0 ? true : backendStatus.isOnline}
+        kbsConfigured={tesis?.kbsConnected}
+      />
 
-      {/* Özet Kartları — lobi cam kartlar */}
       {ozet && (
         <View style={styles.lobbyOzetContainer}>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.ozetScroll}>
-            <View style={styles.lobbyOzetCard}>
-              <View style={[styles.lobbyOzetIcon, { backgroundColor: 'rgba(34, 211, 238, 0.2)' }]}>
-                <Ionicons name="bed" size={20} color={lobby.accent} />
+            <View style={[styles.lobbyOzetCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+              <View style={[styles.lobbyOzetIcon, { backgroundColor: colors.primarySoft }]}>
+                <Ionicons name="bed" size={20} color={colors.primary} />
               </View>
-              <Text style={styles.lobbyOzetValue}>{ozet.doluOda} / {ozet.toplamOda}</Text>
-              <Text style={styles.lobbyOzetLabel}>Dolu Odalar</Text>
+              <Text style={[styles.lobbyOzetValue, { color: colors.textPrimary }]}>{ozet.doluOda} / {ozet.toplamOda}</Text>
+              <Text style={[styles.lobbyOzetLabel, { color: colors.textSecondary }]}>Dolu Odalar</Text>
             </View>
-            <View style={styles.lobbyOzetCard}>
-              <View style={[styles.lobbyOzetIcon, { backgroundColor: 'rgba(52, 211, 153, 0.2)' }]}>
-                <Ionicons name="log-in" size={20} color={theme.colors.success} />
+            <View style={[styles.lobbyOzetCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+              <View style={[styles.lobbyOzetIcon, { backgroundColor: colors.successSoft }]}>
+                <Ionicons name="log-in" size={20} color={colors.success} />
               </View>
-              <Text style={styles.lobbyOzetValue}>{ozet.bugunGiris}</Text>
-              <Text style={styles.lobbyOzetLabel}>Bugün Giriş</Text>
+              <Text style={[styles.lobbyOzetValue, { color: colors.textPrimary }]}>{ozet.bugunGiris}</Text>
+              <Text style={[styles.lobbyOzetLabel, { color: colors.textSecondary }]}>Bugün Giriş</Text>
             </View>
-            <View style={styles.lobbyOzetCard}>
-              <View style={[styles.lobbyOzetIcon, { backgroundColor: 'rgba(251, 191, 36, 0.2)' }]}>
-                <Ionicons name="log-out" size={20} color={theme.colors.warning} />
+            <View style={[styles.lobbyOzetCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+              <View style={[styles.lobbyOzetIcon, { backgroundColor: colors.warningSoft }]}>
+                <Ionicons name="log-out" size={20} color={colors.warning} />
               </View>
-              <Text style={styles.lobbyOzetValue}>{ozet.bugunCikis}</Text>
-              <Text style={styles.lobbyOzetLabel}>Bugün Çıkış</Text>
+              <Text style={[styles.lobbyOzetValue, { color: colors.textPrimary }]}>{ozet.bugunCikis}</Text>
+              <Text style={[styles.lobbyOzetLabel, { color: colors.textSecondary }]}>Bugün Çıkış</Text>
             </View>
-            <View style={styles.lobbyOzetCard}>
-              <View style={[styles.lobbyOzetIcon, { backgroundColor: 'rgba(248, 113, 113, 0.2)' }]}>
-                <Ionicons name="warning" size={20} color={theme.colors.error} />
+            <View style={[styles.lobbyOzetCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+              <View style={[styles.lobbyOzetIcon, { backgroundColor: colors.errorSoft }]}>
+                <Ionicons name="warning" size={20} color={colors.error} />
               </View>
-              <Text style={styles.lobbyOzetValue}>{ozet.hataliBildirim}</Text>
-              <Text style={styles.lobbyOzetLabel}>Hatalı Bildirim</Text>
+              <Text style={[styles.lobbyOzetValue, { color: colors.textPrimary }]}>{ozet.hataliBildirim}</Text>
+              <Text style={[styles.lobbyOzetLabel, { color: colors.textSecondary }]}>Hatalı Bildirim</Text>
             </View>
           </ScrollView>
         </View>
       )}
 
-      {/* Filtreler — lobi pill */}
       <View style={styles.lobbyFiltreContainer}>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filtreScroll}>
           {filterOptions.map((f) => (
             <TouchableOpacity
               key={f.key}
-              style={[styles.lobbyFiltreButton, filtre === f.key && styles.lobbyFiltreButtonActive]}
+              style={[
+                styles.lobbyFiltreButton,
+                { backgroundColor: filtre === f.key ? colors.primary : colors.surface, borderColor: filtre === f.key ? colors.primary : colors.border },
+              ]}
               onPress={() => {
                 try {
                   logger.button('Filtre Button', 'clicked');
-                  logger.log('Filter changed', { oldFiltre: filtre, newFiltre: f.key });
                   setFiltre(f.key);
                 } catch (error) {
                   logger.error('Filter change error', error);
                 }
               }}
             >
-              <Ionicons
-                name={f.icon}
-                size={16}
-                color={filtre === f.key ? lobby.bg : lobby.textMuted}
-                style={styles.filtreIcon}
-              />
-              <Text style={[styles.lobbyFiltreText, filtre === f.key && styles.lobbyFiltreTextActive]}>
+              <Ionicons name={f.icon} size={16} color={filtre === f.key ? colors.textInverse : colors.textSecondary} style={styles.filtreIcon} />
+              <Text style={[styles.lobbyFiltreText, { color: filtre === f.key ? colors.textInverse : colors.textSecondary }, filtre === f.key && styles.lobbyFiltreTextActive]}>
                 {f.label}
               </Text>
             </TouchableOpacity>
@@ -780,32 +741,31 @@ export default function OdalarScreen() {
         </ScrollView>
         {filterLoading && (
           <View style={styles.filterLoadingIndicator}>
-            <ActivityIndicator size="small" color={lobby.accent} />
+            <ActivityIndicator size="small" color={colors.primary} />
           </View>
         )}
       </View>
 
-      {/* Canlı Güncellemeler — lobi stil */}
       {liveUpdates.length > 0 && (
-        <View style={styles.lobbyLiveContainer}>
+        <View style={[styles.lobbyLiveContainer, { backgroundColor: colors.surface, borderColor: colors.border }]}>
           <View style={styles.lobbyLiveHeader}>
             <View style={styles.liveIndicator}>
               <LiveDotPulse />
-              <Text style={styles.lobbyLiveText}>CANLI</Text>
+              <Text style={[styles.lobbyLiveText, { color: colors.primary }]}>CANLI</Text>
             </View>
-            <Text style={styles.lobbyLiveTitle}>Son Güncellemeler</Text>
+            <Text style={[styles.lobbyLiveTitle, { color: colors.textSecondary }]}>Son Güncellemeler</Text>
           </View>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.liveUpdatesScroll}>
             {liveUpdates.map((update, index) => (
-              <View key={index} style={styles.lobbyLiveCard}>
+              <View key={index} style={[styles.lobbyLiveCard, { backgroundColor: colors.background }]}>
                 <View style={styles.liveUpdateHeader}>
-                  <Ionicons name={update.type === 'kbs_status' ? 'shield-checkmark' : 'refresh'} size={16} color={lobby.accent} />
-                  <Text style={styles.lobbyLiveUpdateRoom}>Oda {update.roomNumber}</Text>
-                  <Text style={styles.lobbyLiveUpdateTime}>
+                  <Ionicons name={update.type === 'kbs_status' ? 'shield-checkmark' : 'refresh'} size={16} color={colors.primary} />
+                  <Text style={[styles.lobbyLiveUpdateRoom, { color: colors.textPrimary }]}>Oda {update.roomNumber}</Text>
+                  <Text style={[styles.lobbyLiveUpdateTime, { color: colors.textSecondary }]}>
                     {new Date(update.timestamp).toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' })}
                   </Text>
                 </View>
-                <Text style={styles.lobbyLiveUpdateMessage}>{update.message}</Text>
+                <Text style={[styles.lobbyLiveUpdateMessage, { color: colors.textSecondary }]}>{update.message}</Text>
               </View>
             ))}
           </ScrollView>
@@ -825,91 +785,54 @@ export default function OdalarScreen() {
         initialNumToRender={10}
         windowSize={10}
         refreshControl={
-          <RefreshControl 
-            refreshing={refreshing} 
-            onRefresh={onRefresh}
-            colors={[lobby.accent]}
-            tintColor={lobby.accent}
-          />
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[colors.primary]} tintColor={colors.primary} />
         }
-        contentContainerStyle={[
-          styles.list,
-          odalar.length === 0 && styles.listEmpty
-        ]}
+        contentContainerStyle={[styles.list, odalar.length === 0 && styles.listEmpty]}
         showsVerticalScrollIndicator={false}
         ListEmptyComponent={
-          <View style={styles.emptyContainer}>
-            {!initialLoading && !filterLoading ? (
-              <>
-                <MaterialIcons 
-                  name="wifi-off" 
-                  size={80} 
-                  color={theme.colors.error} 
-                />
-                <Text style={styles.emptyTitle}>
-                  {!getBackendUrl() ? 'Sunucu adresi eksik' : 'Backend Bağlantı Hatası'}
-                </Text>
-                <Text style={styles.emptyText}>
-                  {!getBackendUrl()
-                    ? 'EXPO_PUBLIC_BACKEND_URL tanımlı değil. Check-in ve kayıt için mobile/.env içinde backend adresi gerekli.'
-                    : 'Sunucuya bağlanılamadı.\n\nLütfen kontrol edin:\n• İnternet bağlantınız açık mı?\n• Backend (Railway) adresi doğru mu?'}
-                </Text>
-                <View style={styles.emptyActions}>
-                  <TouchableOpacity
-                    style={styles.retryButton}
-                    onPress={() => {
-                      logger.log('Retry button clicked');
-                      loadData(true);
-                    }}
-                  >
-                    <Ionicons name="refresh" size={20} color={theme.colors.white} />
-                    <Text style={styles.retryButtonText}>Yeniden Dene</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={[styles.retryButton, styles.retryButtonSecondary]}
-                    onPress={() => {
-                      logger.log('Backend check button clicked');
-                      // Backend health check yap
-                      import('../services/backendHealth').then(({ backendHealth }) => {
-                        backendHealth.checkHealth().then((status) => {
-                          if (status.isOnline) {
-                            Toast.show({
-                              type: 'success',
-                              text1: 'Backend Çalışıyor',
-                              text2: 'Bağlantı başarılı, veriler yükleniyor...',
-                            });
-                            loadData(true);
-                          } else {
-                            Toast.show({
-                              type: 'error',
-                              text1: 'Backend Offline',
-                              text2: status.error || 'Backend sunucusuna erişilemiyor',
-                            });
-                          }
-                        });
-                      });
-                    }}
-                  >
-                    <Ionicons name="checkmark-circle" size={20} color={theme.colors.white} />
-                    <Text style={styles.retryButtonText}>Bağlantıyı Test Et</Text>
-                  </TouchableOpacity>
-                </View>
-              </>
-            ) : (
-              <>
-                <ActivityIndicator size="large" color={lobby.accent} />
-                <Text style={styles.emptyTitle}>Yükleniyor...</Text>
-                <Text style={styles.emptyText}>Odalar yükleniyor, lütfen bekleyin</Text>
-              </>
-            )}
-          </View>
+          !initialLoading && !filterLoading ? (
+            <BackendErrorScreen
+              onRetry={() => loadData(true)}
+              onTestConnection={async () => {
+                const status = await backendHealth.checkHealth();
+                if (status.isOnline) {
+                  setBackendStatus({ isOnline: true, lastChecked: status.lastChecked || new Date(), error: null });
+                  setLastLoadErrorType(null);
+                  Toast.show({
+                    type: 'success',
+                    text1: 'Bağlantı kuruldu',
+                    text2: 'Veriler yeniden yükleniyor...',
+                    visibilityTime: 2000,
+                  });
+                  loadData(true);
+                } else {
+                  setBackendStatus({ isOnline: false, lastChecked: status.lastChecked, error: status.error });
+                  Toast.show({ type: 'error', text1: 'Bağlantı başarısız', text2: status.error || 'Sunucuya erişilemiyor' });
+                }
+              }}
+              onOpenSettings={() => navigation.navigate('Ayarlar')}
+              lastError={backendStatus.error}
+              lastChecked={backendStatus.lastChecked}
+              errorType={lastLoadErrorType}
+              testedUrl={getHealthUrl()}
+              apiBaseUrl={getBackendUrl()}
+              showDebug={showDebugUrls}
+              onToggleDebug={() => setShowDebugUrls((v) => !v)}
+            />
+          ) : (
+            <View style={styles.emptyContainer}>
+              <ActivityIndicator size="large" color={colors.primary} />
+              <Text style={[styles.emptyTitle, { color: colors.textPrimary }]}>Yükleniyor...</Text>
+              <Text style={[styles.emptyText, { color: colors.textSecondary }]}>Odalar yükleniyor</Text>
+            </View>
+          )
         }
       />
 
       {/* FAB Butonları */}
       <View style={styles.fabContainer}>
         <TouchableOpacity
-          style={[styles.fab, styles.fabSecondary]}
+          style={[styles.fab, styles.fabSecondary, { backgroundColor: colors.textSecondary }]}
           onPress={() => {
             try {
               logger.button('Refresh FAB', 'clicked');
@@ -919,37 +842,24 @@ export default function OdalarScreen() {
             }
           }}
         >
-          <Ionicons name="refresh" size={24} color={theme.colors.white} />
+          <Ionicons name="refresh" size={24} color={colors.textInverse} />
         </TouchableOpacity>
-        
-        <TouchableOpacity
-          style={styles.fab}
-          onPress={() => setShowFabMenu(!showFabMenu)}
-        >
-          <Ionicons name="add" size={28} color={theme.colors.white} />
+        <TouchableOpacity style={[styles.fab, { backgroundColor: colors.primary }]} onPress={() => setShowFabMenu(!showFabMenu)}>
+          <Ionicons name="add" size={28} color={colors.textInverse} />
         </TouchableOpacity>
-
-        {/* FAB Menu */}
         {showFabMenu && (
-          <View style={styles.fabMenu}>
-            <TouchableOpacity
-              style={styles.fabMenuItem}
-              onPress={handleAddRoom}
-            >
-              <View style={[styles.fabMenuIcon, { backgroundColor: theme.colors.primary }]}>
-                <Ionicons name="add-circle" size={20} color={theme.colors.white} />
+          <View style={[styles.fabMenu, { backgroundColor: colors.surface }]}>
+            <TouchableOpacity style={styles.fabMenuItem} onPress={handleAddRoom}>
+              <View style={[styles.fabMenuIcon, { backgroundColor: colors.primary }]}>
+                <Ionicons name="add-circle" size={20} color={colors.textInverse} />
               </View>
-              <Text style={styles.fabMenuText}>Yeni Oda Ekle</Text>
+              <Text style={[styles.fabMenuText, { color: colors.textPrimary }]}>Yeni Oda Ekle</Text>
             </TouchableOpacity>
-            
-            <TouchableOpacity
-              style={styles.fabMenuItem}
-              onPress={handleQuickCheckIn}
-            >
-              <View style={[styles.fabMenuIcon, { backgroundColor: theme.colors.success }]}>
-                <Ionicons name="log-in" size={20} color={theme.colors.white} />
+            <TouchableOpacity style={styles.fabMenuItem} onPress={handleQuickCheckIn}>
+              <View style={[styles.fabMenuIcon, { backgroundColor: colors.success }]}>
+                <Ionicons name="log-in" size={20} color={colors.textInverse} />
               </View>
-              <Text style={styles.fabMenuText}>Hızlı Check-in</Text>
+              <Text style={[styles.fabMenuText, { color: colors.textPrimary }]}>Hızlı Check-in</Text>
             </TouchableOpacity>
           </View>
         )}
@@ -970,115 +880,18 @@ export default function OdalarScreen() {
 const { width } = Dimensions.get('window');
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: lobby.bg,
-  },
-  loadingContainer: {
-    flex: 1,
-    backgroundColor: lobby.bg,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  loadingContent: {
-    alignItems: 'center',
-  },
-  loadingText: {
-    marginTop: theme.spacing.base,
-    fontSize: theme.typography.fontSize.base,
-    color: lobby.textMuted,
-  },
-  // ——— Lobi header (kurumsal dinamik) ———
-  lobbyHeader: {
-    backgroundColor: lobby.surface,
-    paddingTop: theme.spacing.lg,
-    paddingBottom: theme.spacing.base,
-    borderBottomLeftRadius: theme.spacing.borderRadius.xl,
-    borderBottomRightRadius: theme.spacing.borderRadius.xl,
-    borderBottomWidth: 1,
-    borderBottomColor: lobby.border,
-    overflow: 'hidden',
-    position: 'relative',
-  },
-  lobbyHeaderAccent: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    bottom: 0,
-    height: 3,
-    backgroundColor: lobby.accent,
-    opacity: 0.8,
-  },
-  headerContent: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: theme.spacing.screenPadding,
-  },
-  lobbyTitleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: theme.spacing.sm,
-  },
-  lobbyDot: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
-    backgroundColor: lobby.accent,
-    shadowColor: lobby.accent,
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.8,
-    shadowRadius: 6,
-    elevation: 4,
-  },
-  lobbyHeaderTitle: {
-    fontSize: theme.typography.fontSize.xl,
-    fontWeight: theme.typography.fontWeight.bold,
-    color: lobby.text,
-  },
-  lobbyHeaderSubtitle: {
-    fontSize: theme.typography.fontSize.sm,
-    color: lobby.textMuted,
-    marginTop: 2,
-  },
-  lobbyHeaderUserLine: {
-    fontSize: theme.typography.fontSize.xs,
-    color: lobby.textMuted,
-    opacity: 0.9,
-    marginTop: 2,
-  },
-  headerButtons: {
-    flexDirection: 'row',
-    gap: theme.spacing.sm,
-  },
-  lobbyHeaderButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 12,
-    backgroundColor: 'rgba(148, 163, 184, 0.15)',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  lobbyAdminButton: {
-    backgroundColor: 'rgba(34, 211, 238, 0.2)',
-    borderWidth: 1,
-    borderColor: lobby.border,
-  },
-  // ——— Lobi özet kartları ———
-  lobbyOzetContainer: {
-    paddingVertical: theme.spacing.base,
-  },
-  ozetScroll: {
-    paddingHorizontal: theme.spacing.screenPadding,
-  },
+  container: { flex: 1 },
+  loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  loadingContent: { alignItems: 'center' },
+  loadingText: { marginTop: theme.spacing.base, fontSize: theme.typography.fontSize.base },
+  lobbyOzetContainer: { paddingVertical: theme.spacing.base },
+  ozetScroll: { paddingHorizontal: theme.spacing.screenPadding },
   lobbyOzetCard: {
     width: 112,
-    backgroundColor: lobby.surfaceCard,
-    borderRadius: theme.spacing.borderRadius.lg,
+    borderRadius: theme.spacing.borderRadius.card,
     padding: theme.spacing.base,
     marginRight: theme.spacing.sm,
     borderWidth: 1,
-    borderColor: lobby.border,
   },
   lobbyOzetIcon: {
     width: 40,
@@ -1088,84 +901,34 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: theme.spacing.xs,
   },
-  lobbyOzetValue: {
-    fontSize: theme.typography.fontSize.lg,
-    fontWeight: theme.typography.fontWeight.bold,
-    color: lobby.text,
-    marginBottom: 2,
-  },
-  lobbyOzetLabel: {
-    fontSize: theme.typography.fontSize.xs,
-    color: lobby.textMuted,
-  },
-  // ——— Lobi filtreler ———
-  lobbyFiltreContainer: {
-    paddingBottom: theme.spacing.base,
-  },
-  filtreScroll: {
-    paddingHorizontal: theme.spacing.screenPadding,
-  },
+  lobbyOzetValue: { fontSize: theme.typography.fontSize.lg, fontWeight: '600', marginBottom: 2 },
+  lobbyOzetLabel: { fontSize: theme.typography.fontSize.xs },
+  lobbyFiltreContainer: { paddingBottom: theme.spacing.base },
+  filtreScroll: { paddingHorizontal: theme.spacing.screenPadding },
   lobbyFiltreButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(30, 41, 59, 0.8)',
-    borderRadius: theme.spacing.borderRadius.full,
+    borderRadius: theme.spacing.borderRadius.pill,
     paddingHorizontal: theme.spacing.base,
     paddingVertical: 8,
     marginRight: theme.spacing.sm,
     borderWidth: 1,
-    borderColor: lobby.border,
   },
-  lobbyFiltreButtonActive: {
-    backgroundColor: lobby.accent,
-    borderColor: lobby.accent,
-  },
-  filtreIcon: {
-    marginRight: theme.spacing.xs,
-  },
-  lobbyFiltreText: {
-    fontSize: theme.typography.fontSize.xs,
-    fontWeight: theme.typography.fontWeight.medium,
-    color: lobby.textMuted,
-  },
-  lobbyFiltreTextActive: {
-    color: lobby.bg,
-    fontWeight: theme.typography.fontWeight.semibold,
-  },
-  // ——— Lobi canlı güncellemeler ———
+  filtreIcon: { marginRight: theme.spacing.xs },
+  lobbyFiltreText: { fontSize: theme.typography.fontSize.xs, fontWeight: '500' },
+  lobbyFiltreTextActive: { fontWeight: '600' },
   lobbyLiveContainer: {
     marginHorizontal: theme.spacing.screenPadding,
     marginBottom: theme.spacing.base,
-    backgroundColor: lobby.surfaceCard,
-    borderRadius: theme.spacing.borderRadius.lg,
+    borderRadius: theme.spacing.borderRadius.card,
     padding: theme.spacing.base,
     borderWidth: 1,
-    borderColor: lobby.border,
   },
-  lobbyLiveHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: theme.spacing.sm,
-  },
-  lobbyLiveText: {
-    fontSize: theme.typography.fontSize.xs,
-    fontWeight: theme.typography.fontWeight.bold,
-    color: lobby.accent,
-    marginLeft: theme.spacing.xs,
-  },
-  lobbyLiveTitle: {
-    fontSize: theme.typography.fontSize.sm,
-    color: lobby.textMuted,
-    marginLeft: theme.spacing.base,
-  },
-  lobbyLiveDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: lobby.accent,
-  },
+  lobbyLiveHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: theme.spacing.sm },
+  lobbyLiveText: { fontSize: theme.typography.fontSize.xs, fontWeight: '700', marginLeft: theme.spacing.xs },
+  lobbyLiveTitle: { fontSize: theme.typography.fontSize.sm, marginLeft: theme.spacing.base },
+  lobbyLiveDot: { width: 8, height: 8, borderRadius: 4 },
   lobbyLiveCard: {
-    backgroundColor: 'rgba(15, 23, 42, 0.6)',
     borderRadius: theme.spacing.borderRadius.base,
     padding: theme.spacing.sm,
     marginRight: theme.spacing.sm,
@@ -1174,17 +937,17 @@ const styles = StyleSheet.create({
   lobbyLiveUpdateRoom: {
     fontSize: theme.typography.fontSize.sm,
     fontWeight: theme.typography.fontWeight.semibold,
-    color: lobby.text,
+    color: theme.colors.textPrimary,
     marginLeft: theme.spacing.xs,
   },
   lobbyLiveUpdateTime: {
     fontSize: theme.typography.fontSize.xs,
-    color: lobby.textMuted,
+    color: theme.colors.textSecondary,
     marginLeft: 'auto',
   },
   lobbyLiveUpdateMessage: {
     fontSize: theme.typography.fontSize.xs,
-    color: lobby.textMuted,
+    color: theme.colors.textSecondary,
     marginTop: 4,
   },
   list: {
@@ -1198,13 +961,13 @@ const styles = StyleSheet.create({
   emptyTitle: {
     fontSize: theme.typography.fontSize.xl,
     fontWeight: theme.typography.fontWeight.semibold,
-    color: lobby.text,
+    color: theme.colors.textPrimary,
     marginTop: theme.spacing.lg,
     marginBottom: theme.spacing.sm,
   },
   emptyText: {
     fontSize: theme.typography.fontSize.base,
-    color: lobby.textMuted,
+    color: theme.colors.textSecondary,
     textAlign: 'center',
     paddingHorizontal: theme.spacing['2xl'],
     lineHeight: 22,
@@ -1218,7 +981,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: lobby.accent,
+    backgroundColor: theme.colors.primary,
     borderRadius: theme.spacing.borderRadius.base,
     paddingHorizontal: theme.spacing.xl,
     paddingVertical: theme.spacing.base,
@@ -1226,7 +989,9 @@ const styles = StyleSheet.create({
     minWidth: 180,
   },
   retryButtonSecondary: {
-    backgroundColor: theme.colors.gray600,
+    backgroundColor: theme.colors.surface,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
   },
   retryButtonText: {
     fontSize: theme.typography.fontSize.base,

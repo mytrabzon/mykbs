@@ -1,0 +1,199 @@
+import React, { useState } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, Share, Platform } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
+import { useTheme } from '../context/ThemeContext';
+import { typography, spacing } from '../theme';
+import { Button } from './ui/Button';
+
+/**
+ * Backend/veri hatası ekranı: tek kaynak (test URL = API base).
+ * - errorType: 'auth' → oturum CTA, 'network'/'path' → backend/endpoint mesajı.
+ * - Test başarılıysa parent setBackendStatus('UP') + setLastLoadErrorType(null) yapar, overlay kapanır.
+ * - Debug: Test edilen adres + API adresi (aynı base olmalı).
+ */
+export default function BackendErrorScreen({
+  onRetry,
+  onTestConnection,
+  onOpenSettings,
+  lastError,
+  lastChecked,
+  showDebug = false,
+  onToggleDebug,
+  errorType = null, // 'auth' | 'network' | 'path' | null
+  testedUrl = '',
+  apiBaseUrl = '',
+}) {
+  const { colors } = useTheme();
+  const [debugVisible, setDebugVisible] = useState(showDebug);
+
+  const isAuth = errorType === 'auth';
+  const isPath = errorType === 'path';
+
+  const title = isAuth
+    ? 'Oturum doğrulanamadı'
+    : isPath
+      ? 'Endpoint bulunamadı'
+      : 'Backend Bağlantı Hatası';
+  const message = isAuth
+    ? 'Oturum süreniz dolmuş veya yetkiniz yok. Lütfen tekrar giriş yapın.'
+    : isPath
+      ? 'İstek yapılan adres sunucuda bulunamadı. Test ve API adresleri aynı base\'i kullanıyor mu kontrol edin.'
+      : apiBaseUrl
+        ? 'Sunucu adresi doğrulanamadı. İnternet bağlantınızı ve sunucu adresini kontrol edin.'
+        : 'EXPO_PUBLIC_BACKEND_URL tanımlı değil. mobile/.env içinde backend adresi gerekli.';
+
+  const debugLines = [
+    testedUrl ? `Test edilen adres: ${testedUrl}` : null,
+    apiBaseUrl ? `API adresi: ${apiBaseUrl}` : null,
+    lastChecked ? `Son deneme: ${new Date(lastChecked).toLocaleString('tr-TR')}` : null,
+    lastError ? `Hata: ${lastError}` : null,
+  ].filter(Boolean);
+  const hasDebug = debugLines.length > 0;
+
+  const copyDebug = () => {
+    const text = debugLines.join('\n');
+    if (Platform.OS === 'web' || !Share) return;
+    Share.share({ message: text, title: 'Backend debug' }).catch(() => {});
+  };
+
+  return (
+    <View style={styles.container}>
+      <View style={[styles.pill, { backgroundColor: isAuth ? colors.warningSoft : colors.errorSoft }]}>
+        <Text style={[styles.pillText, { color: isAuth ? colors.warning : colors.error }]}>
+          {isAuth ? 'Oturum' : 'Offline'}
+        </Text>
+      </View>
+      <View style={[styles.iconWrap, { backgroundColor: isAuth ? colors.warningSoft : colors.errorSoft }]}>
+        <Ionicons
+          name={isAuth ? 'person-outline' : 'cloud-offline-outline'}
+          size={56}
+          color={isAuth ? colors.warning : colors.error}
+        />
+      </View>
+      <Text style={[styles.title, { color: colors.textPrimary }]}>{title}</Text>
+      <Text style={[styles.message, { color: colors.textSecondary }]}>{message}</Text>
+
+      {(debugVisible && hasDebug) && (
+        <TouchableOpacity
+          style={[styles.debugBox, { backgroundColor: colors.surface, borderColor: colors.border }]}
+          onLongPress={copyDebug}
+          activeOpacity={1}
+        >
+          <Text style={[styles.debugLabel, { color: colors.textSecondary }]}>Detaylar (uzun basarak kopyala)</Text>
+          {debugLines.map((line, i) => (
+            <Text key={i} style={[styles.debugLine, { color: colors.textPrimary }]} numberOfLines={2}>
+              {line}
+            </Text>
+          ))}
+        </TouchableOpacity>
+      )}
+
+      <View style={styles.actions}>
+        {!isAuth && (
+          <Button variant="primary" onPress={onRetry} style={styles.btn}>
+            Yeniden Dene
+          </Button>
+        )}
+        {isAuth && (
+          <Button variant="primary" onPress={onRetry} style={styles.btn}>
+            Tekrar giriş yap
+          </Button>
+        )}
+        <Button variant="secondary" onPress={onTestConnection} style={styles.btn}>
+          Bağlantıyı Test Et
+        </Button>
+        {onOpenSettings && (
+          <TouchableOpacity onPress={onOpenSettings} style={styles.tertiary}>
+            <Ionicons name="settings-outline" size={18} color={colors.primary} />
+            <Text style={[styles.tertiaryText, { color: colors.primary }]}>Ayarları Aç (Backend URL)</Text>
+          </TouchableOpacity>
+        )}
+      </View>
+
+      {hasDebug && (
+        <TouchableOpacity
+          onPress={() => (onToggleDebug ? onToggleDebug() : setDebugVisible((v) => !v))}
+          style={styles.showDebug}
+        >
+          <Text style={[styles.showDebugText, { color: colors.textSecondary }]}>
+            {debugVisible ? 'Detayları gizle' : 'Detaylar'}
+          </Text>
+        </TouchableOpacity>
+      )}
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: spacing.xl,
+  },
+  pill: {
+    paddingHorizontal: spacing.md,
+    paddingVertical: 6,
+    borderRadius: spacing.borderRadius.pill,
+    marginBottom: spacing.lg,
+  },
+  pillText: {
+    fontSize: typography.text.caption.fontSize,
+    fontWeight: typography.fontWeight.semibold,
+  },
+  iconWrap: {
+    width: 96,
+    height: 96,
+    borderRadius: 48,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: spacing.lg,
+  },
+  title: {
+    fontSize: typography.text.h2Large.fontSize,
+    fontWeight: typography.fontWeight.semibold,
+    marginBottom: spacing.xs,
+    textAlign: 'center',
+  },
+  message: {
+    fontSize: typography.text.body.fontSize,
+    lineHeight: 22,
+    textAlign: 'center',
+    marginBottom: spacing.xl,
+    paddingHorizontal: spacing.sm,
+  },
+  debugBox: {
+    alignSelf: 'stretch',
+    padding: spacing.md,
+    borderRadius: spacing.borderRadius.input,
+    borderWidth: 1,
+    marginBottom: spacing.lg,
+  },
+  debugLabel: {
+    fontSize: typography.text.caption.fontSize,
+    marginBottom: spacing.xs,
+  },
+  debugLine: {
+    fontSize: typography.text.caption.fontSize,
+    fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace',
+  },
+  actions: {
+    width: '100%',
+    maxWidth: 320,
+    gap: spacing.sm,
+    alignItems: 'center',
+  },
+  btn: { width: '100%' },
+  tertiary: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+    paddingVertical: spacing.sm,
+  },
+  tertiaryText: {
+    fontSize: typography.text.body.fontSize,
+    fontWeight: typography.fontWeight.medium,
+  },
+  showDebug: { marginTop: spacing.lg },
+  showDebugText: { fontSize: typography.text.caption.fontSize },
+});

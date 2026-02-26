@@ -1,14 +1,17 @@
 # MyKBS KBS Backend — Supabase + Polis/Jandarma KBS
 FROM node:20-alpine
 
+# Prisma + OpenSSL (Alpine)
+RUN apk add --no-cache openssl
+
 WORKDIR /app
 
 COPY package*.json ./
+COPY prisma ./prisma/
 RUN npm ci --omit=dev
 
 COPY . .
-# Prisma optional (bu projede Supabase kullanılıyor; eski Prisma route'ları kalsın)
-RUN npx prisma generate 2>/dev/null || true
+RUN npx prisma generate
 
 EXPOSE 8080
 ENV PORT=8080

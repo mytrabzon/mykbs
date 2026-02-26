@@ -15,10 +15,18 @@
 
 ## Railway
 
+### Seçenek A: GitHub ile (otomatik deploy)
 1. New Project → Deploy from GitHub Repo → repo seç.
 2. **Root Directory:** Settings → Root Directory = `backend` (proje kökü değil, backend klasörü).
 3. **Variables:** `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `WORKER_SECRET` (uzun rastgele), isteğe `POLIS_KBS_URL`, `JANDARMA_KBS_URL`.
-4. Deploy bitince **BACKEND_URL:** `https://<proje>.up.railway.app` (trailing slash yok).
+4. Deploy bitince **BACKEND_URL:** `https://<proje>.up.railway.app` (trailing slash yok). Her push’ta otomatik deploy.
+
+### Seçenek B: CLI ile deploy
+1. Railway CLI: `npm i -g @railway/cli` veya `npx -y @railway/cli` kullan.
+2. **İlk kez:** `cd backend` → `railway login` (tarayıcı açılır, giriş yap).
+3. Proje bağlı değilse: `railway link` ile proje/sevis seç.
+4. Deploy: `npm run deploy` veya `railway up` (backend klasöründen).
+5. CI için: `RAILWAY_TOKEN=<token> railway up -d` (token: Railway Dashboard → Project → Settings → Tokens).
 
 ## Railway Cron (KBS retry her 1 dk)
 

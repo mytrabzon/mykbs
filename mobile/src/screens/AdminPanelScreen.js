@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   StyleSheet,
@@ -7,131 +7,165 @@ import {
   Text,
   ActivityIndicator,
   Platform,
-  Alert
+  ScrollView,
+  RefreshControl
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { theme } from '../theme';
+import { useAuth } from '../context/AuthContext';
+import { getBackendUrl } from '../services/apiSupabase';
 import { logger } from '../utils/logger';
-
-// WebView'ı conditional import et
-let WebView = null;
-try {
-  WebView = require('react-native-webview').WebView;
-} catch (error) {
-  logger.warn('WebView modülü yüklenemedi', error);
-}
 
 export default function AdminPanelScreen() {
   const navigation = useNavigation();
+  const { getSupabaseToken } = useAuth();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [data, setData] = useState(null);
 
-  // Admin panel URL – production'da env veya ayarlardan alınmalı
-  const getAdminPanelUrl = () => {
-    return process.env.EXPO_PUBLIC_ADMIN_PANEL_URL || 'https://admin.example.com';
-  };
+  const fetchDashboard = useCallback(async () => {
+    setError(null);
+    const base = getBackendUrl();
+    if (!base) {
+      setError('Backend adresi tanımlı değil. EXPO_PUBLIC_BACKEND_URL ayarlayın.');
+      setLoading(false);
+      return;
+    }
+    try {
+      const token = await getSupabaseToken();
+      if (!token) {
+        setError('Oturum bulunamadı. Tekrar giriş yapın.');
+        setLoading(false);
+        return;
+      }
+      const r = await fetch(`${base}/api/app-admin/dashboard`, {
+        method: 'GET',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const json = await r.json().catch(() => ({}));
+      if (!r.ok) {
+        setError(json.message || 'Dashboard yüklenemedi');
+        setData(null);
+        setLoading(false);
+        return;
+      }
+      setData(json);
+    } catch (e) {
+      logger.error('Admin dashboard fetch', e);
+      setError(e?.message || 'Bağlantı hatası. İnterneti kontrol edin.');
+      setData(null);
+    } finally {
+      setLoading(false);
+    }
+  }, [getSupabaseToken]);
 
-  const adminPanelUrl = getAdminPanelUrl();
+  useEffect(() => {
+    fetchDashboard();
+  }, [fetchDashboard]);
 
   const handleGoBack = () => {
     navigation.goBack();
   };
 
-  const handleReload = () => {
-    setError(null);
-    setLoading(true);
-  };
-
-  const handleError = (syntheticEvent) => {
-    const { nativeEvent } = syntheticEvent;
-    logger.error('WebView error', nativeEvent);
-    setError('Admin paneline bağlanılamadı. Lütfen admin panel sunucusunun çalıştığından emin olun.');
-    setLoading(false);
-  };
-
-  const handleLoadEnd = () => {
-    setLoading(false);
-    setError(null);
-  };
-
   return (
     <View style={styles.container}>
       <StatusBar barStyle="dark-content" backgroundColor={theme.colors.surface} />
-      
-      {/* Header */}
+
       <View style={styles.header}>
-        <TouchableOpacity
-          style={styles.backButton}
-          onPress={handleGoBack}
-        >
+        <TouchableOpacity style={styles.backButton} onPress={handleGoBack}>
           <Ionicons name="arrow-back" size={24} color={theme.colors.textPrimary} />
         </TouchableOpacity>
-        
         <View style={styles.headerTitleContainer}>
           <Text style={styles.headerTitle}>Admin Paneli</Text>
         </View>
-        
-        <TouchableOpacity
-          style={styles.reloadButton}
-          onPress={handleReload}
-        >
+        <TouchableOpacity style={styles.reloadButton} onPress={() => { setLoading(true); fetchDashboard(); }}>
           <Ionicons name="refresh" size={24} color={theme.colors.textPrimary} />
         </TouchableOpacity>
       </View>
 
-      {/* Loading Indicator */}
-      {loading && (
+      {loading && !data && (
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color={theme.colors.primary} />
           <Text style={styles.loadingText}>Yükleniyor...</Text>
         </View>
       )}
 
-      {/* Error Message */}
-      {error && (
+      {error && !data && (
         <View style={styles.errorContainer}>
           <Ionicons name="alert-circle-outline" size={48} color={theme.colors.error} />
-          <Text style={styles.errorTitle}>Bağlantı Hatası</Text>
+          <Text style={styles.errorTitle}>Hata</Text>
           <Text style={styles.errorText}>{error}</Text>
-          <Text style={styles.errorUrl}>URL: {adminPanelUrl}</Text>
-          <TouchableOpacity
-            style={styles.retryButton}
-            onPress={handleReload}
-          >
+          <TouchableOpacity style={styles.retryButton} onPress={() => { setLoading(true); fetchDashboard(); }}>
             <Ionicons name="refresh" size={20} color={theme.colors.white} />
             <Text style={styles.retryButtonText}>Yeniden Dene</Text>
           </TouchableOpacity>
         </View>
       )}
 
-      {/* WebView */}
-      {WebView ? (
-        <WebView
-          source={{ uri: adminPanelUrl }}
-          style={styles.webview}
-          onError={handleError}
-          onLoadEnd={handleLoadEnd}
-          onLoadStart={() => setLoading(true)}
-          javaScriptEnabled={true}
-          domStorageEnabled={true}
-          startInLoadingState={true}
-          scalesPageToFit={true}
-          mixedContentMode="always"
-          allowsInlineMediaPlayback={true}
-          mediaPlaybackRequiresUserAction={false}
-        />
-      ) : (
-        <View style={styles.webviewErrorContainer}>
-          <Ionicons name="alert-circle-outline" size={64} color={theme.colors.error} />
-          <Text style={styles.webviewErrorTitle}>WebView Modülü Yüklenemedi</Text>
-          <Text style={styles.webviewErrorText}>
-            WebView native modülü henüz yüklenmedi. Lütfen development build'i yükleyin.
-          </Text>
-          <Text style={styles.webviewErrorSubtext}>
-            Bu özellik için custom build (dev client) gereklidir.
-          </Text>
-        </View>
+      {data && (
+        <ScrollView
+          style={styles.scroll}
+          contentContainerStyle={styles.scrollContent}
+          refreshControl={
+            <RefreshControl refreshing={loading} onRefresh={fetchDashboard} colors={[theme.colors.primary]} />
+          }
+        >
+          <View style={styles.cards}>
+            <View style={styles.card}>
+              <View style={[styles.cardIcon, { backgroundColor: '#4361EE20' }]}>
+                <Ionicons name="business" size={24} color="#4361EE" />
+              </View>
+              <Text style={styles.cardValue}>{data.toplamTesis ?? 0}</Text>
+              <Text style={styles.cardLabel}>Toplam Tesis</Text>
+            </View>
+            <View style={styles.card}>
+              <View style={[styles.cardIcon, { backgroundColor: '#4CAF5020' }]}>
+                <Ionicons name="checkmark-circle" size={24} color="#4CAF50" />
+              </View>
+              <Text style={styles.cardValue}>{data.aktifTesis ?? 0}</Text>
+              <Text style={styles.cardLabel}>Aktif Tesis</Text>
+            </View>
+          </View>
+          <View style={styles.cards}>
+            <View style={styles.card}>
+              <View style={[styles.cardIcon, { backgroundColor: '#FF980020' }]}>
+                <Ionicons name="notifications" size={24} color="#FF9800" />
+              </View>
+              <Text style={styles.cardValue}>{data.gunlukBildirim ?? 0}</Text>
+              <Text style={styles.cardLabel}>Günlük Bildirim</Text>
+            </View>
+            <View style={styles.card}>
+              <View style={[styles.cardIcon, { backgroundColor: '#F4433620' }]}>
+                <Ionicons name="warning" size={24} color="#F44336" />
+              </View>
+              <Text style={styles.cardValue}>{data.gunlukHata ?? 0}</Text>
+              <Text style={styles.cardLabel}>Günlük Hata</Text>
+            </View>
+          </View>
+          {data.paketDagilimi && Object.keys(data.paketDagilimi).length > 0 && (
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>Paket dağılımı</Text>
+              {Object.entries(data.paketDagilimi).map(([paket, count]) => (
+                <View key={paket} style={styles.row}>
+                  <Text style={styles.rowLabel}>{paket}</Text>
+                  <Text style={styles.rowValue}>{count}</Text>
+                </View>
+              ))}
+            </View>
+          )}
+          {data.kotaAsimi && data.kotaAsimi.length > 0 && (
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>Kota aşımı</Text>
+              {data.kotaAsimi.map((t) => (
+                <View key={t.id} style={styles.row}>
+                  <Text style={styles.rowLabel} numberOfLines={1}>{t.tesisAdi}</Text>
+                  <Text style={styles.rowValue}>{t.kullanilanKota}/{t.kota}</Text>
+                </View>
+              ))}
+            </View>
+          )}
+        </ScrollView>
       )}
     </View>
   );
@@ -152,7 +186,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: theme.spacing.base,
     borderBottomWidth: 1,
     borderBottomColor: theme.colors.borderLight,
-    ...theme.spacing.shadow.sm,
   },
   backButton: {
     width: 40,
@@ -179,17 +212,10 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
-  webview: {
-    flex: 1,
-    backgroundColor: theme.colors.background,
-  },
   loadingContainer: {
-    position: 'absolute',
-    top: 100,
-    left: 0,
-    right: 0,
+    flex: 1,
+    justifyContent: 'center',
     alignItems: 'center',
-    zIndex: 1,
   },
   loadingText: {
     marginTop: theme.spacing.base,
@@ -197,13 +223,10 @@ const styles = StyleSheet.create({
     color: theme.colors.textSecondary,
   },
   errorContainer: {
-    position: 'absolute',
-    top: 100,
-    left: 0,
-    right: 0,
+    flex: 1,
+    justifyContent: 'center',
     alignItems: 'center',
     padding: theme.spacing.xl,
-    zIndex: 1,
   },
   errorTitle: {
     fontSize: theme.typography.fontSize.xl,
@@ -216,41 +239,6 @@ const styles = StyleSheet.create({
     fontSize: theme.typography.fontSize.base,
     color: theme.colors.textSecondary,
     textAlign: 'center',
-    marginBottom: theme.spacing.sm,
-  },
-  webviewErrorContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: theme.spacing.xl,
-    backgroundColor: theme.colors.background,
-  },
-  webviewErrorTitle: {
-    fontSize: theme.typography.fontSize.xl,
-    fontWeight: theme.typography.fontWeight.bold,
-    color: theme.colors.textPrimary,
-    marginTop: theme.spacing.lg,
-    marginBottom: theme.spacing.base,
-    textAlign: 'center',
-  },
-  webviewErrorText: {
-    fontSize: theme.typography.fontSize.base,
-    color: theme.colors.textSecondary,
-    textAlign: 'center',
-    marginBottom: theme.spacing.sm,
-    paddingHorizontal: theme.spacing.lg,
-  },
-  webviewErrorSubtext: {
-    fontSize: theme.typography.fontSize.sm,
-    color: theme.colors.textTertiary,
-    textAlign: 'center',
-    marginTop: theme.spacing.base,
-    paddingHorizontal: theme.spacing.lg,
-  },
-  errorUrl: {
-    fontSize: theme.typography.fontSize.sm,
-    color: theme.colors.textSecondary,
-    fontFamily: 'monospace',
     marginBottom: theme.spacing.lg,
   },
   retryButton: {
@@ -268,5 +256,59 @@ const styles = StyleSheet.create({
     fontWeight: theme.typography.fontWeight.semibold,
     color: theme.colors.white,
   },
+  scroll: { flex: 1 },
+  scrollContent: { padding: theme.spacing.base, paddingBottom: theme.spacing.xl * 2 },
+  cards: {
+    flexDirection: 'row',
+    gap: theme.spacing.base,
+    marginBottom: theme.spacing.base,
+  },
+  card: {
+    flex: 1,
+    backgroundColor: theme.colors.surface,
+    borderRadius: theme.spacing.borderRadius.lg,
+    padding: theme.spacing.base,
+    alignItems: 'center',
+    ...theme.spacing.shadow?.sm,
+  },
+  cardIcon: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: theme.spacing.sm,
+  },
+  cardValue: {
+    fontSize: 22,
+    fontWeight: '700',
+    color: theme.colors.textPrimary,
+  },
+  cardLabel: {
+    fontSize: theme.typography.fontSize.sm,
+    color: theme.colors.textSecondary,
+    marginTop: 2,
+  },
+  section: {
+    backgroundColor: theme.colors.surface,
+    borderRadius: theme.spacing.borderRadius.lg,
+    padding: theme.spacing.base,
+    marginTop: theme.spacing.base,
+  },
+  sectionTitle: {
+    fontSize: theme.typography.fontSize.base,
+    fontWeight: '600',
+    color: theme.colors.textPrimary,
+    marginBottom: theme.spacing.sm,
+  },
+  row: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: theme.spacing.sm,
+    borderBottomWidth: 1,
+    borderBottomColor: theme.colors.borderLight,
+  },
+  rowLabel: { flex: 1, fontSize: theme.typography.fontSize.base, color: theme.colors.textPrimary },
+  rowValue: { fontSize: theme.typography.fontSize.base, fontWeight: '600', color: theme.colors.textSecondary },
 });
-

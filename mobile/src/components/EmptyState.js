@@ -1,68 +1,82 @@
 import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { theme } from '../theme';
+import { useTheme } from '../context/ThemeContext';
+import { typography, spacing } from '../theme';
+import { Button } from './ui/Button';
 
-const EmptyState = ({ 
-  icon = 'alert-circle-outline',
+/**
+ * Boş ekran şablonu: büyük ikon (soft), başlık, açıklama, 1–2 aksiyon.
+ * primaryCta = { label, onPress }, secondaryCta = { label, onPress } (opsiyonel).
+ */
+export default function EmptyState({
+  icon = 'folder-open-outline',
+  iconColor,
   title = 'Veri Bulunamadı',
-  message = 'Henüz hiç veri eklenmemiş',
-  actionText,
-  onAction,
-  iconSize = 60,
-  iconColor = theme.colors.gray300
-}) => {
+  message = 'Henüz hiç veri eklenmemiş.',
+  primaryCta,
+  secondaryCta,
+  iconSize = 72,
+}) {
+  const { colors } = useTheme();
+  const softColor = iconColor || colors.textSecondary;
+  const iconBg = colors.primarySoft;
+
   return (
     <View style={styles.container}>
-      <Ionicons name={icon} size={iconSize} color={iconColor} style={styles.icon} />
-      <Text style={styles.title}>{title}</Text>
-      <Text style={styles.message}>{message}</Text>
-      
-      {actionText && onAction && (
-        <TouchableOpacity style={styles.actionButton} onPress={onAction}>
-          <Text style={styles.actionText}>{actionText}</Text>
-        </TouchableOpacity>
-      )}
+      <View style={[styles.iconWrap, { backgroundColor: iconBg }]}>
+        <Ionicons name={icon} size={iconSize} color={softColor} />
+      </View>
+      <Text style={[styles.title, { color: colors.textPrimary }]}>{title}</Text>
+      <Text style={[styles.message, { color: colors.textSecondary }]}>{message}</Text>
+      <View style={styles.actions}>
+        {primaryCta?.label && primaryCta?.onPress && (
+          <Button variant="primary" onPress={primaryCta.onPress} style={styles.primaryBtn}>
+            {primaryCta.label}
+          </Button>
+        )}
+        {secondaryCta?.label && secondaryCta?.onPress && (
+          <Button variant="secondary" onPress={secondaryCta.onPress} style={styles.secondaryBtn}>
+            {secondaryCta.label}
+          </Button>
+        )}
+      </View>
     </View>
   );
-};
+}
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    padding: theme.spacing['4xl'],
+    padding: spacing.xl,
   },
-  icon: {
-    marginBottom: theme.spacing.xl,
+  iconWrap: {
+    width: 120,
+    height: 120,
+    borderRadius: 60,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: spacing.lg,
   },
   title: {
-    fontSize: theme.typography.fontSize.xl,
-    fontWeight: theme.typography.fontWeight.semibold,
-    color: theme.colors.textPrimary,
-    marginBottom: theme.spacing.sm,
+    fontSize: typography.text.h2Large.fontSize,
+    fontWeight: typography.fontWeight.semibold,
+    marginBottom: spacing.xs,
     textAlign: 'center',
   },
   message: {
-    fontSize: theme.typography.fontSize.base,
-    color: theme.colors.textSecondary,
+    fontSize: typography.text.body.fontSize,
+    lineHeight: 22,
     textAlign: 'center',
-    marginBottom: theme.spacing.xl,
-    lineHeight: theme.typography.lineHeight.normal,
+    marginBottom: spacing.xl,
+    paddingHorizontal: spacing.lg,
   },
-  actionButton: {
-    backgroundColor: theme.colors.primary,
-    borderRadius: theme.spacing.borderRadius.base,
-    paddingHorizontal: theme.spacing.xl,
-    paddingVertical: theme.spacing.base,
-    ...theme.spacing.shadow.base,
+  actions: {
+    gap: spacing.sm,
+    alignItems: 'center',
   },
-  actionText: {
-    fontSize: theme.typography.fontSize.base,
-    fontWeight: theme.typography.fontWeight.semibold,
-    color: theme.colors.white,
-  },
+  primaryBtn: { minWidth: 200 },
+  secondaryBtn: { minWidth: 200 },
 });
-
-export default EmptyState;

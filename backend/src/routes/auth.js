@@ -916,6 +916,162 @@ router.post('/giris', async (req, res) => {
 });
 
 /**
+ * Şifremi unuttum: Telefona OTP gönder (Supabase yoksa Node SMS ile)
+ */
+router.post('/sifre-sifirla/otp-iste', async (req, res) => {
+  try {
+    const { telefon } = req.body;
+    if (!telefon) {
+      return res.status(400).json({ message: 'Telefon numarası gerekli' });
+    }
+    const formattedPhone = normalizePhone(telefon);
+    if (!formattedPhone) {
+      return res.status(400).json({ message: 'Geçersiz telefon numarası' });
+    }
+
+    const kullanici = await prisma.kullanici.findFirst({
+      where: { telefon: formattedPhone },
+      include: { tesis: true },
+    });
+    if (!kullanici) {
+      return res.status(404).json({ message: 'Bu telefon numarası ile kayıtlı hesap bulunamadı' });
+    }
+    if (kullanici.tesis.durum !== 'aktif') {
+      return res.status(403).json({ message: 'Tesis aktif değil' });
+    }
+
+    const otp = Math.floor(100000 + Math.random() * 900000).toString();
+    const expiresAt = new Date();
+    expiresAt.setMinutes(expiresAt.getMinutes() + 5);
+
+    await prisma.otp.updateMany({
+      where: { telefon: formattedPhone, islemTipi: 'sifre_sifirla', durum: 'beklemede' },
+      data: { durum: 'iptal' },
+    });
+    await prisma.otp.create({
+      data: {
+        telefon: formattedPhone,
+        otp,
+        kullaniciId: kullanici.id,
+        islemTipi: 'sifre_sifirla',
+        expiresAt,
+      },
+    });
+
+    const smsResult = await smsService.sendOTP(formattedPhone, otp);
+    if (!smsResult.success) {
+      return res.status(500).json({ message: 'SMS gönderilemedi', error: smsResult.error });
+    }
+    const isDev = process.env.NODE_ENV !== 'production' || process.env.SMS_TEST_MODE === 'true';
+    res.json({
+      message: 'Kod gönderildi. Telefonunuza gelen 6 haneli kodu girin.',
+      otpExpiresIn: 5,
+      ...(isDev && { otpForDev: otp }),
+    });
+  } catch (error) {
+    console.error('Şifre sıfırlama OTP hatası:', error);
+    res.status(500).json({ message: 'Kod gönderilemedi', error: error.message });
+  }
+});
+
+/**
+ * Şifremi unuttum: OTP doğrulandıktan sonra şifre sıfırlama.
+ * İki yol: 1) Supabase JWT (access_token), 2) Node OTP (telefon + otp) – Supabase yoksa kullanılır.
+ */
+router.post('/sifre-sifirla', async (req, res) => {
+  try {
+    const authHeader = req.headers.authorization;
+    const accessToken = (authHeader && authHeader.replace(/Bearer\s+/i, '').trim()) || req.body?.access_token || null;
+    const { telefon, otp, yeniSifre, yeniSifreTekrar } = req.body;
+
+    if (!yeniSifre || !yeniSifreTekrar) {
+      return res.status(400).json({ message: 'Yeni şifre ve tekrarı gereklidir' });
+    }
+    if (yeniSifre.length < 6) {
+      return res.status(400).json({ message: 'Şifre en az 6 karakter olmalıdır' });
+    }
+    if (yeniSifre !== yeniSifreTekrar) {
+      return res.status(400).json({ message: 'Şifreler eşleşmiyor' });
+    }
+
+    let formattedPhone = null;
+    const supabaseUrl = process.env.SUPABASE_URL || '';
+    const apiKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY || '';
+
+    if (accessToken && supabaseUrl && apiKey) {
+      const userRes = await fetch(`${supabaseUrl.replace(/\/$/, '')}/auth/v1/user`, {
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          apikey: apiKey,
+        },
+      });
+      if (!userRes.ok) {
+        return res.status(401).json({ message: 'Doğrulama süresi doldu. Lütfen tekrar kod isteyip deneyin.' });
+      }
+      const supabaseUser = await userRes.json();
+      const phone = supabaseUser?.phone || supabaseUser?.user_metadata?.phone;
+      if (!phone) {
+        return res.status(400).json({ message: 'Telefon bilgisi bulunamadı' });
+      }
+      formattedPhone = String(phone).trim();
+      if (!formattedPhone.startsWith('+')) {
+        if (formattedPhone.startsWith('90')) formattedPhone = '+' + formattedPhone;
+        else if (formattedPhone.startsWith('0')) formattedPhone = '+90' + formattedPhone.slice(1);
+        else formattedPhone = '+90' + formattedPhone;
+      }
+    } else if (telefon && otp) {
+      formattedPhone = normalizePhone(telefon);
+      if (!formattedPhone) {
+        return res.status(400).json({ message: 'Geçersiz telefon numarası' });
+      }
+      const otpTrimmed = String(otp).trim();
+      const otpRecord = await prisma.otp.findFirst({
+        where: {
+          telefon: formattedPhone,
+          otp: otpTrimmed,
+          islemTipi: 'sifre_sifirla',
+          durum: 'beklemede',
+          expiresAt: { gt: new Date() },
+        },
+        orderBy: { createdAt: 'desc' },
+      });
+      if (!otpRecord) {
+        return res.status(401).json({ message: 'Kod geçersiz veya süresi doldu. Yeni kod isteyip tekrar deneyin.' });
+      }
+      await prisma.otp.update({ where: { id: otpRecord.id }, data: { durum: 'dogrulandi' } });
+    } else if (accessToken && (!supabaseUrl || !apiKey)) {
+      return res.status(503).json({
+        message: 'Şifre sıfırlama şu an sunucu ayarları nedeniyle kullanılamıyor. Lütfen "Sunucu ile kod iste" ile tekrar deneyin veya destek ile iletişime geçin.',
+      });
+    } else {
+      return res.status(400).json({ message: 'Doğrulama gerekli. Önce kodu alıp doğrulayın, ardından yeni şifrenizi girin.' });
+    }
+
+    const kullanici = await prisma.kullanici.findFirst({
+      where: { telefon: formattedPhone },
+      include: { tesis: true },
+    });
+    if (!kullanici) {
+      return res.status(404).json({ message: 'Bu telefon numarası ile kayıtlı hesap bulunamadı' });
+    }
+    if (kullanici.tesis.durum !== 'aktif') {
+      return res.status(403).json({ message: 'Tesis aktif değil' });
+    }
+
+    const hashedSifre = await bcrypt.hash(yeniSifre, 10);
+    await prisma.kullanici.update({
+      where: { id: kullanici.id },
+      data: { sifre: hashedSifre },
+    });
+
+    res.json({ message: 'Şifreniz güncellendi. Telefon veya e-posta ve yeni şifrenizle giriş yapabilirsiniz.' });
+  } catch (error) {
+    console.error('Şifre sıfırlama hatası:', error);
+    res.status(500).json({ message: 'Şifre güncellenemedi', error: error.message });
+  }
+});
+
+/**
  * Şifre belirleme/güncelleme (giriş yapmış kullanıcı)
  */
 router.post('/sifre', authenticate, async (req, res) => {

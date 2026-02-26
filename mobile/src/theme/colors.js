@@ -1,79 +1,69 @@
-export const colors = {
-  // Primary Colors
-  primary: '#4361EE', // Modern mavi
-  primaryLight: '#6C8AFF',
-  primaryDark: '#2A4BCF',
-  
-  // Secondary Colors
-  secondary: '#7209B7', // Mor
-  secondaryLight: '#9D4EDD',
-  secondaryDark: '#560BAD',
-  
-  // Success Colors
-  success: '#4CAF50',
-  successLight: '#80E27E',
-  successDark: '#087F23',
-  
-  // Warning Colors
-  warning: '#FF9800',
-  warningLight: '#FFC947',
-  warningDark: '#C66900',
-  
-  // Error Colors
-  error: '#F44336',
-  errorLight: '#FF7961',
-  errorDark: '#BA000D',
-  
-  // Info Colors
-  info: '#2196F3',
-  infoLight: '#6EC6FF',
-  infoDark: '#0069C0',
-  
-  // Neutral Colors
-  white: '#FFFFFF',
-  black: '#000000',
-  gray50: '#FAFAFA',
-  gray100: '#F5F5F5',
-  gray200: '#EEEEEE',
-  gray300: '#E0E0E0',
-  gray400: '#BDBDBD',
-  gray500: '#9E9E9E',
-  gray600: '#757575',
-  gray700: '#616161',
-  gray800: '#424242',
-  gray900: '#212121',
-  
-  // Background Colors
-  background: '#F8FAFC',
+/**
+ * KBS Pro / Hotel Ops — Light + Dark palette
+ * Tek palette, premium his; dark modda tam siyah yok.
+ */
+
+export const lightColors = {
+  background: '#F6F7FB',
   surface: '#FFFFFF',
-  card: '#FFFFFF',
-  
-  // Text Colors
-  textPrimary: '#1A1A1A',
-  textSecondary: '#666666',
-  textDisabled: '#9E9E9E',
+  surfaceCard: '#FFFFFF',
+  textPrimary: '#111827',
+  textSecondary: '#6B7280',
+  textDisabled: '#9CA3AF',
   textInverse: '#FFFFFF',
-  
-  // Border Colors
-  border: '#E0E0E0',
-  borderLight: '#F0F0F0',
-  borderDark: '#BDBDBD',
-  
-  // Status Colors
-  statusAvailable: '#4CAF50',
-  statusOccupied: '#F44336',
-  statusPending: '#FF9800',
-  statusMaintenance: '#9E9E9E',
-  
-  // Gradient Colors
-  gradientStart: '#4361EE',
-  gradientEnd: '#7209B7',
+  border: '#E5E7EB',
+  borderLight: '#F3F4F6',
+
+  primary: '#2563EB',
+  primaryHover: '#1D4ED8',
+  primarySoft: '#E8F0FF',
+  primaryDisabled: '#93C5FD',
+
+  success: '#16A34A',
+  successSoft: '#E9F9EF',
+  successDark: '#15803D',
+
+  warning: '#F59E0B',
+  warningSoft: '#FFF7E6',
+
+  error: '#EF4444',
+  errorSoft: '#FFE9E9',
+  errorDark: '#DC2626',
+
+  white: '#FFFFFF',
+  black: '#111827',
 };
 
-export const gradients = {
-  primary: ['#4361EE', '#7209B7'],
-  success: ['#4CAF50', '#087F23'],
-  warning: ['#FF9800', '#FF5722'],
-  error: ['#F44336', '#D32F2F'],
-  info: ['#2196F3', '#1976D2'],
+export const darkColors = {
+  background: '#0B1220',
+  surface: '#0F1A2E',
+  surfaceCard: '#0F1A2E',
+  textPrimary: '#E5E7EB',
+  textSecondary: '#9CA3AF',
+  textDisabled: '#6B7280',
+  textInverse: '#111827',
+  border: '#1F2A44',
+  borderLight: '#1E293B',
+
+  primary: '#60A5FA',
+  primaryHover: '#3B82F6',
+  primarySoft: '#1E3A5F',
+  primaryDisabled: '#1F3B6B',
+
+  success: '#34D399',
+  successSoft: '#064E3B',
+  successDark: '#10B981',
+
+  warning: '#FBBF24',
+  warningSoft: '#422006',
+
+  error: '#F87171',
+  errorSoft: '#7F1D1D',
+  errorDark: '#EF4444',
+
+  white: '#FFFFFF',
+  black: '#0B1220',
 };
+
+// Legacy export: default light (theme context ile override edilir)
+export const colors = lightColors;

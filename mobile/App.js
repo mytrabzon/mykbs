@@ -7,6 +7,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
 import Toast from 'react-native-toast-message';
 import ErrorBoundary from './src/components/ErrorBoundary';
+import EmptyState from './src/components/EmptyState';
 import { logger } from './src/utils/logger';
 import { backendHealth } from './src/services/backendHealth';
 import { registerPushToken } from './src/services/pushNotifications';
@@ -15,6 +16,7 @@ import { BackHandler, Alert, Platform, View, Text, StyleSheet, TouchableOpacity 
 // Screens
 import LoginScreen from './src/screens/LoginScreen';
 import OTPVerifyScreen from './src/screens/OTPVerifyScreen';
+import ForgotPasswordScreen from './src/screens/ForgotPasswordScreen';
 import KayitScreen from './src/screens/KayitScreen';
 import BasvuruScreen from './src/screens/BasvuruScreen';
 import OdalarScreen from './src/screens/OdalarScreen';
@@ -31,74 +33,58 @@ import KycSubmitScreen from './src/features/kyc/KycSubmitScreen';
 import KycManualEntryScreen from './src/features/kyc/KycManualEntryScreen';
 import NfcIntroScreen from './src/features/kyc/NfcIntroScreen';
 
-// Placeholder screens for tabs
+// Placeholder screens for tabs (theme-aware)
 function MisafirlerScreen({ navigation }) {
+  const { colors } = useTheme();
   return (
-    <View style={styles.screenContainer}>
-      <View style={styles.screenHeader}>
-        <Text style={styles.screenTitle}>Misafirler</Text>
-        <Text style={styles.screenSubtitle}>Aktif ve geçmiş misafirleriniz</Text>
+    <View style={[styles.screenContainer, { backgroundColor: colors.background }]}>
+      <View style={[styles.screenHeader, { backgroundColor: colors.surface }]}>
+        <Text style={[styles.screenTitle, { color: colors.textPrimary }]}>Misafirler</Text>
+        <Text style={[styles.screenSubtitle, { color: colors.textSecondary }]}>Aktif ve geçmiş misafirleriniz</Text>
       </View>
-      
       <View style={styles.contentContainer}>
-        <View style={styles.emptyState}>
-          <Ionicons name="people-outline" size={80} color="#CCCCCC" />
-          <Text style={styles.emptyStateTitle}>Misafir Bulunamadı</Text>
-          <Text style={styles.emptyStateText}>
-            Henüz kayıtlı misafir bulunmuyor. Yeni misafir eklemek için Odalar ekranından Check-in yapabilirsiniz.
-          </Text>
-        </View>
+        <EmptyState
+          icon="people-outline"
+          title="Misafir Bulunamadı"
+          message="Henüz kayıtlı misafir bulunmuyor. Odalar ekranından check-in yaparak misafir ekleyebilirsiniz."
+          primaryCta={{ label: 'Hızlı Check-in', onPress: () => navigation.navigate('CheckIn') }}
+          secondaryCta={{ label: 'Oda Ekle', onPress: () => navigation.navigate('Odalar') }}
+        />
       </View>
     </View>
   );
 }
 
 function RaporlarScreen({ navigation }) {
+  const { colors } = useTheme();
+  const reportCards = [
+    { key: 'doluluk', icon: 'calendar', iconBg: colors.primarySoft, iconColor: colors.primary, label: 'Günlük Doluluk', value: '%75' },
+    { key: 'gelir', icon: 'cash', iconBg: colors.successSoft, iconColor: colors.success, label: 'Aylık Gelir', value: '₺45,250' },
+    { key: 'misafir', icon: 'person-add', iconBg: colors.warningSoft, iconColor: colors.warning, label: 'Yeni Misafir', value: '12' },
+    { key: 'kalış', icon: 'time', iconBg: colors.errorSoft, iconColor: colors.error, label: 'Ort. Kalış', value: '3.2 gün' },
+  ];
   return (
-    <View style={styles.screenContainer}>
-      <View style={styles.screenHeader}>
-        <Text style={styles.screenTitle}>Raporlar</Text>
-        <Text style={styles.screenSubtitle}>Tesis performans analizleri</Text>
+    <View style={[styles.screenContainer, { backgroundColor: colors.background }]}>
+      <View style={[styles.screenHeader, { backgroundColor: colors.surface }]}>
+        <Text style={[styles.screenTitle, { color: colors.textPrimary }]}>Raporlar</Text>
+        <Text style={[styles.screenSubtitle, { color: colors.textSecondary }]}>Tesis performans analizleri</Text>
       </View>
-      
       <View style={styles.reportsGrid}>
-        <TouchableOpacity style={styles.reportCard}>
-          <View style={[styles.reportIcon, { backgroundColor: '#4361EE15' }]}>
-            <Ionicons name="calendar" size={24} color="#4361EE" />
-          </View>
-          <Text style={styles.reportTitle}>Günlük Doluluk</Text>
-          <Text style={styles.reportValue}>%75</Text>
-        </TouchableOpacity>
-        
-        <TouchableOpacity style={styles.reportCard}>
-          <View style={[styles.reportIcon, { backgroundColor: '#4CAF5015' }]}>
-            <Ionicons name="cash" size={24} color="#4CAF50" />
-          </View>
-          <Text style={styles.reportTitle}>Aylık Gelir</Text>
-          <Text style={styles.reportValue}>₺45,250</Text>
-        </TouchableOpacity>
-        
-        <TouchableOpacity style={styles.reportCard}>
-          <View style={[styles.reportIcon, { backgroundColor: '#FF980015' }]}>
-            <Ionicons name="person-add" size={24} color="#FF9800" />
-          </View>
-          <Text style={styles.reportTitle}>Yeni Misafir</Text>
-          <Text style={styles.reportValue}>12</Text>
-        </TouchableOpacity>
-        
-        <TouchableOpacity style={styles.reportCard}>
-          <View style={[styles.reportIcon, { backgroundColor: '#F4433615' }]}>
-            <Ionicons name="time" size={24} color="#F44336" />
-          </View>
-          <Text style={styles.reportTitle}>Ort. Kalış</Text>
-          <Text style={styles.reportValue}>3.2 gün</Text>
-        </TouchableOpacity>
+        {reportCards.map((r) => (
+          <TouchableOpacity key={r.key} style={[styles.reportCard, { backgroundColor: colors.surface }]}>
+            <View style={[styles.reportIcon, { backgroundColor: r.iconBg }]}>
+              <Ionicons name={r.icon} size={24} color={r.iconColor} />
+            </View>
+            <Text style={[styles.reportValue, { color: colors.textPrimary }]}>{r.value}</Text>
+            <Text style={[styles.reportTitle, { color: colors.textSecondary }]}>{r.label}</Text>
+          </TouchableOpacity>
+        ))}
       </View>
-      
-      <View style={styles.chartContainer}>
-        <Text style={styles.chartTitle}>Doluluk Oranı (Son 7 Gün)</Text>
-        <View style={styles.chartPlaceholder}>
-          <Text style={styles.chartPlaceholderText}>Grafik gösterimi yakında eklenecek</Text>
+      <View style={[styles.chartContainer, { backgroundColor: colors.surface }]}>
+        <Text style={[styles.chartTitle, { color: colors.textPrimary }]}>Doluluk Oranı (Son 7 Gün)</Text>
+        <View style={[styles.chartPlaceholder, { backgroundColor: colors.background }]}>
+          <Text style={[styles.chartPlaceholderText, { color: colors.textSecondary }]}>Veri bekleniyor</Text>
+          <Text style={[styles.chartPlaceholderSub, { color: colors.textSecondary }]}>Son 7 gün yakında</Text>
         </View>
       </View>
     </View>
@@ -142,58 +128,27 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontWeight: 'bold',
   },
-  screenContainer: {
-    flex: 1,
-    backgroundColor: '#F8F9FA',
-  },
+  screenContainer: { flex: 1 },
   screenHeader: {
-    backgroundColor: '#FFFFFF',
-    paddingTop: 60,
-    paddingBottom: 20,
+    paddingTop: 56,
+    paddingBottom: 16,
     paddingHorizontal: 20,
-    borderBottomLeftRadius: 20,
-    borderBottomRightRadius: 20,
+    borderBottomLeftRadius: 16,
+    borderBottomRightRadius: 16,
+    marginBottom: 16,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.05,
     shadowRadius: 4,
     elevation: 3,
-    marginBottom: 20,
   },
   screenTitle: {
     fontSize: 28,
-    fontWeight: 'bold',
-    color: '#1A1A1A',
+    fontWeight: '600',
     marginBottom: 4,
   },
-  screenSubtitle: {
-    fontSize: 14,
-    color: '#666666',
-  },
-  contentContainer: {
-    flex: 1,
-    paddingHorizontal: 20,
-  },
-  emptyState: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingVertical: 40,
-  },
-  emptyStateTitle: {
-    fontSize: 20,
-    fontWeight: '600',
-    color: '#333333',
-    marginTop: 20,
-    marginBottom: 8,
-  },
-  emptyStateText: {
-    fontSize: 14,
-    color: '#666666',
-    textAlign: 'center',
-    lineHeight: 20,
-    paddingHorizontal: 40,
-  },
+  screenSubtitle: { fontSize: 14 },
+  contentContainer: { flex: 1, paddingHorizontal: 20 },
   reportsGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
@@ -203,13 +158,12 @@ const styles = StyleSheet.create({
   },
   reportCard: {
     width: '48%',
-    backgroundColor: '#FFFFFF',
     borderRadius: 16,
     padding: 16,
     marginBottom: 16,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
+    shadowOpacity: 0.06,
     shadowRadius: 4,
     elevation: 2,
   },
@@ -223,55 +177,53 @@ const styles = StyleSheet.create({
   },
   reportTitle: {
     fontSize: 13,
-    color: '#666666',
-    marginBottom: 4,
+    marginTop: 4,
   },
   reportValue: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#1A1A1A',
+    fontSize: 24,
+    fontWeight: '700',
+  },
+  chartPlaceholderSub: {
+    fontSize: 12,
+    marginTop: 4,
   },
   chartContainer: {
-    backgroundColor: '#FFFFFF',
     borderRadius: 16,
     padding: 20,
     marginHorizontal: 20,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
+    shadowOpacity: 0.06,
     shadowRadius: 4,
     elevation: 2,
   },
-  chartTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#1A1A1A',
-    marginBottom: 16,
-  },
+  chartTitle: { fontSize: 18, fontWeight: '600', marginBottom: 16 },
   chartPlaceholder: {
     height: 200,
-    backgroundColor: '#F8F9FA',
     borderRadius: 12,
     justifyContent: 'center',
     alignItems: 'center',
   },
-  chartPlaceholderText: {
-    fontSize: 14,
-    color: '#999999',
-  },
+  chartPlaceholderText: { fontSize: 14 },
 });
 
 // Context
 import { AuthProvider, useAuth } from './src/context/AuthContext';
+import { ThemeProvider, useTheme } from './src/context/ThemeContext';
 
 const Tab = createBottomTabNavigator();
 const Stack = createStackNavigator();
 
 const TAB_NAMES = ['Odalar', 'Misafirler', 'Topluluk', 'Bildirimler', 'Raporlar', 'Ayarlar'];
 
+const ADMIN_PANEL_USER_UID = 'f7cfe2ef-00bd-4c70-b40d-c5b55e1c52d7';
+
 function MainTabs() {
-  const { lastTab, setLastTab } = useAuth();
-  const initialTab = lastTab && TAB_NAMES.includes(lastTab) ? lastTab : 'Odalar';
+  const { user, lastTab, setLastTab } = useAuth();
+  const { colors } = useTheme();
+  const isAdminPanelUser = !!user && (user.id === ADMIN_PANEL_USER_UID || user.uid === ADMIN_PANEL_USER_UID);
+  const tabNames = isAdminPanelUser ? [...TAB_NAMES, 'AdminPanel'] : TAB_NAMES;
+  const initialTab = lastTab && tabNames.includes(lastTab) ? lastTab : 'Odalar';
 
   return (
     <Tab.Navigator
@@ -285,31 +237,32 @@ function MainTabs() {
           else if (route.name === 'Misafirler') iconName = focused ? 'people' : 'people-outline';
           else if (route.name === 'Topluluk') iconName = focused ? 'chatbubbles' : 'chatbubbles-outline';
           else if (route.name === 'Bildirimler') iconName = focused ? 'notifications' : 'notifications-outline';
+          else if (route.name === 'AdminPanel') iconName = focused ? 'shield' : 'shield-outline';
+          else iconName = 'ellipse-outline';
           return <Ionicons name={iconName} size={size} color={color} />;
         },
-        tabBarActiveTintColor: '#4361EE',
-        tabBarInactiveTintColor: '#9E9E9E',
+        tabBarActiveTintColor: colors.primary,
+        tabBarInactiveTintColor: colors.textSecondary,
         tabBarStyle: {
-          backgroundColor: '#FFFFFF',
+          backgroundColor: colors.surface,
           borderTopWidth: 1,
-          borderTopColor: '#F0F0F0',
-          height: 65,
-          paddingBottom: 10,
-          paddingTop: 10,
-          elevation: 8,
+          borderTopColor: colors.border,
+          height: 80,
+          paddingBottom: 12,
+          paddingTop: 8,
+          elevation: 4,
           shadowColor: '#000',
           shadowOffset: { width: 0, height: -2 },
-          shadowOpacity: 0.1,
+          shadowOpacity: 0.06,
           shadowRadius: 4,
         },
         tabBarLabelStyle: {
-          fontSize: 11,
+          fontSize: 12,
           fontWeight: '600',
           marginTop: 2,
         },
-        tabBarItemStyle: {
-          paddingVertical: 4,
-        },
+        tabBarItemStyle: { paddingVertical: 4 },
+        tabBarShowLabel: true,
         headerShown: false,
         listeners: ({ route }) => ({
           focus: () => setLastTab(route.name),
@@ -350,6 +303,13 @@ function MainTabs() {
         component={AyarlarScreen}
         options={{ tabBarLabel: 'Ayarlar' }}
       />
+      {isAdminPanelUser && (
+        <Tab.Screen
+          name="AdminPanel"
+          component={AdminPanelScreen}
+          options={{ tabBarLabel: 'Admin' }}
+        />
+      )}
     </Tab.Navigator>
   );
 }
@@ -367,6 +327,7 @@ function AppNavigator() {
         {!isAuthenticated ? (
           <>
             <Stack.Screen name="Login" component={LoginScreen} />
+            <Stack.Screen name="ForgotPassword" component={ForgotPasswordScreen} />
             <Stack.Screen name="Kayit" component={KayitScreen} />
             <Stack.Screen name="OTPVerify" component={OTPVerifyScreen} />
             <Stack.Screen name="Basvuru" component={BasvuruScreen} />
@@ -460,11 +421,13 @@ export default function App() {
 
   return (
     <ErrorBoundary>
-      <AuthProvider>
-        <PushRegistration />
-        <AppNavigator />
-        <Toast />
-      </AuthProvider>
+      <ThemeProvider>
+        <AuthProvider>
+          <PushRegistration />
+          <AppNavigator />
+          <Toast />
+        </AuthProvider>
+      </ThemeProvider>
     </ErrorBoundary>
   );
 }

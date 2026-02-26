@@ -1,23 +1,15 @@
 import { logger } from '../utils/logger';
+import { getApiBaseUrl, getHealthUrl } from '../config/api';
 import { callFn } from '../lib/supabase/functions';
-
-function getBackendUrl(): string {
-  if (typeof process !== 'undefined' && process.env?.EXPO_PUBLIC_BACKEND_URL) {
-    return (process.env.EXPO_PUBLIC_BACKEND_URL || '').replace(/\/$/, '');
-  }
-  try {
-    const Constants = require('expo-constants').default;
-    const url = Constants.expoConfig?.extra?.backendUrl ?? '';
-    return String(url).replace(/\/$/, '');
-  } catch {
-    return '';
-  }
-}
 
 export interface BackendStatus {
   isOnline: boolean;
   lastChecked: Date | null;
   error?: string;
+  /** Test edilen URL (debug) */
+  testedUrl?: string;
+  /** Son HTTP status (debug) */
+  lastStatusCode?: number;
 }
 
 class BackendHealthService {
@@ -30,33 +22,51 @@ class BackendHealthService {
   private listeners: Array<(status: BackendStatus) => void> = [];
 
   async checkHealth(): Promise<BackendStatus> {
-    const backendUrl = getBackendUrl();
+    const backendUrl = getApiBaseUrl();
+    const healthUrl = getHealthUrl();
     try {
-      if (backendUrl) {
-        logger.log('Checking backend health (KBS Node backend)...', backendUrl);
-        const res = await fetch(`${backendUrl}/health`, { method: 'GET' });
+      if (backendUrl && healthUrl) {
+        logger.log('Checking backend health (KBS Node backend)...', healthUrl);
+        const res = await fetch(healthUrl, { method: 'GET' });
         const data = (await res.json().catch(() => ({}))) as { ok?: boolean; status?: string };
         if (!res.ok || (data.ok !== true && data.status !== 'ok')) {
           throw new Error(data?.message || `HTTP ${res.status}`);
         }
+        this.status = {
+          isOnline: true,
+          lastChecked: new Date(),
+          error: undefined,
+          testedUrl: healthUrl,
+          lastStatusCode: res.status,
+        };
       } else {
         logger.log('Checking backend health (Supabase Edge Functions)...');
         await callFn<{ status?: string }>('health', {});
+        this.status = {
+          isOnline: true,
+          lastChecked: new Date(),
+          error: undefined,
+          testedUrl: 'Supabase Edge Functions',
+          lastStatusCode: 200,
+        };
       }
-      this.status = {
-        isOnline: true,
-        lastChecked: new Date(),
-      };
       logger.log('Backend health check successful', this.status);
       this.notifyListeners();
       return this.status;
     } catch (error: unknown) {
-      const message = error instanceof Error ? error.message : (backendUrl ? 'Backend erişilemiyor' : 'Supabase erişilemiyor');
+      const message =
+        error instanceof Error
+          ? error.message
+          : backendUrl
+            ? 'Backend erişilemiyor'
+            : 'Supabase erişilemiyor';
       logger.error('Backend health check failed', error);
       this.status = {
         isOnline: false,
         lastChecked: new Date(),
         error: message,
+        testedUrl: healthUrl || undefined,
+        lastStatusCode: (error as { response?: { status?: number } })?.response?.status,
       };
       this.notifyListeners();
       return this.status;

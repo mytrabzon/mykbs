@@ -10,409 +10,248 @@ import {
   ScrollView,
   StatusBar,
   Modal,
-  Animated,
+  Linking,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import Toast from 'react-native-toast-message';
+import Constants from 'expo-constants';
 import { logger } from '../utils/logger';
 import { Ionicons, MaterialIcons } from '@expo/vector-icons';
-import { theme } from '../theme';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useAuth } from '../context/AuthContext';
+import { useTheme } from '../context/ThemeContext';
+import { SegmentedControl, Button, Input } from '../components/ui';
+import { typography, spacing } from '../theme';
 
 const APP_PREFIX = 'mykbs';
-const STORAGE_KEYS = {
-  TELEFON: `@${APP_PREFIX}:login:telefon`
-};
+const STORAGE_KEYS = { TELEFON: `@${APP_PREFIX}:login:telefon` };
+const SUPPORT_EMAIL = Constants.expoConfig?.extra?.EXPO_PUBLIC_SUPPORT_EMAIL || 'support@litxtech.com';
+const SUPPORT_PHONE = Constants.expoConfig?.extra?.EXPO_PUBLIC_SUPPORT_PHONE || '0850 304 5061';
+const SUPPORT_PHONE_TEL = Constants.expoConfig?.extra?.EXPO_PUBLIC_SUPPORT_PHONE_TEL || 'tel:08503045061';
 
 export default function LoginScreen({ route }) {
   const navigation = useNavigation();
-  const { loginWithPassword } = useAuth();
+  const { colors } = useTheme();
+  const { login, loginWithPassword } = useAuth();
+  const [tab, setTab] = useState('tesis'); // 'tesis' | 'hesap'
+  const [tesisKodu, setTesisKodu] = useState('');
+  const [pin, setPin] = useState('');
   const [telefon, setTelefon] = useState('');
   const [sifre, setSifre] = useState('');
   const [loading, setLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
   const [errorDetails, setErrorDetails] = useState(null);
   const [showErrorModal, setShowErrorModal] = useState(false);
-  const [loginMode, setLoginMode] = useState('sms'); // 'sms' | 'password'
-  const [showPassword, setShowPassword] = useState(false);
-
-  const logoAnim = useRef(new Animated.Value(0)).current;
-  const titleAnim = useRef(new Animated.Value(0)).current;
-  const formAnim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
-    loadSavedCredentials();
-    if (route?.params?.testAccount?.telefon) {
-      setTelefon(route.params.testAccount.telefon || '');
-    }
-    logger.log('LoginScreen mounted');
-
-    Animated.sequence([
-      Animated.timing(logoAnim, {
-        toValue: 1,
-        duration: 500,
-        useNativeDriver: true,
-      }),
-      Animated.timing(titleAnim, {
-        toValue: 1,
-        duration: 400,
-        useNativeDriver: true,
-      }),
-      Animated.timing(formAnim, {
-        toValue: 1,
-        duration: 400,
-        useNativeDriver: true,
-      }),
-    ]).start();
-
-    return () => logger.log('LoginScreen unmounted');
+    (async () => {
+      try {
+        const saved = await AsyncStorage.getItem(STORAGE_KEYS.TELEFON);
+        if (saved) setTelefon(saved);
+      } catch (e) {}
+    })();
+    if (route?.params?.testAccount?.telefon) setTelefon(route.params.testAccount.telefon || '');
   }, [route]);
 
-  const loadSavedCredentials = async () => {
+  const formatPhone = (t) => t.replace(/[^\d]/g, '').slice(0, 10);
+  const isValidHesap = (v) => {
+    if (!v?.trim()) return false;
+    const s = v.trim();
+    if (s.includes('@')) return s.length >= 5;
+    return s.replace(/\D/g, '').length >= 10;
+  };
+
+  const handleTesisLogin = async () => {
+    if (!tesisKodu?.trim() || !pin?.trim()) {
+      Toast.show({ type: 'error', text1: 'Eksik alan', text2: 'Tesis kodu ve PIN giriniz' });
+      return;
+    }
+    setLoading(true);
     try {
-      const savedTelefon = await AsyncStorage.getItem(STORAGE_KEYS.TELEFON);
-      if (savedTelefon) setTelefon(savedTelefon);
-    } catch (error) {
-      logger.error('Error loading saved credentials', error);
+      const result = await login(tesisKodu.trim(), pin);
+      setLoading(false);
+      if (result?.success) Toast.show({ type: 'success', text1: 'Giriş başarılı' });
+      else Toast.show({ type: 'error', text1: 'Giriş başarısız', text2: result?.message });
+    } catch (e) {
+      setLoading(false);
+      setErrorDetails({ message: e?.message });
+      Toast.show({ type: 'error', text1: 'Hata', text2: e?.response?.data?.message || e?.message });
     }
   };
 
-  const saveCredentials = async () => {
+  const handleHesapLogin = async () => {
+    if (!isValidHesap(telefon)) {
+      Toast.show({ type: 'error', text1: 'Geçersiz giriş', text2: 'Telefon (10 hane) veya e-posta giriniz' });
+      return;
+    }
+    if (!sifre || sifre.length < 6) {
+      Toast.show({ type: 'error', text1: 'Şifre', text2: 'En az 6 karakter giriniz' });
+      return;
+    }
+    setLoading(true);
     try {
       if (telefon) await AsyncStorage.setItem(STORAGE_KEYS.TELEFON, telefon);
-    } catch (error) {
-      logger.error('Error saving credentials', error);
-    }
-  };
-
-  const formatPhoneNumber = (text) => {
-    const numbers = text.replace(/[^\d]/g, '');
-    if (numbers.length <= 10) return numbers;
-    return numbers.substring(0, 10);
-  };
-
-  const handleSmsLogin = async () => {
-    try {
-      logger.button('SMS Giriş', 'clicked');
-      if (!telefon || telefon.length < 10) {
-        Toast.show({
-          type: 'error',
-          text1: 'Geçersiz Telefon',
-          text2: 'Lütfen geçerli bir telefon numarası giriniz (10 haneli)'
-        });
-        return;
-      }
-      await saveCredentials();
-      navigation.navigate('OTPVerify', { telefon, islemTipi: 'giris' });
-    } catch (error) {
-      logger.error('SMS login nav error', error);
-      setErrorDetails({ message: error.message, timestamp: new Date().toISOString() });
-      Toast.show({ type: 'error', text1: 'Hata', text2: error.message });
-    }
-  };
-
-  const handlePasswordLogin = async () => {
-    try {
-      logger.button('Şifre ile Giriş', 'clicked');
-      if (!telefon || telefon.length < 10) {
-        Toast.show({ type: 'error', text1: 'Geçersiz Telefon', text2: '10 haneli telefon giriniz' });
-        return;
-      }
-      if (!sifre || sifre.length < 6) {
-        Toast.show({ type: 'error', text1: 'Şifre', text2: 'En az 6 karakter giriniz' });
-        return;
-      }
-      setLoading(true);
-      await saveCredentials();
-      const result = await loginWithPassword(telefon, sifre);
+      const result = await loginWithPassword(telefon.trim(), sifre);
       setLoading(false);
-      if (result.success) {
-        Toast.show({ type: 'success', text1: 'Giriş başarılı' });
-      } else {
-        Toast.show({ type: 'error', text1: 'Giriş başarısız', text2: result.message });
-      }
-    } catch (error) {
+      if (result?.success) Toast.show({ type: 'success', text1: 'Giriş başarılı' });
+      else Toast.show({ type: 'error', text1: 'Giriş başarısız', text2: result?.message });
+    } catch (e) {
       setLoading(false);
-      setErrorDetails({ message: error.message, timestamp: new Date().toISOString() });
-      Toast.show({ type: 'error', text1: 'Hata', text2: error.response?.data?.message || error.message });
+      setErrorDetails({ message: e?.message });
+      Toast.show({ type: 'error', text1: 'Hata', text2: e?.response?.data?.message || e?.message });
     }
   };
-
-  const handleKayit = () => {
-    logger.button('Kayıt Button', 'clicked');
-    navigation.navigate('Kayit');
-  };
-
-  const logoTranslateY = logoAnim.interpolate({ inputRange: [0, 1], outputRange: [-24, 0] });
-  const logoOpacity = logoAnim;
-  const titleTranslateY = titleAnim.interpolate({ inputRange: [0, 1], outputRange: [-16, 0] });
-  const titleOpacity = titleAnim;
-  const formOpacity = formAnim;
 
   return (
     <KeyboardAvoidingView
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      style={styles.container}
+      style={[styles.container, { backgroundColor: colors.background }]}
     >
-      <StatusBar barStyle="light-content" backgroundColor={theme.colors.primary} />
+      <StatusBar barStyle={colors.background === '#0B1220' ? 'light-content' : 'dark-content'} backgroundColor={colors.primary} />
       <ScrollView
         contentContainerStyle={styles.scrollContent}
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
       >
-        {/* Lobi / Hero – logo ve KBS biraz aşağıda, animasyonlu */}
-        <View style={styles.hero}>
-          <View style={styles.heroInner}>
-            <Animated.View
-              style={[
-                styles.logoWrap,
-                {
-                  opacity: logoOpacity,
-                  transform: [{ translateY: logoTranslateY }],
-                },
-              ]}
-            >
-              <MaterialIcons name="hotel" size={36} color={theme.colors.primary} />
-            </Animated.View>
-            <Animated.Text
-              style={[
-                styles.heroTitle,
-                {
-                  opacity: titleOpacity,
-                  transform: [{ translateY: titleTranslateY }],
-                },
-              ]}
-            >
-              MyKBS
-            </Animated.Text>
-            <Animated.Text style={[styles.heroTagline, { opacity: titleOpacity }]}>
-              Otel Kimlik Bildirim Otomasyonu
-            </Animated.Text>
-            <Animated.Text style={[styles.heroWelcome, { opacity: titleOpacity }]}>
-              Hoş geldiniz
-            </Animated.Text>
+        <View style={[styles.hero, { backgroundColor: colors.primary }]}>
+          <View style={[styles.logoWrap, { backgroundColor: colors.surface }]}>
+            <MaterialIcons name="hotel" size={36} color={colors.primary} />
           </View>
+          <Text style={styles.heroTitle}>KBS Yönetim Paneli</Text>
         </View>
 
-        <Animated.View style={[styles.formWrapper, { opacity: formOpacity }]}>
-          <View style={styles.formCard}>
-            {/* Giriş türü seçimi */}
-            <View style={styles.toggleRow}>
-              <TouchableOpacity
-                style={[styles.toggleBtn, loginMode === 'sms' && styles.toggleBtnActive]}
-                onPress={() => setLoginMode('sms')}
-                activeOpacity={0.8}
-              >
-                <Ionicons
-                  name="chatbubble-outline"
-                  size={18}
-                  color={loginMode === 'sms' ? theme.colors.white : theme.colors.textSecondary}
-                />
-                <Text style={[styles.toggleText, loginMode === 'sms' && styles.toggleTextActive]}>
-                  SMS ile
-                </Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.toggleBtn, loginMode === 'password' && styles.toggleBtnActive]}
-                onPress={() => setLoginMode('password')}
-                activeOpacity={0.8}
-              >
-                <Ionicons
-                  name="lock-closed-outline"
-                  size={18}
-                  color={loginMode === 'password' ? theme.colors.white : theme.colors.textSecondary}
-                />
-                <Text style={[styles.toggleText, loginMode === 'password' && styles.toggleTextActive]}>
-                  Şifre ile
-                </Text>
-              </TouchableOpacity>
-            </View>
+        <View style={[styles.formCard, { backgroundColor: colors.surface }]}>
+          <SegmentedControl
+            options={[
+              { key: 'tesis', label: 'Tesis ile Giriş' },
+              { key: 'hesap', label: 'Hesap ile Giriş' },
+            ]}
+            value={tab}
+            onChange={setTab}
+            style={styles.segmented}
+          />
 
-            {loginMode === 'sms' ? (
-              <>
-                <Text style={styles.formSubtitle}>
-                  Telefon numaranıza gönderilen kodu girin
-                </Text>
-                <View style={styles.inputWrap}>
-                  <View style={styles.inputIconWrap}>
-                    <Ionicons name="call-outline" size={20} color={theme.colors.textSecondary} />
-                  </View>
-                  <TextInput
-                    style={styles.input}
-                    placeholder="5xx xxx xx xx"
-                    placeholderTextColor={theme.colors.textDisabled}
-                    value={telefon}
-                    onChangeText={(text) => setTelefon(formatPhoneNumber(text))}
-                    keyboardType="phone-pad"
-                    maxLength={10}
-                  />
-                </View>
-                <TouchableOpacity
-                  style={[
-                    styles.primaryButton,
-                    (loading || telefon.length < 10) && styles.primaryButtonDisabled
-                  ]}
-                  onPress={handleSmsLogin}
-                  disabled={loading || telefon.length < 10}
-                  activeOpacity={0.85}
-                >
-                  {loading ? (
-                    <Text style={styles.primaryButtonText}>Yönlendiriliyor...</Text>
-                  ) : (
-                    <>
-                      <Ionicons name="chatbubble-outline" size={22} color={theme.colors.white} />
-                      <Text style={styles.primaryButtonText}>SMS ile Giriş Yap</Text>
-                    </>
-                  )}
-                </TouchableOpacity>
-              </>
-            ) : (
-              <>
-                <Text style={styles.formSubtitle}>
-                  Telefon ve şifrenizle giriş yapın
-                </Text>
-                <View style={styles.inputWrap}>
-                  <View style={styles.inputIconWrap}>
-                    <Ionicons name="call-outline" size={20} color={theme.colors.textSecondary} />
-                  </View>
-                  <TextInput
-                    style={styles.input}
-                    placeholder="5xx xxx xx xx"
-                    placeholderTextColor={theme.colors.textDisabled}
-                    value={telefon}
-                    onChangeText={(text) => setTelefon(formatPhoneNumber(text))}
-                    keyboardType="phone-pad"
-                    maxLength={10}
-                  />
-                </View>
-                <View style={styles.inputWrap}>
-                  <View style={styles.inputIconWrap}>
-                    <Ionicons name="lock-closed-outline" size={20} color={theme.colors.textSecondary} />
-                  </View>
-                  <TextInput
-                    style={styles.input}
-                    placeholder="Şifre"
-                    placeholderTextColor={theme.colors.textDisabled}
-                    value={sifre}
-                    onChangeText={setSifre}
-                    secureTextEntry={!showPassword}
-                    autoCapitalize="none"
-                  />
-                  <TouchableOpacity
-                    style={styles.eyeBtn}
-                    onPress={() => setShowPassword(!showPassword)}
-                  >
-                    <Ionicons
-                      name={showPassword ? 'eye-off-outline' : 'eye-outline'}
-                      size={22}
-                      color={theme.colors.textSecondary}
-                    />
+          {tab === 'tesis' ? (
+            <>
+              <Input
+                label="Tesis Kodu"
+                value={tesisKodu}
+                onChangeText={setTesisKodu}
+                placeholder="Tesis kodu"
+                autoCapitalize="characters"
+              />
+              <Input
+                label="PIN"
+                value={pin}
+                onChangeText={setPin}
+                placeholder="PIN"
+                secureTextEntry
+                keyboardType="numeric"
+              />
+              <Button
+                variant="primary"
+                onPress={handleTesisLogin}
+                loading={loading}
+                disabled={loading || !tesisKodu?.trim() || !pin?.trim()}
+              >
+                Giriş Yap
+              </Button>
+            </>
+          ) : (
+            <>
+              <Input
+                label="Telefon veya E-posta"
+                value={telefon}
+                onChangeText={(t) => setTelefon(t.includes('@') ? t : formatPhone(t))}
+                placeholder="5xx xxx xx xx veya e-posta"
+                keyboardType={telefon.includes('@') ? 'email-address' : 'phone-pad'}
+                autoCapitalize="none"
+              />
+              <Input
+                label="Şifre"
+                value={sifre}
+                onChangeText={setSifre}
+                placeholder="Şifre"
+                secureTextEntry={!showPassword}
+                rightIcon={
+                  <TouchableOpacity onPress={() => setShowPassword(!showPassword)}>
+                    <Ionicons name={showPassword ? 'eye-off-outline' : 'eye-outline'} size={22} color={colors.textSecondary} />
                   </TouchableOpacity>
-                </View>
-                <TouchableOpacity
-                  style={[
-                    styles.primaryButton,
-                    (loading || telefon.length < 10 || !sifre) && styles.primaryButtonDisabled
-                  ]}
-                  onPress={handlePasswordLogin}
-                  disabled={loading || telefon.length < 10 || !sifre}
-                  activeOpacity={0.85}
-                >
-                  {loading ? (
-                    <Text style={styles.primaryButtonText}>Giriş yapılıyor...</Text>
-                  ) : (
-                    <>
-                      <Ionicons name="log-in-outline" size={22} color={theme.colors.white} />
-                      <Text style={styles.primaryButtonText}>Giriş Yap</Text>
-                    </>
-                  )}
-                </TouchableOpacity>
-              </>
-            )}
-
-            {errorDetails && (
-              <TouchableOpacity
-                style={styles.errorDetailsButton}
-                onPress={() => setShowErrorModal(true)}
+                }
+              />
+              <Button
+                variant="primary"
+                onPress={handleHesapLogin}
+                loading={loading}
+                disabled={loading || !isValidHesap(telefon) || !sifre}
               >
-                <Ionicons name="information-circle-outline" size={18} color={theme.colors.error} />
-                <Text style={styles.errorDetailsButtonText}>Hata detayları</Text>
+                Giriş Yap
+              </Button>
+              <TouchableOpacity
+                style={styles.smsLinkWrap}
+                onPress={() => {
+                  const raw = (telefon || '').trim();
+                  const tel = raw.replace(/\D/g, '').replace(/^0/, '');
+                  if (tel.length >= 10) {
+                    navigation.navigate('OTPVerify', { telefon: raw || '0' + tel, islemTipi: 'giris' });
+                  } else {
+                    Toast.show({ type: 'error', text1: 'Telefon gerekli', text2: 'SMS ile giriş için önce geçerli telefon numaranızı girin.' });
+                  }
+                }}
+                disabled={loading}
+              >
+                <Text style={[styles.smsLinkText, { color: colors.primary }]}>SMS kodu ile giriş</Text>
               </TouchableOpacity>
-            )}
+            </>
+          )}
 
-            <View style={styles.footer}>
-              <Text style={styles.footerText}>Hesabınız yok mu?</Text>
-              <TouchableOpacity onPress={handleKayit} activeOpacity={0.7}>
-                <Text style={styles.registerLink}>Kayıt ol</Text>
-              </TouchableOpacity>
-            </View>
+          <Text style={[styles.secureNote, { color: colors.textSecondary }]}>
+            Veriler şifreli iletilir.
+          </Text>
+
+          {errorDetails && (
+            <TouchableOpacity onPress={() => setShowErrorModal(true)} style={styles.errorLink}>
+              <Ionicons name="information-circle-outline" size={18} color={colors.error} />
+              <Text style={[styles.errorLinkText, { color: colors.error }]}>Hata detayları</Text>
+            </TouchableOpacity>
+          )}
+
+          <View style={[styles.footer, { borderTopColor: colors.border }]}>
+            <TouchableOpacity onPress={() => navigation.navigate('ForgotPassword')}>
+              <Text style={[styles.footerLink, { color: colors.primary }]}>Şifremi unuttum</Text>
+            </TouchableOpacity>
+            <Text style={[styles.footerSupport, { color: colors.textSecondary }]}>
+              Destek:{' '}
+              <Text style={{ color: colors.primary }} onPress={() => Linking.openURL(`mailto:${SUPPORT_EMAIL}`)}>{SUPPORT_EMAIL}</Text>
+              {' · '}
+              <Text style={{ color: colors.primary }} onPress={() => Linking.openURL(SUPPORT_PHONE_TEL)}>{SUPPORT_PHONE}</Text>
+            </Text>
           </View>
-        </Animated.View>
+
+          <View style={styles.registerRow}>
+            <Text style={[styles.registerText, { color: colors.textSecondary }]}>Hesabınız yok mu?</Text>
+            <TouchableOpacity onPress={() => navigation.navigate('Kayit')}>
+              <Text style={[styles.registerLink, { color: colors.primary }]}>Kayıt ol</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
       </ScrollView>
 
-      <Modal
-        visible={showErrorModal}
-        transparent
-        animationType="slide"
-        onRequestClose={() => setShowErrorModal(false)}
-      >
+      <Modal visible={showErrorModal} transparent animationType="slide">
         <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Hata Detayları</Text>
-              <TouchableOpacity
-                onPress={() => setShowErrorModal(false)}
-                style={styles.modalCloseButton}
-              >
-                <Ionicons name="close" size={24} color={theme.colors.textPrimary} />
+          <View style={[styles.modalContent, { backgroundColor: colors.surface }]}>
+            <View style={[styles.modalHeader, { borderBottomColor: colors.border }]}>
+              <Text style={[styles.modalTitle, { color: colors.textPrimary }]}>Hata Detayları</Text>
+              <TouchableOpacity onPress={() => setShowErrorModal(false)}>
+                <Ionicons name="close" size={24} color={colors.textPrimary} />
               </TouchableOpacity>
             </View>
             <ScrollView style={styles.modalBody}>
               {errorDetails && (
-                <>
-                  <View style={styles.errorSection}>
-                    <Text style={styles.errorLabel}>Hata Mesajı:</Text>
-                    <Text style={styles.errorValue}>{errorDetails.message || 'Bilinmeyen hata'}</Text>
-                  </View>
-                  {errorDetails.status && (
-                    <View style={styles.errorSection}>
-                      <Text style={styles.errorLabel}>HTTP Durum Kodu:</Text>
-                      <Text style={styles.errorValue}>{errorDetails.status}</Text>
-                    </View>
-                  )}
-                  {errorDetails.response && (
-                    <View style={styles.errorSection}>
-                      <Text style={styles.errorLabel}>Sunucu Yanıtı:</Text>
-                      <Text style={styles.errorValue}>
-                        {JSON.stringify(errorDetails.response, null, 2)}
-                      </Text>
-                    </View>
-                  )}
-                  {errorDetails.timestamp && (
-                    <View style={styles.errorSection}>
-                      <Text style={styles.errorLabel}>Zaman:</Text>
-                      <Text style={styles.errorValue}>
-                        {new Date(errorDetails.timestamp).toLocaleString('tr-TR')}
-                      </Text>
-                    </View>
-                  )}
-                  {errorDetails.stack && (
-                    <View style={styles.errorSection}>
-                      <Text style={styles.errorLabel}>Stack Trace:</Text>
-                      <Text style={styles.errorStack}>{errorDetails.stack}</Text>
-                    </View>
-                  )}
-                </>
+                <Text style={[styles.modalBodyText, { color: colors.textPrimary }]}>{errorDetails.message || 'Bilinmeyen hata'}</Text>
               )}
             </ScrollView>
-            <View style={styles.modalFooter}>
-              <TouchableOpacity
-                style={styles.modalButton}
-                onPress={() => setShowErrorModal(false)}
-              >
-                <Text style={styles.modalButtonText}>Kapat</Text>
-              </TouchableOpacity>
-            </View>
+            <Button variant="primary" onPress={() => setShowErrorModal(false)}>Kapat</Button>
           </View>
         </View>
       </Modal>
@@ -420,183 +259,83 @@ export default function LoginScreen({ route }) {
   );
 }
 
-const { colors, typography, spacing } = theme;
-const heroRadius = 28;
-
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: colors.background,
-  },
-  scrollContent: {
-    flexGrow: 1,
-    paddingBottom: spacing['3xl'],
-  },
+  container: { flex: 1 },
+  scrollContent: { flexGrow: 1, paddingBottom: spacing['3xl'] },
   hero: {
-    backgroundColor: colors.primary,
     paddingTop: spacing['4xl'] + 8,
-    paddingBottom: spacing['2xl'] + 24,
-    paddingHorizontal: spacing.xl,
-    borderBottomLeftRadius: heroRadius,
-    borderBottomRightRadius: heroRadius,
-    ...spacing.shadow.lg,
-  },
-  heroInner: {
+    paddingBottom: spacing.xl,
     alignItems: 'center',
+    borderBottomLeftRadius: 20,
+    borderBottomRightRadius: 20,
   },
   logoWrap: {
     width: 72,
     height: 72,
     borderRadius: 36,
-    backgroundColor: colors.white,
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: spacing.base,
-    ...spacing.shadow.md,
+    marginBottom: spacing.md,
   },
   heroTitle: {
-    fontSize: typography.fontSize['3xl'],
-    fontWeight: typography.fontWeight.bold,
-    color: colors.white,
-    letterSpacing: 0.5,
-    marginBottom: spacing.xs,
-  },
-  heroTagline: {
-    fontSize: typography.fontSize.sm,
-    color: 'rgba(255,255,255,0.9)',
-    textAlign: 'center',
-    marginBottom: spacing.sm,
-    paddingHorizontal: spacing.lg,
-  },
-  heroWelcome: {
-    fontSize: typography.fontSize.xs,
-    color: 'rgba(255,255,255,0.75)',
-    letterSpacing: 1,
-    textTransform: 'uppercase',
-  },
-  formWrapper: {
-    paddingHorizontal: spacing.screenPadding,
-    marginTop: -20,
+    fontSize: typography.text.h1.fontSize,
+    fontWeight: typography.fontWeight.semibold,
+    color: '#FFFFFF',
   },
   formCard: {
-    backgroundColor: colors.surface,
-    borderRadius: spacing.borderRadius.xl,
+    marginHorizontal: spacing.screenPadding,
+    marginTop: -16,
+    borderRadius: 16,
     padding: spacing.xl,
-    ...spacing.shadow.lg,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    elevation: 4,
   },
-  toggleRow: {
-    flexDirection: 'row',
-    marginBottom: spacing.lg,
-    backgroundColor: colors.gray100,
-    borderRadius: spacing.borderRadius.base,
-    padding: 4,
-  },
-  toggleBtn: {
-    flex: 1,
-    flexDirection: 'row',
+  segmented: { marginBottom: spacing.lg },
+  smsLinkWrap: {
+    marginTop: spacing.md,
     alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: spacing.sm,
-    gap: spacing.xs,
-    borderRadius: spacing.borderRadius.sm,
   },
-  toggleBtnActive: {
-    backgroundColor: colors.primary,
-    ...spacing.shadow.sm,
+  smsLinkText: {
+    fontSize: typography.text.body.fontSize,
+    fontWeight: '600',
   },
-  toggleText: {
-    fontSize: typography.fontSize.sm,
-    fontWeight: typography.fontWeight.medium,
-    color: colors.textSecondary,
-  },
-  toggleTextActive: {
-    color: colors.white,
-    fontWeight: typography.fontWeight.semibold,
-  },
-  formSubtitle: {
-    fontSize: typography.fontSize.sm,
-    color: colors.textSecondary,
+  secureNote: {
+    fontSize: typography.text.caption.fontSize,
     textAlign: 'center',
-    marginBottom: spacing.lg,
+    marginTop: spacing.md,
   },
-  inputWrap: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: colors.gray50,
-    borderRadius: spacing.borderRadius.base,
-    borderWidth: 1,
-    borderColor: colors.border,
-    marginBottom: spacing.base,
-    overflow: 'hidden',
-  },
-  inputIconWrap: {
-    paddingLeft: spacing.base,
-    paddingRight: spacing.sm,
-  },
-  input: {
-    flex: 1,
-    paddingVertical: spacing.base,
-    paddingHorizontal: spacing.sm,
-    paddingRight: spacing.base,
-    fontSize: typography.fontSize.base,
-    color: colors.textPrimary,
-    minHeight: 48,
-  },
-  eyeBtn: {
-    paddingHorizontal: spacing.base,
-    paddingVertical: spacing.sm,
-  },
-  primaryButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: colors.primary,
-    borderRadius: spacing.borderRadius.base,
-    paddingVertical: spacing.base,
-    gap: spacing.sm,
-    minHeight: 52,
-    ...spacing.shadow.base,
-  },
-  primaryButtonDisabled: {
-    opacity: 0.55,
-  },
-  primaryButtonText: {
-    fontSize: typography.fontSize.base,
-    fontWeight: typography.fontWeight.semibold,
-    color: colors.white,
-  },
-  footer: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginTop: spacing.xl,
-    paddingTop: spacing.xl,
-    borderTopWidth: 1,
-    borderTopColor: colors.borderLight,
-  },
-  footerText: {
-    fontSize: typography.fontSize.sm,
-    color: colors.textSecondary,
-    marginRight: spacing.sm,
-  },
-  registerLink: {
-    fontSize: typography.fontSize.sm,
-    fontWeight: typography.fontWeight.semibold,
-    color: colors.primary,
-  },
-  errorDetailsButton: {
+  errorLink: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     marginTop: spacing.sm,
-    paddingVertical: spacing.xs,
     gap: spacing.xs,
   },
-  errorDetailsButtonText: {
-    fontSize: typography.fontSize.xs,
-    color: colors.error,
-    fontWeight: typography.fontWeight.medium,
+  errorLinkText: { fontSize: typography.text.caption.fontSize },
+  footer: {
+    marginTop: spacing.xl,
+    paddingTop: spacing.lg,
+    borderTopWidth: 1,
+    alignItems: 'center',
   },
+  footerLink: { fontSize: typography.text.body.fontSize, fontWeight: '600' },
+  footerSupport: {
+    fontSize: typography.text.caption.fontSize,
+    marginTop: spacing.xs,
+    textAlign: 'center',
+  },
+  registerRow: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginTop: spacing.lg,
+    gap: spacing.xs,
+  },
+  registerText: { fontSize: typography.text.body.fontSize },
+  registerLink: { fontSize: typography.text.body.fontSize, fontWeight: '600' },
   modalOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.5)',
@@ -605,74 +344,21 @@ const styles = StyleSheet.create({
     padding: spacing.lg,
   },
   modalContent: {
-    backgroundColor: colors.surface,
-    borderRadius: spacing.borderRadius.lg,
+    borderRadius: 16,
     width: '100%',
-    maxWidth: 500,
+    maxWidth: 400,
     maxHeight: '80%',
-    ...spacing.shadow.lg,
+    padding: spacing.lg,
   },
   modalHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    padding: spacing.lg,
+    paddingBottom: spacing.md,
     borderBottomWidth: 1,
-    borderBottomColor: colors.borderLight,
+    marginBottom: spacing.md,
   },
-  modalTitle: {
-    fontSize: typography.fontSize.lg,
-    fontWeight: typography.fontWeight.bold,
-    color: colors.textPrimary,
-  },
-  modalCloseButton: {
-    padding: spacing.xs,
-  },
-  modalBody: {
-    padding: spacing.lg,
-    maxHeight: 400,
-  },
-  errorSection: {
-    marginBottom: spacing.base,
-  },
-  errorLabel: {
-    fontSize: typography.fontSize.sm,
-    fontWeight: typography.fontWeight.semibold,
-    color: colors.textSecondary,
-    marginBottom: spacing.xs,
-  },
-  errorValue: {
-    fontSize: typography.fontSize.sm,
-    color: colors.textPrimary,
-    backgroundColor: colors.gray50,
-    padding: spacing.sm,
-    borderRadius: spacing.borderRadius.base,
-    fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace',
-  },
-  errorStack: {
-    fontSize: typography.fontSize.xs,
-    color: colors.textPrimary,
-    backgroundColor: colors.gray50,
-    padding: spacing.sm,
-    borderRadius: spacing.borderRadius.base,
-    fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace',
-    maxHeight: 200,
-  },
-  modalFooter: {
-    padding: spacing.lg,
-    borderTopWidth: 1,
-    borderTopColor: colors.borderLight,
-  },
-  modalButton: {
-    backgroundColor: colors.primary,
-    borderRadius: spacing.borderRadius.base,
-    paddingVertical: spacing.sm,
-    paddingHorizontal: spacing.base,
-    alignItems: 'center',
-  },
-  modalButtonText: {
-    fontSize: typography.fontSize.sm,
-    fontWeight: typography.fontWeight.semibold,
-    color: colors.white,
-  },
+  modalTitle: { fontSize: typography.text.h2.fontSize, fontWeight: '600' },
+  modalBody: { maxHeight: 200, marginBottom: spacing.md },
+  modalBodyText: { fontSize: typography.text.body.fontSize },
 });

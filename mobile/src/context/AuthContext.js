@@ -59,7 +59,7 @@ export const AuthProvider = ({ children }) => {
         setSupabaseTokenState(storedSupabaseToken);
         setLastTabState(storedLastTab || null);
         const getToken = async () => await AsyncStorage.getItem(AUTH_STORAGE_KEYS.TOKEN);
-        const getSupabaseTokenForDataService = async () => await AsyncStorage.getItem(AUTH_STORAGE_KEYS.SUPABASE_TOKEN);
+        const getSupabaseTokenForDataService = async () => (await AsyncStorage.getItem(AUTH_STORAGE_KEYS.SUPABASE_TOKEN)) || (await AsyncStorage.getItem(AUTH_STORAGE_KEYS.TOKEN));
         setApiTokenProvider(getToken);
         setDataServiceTokenProvider(getSupabaseTokenForDataService);
         logger.log('Stored auth loaded successfully');
@@ -93,9 +93,13 @@ export const AuthProvider = ({ children }) => {
   // SMS ile giriş (OTP doğrulandıktan sonra token kaydet)
   // Backend supabase_access_token dönerse topluluk/bildirim özellikleri açılır
   const loginWithToken = async (token, kullanici, tesis, supabaseAccessToken) => {
+    if (token == null || token === undefined) {
+      logger.error('Login token save skipped: token is null/undefined');
+      return { success: false, message: 'Oturum bilgisi alınamadı. Tekrar giriş yapın.' };
+    }
     try {
       logger.log('Saving auth data to AsyncStorage', { appPrefix: APP_PREFIX });
-      await AsyncStorage.setItem(AUTH_STORAGE_KEYS.TOKEN, token);
+      await AsyncStorage.setItem(AUTH_STORAGE_KEYS.TOKEN, String(token));
       await AsyncStorage.setItem(AUTH_STORAGE_KEYS.USER, JSON.stringify(kullanici));
       await AsyncStorage.setItem(AUTH_STORAGE_KEYS.TESIS, JSON.stringify(tesis));
       if (supabaseAccessToken) {
@@ -107,8 +111,9 @@ export const AuthProvider = ({ children }) => {
       setUser(kullanici);
       setTesis(tesis);
       const getToken = async () => await AsyncStorage.getItem(AUTH_STORAGE_KEYS.TOKEN);
+      const getSupabaseTokenForDataService = async () => (await AsyncStorage.getItem(AUTH_STORAGE_KEYS.SUPABASE_TOKEN)) || (await AsyncStorage.getItem(AUTH_STORAGE_KEYS.TOKEN));
       setApiTokenProvider(getToken);
-      setDataServiceTokenProvider(getToken);
+      setDataServiceTokenProvider(getSupabaseTokenForDataService);
 
       logger.log('Login successful, auth state updated');
       return { success: true };
@@ -121,17 +126,22 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
-  // Telefon + şifre ile giriş (yeni giriş)
-  const loginWithPassword = async (telefon, sifre) => {
+  // Telefon veya e-posta + şifre ile giriş
+  const loginWithPassword = async (telefonOrEmail, sifre) => {
     try {
-      logger.api('POST', '/auth/giris/yeni', { telefon: telefon?.length, hasPassword: !!sifre });
+      const isEmail = typeof telefonOrEmail === 'string' && telefonOrEmail.includes('@');
+      const body = isEmail
+        ? { email: telefonOrEmail.trim(), sifre }
+        : { telefon: (telefonOrEmail || '').replace(/\D/g, '').replace(/^0/, '') || telefonOrEmail, sifre };
+      logger.api('POST', '/auth/giris/yeni', { isEmail, len: telefonOrEmail?.length, hasPassword: !!sifre });
 
-      const response = await api.post('/auth/giris/yeni', {
-        telefon: telefon?.replace(/\D/g, '').replace(/^0/, '') || telefon,
-        sifre
-      });
+      const response = await api.post('/auth/giris/yeni', body);
 
-      const { token: newToken, kullanici, tesis: tesisData } = response.data;
+      const { token: newToken, kullanici, tesis: tesisData } = response.data || {};
+      if (!newToken || !kullanici) {
+        const msg = response.data?.message || 'Giriş yanıtında oturum bilgisi yok. OTP ile giriş kullanıyorsanız doğrulama ekranına yönlendirilmelisiniz.';
+        return { success: false, message: msg };
+      }
       return await loginWithToken(newToken, kullanici, tesisData);
     } catch (error) {
       logger.error('Login with password error', {

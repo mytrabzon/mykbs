@@ -1,21 +1,12 @@
 /**
- * Tek backend: Supabase Edge Functions veya KBS Node backend (EXPO_PUBLIC_BACKEND_URL).
- * BACKEND_URL tanımlıysa health + checkin/checkout Node backend'e gider.
+ * Tek backend: config/api.ts tek kaynak. Health test ve API çağrıları aynı base URL'i kullanır.
  */
 import { callFn, EdgeFunctionError } from '../lib/supabase/functions';
 import { logger } from '../utils/logger';
+import { getApiBaseUrl } from '../config/api';
 
 export function getBackendUrl(): string {
-  if (typeof process !== 'undefined' && process.env?.EXPO_PUBLIC_BACKEND_URL) {
-    return (process.env.EXPO_PUBLIC_BACKEND_URL || '').replace(/\/$/, '');
-  }
-  try {
-    const Constants = require('expo-constants').default;
-    const url = Constants.expoConfig?.extra?.backendUrl ?? '';
-    return String(url).replace(/\/$/, '');
-  } catch {
-    return '';
-  }
+  return getApiBaseUrl();
 }
 
 /** API hata mesajı: 401/403 -> oturum, 404 -> endpoint, network -> bağlantı */
@@ -65,15 +56,18 @@ function toResponse<T>(data: T): { data: T } {
   return { data };
 }
 
-/** Hata yakalayıp axios-benzeri error.response ile fırlat; 401 ise onUnauthorized çağır (checkin/checkout'ta lobiye atmamak için skip edilebilir) */
-function wrapError(err: unknown): never {
+/** Hata yakalayıp axios-benzeri error.response ile fırlat; 401 ise (ve zaten token varken) onUnauthorized çağır. Token yokken 401 = henüz yüklenmedi, lobiye atma. */
+async function wrapError(err: unknown): Promise<never> {
   if (err instanceof EdgeFunctionError) {
     const skipAuthRedirect = (err as EdgeFunctionError & { skipAuthRedirect?: boolean }).skipAuthRedirect;
     if (err.status === 401 && !skipAuthRedirect && onUnauthorized) {
-      try {
-        onUnauthorized();
-      } catch (e) {
-        logger.error('onUnauthorized error', e);
+      const hadToken = await getToken();
+      if (hadToken) {
+        try {
+          onUnauthorized();
+        } catch (e) {
+          logger.error('onUnauthorized error', e);
+        }
       }
     }
     throw Object.assign(new Error(err.message), {
@@ -106,6 +100,16 @@ export const api = {
         return toResponse(res as { tesis: unknown; ozet: unknown });
       }
       if (pathname.startsWith('/tesis/kbs') || pathname === 'tesis/kbs') {
+        const backendUrl = getBackendUrl();
+        if (backendUrl) {
+          const r = await fetch(`${backendUrl}/api/tesis/kbs`, {
+            method: 'GET',
+            headers: token ? { Authorization: `Bearer ${token}` } : {},
+          });
+          const data = await r.json().catch(() => ({}));
+          if (!r.ok) throw Object.assign(new Error((data as { message?: string }).message || 'Yetkisiz'), { response: { status: r.status, data } });
+          return toResponse(data);
+        }
         const res = await callFn('settings_get', {}, token);
         return toResponse(res);
       }
@@ -123,7 +127,7 @@ export const api = {
       const res = await callFn('facilities_list', {}, token);
       return toResponse(res);
     } catch (e) {
-      wrapError(e);
+      await wrapError(e);
     }
   },
 
@@ -149,7 +153,46 @@ export const api = {
         const res = await callFn('auth_sifre', payload, token);
         return toResponse(res);
       }
+      if (pathname === '/auth/sifre-sifirla/otp-iste' || pathname === 'auth/sifre-sifirla/otp-iste') {
+        const backendUrl = getBackendUrl();
+        if (!backendUrl) throw new Error('Sunucu adresi eksik. EXPO_PUBLIC_BACKEND_URL tanımlayın.');
+        const r = await fetch(`${backendUrl}/api/auth/sifre-sifirla/otp-iste`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+        const data = await r.json().catch(() => ({}));
+        if (!r.ok) throw Object.assign(new Error((data as { message?: string }).message || 'Kod gönderilemedi'), { response: { status: r.status, data } });
+        return toResponse(data);
+      }
+      if (pathname === '/auth/sifre-sifirla' || pathname === 'auth/sifre-sifirla') {
+        const backendUrl = getBackendUrl();
+        if (!backendUrl) throw new Error('Sunucu adresi eksik. EXPO_PUBLIC_BACKEND_URL tanımlayın.');
+        const accessToken = (payload?.access_token as string) || '';
+        const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+        if (accessToken) headers.Authorization = `Bearer ${accessToken}`;
+        const r = await fetch(`${backendUrl}/api/auth/sifre-sifirla`, {
+          method: 'POST',
+          headers,
+          body: JSON.stringify(payload),
+        });
+        const data = await r.json().catch(() => ({}));
+        if (!r.ok) throw Object.assign(new Error((data as { message?: string }).message || 'Şifre güncellenemedi'), { response: { status: r.status, data } });
+        return toResponse(data);
+      }
       if (pathname === '/auth/giris/yeni' || pathname === 'auth/giris/yeni') {
+        // KBS şifre ile giriş: Node backend token döner; Edge sadece OTP gönderir.
+        const backendUrl = getBackendUrl();
+        if (backendUrl && (payload.telefon || payload.email) && payload.sifre) {
+          const r = await fetch(`${backendUrl}/api/auth/giris/yeni`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+          });
+          const data = await r.json().catch(() => ({}));
+          if (!r.ok) throw Object.assign(new Error((data as { message?: string }).message || 'Giriş başarısız'), { response: { status: r.status, data } });
+          return toResponse(data);
+        }
         const res = await callFn('auth_request_otp', payload, null);
         return toResponse(res);
       }
@@ -293,7 +336,7 @@ export const api = {
       logger.warn('[apiSupabase] Unmapped POST', path);
       return toResponse(await callFn(pathname.replace(/^\//, '').replace(/\//g, '_'), payload, token));
     } catch (e) {
-      wrapError(e);
+      await wrapError(e);
     }
   },
 
@@ -308,7 +351,7 @@ export const api = {
       logger.warn('[apiSupabase] Unmapped PUT', path);
       return toResponse(await callFn('settings_update', (body || {}) as Record<string, unknown>, token));
     } catch (e) {
-      wrapError(e);
+      await wrapError(e);
     }
   },
 
@@ -320,7 +363,7 @@ export const api = {
         const res = await callFn('checkout', { misafirId: match[1] }, token);
         return toResponse(res);
       } catch (e) {
-        wrapError(e);
+        await wrapError(e);
       }
     }
     logger.warn('[apiSupabase] Unmapped DELETE', path);

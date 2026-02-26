@@ -39,6 +39,7 @@ app.use('/api/ocr', require('./routes/ocr'));
 app.use('/api/nfc', require('./routes/nfc'));
 app.use('/api/supabase', require('./routes/supabase'));
 app.use('/api/kyc', require('./routes/kyc'));
+app.use('/api/app-admin', require('./routes/appAdmin'));
 
 // KBS backend API (Supabase + outbox) — checkin, checkout, room-change
 app.use('/api', require('./routes/api/checkin'));

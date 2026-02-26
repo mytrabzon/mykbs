@@ -1,6 +1,7 @@
 import { callFn } from '../lib/supabase/functions';
 import { logger } from '../utils/logger';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { getApiBaseUrl } from '../config/api';
 
 // Veri tipleri
 export interface TesisData {
@@ -63,6 +64,12 @@ export interface MisafirData {
 // app.config.js'deki slug kullanılıyor: "mykbs"
 const APP_PREFIX = 'mykbs';
 
+// Auth key'leri (AuthContext ile aynı – token yokken fallback için)
+const AUTH_KEYS = {
+  TOKEN: `@${APP_PREFIX}:auth:token`,
+  SUPABASE_TOKEN: `@${APP_PREFIX}:auth:supabase_token`,
+};
+
 // Cache anahtarları (uygulama prefix'i ile)
 const CACHE_KEYS = {
   TESIS: `@${APP_PREFIX}:data:tesis`,
@@ -84,9 +91,20 @@ export function setDataServiceTokenProvider(provider: DataServiceTokenProvider |
 }
 
 async function getAccessToken(): Promise<string | null> {
-  if (!tokenProvider) return null;
-  const t = tokenProvider();
-  return t instanceof Promise ? t : Promise.resolve(t);
+  if (tokenProvider) {
+    const t = tokenProvider();
+    const token = t instanceof Promise ? await t : t;
+    if (token) return token;
+  }
+  // Fallback: Auth henüz yüklenmeden çağrı yapılıyorsa AsyncStorage'dan oku (race önleme)
+  try {
+    const supabase = await AsyncStorage.getItem(AUTH_KEYS.SUPABASE_TOKEN);
+    if (supabase) return supabase;
+    const node = await AsyncStorage.getItem(AUTH_KEYS.TOKEN);
+    return node;
+  } catch {
+    return null;
+  }
 }
 
 class DataService {
@@ -215,7 +233,7 @@ class DataService {
   }
 
   /**
-   * Tesis bilgilerini getir
+   * Tesis bilgilerini getir (önce Node backend dene, yoksa Edge)
    */
   async getTesis(forceRefresh = false): Promise<TesisData | null> {
     try {
@@ -225,8 +243,38 @@ class DataService {
         return this.tesisCache;
       }
 
-      logger.log('Fetching tesis from API (Supabase)');
       const accessToken = await getAccessToken();
+      const backendUrl = getApiBaseUrl();
+
+      if (backendUrl && accessToken) {
+        try {
+          logger.log('Fetching tesis from API (Node)');
+          const r = await fetch(`${backendUrl}/api/tesis`, {
+            method: 'GET',
+            headers: { Authorization: `Bearer ${accessToken}` },
+          });
+          if (r.ok) {
+            const data = await r.json();
+            const tesisData: TesisData = {
+              id: data.tesis.id,
+              tesisAdi: data.tesis.tesisAdi,
+              paket: data.tesis.paket,
+              kota: data.tesis.kota,
+              kullanilanKota: data.tesis.kullanilanKota ?? 0,
+              kbsTuru: data.tesis.kbsTuru,
+              ozet: data.ozet,
+            };
+            this.tesisCache = tesisData;
+            await this.saveCache();
+            this.emit('tesis:updated', tesisData);
+            return tesisData;
+          }
+        } catch (nodeErr) {
+          logger.log('Node tesis failed, falling back to Edge', nodeErr);
+        }
+      }
+
+      logger.log('Fetching tesis from API (Supabase)');
       logger.log('[dataService] facilities_list çağrılıyor', { hasToken: !!accessToken });
       const responseData = await callFn<{ tesis: any; ozet: any }>('facilities_list', {}, accessToken);
       const tesisData: TesisData = {
@@ -250,8 +298,7 @@ class DataService {
       return tesisData;
     } catch (error: any) {
       logger.error('Get tesis error', error);
-      
-      // Hata durumunda cache'den dön
+
       if (this.tesisCache) {
         logger.log('Returning tesis from cache due to error');
         return this.tesisCache;
@@ -262,7 +309,7 @@ class DataService {
   }
 
   /**
-   * Odaları getir (filtreli)
+   * Odaları getir (filtreli) – önce Node backend dene, yoksa Edge
    */
   async getOdalar(filtre: string = 'tumu', forceRefresh = false): Promise<OdaData[]> {
     try {
@@ -277,8 +324,49 @@ class DataService {
         }
       }
 
-      logger.log('Fetching odalar from API (Supabase)', { filtre });
       const accessToken = await getAccessToken();
+      const backendUrl = getApiBaseUrl();
+
+      if (backendUrl && accessToken) {
+        try {
+          logger.log('Fetching odalar from API (Node)', { filtre });
+          const r = await fetch(`${backendUrl}/api/oda?filtre=${encodeURIComponent(filtre)}`, {
+            method: 'GET',
+            headers: { Authorization: `Bearer ${accessToken}` },
+          });
+          if (r.ok) {
+            const data = await r.json();
+            const odalar: OdaData[] = (data.odalar || []).map((oda: any) => ({
+              id: oda.id,
+              odaNumarasi: oda.odaNumarasi,
+              odaTipi: oda.odaTipi || 'Standart Oda',
+              kapasite: oda.kapasite || 2,
+              fotograf: oda.fotograf,
+              durum: oda.durum || 'bos',
+              fiyat: oda.fiyat,
+              odadaMi: oda.odadaMi ?? (oda.durum === 'dolu' && !!oda.misafir),
+              misafir: oda.misafir
+                ? {
+                    id: oda.misafir.id,
+                    ad: oda.misafir.ad,
+                    soyad: oda.misafir.soyad,
+                    girisTarihi: oda.misafir.girisTarihi,
+                    cikisTarihi: oda.misafir.cikisTarihi,
+                  }
+                : undefined,
+              kbsDurumu: oda.kbsDurumu,
+              kbsHataMesaji: oda.kbsHataMesaji,
+            }));
+            this.odalarCache.set(cacheKey, odalar);
+            await this.saveCache();
+            return odalar;
+          }
+        } catch (nodeErr) {
+          logger.log('Node odalar failed, falling back to Edge', nodeErr);
+        }
+      }
+
+      logger.log('Fetching odalar from API (Supabase)', { filtre });
       logger.log('[dataService] rooms_list çağrılıyor', { filtre, hasToken: !!accessToken });
       const odalarResponse = await callFn<{ odalar?: any[] }>('rooms_list', { filtre }, accessToken);
       const odalar: OdaData[] = (odalarResponse?.odalar || []).map((oda: any) => ({
