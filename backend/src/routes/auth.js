@@ -1193,6 +1193,43 @@ router.post('/supabase-phone-session', async (req, res) => {
 });
 
 /**
+ * Supabase OTP doğrulama proxy: Telefon + OTP ile Supabase /auth/v1/verify çağrısını backend üzerinden yapar.
+ * Mobil cihazdan doğrudan Supabase'e giden istekler düşük bot skoru (native app) nedeniyle 403 alabildiği için
+ * doğrulama sunucu tarafından yapılır; böylece istek backend IP'sinden gider.
+ */
+router.post('/kayit/supabase-verify-otp', async (req, res) => {
+  try {
+    const { phone: rawPhone, token } = req.body;
+    if (!rawPhone || !token || String(token).trim().length < 6) {
+      return res.status(400).json({ message: 'Telefon ve 6 haneli kod gerekli' });
+    }
+    const phone = normalizePhone(rawPhone);
+    if (!phone) {
+      return res.status(400).json({ message: 'Geçersiz telefon numarası' });
+    }
+    const supabaseUrl = process.env.SUPABASE_URL || '';
+    const apiKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY || '';
+    if (!supabaseUrl || !apiKey) {
+      return res.status(500).json({ message: 'Supabase yapılandırması eksik (SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY)' });
+    }
+    const verifyRes = await fetch(`${supabaseUrl.replace(/\/$/, '')}/auth/v1/verify`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', apikey: apiKey },
+      body: JSON.stringify({ type: 'sms', phone, token: String(token).trim() }),
+    });
+    const data = await verifyRes.json().catch(() => ({}));
+    if (verifyRes.ok && data.access_token) {
+      return res.json({ access_token: data.access_token });
+    }
+    const errMsg = data.error_description || data.msg || data.message || (verifyRes.status === 403 ? 'Kod geçersiz veya süresi doldu. Yeni kod isteyip tekrar deneyin.' : 'Doğrulama başarısız.');
+    return res.status(verifyRes.status >= 400 ? verifyRes.status : 400).json({ message: errMsg });
+  } catch (error) {
+    console.error('Kayıt supabase-verify-otp hatası:', error);
+    return res.status(500).json({ message: 'Doğrulama yapılamadı', error: error.message });
+  }
+});
+
+/**
  * Supabase OTP ile doğrulanmış kayıt: access_token + form bilgileri ile kullanıcı/tesis oluştur.
  * Kayıt ekranında SMS Supabase (Twilio) ile gidiyorsa bu endpoint kullanılır; aynı kanal girişte de kullanıldığı için SMS gelir.
  */

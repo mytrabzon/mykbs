@@ -6,7 +6,7 @@
 |----------|---------|----------|
 | `PORT` | Hayır | Sunucu portu (Railway otomatik verir) |
 | `SUPABASE_URL` | Evet | Supabase proje URL |
-| `SUPABASE_SERVICE_ROLE_KEY` | Evet | Supabase Settings → API → service_role key (mobilde ASLA kullanma) |
+| `SUPABASE_SERVICE_ROLE_KEY` | Evet | Supabase Settings → API → service_role key (mobilde ASLA kullanma). Adım adım: [docs/ADMIN_PANEL_SERVICE_ROLE.md](../docs/ADMIN_PANEL_SERVICE_ROLE.md) |
 | `SYNC_BRANCH_SECRET` | Evet (OTP giriş için) | Rastgele uzun string; branch/profile sync için. Aynı değer Supabase Edge Function secret olarak da eklenmeli (`sync_branch_profile`) |
 | `WORKER_SECRET` | Evet (cron için) | Rastgele uzun string; cron isteğinde header `x-worker-secret` ile gönderilir |
 | `POLIS_KBS_URL` | Hayır | Polis KBS API base URL (boşsa mock) |
@@ -24,9 +24,21 @@
 ### Seçenek B: CLI ile deploy
 1. Railway CLI: `npm i -g @railway/cli` veya `npx -y @railway/cli` kullan.
 2. **İlk kez:** `cd backend` → `railway login` (tarayıcı açılır, giriş yap).
-3. Proje bağlı değilse: `railway link` ile proje/sevis seç.
+3. Proje bağlı değilse: `railway link` ile proje/servis seç.
 4. Deploy: `npm run deploy` veya `railway up` (backend klasöründen).
 5. CI için: `RAILWAY_TOKEN=<token> railway up -d` (token: Railway Dashboard → Project → Settings → Tokens).
+
+### Seçenek C: GitHub Actions ile otomatik deploy (önerilen)
+`main` branch’e push yapıldığında backend otomatik olarak Railway’e deploy edilir (sadece `backend/**` değiştiğinde).
+
+**Kurulum (bir kez):**
+1. **Railway Project Token:** Railway → Projen → **Settings** → **Tokens** → **New Token** → oluştur, token’ı kopyala (bir kez gösterilir).
+2. **Service ID:** Railway’de backend servisine tıkla → **Settings** → sayfadaki veya URL’deki service id’yi kopyala (örn. `xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx`).
+3. **GitHub Secrets:** Repo → **Settings** → **Secrets and variables** → **Actions** → **New repository secret** ile ekle:
+   - `RAILWAY_TOKEN` = Railway’den kopyaladığın token
+   - `RAILWAY_SERVICE_ID` = Backend servisinin ID’si
+
+Bundan sonra `main`’e (veya `backend/` altında değişiklik içeren) push’larda deploy otomatik çalışır. Workflow: `.github/workflows/deploy-railway.yml`.
 
 ## Railway Cron (KBS retry her 1 dk)
 
@@ -38,6 +50,14 @@
 
 - `EXPO_PUBLIC_BACKEND_URL=https://<proje>.up.railway.app`
 - Check-in / checkout istekleri backend’e; auth/login Supabase’e.
+
+## Build / npm uyarıları
+
+- **`npm warn config production Use --omit=dev instead`:** Proje kökünden deploy ediyorsanız root `postinstall` zaten production’da `--omit=dev` kullanıyor. Root Directory = `backend` ise Railway’de Build Command’ı `npm install --omit=dev` yaparak uyarıyı kaldırabilirsiniz.
+
+## Sorun giderme
+
+- **"Supabase yapılandırması eksik" (kayıt / giriş 500):** Railway Variables’da `SUPABASE_URL` ve `SUPABASE_SERVICE_ROLE_KEY` (veya en azından `SUPABASE_ANON_KEY`) tanımlı olmalı. Ekledikten sonra redeploy edin.
 
 ## Health
 

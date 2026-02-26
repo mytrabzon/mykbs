@@ -45,7 +45,12 @@ export default function AdminPanelScreen() {
       });
       const json = await r.json().catch(() => ({}));
       if (!r.ok) {
-        setError(json.message || 'Dashboard yüklenemedi');
+        const msg = json.message || 'Dashboard yüklenemedi';
+        if (r.status === 503 && (msg.includes('Supabase') || msg.includes('yapılandır'))) {
+          setError('Admin paneli için sunucuda Supabase yapılandırması gerekiyor (SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY). Bu hesap sadece yetkili yönetici içindir.');
+        } else {
+          setError(msg);
+        }
         setData(null);
         setLoading(false);
         return;

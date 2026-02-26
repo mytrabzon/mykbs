@@ -11,6 +11,7 @@ import {
   Linking,
 } from 'react-native';
 import Constants from 'expo-constants';
+import { useNavigation } from '@react-navigation/native';
 import { useTheme } from '../context/ThemeContext';
 import { useAuth } from '../context/AuthContext';
 import { api } from '../services/api';
@@ -21,6 +22,7 @@ import { typography, spacing } from '../theme';
 import AppHeader from '../components/AppHeader';
 
 export default function AyarlarScreen() {
+  const navigation = useNavigation();
   const { colors } = useTheme();
   const { logout, tesis, user, setPin } = useAuth();
   const [tesisDetail, setTesisDetail] = useState(null);
@@ -49,6 +51,18 @@ export default function AyarlarScreen() {
       setKbsSettings((prev) => ({ ...prev, ...response.data }));
     } catch (e) {
       console.error('KBS ayarları yüklenemedi:', e);
+      const status = e?.response?.status;
+      const msg = e?.response?.data?.message || e?.message;
+      if (status === 401) {
+        Toast.show({
+          type: 'error',
+          text1: 'Oturum geçersiz',
+          text2: 'KBS ayarları için oturum süreniz dolmuş olabilir. Çıkış yapıp tekrar giriş yapın.',
+          visibilityTime: 5000,
+        });
+      } else if (msg) {
+        Toast.show({ type: 'error', text1: 'KBS ayarları', text2: msg, visibilityTime: 4000 });
+      }
     }
   };
 
@@ -146,7 +160,14 @@ export default function AyarlarScreen() {
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
-      <AppHeader title="Ayarlar" tesis={tesis} backendOnline={true} kbsConfigured={tesisDetail?.kbsConnected} />
+      <AppHeader
+        title="Ayarlar"
+        tesis={tesis}
+        backendOnline={true}
+        kbsConfigured={tesisDetail?.kbsConnected}
+        onNotification={() => navigation.navigate('Bildirimler')}
+        onProfile={() => navigation.navigate('Ayarlar')}
+      />
       <ScrollView style={styles.scroll} contentContainerStyle={styles.content}>
         <View style={[styles.section, { backgroundColor: colors.surface }]}>
           <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>Tesis Bilgileri</Text>

@@ -18,14 +18,14 @@ import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
 import { api, getBackendUrl, getApiErrorMessage } from '../services/api';
-import { getHealthUrl } from '../config/api';
+import { getHealthUrl, getApiDebugInfo, isSupabaseConfigured } from '../config/api';
 import { dataService } from '../services/dataService';
 import { backendHealth } from '../services/backendHealth';
 import websocketService from '../services/websocket';
 import Toast from 'react-native-toast-message';
 import { logger } from '../utils/logger';
 import { Ionicons, MaterialIcons } from '@expo/vector-icons';
-import { theme } from '../theme';
+import { theme, spacing } from '../theme';
 import AppHeader from '../components/AppHeader';
 import BackendErrorScreen from '../components/BackendErrorScreen';
 
@@ -188,6 +188,7 @@ export default function OdalarScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [liveUpdates, setLiveUpdates] = useState([]);
   const [backendStatus, setBackendStatus] = useState({ isOnline: null, lastChecked: null, error: null });
+  const [supabaseStatus, setSupabaseStatus] = useState({ configured: false, isOnline: null, lastChecked: null, error: null });
   const [lastLoadErrorType, setLastLoadErrorType] = useState(null); // 'auth' | 'network' | 'path' | null
   const [showDebugUrls, setShowDebugUrls] = useState(__DEV__);
   const appState = useRef(AppState.currentState);
@@ -201,9 +202,34 @@ export default function OdalarScreen() {
       if (status.isOnline) {
         setBackendStatus((p) => ({ ...p, isOnline: true, lastChecked: status.lastChecked, error: null }));
         setLastLoadErrorType(null);
+      } else {
+        setBackendStatus((p) => ({ ...p, isOnline: false, lastChecked: status.lastChecked, error: status.error }));
       }
     });
     return unsub;
+  }, []);
+
+  // Supabase health: mount'ta bir kez kontrol + dinleyici
+  useEffect(() => {
+    setSupabaseStatus(backendHealth.getSupabaseStatus());
+    const unsub = backendHealth.onSupabaseStatusChange((status) => {
+      setSupabaseStatus(status);
+    });
+    if (isSupabaseConfigured()) {
+      backendHealth.checkSupabaseHealth();
+    }
+    return unsub;
+  }, []);
+
+  // İlk açılışta backend durumunu güncelle (header noktaları için)
+  useEffect(() => {
+    const run = async () => {
+      if (getBackendUrl()) {
+        const status = await backendHealth.checkHealth();
+        setBackendStatus((p) => ({ ...p, isOnline: status.isOnline, lastChecked: status.lastChecked, error: status.error }));
+      }
+    };
+    run();
   }, []);
 
   // Mount: AppState listener + cleanup
@@ -675,8 +701,15 @@ export default function OdalarScreen() {
       <AppHeader
         title="Odalar"
         tesis={tesis}
+        backendConfigured={!!getBackendUrl()}
         backendOnline={odalar.length > 0 ? true : backendStatus.isOnline}
+        backendError={backendStatus.error}
+        supabaseConfigured={supabaseStatus.configured}
+        supabaseOnline={supabaseStatus.isOnline}
+        supabaseError={supabaseStatus.error}
         kbsConfigured={tesis?.kbsConnected}
+        onNotification={() => navigation.navigate('Bildirimler')}
+        onProfile={() => navigation.navigate('Ayarlar')}
       />
 
       {ozet && (
@@ -791,34 +824,50 @@ export default function OdalarScreen() {
         showsVerticalScrollIndicator={false}
         ListEmptyComponent={
           !initialLoading && !filterLoading ? (
-            <BackendErrorScreen
-              onRetry={() => loadData(true)}
-              onTestConnection={async () => {
-                const status = await backendHealth.checkHealth();
-                if (status.isOnline) {
-                  setBackendStatus({ isOnline: true, lastChecked: status.lastChecked || new Date(), error: null });
-                  setLastLoadErrorType(null);
-                  Toast.show({
-                    type: 'success',
-                    text1: 'Bağlantı kuruldu',
-                    text2: 'Veriler yeniden yükleniyor...',
-                    visibilityTime: 2000,
-                  });
-                  loadData(true);
-                } else {
-                  setBackendStatus({ isOnline: false, lastChecked: status.lastChecked, error: status.error });
-                  Toast.show({ type: 'error', text1: 'Bağlantı başarısız', text2: status.error || 'Sunucuya erişilemiyor' });
-                }
-              }}
-              onOpenSettings={() => navigation.navigate('Ayarlar')}
-              lastError={backendStatus.error}
-              lastChecked={backendStatus.lastChecked}
-              errorType={lastLoadErrorType}
-              testedUrl={getHealthUrl()}
-              apiBaseUrl={getBackendUrl()}
-              showDebug={showDebugUrls}
-              onToggleDebug={() => setShowDebugUrls((v) => !v)}
-            />
+            (backendStatus.isOnline === false || lastLoadErrorType !== null) ? (
+              <BackendErrorScreen
+                onRetry={() => loadData(true)}
+                onTestConnection={async () => {
+                  const status = await backendHealth.checkHealth();
+                  if (status.isOnline) {
+                    setBackendStatus({ isOnline: true, lastChecked: status.lastChecked || new Date(), error: null });
+                    setLastLoadErrorType(null);
+                    Toast.show({
+                      type: 'success',
+                      text1: 'Bağlantı kuruldu',
+                      text2: 'Veriler yeniden yükleniyor...',
+                      visibilityTime: 2000,
+                    });
+                    loadData(true);
+                  } else {
+                    setBackendStatus({ isOnline: false, lastChecked: status.lastChecked, error: status.error });
+                    Toast.show({ type: 'error', text1: 'Bağlantı başarısız', text2: status.error || 'Sunucuya erişilemiyor' });
+                  }
+                }}
+                onOpenSettings={() => navigation.navigate('Ayarlar')}
+                lastError={backendStatus.error}
+                lastChecked={backendStatus.lastChecked}
+                errorType={lastLoadErrorType}
+                testedUrl={getHealthUrl()}
+                apiBaseUrl={getBackendUrl()}
+                showDebug={showDebugUrls}
+                onToggleDebug={() => setShowDebugUrls((v) => !v)}
+              />
+            ) : (
+              <View style={styles.emptyContainer}>
+                <MaterialIcons name="hotel" size={48} color={colors.textSecondary} style={{ marginBottom: spacing.md }} />
+                <Text style={[styles.emptyTitle, { color: colors.textPrimary }]}>Henüz oda yok</Text>
+                <Text style={[styles.emptyText, { color: colors.textSecondary }]}>Oda ekleyerek veya check-in yaparak başlayın</Text>
+                {__DEV__ && (() => {
+                  const { healthUrl, apiBaseUrl } = getApiDebugInfo();
+                  return (
+                    <Text style={[styles.emptyText, { color: colors.textSecondary, marginTop: spacing.lg, fontSize: 11 }]}>
+                      Health OK · API: {apiBaseUrl || '(yok)'}
+                    </Text>
+                  );
+                })()}
+              </View>
+            )
           ) : (
             <View style={styles.emptyContainer}>
               <ActivityIndicator size="large" color={colors.primary} />
@@ -829,8 +878,8 @@ export default function OdalarScreen() {
         }
       />
 
-      {/* FAB Butonları */}
-      <View style={styles.fabContainer}>
+      {/* FAB Butonları — zIndex ile overlay ve liste üstünde kalır */}
+      <View style={[styles.fabContainer, { zIndex: 20 }]}>
         <TouchableOpacity
           style={[styles.fab, styles.fabSecondary, { backgroundColor: colors.textSecondary }]}
           onPress={() => {
@@ -1254,7 +1303,7 @@ const styles = StyleSheet.create({
   fabOverlay: {
     ...StyleSheet.absoluteFillObject,
     backgroundColor: 'transparent',
-    zIndex: 1,
+    zIndex: 10,
   },
   liveUpdatesContainer: {
     backgroundColor: theme.colors.surface,

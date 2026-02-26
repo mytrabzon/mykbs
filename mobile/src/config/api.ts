@@ -48,20 +48,31 @@ export function getTrpcUrl(): string {
   return base ? `${base}${TRPC_PATH}` : '';
 }
 
+function getSupabaseBaseUrlInternal(): string {
+  if (typeof process !== 'undefined' && process.env?.EXPO_PUBLIC_SUPABASE_URL) {
+    return (process.env.EXPO_PUBLIC_SUPABASE_URL || '').replace(/\/$/, '');
+  }
+  try {
+    const Constants = require('expo-constants').default;
+    const extra = Constants.expoConfig?.extra ?? {};
+    return String(extra.supabaseUrl ?? '').replace(/\/$/, '');
+  } catch {
+    return '';
+  }
+}
+
+/** Supabase proje base URL (functions için kullanılır) */
+export function getSupabaseBaseUrl(): string {
+  return getSupabaseBaseUrlInternal();
+}
+
+/** Supabase yapılandırılmış mı (URL + anon key kontrolü yapılabilir) */
+export function isSupabaseConfigured(): boolean {
+  return getSupabaseBaseUrlInternal().length > 0;
+}
+
 /** Supabase Edge Functions URL (tesis/oda listesi vb. – ayrı kaynak) */
 export function buildApiUrl(path: string): string {
-  const { url } = (() => {
-    if (typeof process !== 'undefined' && process.env?.EXPO_PUBLIC_SUPABASE_URL) {
-      return { url: process.env.EXPO_PUBLIC_SUPABASE_URL };
-    }
-    try {
-      const Constants = require('expo-constants').default;
-      const extra = Constants.expoConfig?.extra ?? {};
-      return { url: extra.supabaseUrl || '' };
-    } catch {
-      return { url: '' };
-    }
-  })();
-  const base = (url || '').replace(/\/$/, '');
+  const base = getSupabaseBaseUrlInternal();
   return base ? `${base}/functions/v1/${path.replace(/^\//, '')}` : '';
 }

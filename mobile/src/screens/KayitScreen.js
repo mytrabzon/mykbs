@@ -12,7 +12,7 @@ import {
 } from 'react-native';
 import { Ionicons, MaterialIcons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
-import { api } from '../services/api';
+import { api, getBackendUrl } from '../services/api';
 import { supabase } from '../lib/supabase/supabase';
 import Toast from 'react-native-toast-message';
 import { logger } from '../utils/logger';
@@ -33,6 +33,8 @@ export default function KayitScreen() {
   const navigation = useNavigation();
   const { loginWithToken } = useAuth();
   const usedSupabaseForKayit = useRef(false);
+  /** OTP isteğinde Supabase'e gönderilen telefon (verify'da birebir aynı kullanılmalı) */
+  const lastSupabasePhoneRef = useRef(null);
 
   const [step, setStep] = useState(1);
   const [telefon, setTelefon] = useState('');
@@ -71,6 +73,7 @@ export default function KayitScreen() {
         const { error } = await supabase.auth.signInWithOtp({ phone });
         if (!error) {
           usedSupabaseForKayit.current = true;
+          lastSupabasePhoneRef.current = phone;
           Toast.show({ type: 'success', text1: 'SMS gönderildi', text2: 'Doğrulama kodunu girin.' });
           setStep(2);
           setCountdown(300);
@@ -151,23 +154,55 @@ export default function KayitScreen() {
     try {
       setLoading(true);
       if (usedSupabaseForKayit.current) {
-        const phone = formatPhoneForSupabase(telefon);
-        const { data: supabaseData, error: verifyError } = await supabase.auth.verifyOtp({
-          phone,
-          token: otp.join(''),
-          type: 'sms',
-        });
-        if (verifyError || !supabaseData?.session?.access_token) {
-          Toast.show({
-            type: 'error',
-            text1: 'Kod geçersiz',
-            text2: verifyError?.message || 'Doğrulama başarısız. Yeni kod isteyip tekrar deneyin.',
+        const phone = lastSupabasePhoneRef.current || formatPhoneForSupabase(telefon);
+        let accessToken = null;
+        const backendUrl = typeof getBackendUrl === 'function' ? getBackendUrl() : null;
+        if (backendUrl) {
+          try {
+            const verifyRes = await api.post('/auth/kayit/supabase-verify-otp', { phone, token: otp.join('') });
+            accessToken = verifyRes.data?.access_token || null;
+          } catch (verifyErr) {
+            const msg = verifyErr.response?.data?.message || verifyErr.message || 'Doğrulama başarısız.';
+            const isExpired = msg.toLowerCase().includes('süresi doldu') || msg.toLowerCase().includes('expired');
+            Toast.show({
+              type: 'error',
+              text1: isExpired ? 'Kodun süresi doldu' : 'Kod geçersiz',
+              text2: isExpired ? "'Yeni kod gönder' ile tekrar kod isteyin." : msg,
+            });
+            setLoading(false);
+            return;
+          }
+        }
+        if (!accessToken && supabase) {
+          const { data: supabaseData, error: verifyError } = await supabase.auth.verifyOtp({
+            phone,
+            token: otp.join(''),
+            type: 'sms',
           });
+          if (verifyError || !supabaseData?.session?.access_token) {
+            const isExpired = verifyError?.message?.toLowerCase?.().includes('expired') ||
+              verifyError?.message?.toLowerCase?.().includes('otp_expired') ||
+              verifyError?.status === 403 ||
+              verifyError?.code === 'otp_expired';
+            Toast.show({
+              type: 'error',
+              text1: isExpired ? 'Kodun süresi doldu' : 'Kod geçersiz',
+              text2: isExpired
+                ? "'Yeni kod gönder' ile tekrar kod isteyin."
+                : (verifyError?.message || 'Doğrulama başarısız. Yeni kod isteyip tekrar deneyin.'),
+            });
+            setLoading(false);
+            return;
+          }
+          accessToken = supabaseData.session.access_token;
+        }
+        if (!accessToken) {
+          Toast.show({ type: 'error', text1: 'Doğrulama başarısız', text2: 'Sunucu adresi eksik veya doğrulama yapılamadı.' });
           setLoading(false);
           return;
         }
         const response = await api.post('/auth/kayit/supabase-create', {
-          access_token: supabaseData.session.access_token,
+          access_token: accessToken,
           adSoyad: adSoyad.trim(),
           email: email || null,
           tesisAdi: tesisAdi || adSoyad.trim() + ' Tesis',

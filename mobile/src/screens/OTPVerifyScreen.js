@@ -210,6 +210,22 @@ export default function OTPVerifyScreen() {
               }
             }
           }
+          if (error) {
+            const isExpired = error?.message?.toLowerCase?.().includes('expired') ||
+              error?.message?.toLowerCase?.().includes('otp_expired') ||
+              error?.status === 403;
+            setLoading(false);
+            Toast.show({
+              type: 'error',
+              text1: isExpired ? 'Kodun süresi doldu' : 'Doğrulama Başarısız',
+              text2: isExpired
+                ? "Doğrulama kodunun süresi doldu. 'Yeni kod gönder' ile tekrar kod isteyin."
+                : (error?.message || 'Kod hatalı. Yeni kod gönderip tekrar deneyin.'),
+            });
+            setOtp(['', '', '', '', '', '']);
+            inputRefs.current[0]?.focus();
+            return;
+          }
         }
         const response = await api.post('/auth/giris/otp-dogrula', { telefon, otp: code });
         const { token, kullanici, tesis } = response.data;

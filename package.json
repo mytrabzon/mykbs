@@ -3,7 +3,7 @@
   "private": true,
   "scripts": {
     "start": "npm start --prefix backend",
-    "postinstall": "npm install --prefix backend",
+    "postinstall": "node -e \"require('child_process').execSync('npm install --prefix backend' + (process.env.NODE_ENV === 'production' ? ' --omit=dev' : ''), { stdio: 'inherit' })\"",
     "mobile": "npm run start --prefix mobile",
     "mobile:dev": "npm run start:dev --prefix mobile",
     "backend": "npm start --prefix backend",

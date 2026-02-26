@@ -96,6 +96,16 @@ export const api = {
         return toResponse(res || { status: 'ok' });
       }
       if (pathname === '/tesis' || pathname === 'tesis') {
+        const backendUrl = getBackendUrl();
+        if (backendUrl) {
+          const r = await fetch(`${backendUrl}/api/tesis`, {
+            method: 'GET',
+            headers: token ? { Authorization: `Bearer ${token}` } : {},
+          });
+          const data = await r.json().catch(() => ({}));
+          if (!r.ok) throw Object.assign(new Error((data as { message?: string }).message || 'Tesis alınamadı'), { response: { status: r.status, data } });
+          return toResponse(data as { tesis: unknown; ozet: unknown });
+        }
         const res = await callFn('facilities_list', {}, token);
         return toResponse(res as { tesis: unknown; ozet: unknown });
       }
@@ -115,11 +125,31 @@ export const api = {
       }
       if (pathname === '/oda' || pathname === 'oda') {
         const filtre = query.filtre || 'tumu';
+        const backendUrl = getBackendUrl();
+        if (backendUrl) {
+          const r = await fetch(`${backendUrl}/api/oda?filtre=${encodeURIComponent(filtre)}`, {
+            method: 'GET',
+            headers: token ? { Authorization: `Bearer ${token}` } : {},
+          });
+          const data = await r.json().catch(() => ({}));
+          if (!r.ok) throw Object.assign(new Error((data as { message?: string }).message || 'Odalar alınamadı'), { response: { status: r.status, data } });
+          return toResponse({ odalar: (data as { odalar?: unknown[] }).odalar ?? [] });
+        }
         const res = await callFn<{ odalar?: unknown[] }>('rooms_list', { filtre }, token);
         return toResponse({ odalar: res?.odalar ?? res ?? [] });
       }
       const odaMatch = pathname.match(/^\/?oda\/([^/]+)$/);
       if (odaMatch) {
+        const backendUrl = getBackendUrl();
+        if (backendUrl) {
+          const r = await fetch(`${backendUrl}/api/oda/${odaMatch[1]}`, {
+            method: 'GET',
+            headers: token ? { Authorization: `Bearer ${token}` } : {},
+          });
+          const data = await r.json().catch(() => ({}));
+          if (!r.ok) throw Object.assign(new Error((data as { message?: string }).message || 'Oda alınamadı'), { response: { status: r.status, data } });
+          return toResponse(data);
+        }
         const res = await callFn('room_get', { id: odaMatch[1] }, token);
         return toResponse(res);
       }
@@ -242,6 +272,18 @@ export const api = {
         const res = await callFn('auth_verify_otp', payload, null);
         return toResponse(res);
       }
+      if (pathname === '/auth/kayit/supabase-verify-otp' || pathname === 'auth/kayit/supabase-verify-otp') {
+        const backendUrl = getBackendUrl();
+        if (!backendUrl) throw new Error('Sunucu adresi eksik. EXPO_PUBLIC_BACKEND_URL tanımlayın.');
+        const r = await fetch(`${backendUrl}/api/auth/kayit/supabase-verify-otp`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ phone: payload.phone, token: payload.token }),
+        });
+        const data = await r.json().catch(() => ({}));
+        if (!r.ok) throw Object.assign(new Error((data as { message?: string }).message || 'Doğrulama başarısız'), { response: { status: r.status, data } });
+        return toResponse(data);
+      }
       if (pathname === '/auth/kayit/supabase-create' || pathname === 'auth/kayit/supabase-create') {
         const backendUrl = getBackendUrl();
         if (!backendUrl) throw new Error('Sunucu adresi eksik. EXPO_PUBLIC_BACKEND_URL tanımlayın.');
@@ -305,6 +347,21 @@ export const api = {
         return toResponse(res);
       }
       if (pathname === '/tesis/kbs/test' || pathname === 'tesis/kbs/test') {
+        const backendUrl = getBackendUrl();
+        if (backendUrl && token) {
+          const r = await fetch(`${backendUrl}/api/tesis/kbs/test`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+            body: JSON.stringify({}),
+          });
+          const data = await r.json().catch(() => ({}));
+          if (!r.ok) {
+            throw Object.assign(new Error((data as { message?: string })?.message || 'KBS test başarısız'), {
+              response: { status: r.status, data },
+            });
+          }
+          return toResponse(data);
+        }
         const res = await callFn('settings_kbs_test', {}, token);
         return toResponse(res);
       }

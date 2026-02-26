@@ -1,5 +1,5 @@
 import { logger } from '../utils/logger';
-import { getApiBaseUrl, getHealthUrl } from '../config/api';
+import { getApiBaseUrl, getHealthUrl, isSupabaseConfigured } from '../config/api';
 import { callFn } from '../lib/supabase/functions';
 
 export interface BackendStatus {
@@ -12,14 +12,28 @@ export interface BackendStatus {
   lastStatusCode?: number;
 }
 
+export interface SupabaseStatus {
+  configured: boolean;
+  isOnline: boolean;
+  lastChecked: Date | null;
+  error?: string;
+}
+
 class BackendHealthService {
   private status: BackendStatus = {
     isOnline: false,
     lastChecked: null,
   };
 
+  private supabaseStatus: SupabaseStatus = {
+    configured: false,
+    isOnline: false,
+    lastChecked: null,
+  };
+
   private checkInterval: ReturnType<typeof setInterval> | null = null;
   private listeners: Array<(status: BackendStatus) => void> = [];
+  private supabaseListeners: Array<(status: SupabaseStatus) => void> = [];
 
   async checkHealth(): Promise<BackendStatus> {
     const backendUrl = getApiBaseUrl();
@@ -50,10 +64,20 @@ class BackendHealthService {
           lastStatusCode: 200,
         };
       }
-      logger.log('Backend health check successful', this.status);
+      if (__DEV__) {
+        logger.log('Backend health OK', {
+          healthUrl: healthUrl || this.status.testedUrl,
+          backendStatus: this.status.isOnline,
+          lastStatusCode: this.status.lastStatusCode,
+        });
+      } else {
+        logger.log('Backend health check successful', this.status);
+      }
       this.notifyListeners();
       return this.status;
     } catch (error: unknown) {
+      const statusCode = (error as { response?: { status?: number } })?.response?.status;
+      const isAuthError = statusCode === 401 || statusCode === 403;
       const message =
         error instanceof Error
           ? error.message
@@ -62,25 +86,86 @@ class BackendHealthService {
             : 'Supabase erişilemiyor';
       logger.error('Backend health check failed', error);
       this.status = {
-        isOnline: false,
+        isOnline: isAuthError ? true : false,
         lastChecked: new Date(),
-        error: message,
+        error: isAuthError ? undefined : message,
         testedUrl: healthUrl || undefined,
-        lastStatusCode: (error as { response?: { status?: number } })?.response?.status,
+        lastStatusCode: statusCode,
       };
       this.notifyListeners();
       return this.status;
     }
   }
 
+  /** Sadece Supabase Edge health kontrolü */
+  async checkSupabaseHealth(): Promise<SupabaseStatus> {
+    const configured = isSupabaseConfigured();
+    this.supabaseStatus = { ...this.supabaseStatus, configured };
+    if (!configured) {
+      this.notifySupabaseListeners();
+      return this.supabaseStatus;
+    }
+    try {
+      await callFn<{ status?: string }>('health', {});
+      this.supabaseStatus = {
+        configured: true,
+        isOnline: true,
+        lastChecked: new Date(),
+        error: undefined,
+      };
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : 'Supabase erişilemiyor';
+      this.supabaseStatus = {
+        configured: true,
+        isOnline: false,
+        lastChecked: new Date(),
+        error: message,
+      };
+    }
+    this.notifySupabaseListeners();
+    return this.supabaseStatus;
+  }
+
+  /** Backend + Supabase ikisini de kontrol et (paralel) */
+  async checkAll(): Promise<{ backend: BackendStatus; supabase: SupabaseStatus }> {
+    const [backend, supabase] = await Promise.all([
+      this.checkHealth(),
+      this.checkSupabaseHealth(),
+    ]);
+    return { backend, supabase };
+  }
+
+  getSupabaseStatus(): SupabaseStatus {
+    return { ...this.supabaseStatus, configured: isSupabaseConfigured() };
+  }
+
+  onSupabaseStatusChange(listener: (status: SupabaseStatus) => void) {
+    this.supabaseListeners.push(listener);
+    return () => {
+      this.supabaseListeners = this.supabaseListeners.filter((l) => l !== listener);
+    };
+  }
+
+  private notifySupabaseListeners() {
+    this.supabaseListeners.forEach((listener) => {
+      try {
+        listener(this.supabaseStatus);
+      } catch (error) {
+        logger.error('Error in supabase health listener', error);
+      }
+    });
+  }
+
   startPeriodicCheck(intervalMs: number = 30000) {
     if (this.checkInterval) {
       this.stopPeriodicCheck();
     }
-    this.checkHealth();
-    this.checkInterval = setInterval(() => {
+    const run = () => {
       this.checkHealth();
-    }, intervalMs);
+      if (isSupabaseConfigured()) this.checkSupabaseHealth();
+    };
+    run();
+    this.checkInterval = setInterval(run, intervalMs);
     logger.log('Backend periodic health check started', { intervalMs });
   }
 

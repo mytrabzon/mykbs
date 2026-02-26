@@ -7,6 +7,8 @@ import {
   TouchableOpacity,
   RefreshControl,
   ActivityIndicator,
+  Modal,
+  Pressable,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../context/AuthContext';
@@ -39,6 +41,7 @@ export default function ToplulukScreen({ navigation }) {
   const [category, setCategory] = useState('');
   const [token, setToken] = useState(null);
   const [hasCommunity, setHasCommunity] = useState(false);
+  const [categoryModalVisible, setCategoryModalVisible] = useState(false);
 
   const loadToken = useCallback(async () => {
     const t = await getSupabaseToken();
@@ -99,7 +102,12 @@ export default function ToplulukScreen({ navigation }) {
   if (!hasCommunity && !token) {
     return (
       <View style={[styles.screenContainer, { backgroundColor: colors.background }]}>
-        <AppHeader title="Topluluk" tesis={tesis} />
+        <AppHeader
+          title="Topluluk"
+          tesis={tesis}
+          onNotification={() => navigation.navigate('Bildirimler')}
+          onProfile={() => navigation.navigate('Ayarlar')}
+        />
         <View style={styles.emptyWrap}>
           <EmptyState
             icon="people-outline"
@@ -111,9 +119,17 @@ export default function ToplulukScreen({ navigation }) {
     );
   }
 
+  const openCategoryModal = () => setCategoryModalVisible(true);
+  const closeCategoryModal = () => setCategoryModalVisible(false);
+
   return (
     <View style={[styles.screenContainer, { backgroundColor: colors.background }]}>
-      <AppHeader title="Topluluk" tesis={tesis} />
+      <AppHeader
+        title="Topluluk"
+        tesis={tesis}
+        onNotification={() => navigation.navigate('Bildirimler')}
+        onProfile={() => navigation.navigate('Ayarlar')}
+      />
       <View style={styles.tabs}>
         <TouchableOpacity
           style={[styles.tab, tab === 'announcement' && { backgroundColor: colors.primary }]}
@@ -156,7 +172,7 @@ export default function ToplulukScreen({ navigation }) {
               title="Henüz paylaşım yok"
               message="İlk duyuruyu veya paylaşımı siz ekleyin."
               primaryCta={{ label: 'İlk Duyuruyu Paylaş', onPress: () => Toast.show({ type: 'info', text1: 'Yakında', text2: 'Paylaşım ekranı yakında' }) }}
-              secondaryCta={{ label: 'Kategori Seç', onPress: () => {} }}
+              secondaryCta={{ label: 'Kategori Seç', onPress: openCategoryModal }}
             />
           }
           renderItem={({ item }) => (
@@ -180,6 +196,31 @@ export default function ToplulukScreen({ navigation }) {
           )}
         />
       )}
+
+      <Modal visible={categoryModalVisible} transparent animationType="fade">
+        <Pressable style={styles.modalOverlay} onPress={closeCategoryModal}>
+          <View style={[styles.modalContent, { backgroundColor: colors.surface }]}>
+            <Text style={[styles.modalTitle, { color: colors.textPrimary }]}>Kategori Seç</Text>
+            {CATEGORIES.map((item) => (
+              <TouchableOpacity
+                key={item.key}
+                style={[styles.modalItem, category === item.key && { backgroundColor: colors.primarySoft }]}
+                onPress={() => {
+                  setCategory(item.key);
+                  closeCategoryModal();
+                }}
+              >
+                <Text style={[styles.modalItemText, { color: category === item.key ? colors.primary : colors.textPrimary }]}>
+                  {item.label}
+                </Text>
+              </TouchableOpacity>
+            ))}
+            <TouchableOpacity style={[styles.modalClose, { borderColor: colors.border }]} onPress={closeCategoryModal}>
+              <Text style={[styles.modalCloseText, { color: colors.textSecondary }]}>Kapat</Text>
+            </TouchableOpacity>
+          </View>
+        </Pressable>
+      </Modal>
     </View>
   );
 }
@@ -210,4 +251,36 @@ const styles = StyleSheet.create({
   cardMeta: { flexDirection: 'row', justifyContent: 'space-between' },
   cardCategory: { fontSize: typography.text.caption.fontSize },
   cardDate: { fontSize: typography.text.caption.fontSize },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: spacing.screenPadding,
+  },
+  modalContent: {
+    width: '100%',
+    maxWidth: 320,
+    borderRadius: spacing.borderRadius.card,
+    padding: spacing.cardPadding,
+  },
+  modalTitle: {
+    fontSize: typography.text.bodyLarge.fontSize,
+    fontWeight: '600',
+    marginBottom: spacing.base,
+  },
+  modalItem: {
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.base,
+    borderRadius: spacing.borderRadius.input,
+    marginBottom: 4,
+  },
+  modalItemText: { fontSize: typography.text.body.fontSize },
+  modalClose: {
+    marginTop: spacing.base,
+    paddingVertical: spacing.sm,
+    borderTopWidth: 1,
+    alignItems: 'center',
+  },
+  modalCloseText: { fontSize: typography.text.body.fontSize },
 });
