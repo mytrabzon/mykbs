@@ -960,15 +960,15 @@ router.post('/supabase-phone-session', async (req, res) => {
     }
 
     const supabaseUrl = process.env.SUPABASE_URL || '';
-    const anonKey = process.env.SUPABASE_ANON_KEY || '';
-    if (!supabaseUrl || !anonKey) {
-      return res.status(500).json({ message: 'Supabase yapılandırması eksik' });
+    const apiKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY || '';
+    if (!supabaseUrl || !apiKey) {
+      return res.status(500).json({ message: 'Supabase yapılandırması eksik (SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY)' });
     }
 
     const userRes = await fetch(`${supabaseUrl.replace(/\/$/, '')}/auth/v1/user`, {
       headers: {
         Authorization: `Bearer ${accessToken}`,
-        apikey: anonKey,
+        apikey: apiKey,
       },
     });
 
@@ -1059,13 +1059,13 @@ router.post('/kayit/supabase-create', async (req, res) => {
     }
 
     const supabaseUrl = process.env.SUPABASE_URL || '';
-    const anonKey = process.env.SUPABASE_ANON_KEY || '';
-    if (!supabaseUrl || !anonKey) {
-      return res.status(500).json({ message: 'Supabase yapılandırması eksik' });
+    const apiKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY || '';
+    if (!supabaseUrl || !apiKey) {
+      return res.status(500).json({ message: 'Supabase yapılandırması eksik (SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY)' });
     }
 
     const userRes = await fetch(`${supabaseUrl.replace(/\/$/, '')}/auth/v1/user`, {
-      headers: { Authorization: `Bearer ${accessToken}`, apikey: anonKey },
+      headers: { Authorization: `Bearer ${accessToken}`, apikey: apiKey },
     });
     if (!userRes.ok) {
       return res.status(401).json({ message: 'Doğrulama süresi doldu. Lütfen kodu tekrar isteyip yeniden deneyin.' });

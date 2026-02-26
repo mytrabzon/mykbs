@@ -5,7 +5,7 @@
 import { callFn, EdgeFunctionError } from '../lib/supabase/functions';
 import { logger } from '../utils/logger';
 
-function getBackendUrl(): string {
+export function getBackendUrl(): string {
   if (typeof process !== 'undefined' && process.env?.EXPO_PUBLIC_BACKEND_URL) {
     return (process.env.EXPO_PUBLIC_BACKEND_URL || '').replace(/\/$/, '');
   }
@@ -16,6 +16,16 @@ function getBackendUrl(): string {
   } catch {
     return '';
   }
+}
+
+/** API hata mesajı: 401/403 -> oturum, 404 -> endpoint, network -> bağlantı */
+export function getApiErrorMessage(err: unknown): string {
+  const status = (err as { response?: { status?: number } })?.response?.status;
+  const message = (err as Error)?.message || '';
+  if (status === 401 || status === 403) return 'Oturum geçersiz veya süresi doldu. Tekrar giriş yapın.';
+  if (status === 404) return 'İstek yapılan adres bulunamadı.';
+  if (message.includes('Network') || message.includes('fetch') || message.includes('Bağlantı')) return 'Bağlantı hatası. İnterneti kontrol edin.';
+  return message || 'Bir hata oluştu.';
 }
 
 export type ApiTokenProvider = () => Promise<string | null> | string | null;
@@ -162,7 +172,7 @@ export const api = {
       if (pathname === '/auth/kayit/otp-iste' || pathname === 'auth/kayit/otp-iste') {
         const backendUrl = getBackendUrl();
         if (backendUrl) {
-          const r = await fetch(`${backendUrl}/auth/kayit/otp-iste`, {
+          const r = await fetch(`${backendUrl}/api/auth/kayit/otp-iste`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ telefon: payload.telefon }),
@@ -177,7 +187,7 @@ export const api = {
       if (pathname === '/auth/kayit/dogrula' || pathname === 'auth/kayit/dogrula') {
         const backendUrl = getBackendUrl();
         if (backendUrl) {
-          const r = await fetch(`${backendUrl}/auth/kayit/dogrula`, {
+          const r = await fetch(`${backendUrl}/api/auth/kayit/dogrula`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(payload),
@@ -191,8 +201,8 @@ export const api = {
       }
       if (pathname === '/auth/kayit/supabase-create' || pathname === 'auth/kayit/supabase-create') {
         const backendUrl = getBackendUrl();
-        if (!backendUrl) throw new Error('Kayıt için backend adresi gerekli');
-        const r = await fetch(`${backendUrl}/auth/kayit/supabase-create`, {
+        if (!backendUrl) throw new Error('Sunucu adresi eksik. EXPO_PUBLIC_BACKEND_URL tanımlayın.');
+        const r = await fetch(`${backendUrl}/api/auth/kayit/supabase-create`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(payload),

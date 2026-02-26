@@ -2,10 +2,10 @@
  * Tek backend: Supabase Edge Functions.
  * api get/post/put arayüzü apiSupabase üzerinden sağlanır.
  */
-import { api, setApiTokenProvider, setOnUnauthorized } from './apiSupabase';
+import { api, setApiTokenProvider, setOnUnauthorized, getBackendUrl, getApiErrorMessage } from './apiSupabase';
 import { logger } from '../utils/logger';
 
-export { setApiTokenProvider, setOnUnauthorized };
+export { setApiTokenProvider, setOnUnauthorized, getBackendUrl, getApiErrorMessage };
 export { api };
 
 // Request/response log (axios interceptor benzeri)

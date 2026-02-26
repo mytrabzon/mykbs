@@ -16,7 +16,7 @@ import {
 } from 'react-native';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { useAuth } from '../context/AuthContext';
-import { api } from '../services/api';
+import { api, getBackendUrl, getApiErrorMessage } from '../services/api';
 import { dataService } from '../services/dataService';
 import websocketService from '../services/websocket';
 import Toast from 'react-native-toast-message';
@@ -495,18 +495,12 @@ export default function OdalarScreen() {
             visibilityTime: 4000,
           });
         }
-      } else if (error.response?.status === 404) {
-        Toast.show({
-          type: 'error',
-          text1: 'Endpoint bulunamadı',
-          text2: error.message || 'İstenen adres mevcut değil.',
-          visibilityTime: 3000,
-        });
       } else {
+        const msg = getApiErrorMessage(error);
         Toast.show({
           type: 'error',
-          text1: error.response?.status === 401 ? 'Oturum süresi doldu' : 'Hata',
-          text2: error.response?.data?.message || error.message || 'Veriler yüklenemedi',
+          text1: error.response?.status === 401 || error.response?.status === 403 ? 'Oturum' : error.response?.status === 404 ? 'Endpoint' : 'Hata',
+          text2: error.response?.data?.message || msg,
           visibilityTime: 3000,
         });
       }
@@ -853,13 +847,12 @@ export default function OdalarScreen() {
                   color={theme.colors.error} 
                 />
                 <Text style={styles.emptyTitle}>
-                  Backend Bağlantı Hatası
+                  {!getBackendUrl() ? 'Sunucu adresi eksik' : 'Backend Bağlantı Hatası'}
                 </Text>
                 <Text style={styles.emptyText}>
-                  Sunucuya bağlanılamadı.{'\n\n'}
-                  Lütfen kontrol edin:{'\n'}
-                  • İnternet bağlantınız açık mı?{'\n'}
-                  • Uygulama ayarlarındaki Supabase adresi doğru mu?
+                  {!getBackendUrl()
+                    ? 'EXPO_PUBLIC_BACKEND_URL tanımlı değil. Check-in ve kayıt için mobile/.env içinde backend adresi gerekli.'
+                    : 'Sunucuya bağlanılamadı.\n\nLütfen kontrol edin:\n• İnternet bağlantınız açık mı?\n• Backend (Railway) adresi doğru mu?'}
                 </Text>
                 <View style={styles.emptyActions}>
                   <TouchableOpacity
