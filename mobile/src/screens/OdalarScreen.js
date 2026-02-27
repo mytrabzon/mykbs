@@ -179,7 +179,7 @@ function LiveDotPulse() {
 export default function OdalarScreen() {
   const navigation = useNavigation();
   const { colors } = useTheme();
-  const { tesis, token, user, isLoading: authLoading } = useAuth();
+  const { tesis, token, user, isLoading: authLoading, logout } = useAuth();
   const [odalar, setOdalar] = useState([]);
   const [ozet, setOzet] = useState(null);
   const [filtre, setFiltre] = useState('tumu');
@@ -517,8 +517,11 @@ export default function OdalarScreen() {
         error.code === 'ERR_NETWORK' ||
         (status >= 500 && status < 600);
       if (isAuth) {
-        setLastLoadErrorType('auth');
-        setBackendStatus((p) => ({ ...p, isOnline: true })); // backend DOWN değil, oturum sorunu
+        setLastLoadErrorType(null);
+        if (typeof logout === 'function') {
+          logout();
+        }
+        return;
       } else if (isPath) {
         setLastLoadErrorType('path');
         setBackendStatus((p) => ({ ...p, isOnline: true }));
@@ -555,7 +558,7 @@ export default function OdalarScreen() {
       }
       setRefreshing(false);
     }
-  }, [filtre]);
+  }, [filtre, logout]);
 
   const onRefresh = useCallback(() => {
     setRefreshing(true);

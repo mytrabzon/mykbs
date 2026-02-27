@@ -1,9 +1,8 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { useRouter } from 'next/navigation'
 import toast from 'react-hot-toast'
-import { callEdgeFunction, getSupabaseToken } from '@/services/supabaseEdge'
+import { callEdgeFunction } from '@/services/supabaseEdge'
 
 interface PostRow {
   id: string
@@ -17,25 +16,28 @@ interface PostRow {
 }
 
 export default function CommunityPage() {
-  const router = useRouter()
   const [posts, setPosts] = useState<PostRow[]>([])
   const [loading, setLoading] = useState(true)
+  const [configRequired, setConfigRequired] = useState(false)
 
   useEffect(() => {
-    if (!getSupabaseToken()) {
-      router.push('/login')
-      return
-    }
     load()
-  }, [router])
+  }, [])
 
   const load = async () => {
     try {
+      setConfigRequired(false)
       const res = await callEdgeFunction<{ posts: PostRow[] }>('community_post_list', { include_deleted: true, limit: 100 })
       setPosts(res.posts || [])
     } catch (e: unknown) {
-      toast.error((e as Error).message)
-      setPosts([])
+      const msg = (e as Error).message
+      if (msg.includes('Supabase') || msg.includes('NEXT_PUBLIC')) {
+        setConfigRequired(true)
+        setPosts([])
+      } else {
+        toast.error(msg)
+        setPosts([])
+      }
     } finally {
       setLoading(false)
     }
@@ -66,6 +68,13 @@ export default function CommunityPage() {
     <div className="admin-page">
       <h1 className="kbs-page-title">Topluluk Moderation</h1>
       <p className="kbs-page-sub">Soft delete yapılan paylaşımları geri alabilirsiniz.</p>
+      {configRequired && (
+        <div className="kbs-card" style={{ marginBottom: '1.25rem', background: 'var(--kbs-surface-elevated)', border: '1px solid var(--kbs-border)' }}>
+          <p className="kbs-card-empty-text" style={{ padding: '1.25rem', margin: 0 }}>
+            Bu sayfa Supabase Edge Functions kullanır. Kullanmak için <code style={{ background: 'var(--kbs-bg)', padding: '0.2rem 0.5rem', borderRadius: 6 }}>NEXT_PUBLIC_SUPABASE_URL</code> ve <code style={{ background: 'var(--kbs-bg)', padding: '0.2rem 0.5rem', borderRadius: 6 }}>NEXT_PUBLIC_SUPABASE_ANON_KEY</code> değerlerini admin paneli <code>.env</code> dosyasına ekleyin.
+          </p>
+        </div>
+      )}
       <div className="kbs-card">
         <div className="kbs-table-wrap">
           <table className="kbs-table">

@@ -52,6 +52,7 @@ export default function PaylasimEkleScreen() {
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
       allowsMultipleSelection: true,
       quality: 0.8,
+      base64: true,
     });
     if (!result.canceled && result.assets) {
       setImages((prev) => [...prev, ...result.assets.slice(0, 5 - prev.length)].slice(0, 5));
@@ -91,13 +92,25 @@ export default function PaylasimEkleScreen() {
       let imageUrls = [];
       for (const img of images) {
         try {
-          const base64 = await FileSystem.readAsStringAsync(img.uri, {
-            encoding: FileSystem.EncodingType.Base64,
-          });
+          let base64 = null;
+          if (typeof img.base64 === 'string' && img.base64.length > 0) {
+            base64 = img.base64.replace(/^data:image\/[^;]+;base64,/i, '').replace(/\s/g, '');
+          }
+          if (!base64 && img.uri) {
+            base64 = await FileSystem.readAsStringAsync(img.uri, {
+              encoding: FileSystem.EncodingType.Base64,
+            });
+            if (typeof base64 === 'string') base64 = base64.replace(/\s/g, '');
+          }
+          if (!base64 || typeof base64 !== 'string') {
+            Toast.show({ type: 'error', text1: 'Resim yüklenemedi', text2: 'Resim verisi alınamadı' });
+            setLoading(false);
+            return;
+          }
           const url = await communityApi.uploadCommunityImage(base64, branchId, token);
           imageUrls.push(url);
         } catch (e) {
-          Toast.show({ type: 'error', text1: 'Resim yüklenemedi', text2: e?.message });
+          Toast.show({ type: 'error', text1: 'Resim yüklenemedi', text2: e?.message || 'Resim verisi işlenemedi' });
           setLoading(false);
           return;
         }

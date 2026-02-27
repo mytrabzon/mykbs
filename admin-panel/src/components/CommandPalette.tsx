@@ -22,7 +22,7 @@ const staticCommands: CommandItem[] = [
   { id: 'users', label: 'Kullanıcılar', icon: '👥', action: () => {} },
   { id: 'identity', label: 'Kimlik & Pasaport', icon: '🪪', action: () => {} },
   { id: 'payments', label: 'Paketler & Ödemeler', icon: '💳', action: () => {} },
-  { id: 'kbs', label: 'Tesis/KBS Talepleri', icon: '🏢', action: () => {} },
+  { id: 'kbs', label: 'Tesis Listesi', icon: '🏢', action: () => {} },
   { id: 'notifications', label: 'Bildirim Gönder', icon: '📢', action: () => {} },
   { id: 'audit', label: 'Audit Log', icon: '📋', action: () => {} },
 ]

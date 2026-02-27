@@ -1,9 +1,8 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { useRouter } from 'next/navigation'
 import toast from 'react-hot-toast'
-import { callEdgeFunction, getSupabaseToken } from '@/services/supabaseEdge'
+import { callEdgeFunction } from '@/services/supabaseEdge'
 
 interface NotifRow {
   id: string
@@ -14,28 +13,34 @@ interface NotifRow {
 }
 
 export default function KBSNotificationsPage() {
-  const router = useRouter()
   const [list, setList] = useState<NotifRow[]>([])
   const [loading, setLoading] = useState(true)
   const [filter, setFilter] = useState('')
-
-  useEffect(() => {
-    if (!getSupabaseToken()) { router.push('/login'); return }
-    load()
-  }, [router])
+  const [configRequired, setConfigRequired] = useState(false)
 
   const load = async (statusFilter?: string) => {
     try {
+      setConfigRequired(false)
       const body = statusFilter ? { status: statusFilter } : {}
       const res = await callEdgeFunction<{ notifications: NotifRow[] }>('admin_kbs_notifications', body)
       setList(res.notifications || [])
     } catch (e: unknown) {
-      toast.error((e as Error).message)
-      setList([])
+      const msg = (e as Error).message
+      if (msg.includes('Supabase') || msg.includes('NEXT_PUBLIC')) {
+        setConfigRequired(true)
+        setList([])
+      } else {
+        toast.error(msg)
+        setList([])
+      }
     } finally {
       setLoading(false)
     }
   }
+
+  useEffect(() => {
+    load()
+  }, [])
 
   const onFilterChange = (v: string) => {
     setFilter(v)
@@ -43,7 +48,7 @@ export default function KBSNotificationsPage() {
     load(v)
   }
 
-  if (loading && list.length === 0) {
+  if (loading && list.length === 0 && !configRequired) {
     return (
       <div className="kbs-loading">
         <div className="kbs-loading-inner">
@@ -58,6 +63,13 @@ export default function KBSNotificationsPage() {
     <div className="admin-page">
       <h1 className="kbs-page-title">Push / KBS Bildirim Kuyruğu</h1>
       <p className="kbs-page-sub">notification_outbox: queued / sent / failed.</p>
+      {configRequired && (
+        <div className="kbs-card" style={{ marginBottom: '1.25rem', background: 'var(--kbs-surface-elevated)', border: '1px solid var(--kbs-border)' }}>
+          <p className="kbs-card-empty-text" style={{ padding: '1.25rem', margin: 0 }}>
+            Bu sayfa Supabase Edge Functions kullanır. Kullanmak için <code>NEXT_PUBLIC_SUPABASE_URL</code> ve <code>NEXT_PUBLIC_SUPABASE_ANON_KEY</code> değerlerini admin paneli <code>.env</code> dosyasına ekleyin.
+          </p>
+        </div>
+      )}
       <div style={{ marginBottom: '1.25rem' }}>
         <select aria-label="Bildirim durumu filtresi" value={filter} onChange={(e) => onFilterChange(e.target.value)} className="kbs-select">
           <option value="">Tümü</option>

@@ -35,8 +35,8 @@ export default function NfcIntroScreen({ navigation }) {
       {supported === false && <Text style={styles.warn}>Bu cihaz NFC desteklemiyor.</Text>}
       {supported === true && enabled === false && <Text style={styles.warn}>NFC kapalı. Ayarlardan açın.</Text>}
       {supported === true && enabled === true && <Text style={styles.ok}>NFC hazır.</Text>}
-      <TouchableOpacity style={styles.button} onPress={() => navigation.replace('Main')}>
-        <Text style={styles.buttonText}>Tamamla</Text>
+      <TouchableOpacity style={styles.button} onPress={() => navigation.goBack()}>
+        <Text style={styles.buttonText}>Tamam</Text>
       </TouchableOpacity>
     </View>
   );

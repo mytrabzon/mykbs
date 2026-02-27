@@ -2,6 +2,7 @@ const express = require('express');
 const { PrismaClient } = require('@prisma/client');
 const { authenticate } = require('../middleware/auth');
 const { createKBSService } = require('../services/kbs');
+const { canSendBildirim } = require('../config/packages');
 const PDFDocument = require('pdfkit');
 const fs = require('fs');
 const path = require('path');
@@ -61,6 +62,14 @@ router.post('/toplu-gonder', async (req, res) => {
 
     if (!req.tesis.kbsTuru || !req.tesis.kbsTesisKodu || !req.tesis.kbsWebServisSifre) {
       return res.status(400).json({ message: 'KBS ayarları eksik' });
+    }
+
+    const sendCheck = canSendBildirim(req.tesis);
+    if (!sendCheck.allowed) {
+      const message = sendCheck.reason === 'trial_ended'
+        ? 'Deneme süren tamamlandı. Bildirimlerine kesintisiz devam etmek için paket seç.'
+        : 'Bildirim hakkın doldu. Devam etmek için paket seç.';
+      return res.status(402).json({ message, code: sendCheck.reason });
     }
 
     // Seçili misafirleri getir

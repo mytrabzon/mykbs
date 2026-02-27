@@ -954,7 +954,10 @@ body {
 .admin-content {
   flex: 1;
   padding: 1.5rem;
-  overflow-auto;
+  overflow: auto;
+  position: relative;
+  z-index: 1;
+  isolation: isolate;
 }
 
 /* Command palette (Ctrl+K) */
@@ -1057,4 +1060,16 @@ body {
 
 .admin-page {
   max-width: 1400px;
+  position: relative;
+  z-index: 1;
+}
+
+/* Buton ve linklerin tıklanabilir olması için */
+.admin-page .kbs-btn-primary,
+.admin-page .kbs-table button,
+.admin-page .kbs-table a,
+.admin-page a[href] {
+  cursor: pointer;
+  position: relative;
+  z-index: 2;
 }

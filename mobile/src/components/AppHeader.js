@@ -84,7 +84,12 @@ export default function AppHeader({
           )}
           {(tesis?.paket || tesis?.kota) && !onBack && (
             <Text style={[styles.package, { color: isPrimary ? 'rgba(255,255,255,0.8)' : colors.textSecondary }]} numberOfLines={1}>
-              {[tesis?.paket, tesis?.kota ? `Kota: ${tesis.kullanilanKota ?? 0}/${tesis.kota}` : null].filter(Boolean).join(' · ')}
+              {[
+                tesis?.paket,
+                tesis?.kota != null
+                  ? `Kalan: ${Math.max(0, (tesis.kota ?? 0) - (tesis.kullanilanKota ?? 0))} bildirim`
+                  : null
+              ].filter(Boolean).join(' · ')}
             </Text>
           )}
         </View>

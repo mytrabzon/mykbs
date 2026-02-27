@@ -7,7 +7,7 @@ export default function SettingsPage() {
       <p className="kbs-page-sub">Panel ve alarm ayarları.</p>
       <div className="kbs-card">
         <p className="kbs-card-empty-text" style={{ padding: '2rem' }}>
-          Ayarlar ekranı MVP / Full kapsamında eklenecek.
+          Ayarlar bölümü kullanıma açıktır; ek seçenekler geliştirme aşamasındadır.
         </p>
       </div>
     </div>

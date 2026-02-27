@@ -55,7 +55,7 @@ class BackendHealthService {
         };
       } else {
         logger.log('Checking backend health (Supabase Edge Functions)...');
-        await callFn<{ status?: string }>('health', {});
+        await callFn<{ status?: string }>('health', {}, { requireAuth: false });
         this.status = {
           isOnline: true,
           lastChecked: new Date(),
@@ -106,7 +106,7 @@ class BackendHealthService {
       return this.supabaseStatus;
     }
     try {
-      await callFn<{ status?: string }>('health', {});
+      await callFn<{ status?: string }>('health', {}, { requireAuth: false });
       this.supabaseStatus = {
         configured: true,
         isOnline: true,

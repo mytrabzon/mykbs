@@ -10,6 +10,7 @@ import ErrorBoundary from './src/components/ErrorBoundary';
 import EmptyState from './src/components/EmptyState';
 import AppHeader from './src/components/AppHeader';
 import { logger } from './src/utils/logger';
+import { getIsAdminPanelUser } from './src/utils/adminAuth';
 import { backendHealth } from './src/services/backendHealth';
 import { registerPushToken } from './src/services/pushNotifications';
 import { BackHandler, Alert, Platform, View, Text, StyleSheet, TouchableOpacity } from 'react-native';
@@ -32,11 +33,18 @@ import PostDetayScreen from './src/screens/PostDetayScreen';
 import AddRoomScreen from './src/screens/AddRoomScreen';
 import PaylasimEkleScreen from './src/screens/PaylasimEkleScreen';
 import ProfilDuzenleScreen from './src/screens/ProfilDuzenleScreen';
+import OkumaScreen from './src/screens/OkumaScreen';
 import MrzScanScreen from './src/features/kyc/MrzScanScreen';
 import MrzResultScreen from './src/features/kyc/MrzResultScreen';
 import KycSubmitScreen from './src/features/kyc/KycSubmitScreen';
 import KycManualEntryScreen from './src/features/kyc/KycManualEntryScreen';
 import NfcIntroScreen from './src/features/kyc/NfcIntroScreen';
+import DocumentHubScreen from './src/features/documentRead/DocumentHubScreen';
+import FrontDocumentScanScreen from './src/features/documentRead/FrontDocumentScanScreen';
+import GallerySingleDocumentScreen from './src/features/documentRead/GallerySingleDocumentScreen';
+import GalleryBatchDocumentScreen from './src/features/documentRead/GalleryBatchDocumentScreen';
+import DocumentResultScreen from './src/features/documentRead/DocumentResultScreen';
+import DocumentBatchResultScreen from './src/features/documentRead/DocumentBatchResultScreen';
 
 // Placeholder screens for tabs (theme-aware, modern design)
 function MisafirlerScreen({ navigation }) {
@@ -130,6 +138,7 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
   },
   screenContainer: { flex: 1 },
+  mainTabsWrap: { flex: 1 },
   contentContainer: { flex: 1, paddingHorizontal: 20, paddingBottom: 120 },
   reportsGrid: {
     flexDirection: 'row',
@@ -186,33 +195,36 @@ const styles = StyleSheet.create({
 // Context (useAuth used in MisafirlerScreen, RaporlarScreen)
 import { AuthProvider, useAuth } from './src/context/AuthContext';
 import { ThemeProvider, useTheme } from './src/context/ThemeContext';
+import { CreditsProvider, useCredits } from './src/context/CreditsContext';
+import CreditsBanner from './src/components/CreditsBanner';
+import PaywallModal from './src/components/PaywallModal';
+import TrialWelcomeBanner from './src/components/TrialWelcomeBanner';
 
 const Tab = createBottomTabNavigator();
 const Stack = createStackNavigator();
 
-const TAB_NAMES = ['Odalar', 'Misafirler', 'Topluluk', 'Bildirimler', 'Raporlar', 'Ayarlar'];
-
-const SUPER_ADMIN_UID = 'f7cfe2ef-00bd-4c70-b40d-c5b55e1c52d7';
+const TAB_NAMES = ['Odalar', 'Okuma', 'Misafirler', 'Topluluk', 'Bildirimler', 'Raporlar', 'Ayarlar'];
 
 function MainTabs() {
   const insets = useSafeAreaInsets();
   const { user, lastTab, setLastTab } = useAuth();
   const { colors } = useTheme();
-  const isAdminPanelUser = !!user && (
-    user.rol === 'admin' || user.role === 'admin' ||
-    user.id === SUPER_ADMIN_UID || user.uid === SUPER_ADMIN_UID
-  );
+  const isAdminPanelUser = getIsAdminPanelUser(user);
   const tabNames = isAdminPanelUser ? [...TAB_NAMES, 'AdminPanel'] : TAB_NAMES;
   const initialTab = lastTab && tabNames.includes(lastTab) ? lastTab : 'Odalar';
   const tabBarBottom = Math.max(insets.bottom, 16);
 
   return (
-    <Tab.Navigator
+    <View style={styles.mainTabsWrap}>
+      <TrialWelcomeBanner />
+      <CreditsBanner />
+      <Tab.Navigator
       initialRouteName={initialTab}
       screenOptions={({ route }) => ({
         tabBarIcon: ({ focused, color, size }) => {
           let iconName;
           if (route.name === 'Odalar') iconName = focused ? 'home' : 'home-outline';
+          else if (route.name === 'Okuma') iconName = focused ? 'scan' : 'scan-outline';
           else if (route.name === 'Ayarlar') iconName = focused ? 'settings' : 'settings-outline';
           else if (route.name === 'Raporlar') iconName = focused ? 'stats-chart' : 'stats-chart-outline';
           else if (route.name === 'Misafirler') iconName = focused ? 'people' : 'people-outline';
@@ -256,9 +268,12 @@ function MainTabs() {
       <Tab.Screen 
         name="Odalar" 
         component={OdalarScreen}
-        options={{
-          tabBarLabel: 'Odalar',
-        }}
+        options={{ tabBarLabel: 'Odalar' }}
+      />
+      <Tab.Screen 
+        name="Okuma" 
+        component={OkumaScreen}
+        options={{ tabBarLabel: 'Okuma' }}
       />
       <Tab.Screen 
         name="Misafirler" 
@@ -295,6 +310,18 @@ function MainTabs() {
         />
       )}
     </Tab.Navigator>
+    </View>
+  );
+}
+
+function CreditsOverlay() {
+  const { showPaywall, setShowPaywall, paywallReason } = useCredits();
+  return (
+    <PaywallModal
+      visible={showPaywall}
+      onClose={() => setShowPaywall(false)}
+      reason={paywallReason}
+    />
   );
 }
 
@@ -307,6 +334,7 @@ function AppNavigator() {
 
   return (
     <NavigationContainer>
+      {isAuthenticated && <CreditsOverlay />}
       <Stack.Navigator screenOptions={{ headerShown: false }}>
         {!isAuthenticated ? (
           <>
@@ -331,6 +359,12 @@ function AppNavigator() {
             <Stack.Screen name="KycSubmit" component={KycSubmitScreen} />
             <Stack.Screen name="KycManualEntry" component={KycManualEntryScreen} />
             <Stack.Screen name="NfcIntro" component={NfcIntroScreen} />
+            <Stack.Screen name="DocumentHub" component={DocumentHubScreen} />
+            <Stack.Screen name="FrontDocumentScan" component={FrontDocumentScanScreen} />
+            <Stack.Screen name="GallerySingleDocument" component={GallerySingleDocumentScreen} />
+            <Stack.Screen name="GalleryBatchDocument" component={GalleryBatchDocumentScreen} />
+            <Stack.Screen name="DocumentResult" component={DocumentResultScreen} />
+            <Stack.Screen name="DocumentBatchResult" component={DocumentBatchResultScreen} />
           </>
         )}
       </Stack.Navigator>
@@ -339,12 +373,12 @@ function AppNavigator() {
 }
 
 function PushRegistration() {
-  const { isAuthenticated, getSupabaseToken } = useAuth();
+  const { isAuthenticated, token } = useAuth();
   useEffect(() => {
-    if (isAuthenticated && getSupabaseToken) {
-      registerPushToken(getSupabaseToken).catch(() => {});
+    if (isAuthenticated && token) {
+      registerPushToken(async () => token).catch(() => {});
     }
-  }, [isAuthenticated, getSupabaseToken]);
+  }, [isAuthenticated, token]);
   return null;
 }
 
@@ -410,9 +444,11 @@ export default function App() {
     <ErrorBoundary>
       <ThemeProvider>
         <AuthProvider>
-          <PushRegistration />
-          <AppNavigator />
-          <Toast />
+          <CreditsProvider>
+            <PushRegistration />
+            <AppNavigator />
+            <Toast />
+          </CreditsProvider>
         </AuthProvider>
       </ThemeProvider>
     </ErrorBoundary>

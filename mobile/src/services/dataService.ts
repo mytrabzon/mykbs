@@ -10,6 +10,8 @@ export interface TesisData {
   paket: string;
   kota: number;
   kullanilanKota: number;
+  /** Deneme süresi bitişi; paket alınca null */
+  trialEndsAt?: string | null;
   kbsTuru?: string;
   /** Kimlik bildirimi (KBS) bu tesis için yapılandırıldı mı */
   kbsConnected?: boolean;

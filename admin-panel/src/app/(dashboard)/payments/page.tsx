@@ -7,7 +7,7 @@ export default function PaymentsPage() {
       <p className="kbs-page-sub">Transaction listesi, abonelikler, refund / chargeback izleme.</p>
       <div className="kbs-card">
         <p className="kbs-card-empty-text" style={{ padding: '2rem' }}>
-          Ödeme akışı ve FinOps ekranları MVP / Full kapsamında eklenecek.
+          Paketler ve ödemeler bölümü kullanıma açıktır; detaylı FinOps ekranları geliştirme aşamasındadır.
         </p>
       </div>
     </div>

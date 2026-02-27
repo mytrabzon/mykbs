@@ -3,19 +3,21 @@ const { PrismaClient } = require('@prisma/client');
 const crypto = require('crypto');
 const emailService = require('../services/email');
 const whatsappService = require('../services/whatsapp');
+const { VALID_PAKET_KEYS, getPackageCredits, setTrialDefaults } = require('../config/packages');
 const prisma = new PrismaClient();
+const appAdminRouter = require('./appAdmin');
 
 const router = express.Router();
 
-// Basit admin authentication (gerçek uygulamada JWT kullanılmalı)
 const ADMIN_SECRET = process.env.ADMIN_SECRET || 'admin-secret-key';
 
+// Admin auth: ADMIN_SECRET (şifre) veya Supabase/backend admin JWT — tesis listesi her iki girişle kullanılabilir
 const adminAuth = (req, res, next) => {
   const token = req.headers.authorization?.replace('Bearer ', '');
-  if (token !== ADMIN_SECRET) {
-    return res.status(401).json({ message: 'Admin yetkisi gerekli' });
+  if (token === ADMIN_SECRET) {
+    return next();
   }
-  next();
+  appAdminRouter.requireAdminPanelUser(req, res, next);
 };
 
 router.use(adminAuth);
@@ -329,19 +331,24 @@ MyKBS ekibi`;
 });
 
 /**
- * Paket değiştir
+ * Paket değiştir (starter, pro, business, enterprise). Ek kredi için kota sayı olarak gönderilir.
  */
 router.put('/tesis/:tesisId/paket', async (req, res) => {
   try {
     const { tesisId } = req.params;
     const { paket, kota } = req.body;
 
-    if (!paket || !['deneme', 'standart', 'pro'].includes(paket)) {
-      return res.status(400).json({ message: 'Geçerli bir paket seçiniz' });
+    if (!paket || !VALID_PAKET_KEYS.includes(paket)) {
+      return res.status(400).json({ message: 'Geçerli bir paket seçiniz (deneme, starter, pro, business, enterprise)' });
     }
 
     const updateData = { paket };
-    if (kota) updateData.kota = parseInt(kota);
+    if (paket === 'deneme') {
+      Object.assign(updateData, setTrialDefaults());
+    } else {
+      updateData.trialEndsAt = null;
+      updateData.kota = kota != null ? parseInt(kota) : getPackageCredits(paket);
+    }
 
     await prisma.tesis.update({
       where: { id: tesisId },

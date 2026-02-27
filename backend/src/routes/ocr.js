@@ -37,14 +37,37 @@ const upload = multer({
   }
 });
 
-/** OCR çıktısından MRZ benzeri satırları bul (sadece A-Z, 0-9, < ; uzunluk 30, 36 veya 44) */
+/** OCR çıktısından MRZ benzeri satırları bul (TD1: 3x30, TD2: 2x36, TD3: 2x44). Tek satırda birleşik (90/72/88 char) desteklenir. */
 function extractMrzFromOcr(text) {
   if (!text || typeof text !== 'string') return '';
   const lines = text.split(/\r\n|\r|\n/).map((l) => l.trim().toUpperCase().replace(/\s/g, ''));
   const mrzLike = lines.filter((l) => /^[A-Z0-9<]+$/.test(l) && (l.length === 30 || l.length === 36 || l.length === 44));
+  if (mrzLike.length >= 3 && mrzLike.every((l) => l.length === 30)) return mrzLike.slice(0, 3).join('\n');
   if (mrzLike.length >= 2) return mrzLike.join('\n');
+  const one = text.replace(/\s/g, '').trim().toUpperCase();
+  if (/^[A-Z0-9<]+$/.test(one) && one.length === 90) return [one.slice(0, 30), one.slice(30, 60), one.slice(60, 90)].join('\n');
+  if (/^[A-Z0-9<]+$/.test(one) && one.length === 88) return [one.slice(0, 44), one.slice(44, 88)].join('\n');
+  if (/^[A-Z0-9<]+$/.test(one) && one.length === 72) return [one.slice(0, 36), one.slice(36, 72)].join('\n');
   if (mrzLike.length === 1 && mrzLike[0].length >= 30) return mrzLike[0];
   return '';
+}
+
+/** Karanlık/aydınlık için görüntü ön işleme: grayscale, kontrast, netlik – Tesseract okumasını iyileştirir */
+async function preprocessImageForMrz(filePath) {
+  try {
+    const Jimp = (await import('jimp')).default;
+    const image = await Jimp.read(filePath);
+    const w = image.bitmap.width;
+    const h = image.bitmap.height;
+    await image
+      .greyscale()
+      .normalize()
+      .contrast(0.2)
+      .write(filePath);
+    return filePath;
+  } catch (e) {
+    return filePath;
+  }
 }
 
 /** MRZ: JWT veya Supabase token ile erişilebilir (check-in KYC için) */
@@ -53,7 +76,8 @@ router.post('/mrz', authenticateTesisOrSupabase, upload.single('image'), async (
     if (!req.file) {
       return res.status(400).json({ message: 'Görüntü yüklenmedi' });
     }
-    const { data: { text } } = await Tesseract.recognize(req.file.path, 'eng', {
+    const imagePath = await preprocessImageForMrz(req.file.path);
+    const { data: { text } } = await Tesseract.recognize(imagePath, 'eng', {
       logger: () => {},
     });
     const raw = extractMrzFromOcr(text);
@@ -65,6 +89,76 @@ router.post('/mrz', authenticateTesisOrSupabase, upload.single('image'), async (
     console.error('OCR MRZ hatası:', error);
     res.status(500).json({ message: 'MRZ okunamadı', error: error.message });
   }
+});
+
+/** Tek görsel: MRZ + ön yüz OCR birleşik (havalimanı tarzı nokta atışı veri) */
+router.post('/document', authenticateTesisOrSupabase, upload.single('image'), async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ message: 'Görüntü yüklenmedi' });
+    }
+    const imagePath = await preprocessImageForMrz(req.file.path);
+    const languages = req.query.languages || 'tur+eng';
+    const { data: { text } } = await Tesseract.recognize(imagePath, languages, { logger: () => {} });
+    const mrzRaw = extractMrzFromOcr(text);
+    const parsed = parseIdentityDocument(text);
+    const mrzPayload = mrzRaw ? parseMrzToPayload(mrzRaw) : null;
+    const merged = mergeMrzAndFront(mrzPayload, parsed);
+    res.json({
+      success: true,
+      rawText: text,
+      mrz: mrzRaw || null,
+      mrzPayload: mrzPayload || null,
+      front: parsed,
+      merged,
+    });
+  } catch (error) {
+    console.error('OCR document hatası:', error);
+    res.status(500).json({ message: 'Belge okunamadı', error: error.message });
+  }
+});
+
+/** Toplu belge: en fazla 10 görsel (5–10’lu seçim) */
+const uploadMany = multer({
+  storage: multer.diskStorage({
+    destination: (req, file, cb) => {
+      if (!fs.existsSync(KIMLIK_UPLOAD_DIR)) fs.mkdirSync(KIMLIK_UPLOAD_DIR, { recursive: true });
+      cb(null, KIMLIK_UPLOAD_DIR);
+    },
+    filename: (req, file, cb) => {
+      cb(null, `${String(Date.now())}_${Math.random().toString(36).slice(2, 8)}.jpg`);
+    },
+  }),
+  limits: { fileSize: 5 * 1024 * 1024 },
+  fileFilter: (req, file, cb) => (file.mimetype.startsWith('image/') ? cb(null, true) : cb(new Error('Sadece resim'))),
+}).array('images', 10);
+
+router.post('/documents-batch', authenticateTesisOrSupabase, (req, res) => {
+  uploadMany(req, res, async (err) => {
+    if (err) {
+      return res.status(400).json({ message: err.message || 'Yükleme hatası' });
+    }
+    const files = req.files || [];
+    if (files.length === 0) {
+      return res.status(400).json({ message: 'En az 1, en fazla 10 görsel gönderin.' });
+    }
+    const results = [];
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i];
+      try {
+        const imagePath = await preprocessImageForMrz(file.path);
+        const { data: { text } } = await Tesseract.recognize(imagePath, 'tur+eng', { logger: () => {} });
+        const mrzRaw = extractMrzFromOcr(text);
+        const parsed = parseIdentityDocument(text);
+        const mrzPayload = mrzRaw ? parseMrzToPayload(mrzRaw) : null;
+        const merged = mergeMrzAndFront(mrzPayload, parsed);
+        results.push({ index: i, success: true, mrz: mrzRaw, front: parsed, merged });
+      } catch (e) {
+        results.push({ index: i, success: false, error: e.message });
+      }
+    }
+    res.json({ success: true, results });
+  });
 });
 
 router.use(authenticate);
@@ -223,6 +317,106 @@ function parseIdentityDocument(text) {
   }
 
   return result;
+}
+
+/** MRZ ham string → belge no, tarihler, isim, ülke (TD1/TD2/TD3) */
+function normalizeMrzLinesBackend(raw) {
+  const one = (raw || '').trim().toUpperCase().replace(/\s/g, '');
+  if (one.length === 90 && /^[A-Z0-9<]+$/.test(one)) {
+    return [one.slice(0, 30), one.slice(30, 60), one.slice(60, 90)];
+  }
+  if (one.length === 88 && /^[A-Z0-9<]+$/.test(one)) {
+    return [one.slice(0, 44), one.slice(44, 88)];
+  }
+  if (one.length === 72 && /^[A-Z0-9<]+$/.test(one)) {
+    return [one.slice(0, 36), one.slice(36, 72)];
+  }
+  return (raw || '').replace(/\r\n/g, '\n').replace(/\r/g, '\n').split('\n').map((l) => l.trim().toUpperCase().replace(/\s/g, '')).filter(Boolean);
+}
+
+function normalizeYYMMDD(yymmdd) {
+  if (!yymmdd || yymmdd.length < 6) return '';
+  const yy = parseInt(yymmdd.substring(0, 2), 10);
+  const mm = yymmdd.substring(2, 4);
+  const dd = yymmdd.substring(4, 6);
+  const year = yy <= 30 ? 2000 + yy : 1900 + yy;
+  return year + '-' + mm + '-' + dd;
+}
+
+function parseMrzToPayload(raw) {
+  if (!raw || typeof raw !== 'string') return null;
+  const lines = normalizeMrzLinesBackend(raw);
+  let docNumber = '';
+  let birthDate = '';
+  let expiryDate = '';
+  let surname = '';
+  let givenNames = '';
+  let issuingCountry = '';
+  if (lines.length >= 2 && lines[0].length >= 40) {
+    const l2 = (lines[1] || '').padEnd(44, '<');
+    docNumber = l2.substring(0, 9).replace(/</g, '').trim();
+    birthDate = normalizeYYMMDD(l2.substring(13, 19));
+    expiryDate = normalizeYYMMDD(l2.substring(21, 27));
+    issuingCountry = (lines[0] || '').substring(2, 5).replace(/</g, '').trim();
+    const nameBlock = (lines[0] || '').substring(5, 44);
+    const parts = nameBlock.split('<<').filter(Boolean);
+    surname = (parts[0] || '').replace(/</g, ' ').trim();
+    givenNames = (parts[1] || '').replace(/</g, ' ').trim();
+  } else if (lines.length >= 2 && lines[0].length >= 34 && lines[0].length <= 36) {
+    const l2 = (lines[1] || '').padEnd(36, '<');
+    docNumber = l2.substring(0, 9).replace(/</g, '').trim();
+    birthDate = normalizeYYMMDD(l2.substring(13, 19));
+    expiryDate = normalizeYYMMDD(l2.substring(21, 27));
+    issuingCountry = (lines[0] || '').substring(2, 5).replace(/</g, '').trim();
+    const nameBlock = (lines[0] || '').substring(5, 36);
+    const parts = nameBlock.split('<<').filter(Boolean);
+    surname = (parts[0] || '').replace(/</g, ' ').trim();
+    givenNames = (parts[1] || '').replace(/</g, ' ').trim();
+  } else if (lines.length >= 3 && lines[0].length >= 28) {
+    const l1 = (lines[0] || '').padEnd(30, '<');
+    const l2 = (lines[1] || '').padEnd(30, '<');
+    const l3 = (lines[2] || '').padEnd(30, '<');
+    docNumber = l1.substring(5, 14).replace(/</g, '').trim();
+    birthDate = normalizeYYMMDD(l2.substring(0, 6));
+    expiryDate = normalizeYYMMDD(l2.substring(8, 14));
+    issuingCountry = l1.substring(2, 5).replace(/</g, '').trim();
+    const nameBlock = l3.replace(/</g, ' ').trim();
+    const nameParts = nameBlock.split(/\s{2,}/).filter(Boolean);
+    surname = (nameParts[0] || '').trim();
+    givenNames = (nameParts.slice(1).join(' ') || '').trim();
+  } else {
+    return null;
+  }
+  return { documentNumber: docNumber, birthDate, expiryDate, surname, givenNames, issuingCountry };
+}
+
+/** MRZ + ön yüz OCR → tek merged obje (MRZ öncelikli) */
+function mergeMrzAndFront(mrzPayload, parsed) {
+  const merged = {
+    ad: parsed?.ad || '',
+    soyad: parsed?.soyad || '',
+    kimlikNo: parsed?.kimlikNo || null,
+    pasaportNo: parsed?.pasaportNo || null,
+    dogumTarihi: parsed?.dogumTarihi || null,
+    uyruk: parsed?.uyruk || 'TÜRK',
+    belgeNo: '',
+    sonKullanma: null,
+    ulkeKodu: '',
+  };
+  if (mrzPayload) {
+    merged.belgeNo = mrzPayload.documentNumber || merged.belgeNo;
+    merged.dogumTarihi = mrzPayload.birthDate || merged.dogumTarihi;
+    merged.sonKullanma = mrzPayload.expiryDate || merged.sonKullanma;
+    merged.ulkeKodu = mrzPayload.issuingCountry || merged.ulkeKodu;
+    if (mrzPayload.surname || mrzPayload.givenNames) {
+      merged.soyad = mrzPayload.surname || merged.soyad;
+      merged.ad = mrzPayload.givenNames || merged.ad;
+    }
+  }
+  if (parsed?.kimlikNo) merged.kimlikNo = parsed.kimlikNo;
+  if (parsed?.pasaportNo && !merged.belgeNo) merged.pasaportNo = parsed.pasaportNo;
+  if (parsed?.dogumTarihi && !merged.dogumTarihi) merged.dogumTarihi = parsed.dogumTarihi;
+  return merged;
 }
 
 module.exports = router;

@@ -16,58 +16,63 @@ function formatPhone(telefon: string): string {
 
 /** access_token ile kullanıcı + tesis döndür (auth_supabase_phone_session ile aynı mantık) */
 async function sessionToAppPayload(accessToken: string) {
-  const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-  const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
-  const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+  try {
+    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+    const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
+    const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
-  const userClient = createClient(supabaseUrl, supabaseAnonKey);
-  const { data: { user }, error: userError } = await userClient.auth.getUser(accessToken);
-  if (userError || !user) return null;
+    const userClient = createClient(supabaseUrl, supabaseAnonKey);
+    const { data: { user }, error: userError } = await userClient.auth.getUser(accessToken);
+    if (userError || !user) return null;
 
-  const admin = createClient(supabaseUrl, supabaseServiceKey);
-  let profile = await admin.from("user_profiles").select("branch_id, role, display_name").eq("user_id", user.id).single().then((r) => r.data);
-  let branchId = profile?.branch_id;
+    const admin = createClient(supabaseUrl, supabaseServiceKey);
+    const profileRes = await admin.from("user_profiles").select("branch_id, role, display_name").eq("user_id", user.id).limit(1);
+    let profile = (profileRes.data as { branch_id: string; role: string; display_name: string | null }[] | null)?.[0] ?? null;
+    let branchId = profile?.branch_id;
 
-  if (!branchId) {
-    const orgRes = await admin.from("organizations").insert({ name: "Tesisim" }).select("id").single();
-    const orgId = (orgRes.data as { id?: string } | null)?.id;
-    if (!orgId) return null;
-    const branchRes = await admin.from("branches").insert({ organization_id: orgId, name: "Ana Tesis" }).select("id").single();
-    const newBranchId = (branchRes.data as { id?: string } | null)?.id;
-    if (!newBranchId) return null;
-    const displayName = (user.user_metadata?.full_name as string) || (user.phone ? `Kullanıcı ${user.phone.slice(-4)}` : "Kullanıcı");
-    await admin.from("user_profiles").insert({
-      user_id: user.id,
-      branch_id: newBranchId,
-      role: "staff",
-      display_name: displayName,
-    });
-    branchId = newBranchId;
-    profile = { branch_id: newBranchId, role: "staff", display_name: displayName };
+    if (!branchId) {
+      const orgRes = await admin.from("organizations").insert({ name: "Tesisim" }).select("id").single();
+      const orgId = (orgRes.data as { id?: string } | null)?.id;
+      if (!orgId) return null;
+      const branchRes = await admin.from("branches").insert({ organization_id: orgId, name: "Ana Tesis" }).select("id").single();
+      const newBranchId = (branchRes.data as { id?: string } | null)?.id;
+      if (!newBranchId) return null;
+      const displayName = (user.user_metadata?.full_name as string) || (user.phone ? `Kullanıcı ${user.phone.slice(-4)}` : "Kullanıcı");
+      await admin.from("user_profiles").insert({
+        user_id: user.id,
+        branch_id: newBranchId,
+        role: "staff",
+        display_name: displayName,
+      });
+      branchId = newBranchId;
+      profile = { branch_id: newBranchId, role: "staff", display_name: displayName };
+    }
+
+    const branch = await admin.from("branches").select("id, name, organization_id").eq("id", branchId).single().then((r) => r.data as { id: string; name: string; organization_id: string } | null);
+    const org = branch?.organization_id
+      ? await admin.from("organizations").select("id, name").eq("id", branch.organization_id).single().then((r) => r.data as { id: string; name: string } | null)
+      : null;
+
+    const tesis = {
+      id: branch?.id,
+      tesisAdi: branch?.name || "Tesis",
+      paket: "standard",
+      kota: 100,
+      kullanilanKota: 0,
+      kbsTuru: "polis",
+      organization: org ?? undefined,
+    };
+    const kullanici = {
+      id: user.id,
+      adSoyad: profile?.display_name || user.phone || user.email || "Kullanıcı",
+      email: user.email ?? null,
+      telefon: user.phone ?? "",
+      rol: profile?.role || "staff",
+    };
+    return { token: accessToken, kullanici, tesis, supabaseAccessToken: accessToken };
+  } catch (_) {
+    return null;
   }
-
-  const branch = await admin.from("branches").select("id, name, organization_id").eq("id", branchId).single().then((r) => r.data as { id: string; name: string; organization_id: string } | null);
-  const org = branch?.organization_id
-    ? await admin.from("organizations").select("id, name").eq("id", branch.organization_id).single().then((r) => r.data as { id: string; name: string } | null)
-    : null;
-
-  const tesis = {
-    id: branch?.id,
-    tesisAdi: branch?.name || "Tesis",
-    paket: "standard",
-    kota: 100,
-    kullanilanKota: 0,
-    kbsTuru: "polis",
-    organization: org ?? undefined,
-  };
-  const kullanici = {
-    id: user.id,
-    adSoyad: profile?.display_name || user.phone || user.email || "Kullanıcı",
-    email: user.email ?? null,
-    telefon: user.phone ?? "",
-    rol: profile?.role || "staff",
-  };
-  return { token: accessToken, kullanici, tesis, supabaseAccessToken: accessToken };
 }
 
 Deno.serve(async (req: Request) => {

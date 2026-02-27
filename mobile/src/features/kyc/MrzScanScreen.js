@@ -1,12 +1,12 @@
 import React, { useState, useRef, useCallback } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Alert, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Alert, ActivityIndicator, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import Toast from 'react-native-toast-message';
 import { theme } from '../../theme';
-import { parseMrz } from '../../lib/mrz';
+import { parseMrz, fixMrzOcrErrors } from '../../lib/mrz';
 import { logger } from '../../utils/logger';
 import { api } from '../../services/apiSupabase';
 import ScanHelpSheet from './ScanHelpSheet';
@@ -23,19 +23,22 @@ try {
   logger.warn('MRZ reader not available', e?.message);
 }
 
-const TIMEOUT_MS = 10000;
-const MAX_FAILS = 3;
+const TIMEOUT_MS = 15000;
+const MAX_FAILS = 6;
 
-const DOC_TYPES = [
-  { key: 'passport', label: 'Pasaport', docType: 'PASSPORT' },
-  { key: 'id', label: 'Ehliyet / Kimlik', docType: 'ID_CARD' },
-];
+// iOS'ta sadece pasaport desteklenir (ID_CARD "Only passport document type is supported on iOS" hatası verir)
+const DOC_TYPES = Platform.OS === 'ios'
+  ? [{ key: 'passport', label: 'Pasaport', docType: 'PASSPORT' }]
+  : [
+      { key: 'passport', label: 'Pasaport', docType: 'PASSPORT' },
+      { key: 'id', label: 'Ehliyet / Kimlik', docType: 'ID_CARD' },
+    ];
 
 export default function MrzScanScreen({ navigation }) {
   const [helpVisible, setHelpVisible] = useState(false);
   const [timeoutWarning, setTimeoutWarning] = useState(false);
   const [failCount, setFailCount] = useState(0);
-  const [docTypeKey, setDocTypeKey] = useState('passport');
+  const [docTypeKey, setDocTypeKey] = useState(Platform.OS === 'ios' ? 'passport' : 'passport');
   const [ocrLoading, setOcrLoading] = useState(false);
   const [showCameraFallback, setShowCameraFallback] = useState(false);
   const timeoutRef = useRef(null);
@@ -47,7 +50,11 @@ export default function MrzScanScreen({ navigation }) {
     (data) => {
       const raw = typeof data === 'string' ? data : (data?.nativeEvent?.mrz ?? data?.mrz ?? '');
       if (!raw || !mounted.current) return;
-      const payload = parseMrz(raw);
+      let payload = parseMrz(raw);
+      if (!payload.checks?.ok && raw) {
+        const fixed = fixMrzOcrErrors(raw);
+        if (fixed !== raw) payload = parseMrz(fixed);
+      }
       if (payload.checks?.ok) {
         if (timeoutRef.current) clearTimeout(timeoutRef.current);
         navigation.replace('MrzResult', { payload });
@@ -57,7 +64,7 @@ export default function MrzScanScreen({ navigation }) {
           if (next >= MAX_FAILS) {
             Alert.alert(
               'Okunamadı',
-              'Manuel giriş ile devam edebilirsiniz (NFC için gerekli alanlar).',
+              'Işık ve hizayı kontrol edin veya manuel giriş ile devam edin.',
               [
                 { text: 'Tekrar dene', onPress: () => setFailCount(0) },
                 { text: 'Manuel giriş', onPress: () => navigation.replace('KycManualEntry') },
@@ -74,11 +81,15 @@ export default function MrzScanScreen({ navigation }) {
   const processMrzRaw = useCallback(
     (raw) => {
       if (!raw || !mounted.current) return;
-      const payload = parseMrz(raw);
+      let payload = parseMrz(raw);
+      if (!payload.checks?.ok && raw) {
+        const fixed = fixMrzOcrErrors(raw);
+        if (fixed !== raw) payload = parseMrz(fixed);
+      }
       if (payload.checks?.ok) {
         navigation.replace('MrzResult', { payload });
       } else {
-        Toast.show({ type: 'error', text1: 'MRZ okunamadı', text2: 'Belgeyi net tutun veya manuel girin.' });
+        Toast.show({ type: 'error', text1: 'MRZ okunamadı', text2: 'Belgeyi net tutun, flaş kullanın veya manuel girin.' });
       }
     },
     [navigation]
@@ -141,7 +152,7 @@ export default function MrzScanScreen({ navigation }) {
     };
   }, []);
 
-  const selectedDocType = docTypeKey === 'id' ? DocType.ID : DocType.Passport;
+  const selectedDocType = Platform.OS === 'ios' ? DocType.Passport : (docTypeKey === 'id' ? DocType.ID : DocType.Passport);
 
   if (!MrzReaderView) {
     if (showCameraFallback) {
@@ -217,7 +228,16 @@ export default function MrzScanScreen({ navigation }) {
         <View style={styles.overlay} pointerEvents="none">
           <View style={styles.frame} />
           <Text style={styles.frameHint}>MRZ alanını çerçeve içine alın</Text>
+          {docTypeKey === 'id' && (
+            <Text style={styles.frameHintSecondary}>Kimlik canlı okunmazsa aşağıdaki "Fotoğraf ile tara"yı kullanın</Text>
+          )}
         </View>
+      </View>
+      <View style={styles.photoFallbackRow}>
+        <TouchableOpacity style={styles.photoFallbackBtn} onPress={handlePickImage} disabled={ocrLoading}>
+          <Ionicons name="image-outline" size={20} color="rgba(255,255,255,0.9)" />
+          <Text style={styles.photoFallbackBtnText}>Fotoğraf ile tara</Text>
+        </TouchableOpacity>
       </View>
       {timeoutWarning && (
         <View style={styles.banner}>
@@ -233,11 +253,16 @@ export default function MrzScanScreen({ navigation }) {
 function CameraFallbackView({ onCapture, onBack, loading, permission, requestPermission }) {
   const cameraRef = useRef(null);
   const [ready, setReady] = useState(false);
+  const [torchOn, setTorchOn] = useState(false);
 
   const capture = async () => {
     if (!cameraRef.current || loading) return;
     try {
-      const photo = await cameraRef.current.takePictureAsync({ quality: 0.85, base64: false });
+      const photo = await cameraRef.current.takePictureAsync({
+        quality: 0.95,
+        base64: false,
+        skipProcessing: false,
+      });
       if (photo?.uri) await onCapture(photo.uri);
     } catch (e) {
       Toast.show({ type: 'error', text1: 'Fotoğraf alınamadı', text2: e?.message });
@@ -260,9 +285,21 @@ function CameraFallbackView({ onCapture, onBack, loading, permission, requestPer
 
   return (
     <View style={styles.cameraFallback}>
-      <CameraView ref={cameraRef} style={StyleSheet.absoluteFill} onCameraReady={() => setReady(true)} />
+      <CameraView
+        ref={cameraRef}
+        style={StyleSheet.absoluteFill}
+        onCameraReady={() => setReady(true)}
+        enableTorch={torchOn}
+      />
       <View style={styles.captureOverlay}>
-        <Text style={styles.frameHint}>MRZ alanını çerçeve içine alıp fotoğraf çekin</Text>
+        <TouchableOpacity
+          style={[styles.torchBtn, torchOn && styles.torchBtnOn]}
+          onPress={() => setTorchOn((v) => !v)}
+        >
+          <Ionicons name={torchOn ? 'flash' : 'flash-outline'} size={28} color="#fff" />
+          <Text style={styles.torchLabel}>{torchOn ? 'Flaş kapat' : 'Flaş aç'}</Text>
+        </TouchableOpacity>
+        <Text style={styles.frameHint}>MRZ alanını çerçeve içine alıp fotoğraf çekin (karanlıkta flaş kullanın)</Text>
         <TouchableOpacity style={styles.captureBtn} onPress={capture} disabled={loading}>
           {loading ? <ActivityIndicator color="#fff" /> : <Ionicons name="camera" size={40} color="#fff" />}
         </TouchableOpacity>
@@ -286,6 +323,10 @@ const styles = StyleSheet.create({
   overlay: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center' },
   frame: { width: '90%', height: 120, borderWidth: 2, borderColor: 'rgba(255,255,255,0.7)', borderRadius: 8 },
   frameHint: { marginTop: theme.spacing.sm, color: 'rgba(255,255,255,0.9)', fontSize: theme.typography.fontSize.sm },
+  frameHintSecondary: { marginTop: 4, color: 'rgba(255,255,255,0.7)', fontSize: 11, textAlign: 'center', paddingHorizontal: theme.spacing.base },
+  photoFallbackRow: { flexDirection: 'row', justifyContent: 'center', paddingVertical: theme.spacing.sm, backgroundColor: 'rgba(0,0,0,0.5)' },
+  photoFallbackBtn: { flexDirection: 'row', alignItems: 'center', paddingVertical: 8, paddingHorizontal: 16, borderRadius: 8, backgroundColor: 'rgba(255,255,255,0.15)' },
+  photoFallbackBtnText: { color: 'rgba(255,255,255,0.9)', marginLeft: 8, fontSize: theme.typography.fontSize.sm, fontWeight: '600' },
   banner: { flexDirection: 'row', alignItems: 'center', backgroundColor: theme.colors.warningLight, padding: theme.spacing.sm, margin: theme.spacing.sm, borderRadius: 8 },
   bannerText: { marginLeft: theme.spacing.sm, color: theme.colors.textPrimary, fontSize: theme.typography.fontSize.sm, flex: 1 },
   placeholder: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: theme.spacing.xl },
@@ -300,5 +341,8 @@ const styles = StyleSheet.create({
   cameraFallback: { flex: 1, position: 'relative', backgroundColor: '#000' },
   cameraFallbackText: { color: '#fff', marginBottom: theme.spacing.base },
   captureOverlay: { position: 'absolute', bottom: 0, left: 0, right: 0, alignItems: 'center', paddingVertical: theme.spacing.xl, backgroundColor: 'rgba(0,0,0,0.5)' },
+  torchBtn: { flexDirection: 'row', alignItems: 'center', paddingVertical: 8, paddingHorizontal: 14, marginBottom: 8, borderRadius: 20, backgroundColor: 'rgba(255,255,255,0.25)' },
+  torchBtnOn: { backgroundColor: theme.colors.primary },
+  torchLabel: { color: '#fff', marginLeft: 6, fontSize: theme.typography.fontSize.sm },
   captureBtn: { width: 72, height: 72, borderRadius: 36, backgroundColor: theme.colors.primary, alignItems: 'center', justifyContent: 'center' },
 });

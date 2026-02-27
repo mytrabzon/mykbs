@@ -3,6 +3,7 @@ const { PrismaClient } = require('@prisma/client');
 const { authenticate } = require('../middleware/auth');
 const { createKBSService } = require('../services/kbs');
 const { maskKimlikNo, maskPasaportNo } = require('../utils/mask');
+const { canSendBildirim } = require('../config/packages');
 const prisma = new PrismaClient();
 
 const router = express.Router();
@@ -104,6 +105,14 @@ router.post('/checkin', async (req, res) => {
 
     if (oda.durum === 'dolu') {
       return res.status(400).json({ message: 'Oda dolu' });
+    }
+
+    const sendCheck = canSendBildirim(req.tesis);
+    if (!sendCheck.allowed) {
+      const message = sendCheck.reason === 'trial_ended'
+        ? 'Deneme süren tamamlandı. Bildirimlerine kesintisiz devam etmek için paket seç.'
+        : 'Bildirim hakkın doldu. Devam etmek için paket seç.';
+      return res.status(402).json({ message, code: sendCheck.reason });
     }
 
     // Misafir oluştur

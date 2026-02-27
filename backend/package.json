@@ -9,7 +9,7 @@
     "migrate": "prisma migrate dev",
     "generate": "prisma generate",
     "postinstall": "prisma generate",
-    "deploy": "railway up"
+    "deploy": "node scripts/deploy-railway.js"
   },
   "dependencies": {
     "@prisma/client": "^5.7.1",
@@ -21,6 +21,7 @@
     "express": "^4.18.2",
     "express-rate-limit": "^7.1.5",
     "helmet": "^7.1.0",
+    "jimp": "^1.6.0",
     "jsonwebtoken": "^9.0.2",
     "moment": "^2.29.4",
     "multer": "^2.0.0",

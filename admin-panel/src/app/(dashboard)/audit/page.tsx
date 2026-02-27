@@ -1,9 +1,10 @@
 'use client'
 
-import { useEffect, useState } from 'react'
-import { useRouter } from 'next/navigation'
+import { useEffect, useState, useCallback } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
+import Link from 'next/link'
 import toast from 'react-hot-toast'
-import { callEdgeFunction, getSupabaseToken } from '@/services/supabaseEdge'
+import { api } from '@/services/api'
 
 interface AuditRow {
   id: string
@@ -17,28 +18,30 @@ interface AuditRow {
 
 export default function AuditPage() {
   const router = useRouter()
+  const searchParams = useSearchParams()
+  const filterUserId = searchParams.get('user_id') || undefined
   const [logs, setLogs] = useState<AuditRow[]>([])
   const [loading, setLoading] = useState(true)
 
-  useEffect(() => {
-    if (!getSupabaseToken()) {
-      router.push('/login')
-      return
-    }
-    load()
-  }, [router])
-
-  const load = async () => {
+  const load = useCallback(async () => {
     try {
-      const res = await callEdgeFunction<{ logs: AuditRow[] }>('admin_audit_list', { limit: 100 })
-      setLogs(res.logs || [])
+      const params = new URLSearchParams()
+      if (filterUserId) params.set('target_user_id', filterUserId)
+      const res = await api.get<{ logs: AuditRow[]; total: number }>(`/app-admin/audit?${params.toString()}`)
+      setLogs(res.data.logs || [])
     } catch (e: unknown) {
-      toast.error((e as Error).message)
+      const err = e as { response?: { status?: number } }
+      if (err.response?.status === 401) router.push('/login')
+      else toast.error('Audit log yüklenemedi')
       setLogs([])
     } finally {
       setLoading(false)
     }
-  }
+  }, [filterUserId, router])
+
+  useEffect(() => {
+    load()
+  }, [load])
 
   if (loading) {
     return (
@@ -54,7 +57,15 @@ export default function AuditPage() {
   return (
     <div className="admin-page">
       <h1 className="kbs-page-title">Audit Log</h1>
-      <p className="kbs-page-sub">Sistem işlem kayıtları</p>
+      <p className="kbs-page-sub">
+        Sistem işlem kayıtları. {filterUserId && (
+          <span>
+            Kullanıcı filtresi: <code style={{ background: 'var(--kbs-surface)', padding: '0.2rem 0.5rem', borderRadius: 6 }}>{filterUserId}</code>
+            {' '}<Link href="/audit" style={{ color: 'var(--kbs-accent)' }}>Filtreyi kaldır</Link>
+          </span>
+        )}
+        {!filterUserId && 'Tüm kullanıcıların işlemleri listelenir.'}
+      </p>
       <div className="kbs-card">
         <div className="kbs-table-wrap">
           <table className="kbs-table">
@@ -68,12 +79,18 @@ export default function AuditPage() {
               </tr>
             </thead>
             <tbody>
-              {logs.map((l) => (
-                <tr key={l.id}>
+              {logs.map((l, i) => (
+                <tr key={l.id || `row-${i}`}>
                   <td>{new Date(l.created_at).toLocaleString('tr-TR')}</td>
                   <td>{l.action}</td>
-                  <td>{l.entity} {l.entity_id ? `#${l.entity_id.slice(0, 8)}` : ''}</td>
-                  <td>{l.user_id ? l.user_id.slice(0, 8) : '-'}</td>
+                  <td>{l.entity} {l.entity_id ? `#${String(l.entity_id).slice(0, 8)}` : ''}</td>
+                  <td>
+                    {l.user_id ? (
+                      <Link href={`/users/${l.user_id}`} style={{ color: 'var(--kbs-accent)', textDecoration: 'none' }} title="Kullanıcı aktiviteleri">
+                        {l.user_id.slice(0, 8)}…
+                      </Link>
+                    ) : '-'}
+                  </td>
                   <td style={{ fontSize: '0.85rem', color: 'var(--kbs-text-muted)', textAlign: 'left' }}>
                     {l.meta_json ? JSON.stringify(l.meta_json) : '-'}
                   </td>

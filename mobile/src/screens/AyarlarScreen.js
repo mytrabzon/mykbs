@@ -8,6 +8,7 @@ import {
   Switch,
   Alert,
   Linking,
+  Modal,
 } from 'react-native';
 import Constants from 'expo-constants';
 import { useNavigation } from '@react-navigation/native';
@@ -45,10 +46,47 @@ export default function AyarlarScreen() {
   const [sifreValue, setSifreValue] = useState('');
   const [sifreTekrar, setSifreTekrar] = useState('');
   const [sifreLoading, setSifreLoading] = useState(false);
+  const [backendStatus, setBackendStatus] = useState({ configured: false, isOnline: false, error: null });
+  const [supabaseStatus, setSupabaseStatus] = useState({ configured: false, isOnline: false, error: null });
+  const [credentialState, setCredentialState] = useState(null);
+  const [credentialLoading, setCredentialLoading] = useState(false);
+  const [changeModalVisible, setChangeModalVisible] = useState(false);
+  const [changeTesisKodu, setChangeTesisKodu] = useState('');
+  const [changeSifre, setChangeSifre] = useState('');
+
+  const loadCredentialStatus = async () => {
+    try {
+      const res = await api.get('/kbs/credentials/status');
+      setCredentialState(res.data?.state ?? 'NONE');
+    } catch (_) {
+      setCredentialState(null);
+    }
+  };
 
   useEffect(() => {
     loadKBSSettings();
+    loadCredentialStatus();
     dataService.getTesis(true).then((t) => setTesisDetail(t)).catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    const backendUrl = getApiBaseUrl();
+    const supabaseCfg = isSupabaseConfigured();
+    setBackendStatus((prev) => ({ ...prev, configured: !!backendUrl }));
+    setSupabaseStatus((prev) => ({ ...prev, configured: supabaseCfg }));
+
+    const updateBackend = (status) => setBackendStatus({ configured: !!backendUrl, isOnline: status.isOnline, error: status.error });
+    const updateSupabase = (status) => setSupabaseStatus({ configured: status.configured, isOnline: status.isOnline, error: status.error });
+
+    backendHealth.checkHealth().then(updateBackend);
+    if (supabaseCfg) backendHealth.checkSupabaseHealth().then(updateSupabase);
+
+    const unsubBackend = backendHealth.onStatusChange(updateBackend);
+    const unsubSupabase = backendHealth.onSupabaseStatusChange(updateSupabase);
+    return () => {
+      if (typeof unsubBackend === 'function') unsubBackend();
+      if (typeof unsubSupabase === 'function') unsubSupabase();
+    };
   }, []);
 
   useEffect(() => {
@@ -118,26 +156,78 @@ export default function AyarlarScreen() {
   const handleSave = async () => {
     setLoading(true);
     try {
-      await api.put('/tesis/kbs', {
-        ...kbsSettings,
-        kbsWebServisSifre: kbsSettings.kbsWebServisSifre,
-      });
-      Toast.show({ type: 'success', text1: 'Başarılı', text2: 'Ayarlar kaydedildi' });
+      if (credentialState === 'NONE' || credentialState === null) {
+        await api.post('/kbs/credentials/request', {
+          action: 'create',
+          tesis_kodu: kbsSettings.kbsTesisKodu,
+          web_servis_sifre: kbsSettings.kbsWebServisSifre,
+        });
+        Toast.show({ type: 'success', text1: 'Talep iletildi', text2: 'Onay bekleniyor', visibilityTime: 4000 });
+        await loadCredentialStatus();
+      } else {
+        await api.put('/tesis/kbs', {
+          ...kbsSettings,
+          kbsWebServisSifre: kbsSettings.kbsWebServisSifre,
+        });
+        Toast.show({ type: 'success', text1: 'Başarılı', text2: 'Ayarlar kaydedildi' });
+      }
     } catch (e) {
-      Toast.show({ type: 'error', text1: 'Hata', text2: e?.response?.data?.message || 'Ayarlar kaydedilemedi' });
-      // Hata olsa bile tesis kodu ve şifre sıfırlanmaz (kbsSettings state değiştirilmez)
+      Toast.show({ type: 'error', text1: 'Hata', text2: e?.response?.data?.message || 'İşlem başarısız' });
     } finally {
       setLoading(false);
     }
   };
 
+  const handleKbsRequest = async (action, tesisKodu, webServisSifre) => {
+    setCredentialLoading(true);
+    try {
+      await api.post('/kbs/credentials/request', {
+        action,
+        tesis_kodu: tesisKodu || '',
+        web_servis_sifre: webServisSifre || '',
+      });
+      Toast.show({ type: 'success', text1: 'Talep iletildi', text2: 'Admin onayından sonra işlem yapılacaktır.', visibilityTime: 4000 });
+      await loadCredentialStatus();
+    } catch (e) {
+      Toast.show({ type: 'error', text1: 'Hata', text2: e?.response?.data?.message || 'Talep gönderilemedi' });
+    } finally {
+      setCredentialLoading(false);
+    }
+  };
+
   const handleKbsTalep = async (type) => {
+    if (type === 'change') {
+      setChangeTesisKodu(kbsSettings.kbsTesisKodu || '');
+      setChangeSifre(kbsSettings.kbsWebServisSifre || '');
+      setChangeModalVisible(true);
+      return;
+    }
+    if (type === 'remove') {
+      Alert.alert(
+        'KBS Kaldırma',
+        'KBS bilgilerini kaldırmak için talep göndereceksiniz. Onay sonrası kaldırılır.',
+        [
+          { text: 'İptal', style: 'cancel' },
+          { text: 'Gönder', onPress: () => handleKbsRequest('delete', '', '') },
+        ]
+      );
+      return;
+    }
     try {
       await api.post('/tesis/kbs/talebi', { type });
       Toast.show({ type: 'success', text1: 'Talep iletildi', text2: 'Admin onayından sonra işlem yapılacaktır.', visibilityTime: 4000 });
     } catch (e) {
       Toast.show({ type: 'error', text1: 'Hata', text2: e?.response?.data?.message || 'Talep gönderilemedi' });
     }
+  };
+
+  const submitChangeModal = () => {
+    if (!changeTesisKodu.trim() || !changeSifre.trim()) {
+      Toast.show({ type: 'error', text1: 'Tesis kodu ve şifre gerekli' });
+      return;
+    }
+    setChangeModalVisible(false);
+    handleKbsRequest('update', changeTesisKodu.trim(), changeSifre);
   };
 
   const handlePinSave = async () => {
@@ -303,8 +393,20 @@ export default function AyarlarScreen() {
         </View>
 
         <View style={[styles.section, { backgroundColor: colors.surface }]}>
-          <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>KBS Ayarları</Text>
-          {tesisDetail && tesisDetail.kbsConnected === false && (
+          <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>KBS Ayarları (Tesis Bilgileri)</Text>
+          {credentialState === 'PENDING' && (
+            <View style={[styles.badge, { backgroundColor: colors.textSecondary }]}>
+              <Ionicons name="time-outline" size={18} color="#fff" />
+              <Text style={styles.badgeText}>Onay bekleniyor</Text>
+            </View>
+          )}
+          {credentialState === 'APPROVED' && (
+            <View style={[styles.badge, { backgroundColor: colors.success || '#22c55e' }]}>
+              <Ionicons name="checkmark-circle" size={18} color="#fff" />
+              <Text style={styles.badgeText}>Onaylandı</Text>
+            </View>
+          )}
+          {tesisDetail && tesisDetail.kbsConnected === false && credentialState !== 'APPROVED' && (
             <Banner
               type="info"
               message="Kimlik bildirimi (KBS) bu tesis için henüz yapılandırılmadı. Bağlantı kurulduğunda bu bölümden test edebilirsiniz."
@@ -327,6 +429,7 @@ export default function AyarlarScreen() {
             value={kbsSettings.kbsTesisKodu}
             onChangeText={(t) => setKbsSettings((prev) => ({ ...prev, kbsTesisKodu: t }))}
             placeholder="KBS Tesis Kodu"
+            editable={credentialState !== 'PENDING'}
           />
           <Input
             label="Web Servis Şifresi"
@@ -334,6 +437,7 @@ export default function AyarlarScreen() {
             onChangeText={(t) => setKbsSettings((prev) => ({ ...prev, kbsWebServisSifre: t }))}
             placeholder="Web Servis Şifresi"
             secureTextEntry
+            editable={credentialState !== 'PENDING'}
           />
 
           <View style={[styles.switchRow, { borderColor: colors.border }]}>
@@ -360,22 +464,52 @@ export default function AyarlarScreen() {
             </View>
           )}
 
-          <Button variant="primary" onPress={handleSave} loading={loading} disabled={loading} style={styles.saveBtn}>
-            Kaydet
-          </Button>
+          {credentialState !== 'PENDING' && (
+            <Button variant="primary" onPress={handleSave} loading={loading} disabled={loading} style={styles.saveBtn}>
+              {credentialState === 'APPROVED' ? 'Güncelle (talep açar)' : 'Kaydet'}
+            </Button>
+          )}
+
+          {credentialState === 'APPROVED' && (
+            <View style={styles.kbsTalepRow}>
+              <Button variant="secondary" onPress={() => handleKbsTalep('change')} style={styles.kbsTalepBtn} disabled={credentialLoading}>
+                Değiştir
+              </Button>
+              <Button variant="secondary" onPress={() => handleKbsTalep('remove')} style={[styles.kbsTalepBtn, { borderColor: colors.error }]} disabled={credentialLoading}>
+                Sil
+              </Button>
+            </View>
+          )}
+
+          {credentialState !== 'APPROVED' && credentialState !== 'PENDING' && (
+            <View style={styles.kbsTalepRow}>
+              <Button variant="secondary" onPress={() => handleKbsTalep('change')} style={styles.kbsTalepBtn}>
+                Değişiklik talebi
+              </Button>
+              <Button variant="secondary" onPress={() => handleKbsTalep('remove')} style={[styles.kbsTalepBtn, { borderColor: colors.error }]}>
+                Kaldırma talebi
+              </Button>
+            </View>
+          )}
 
           <Text style={[styles.infoText, { color: colors.textSecondary, marginTop: spacing.lg }]}>
-            KBS tesis kodu ve şifresi kaydedildikten sonra yalnızca admin onayı ile değiştirilebilir veya kaldırılabilir.
+            KBS tesis kodu ve şifresi talep sonrası admin onayı ile geçerli olur. Değiştir/Sil de onay gerektirir.
           </Text>
-          <View style={styles.kbsTalepRow}>
-            <Button variant="secondary" onPress={() => handleKbsTalep('change')} style={styles.kbsTalepBtn}>
-              Değişiklik talebi
-            </Button>
-            <Button variant="secondary" onPress={() => handleKbsTalep('remove')} style={[styles.kbsTalepBtn, { borderColor: colors.error }]}>
-              Kaldırma talebi
-            </Button>
-          </View>
         </View>
+
+        <Modal visible={changeModalVisible} transparent animationType="fade">
+          <View style={styles.modalOverlay}>
+            <View style={[styles.modalContent, { backgroundColor: colors.surface }]}>
+              <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>KBS Değişiklik Talebi</Text>
+              <Input label="KBS Tesis Kodu" value={changeTesisKodu} onChangeText={setChangeTesisKodu} placeholder="Tesis kodu" />
+              <Input label="Web Servis Şifresi" value={changeSifre} onChangeText={setChangeSifre} placeholder="Şifre" secureTextEntry />
+              <View style={styles.modalButtons}>
+                <Button variant="secondary" onPress={() => setChangeModalVisible(false)}>İptal</Button>
+                <Button variant="primary" onPress={submitChangeModal} loading={credentialLoading}>Gönder</Button>
+              </View>
+            </View>
+          </View>
+        </Modal>
 
         <View style={[styles.section, { backgroundColor: colors.surface }]}>
           <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>İletişim</Text>
@@ -436,6 +570,33 @@ const styles = StyleSheet.create({
   saveBtn: { marginTop: spacing.xs },
   kbsTalepRow: { flexDirection: 'row', gap: spacing.md, marginTop: spacing.lg },
   kbsTalepBtn: { flex: 1 },
+  badge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.xs,
+    borderRadius: spacing.borderRadius.input,
+    gap: 6,
+    marginBottom: spacing.md,
+  },
+  badgeText: { color: '#fff', fontWeight: '600', fontSize: 14 },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    padding: spacing.lg,
+  },
+  modalContent: {
+    borderRadius: 16,
+    padding: spacing.lg,
+  },
+  modalButtons: {
+    flexDirection: 'row',
+    gap: spacing.md,
+    marginTop: spacing.lg,
+    justifyContent: 'flex-end',
+  },
   contactLabel: { fontSize: typography.text.body.fontSize, marginBottom: 4 },
   contactLink: { fontSize: typography.text.body.fontSize },
   menuRow: {

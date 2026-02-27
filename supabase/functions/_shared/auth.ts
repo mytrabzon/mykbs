@@ -48,6 +48,7 @@ export function errorResponse(
 /**
  * Authorization: Bearer <jwt> ile istegi dogrula, user + profile dondur.
  * is_disabled ise 403.
+ * Edge'de auth bypass (DISABLE_AUTH) yok; production'da config ile auth kapatılmaz.
  */
 export async function requireAuth(req: Request): Promise<AuthResult | Response> {
   const authHeader = req.headers.get("Authorization");

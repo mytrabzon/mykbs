@@ -36,6 +36,8 @@ Thumbs.db
 
 # Backend
 backend/uploads/
+backend/prisma/*.db
+backend/prisma/*.db-journal
 backend/.env
 backend/.env.local
 backend/.env.*.local

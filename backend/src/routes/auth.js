@@ -7,6 +7,8 @@ const { authenticateTesisOrSupabase } = require('../middleware/authTesisOrSupaba
 const smsService = require('../services/sms');
 const emailService = require('../services/email');
 const { ensureSupabaseBranchAndProfile } = require('../services/supabaseSync');
+const { supabaseAdmin } = require('../lib/supabaseAdmin');
+const { setTrialDefaults } = require('../config/packages');
 const prisma = new PrismaClient();
 
 const router = express.Router();
@@ -18,6 +20,21 @@ function normalizePhone(telefon) {
   if (!digits.length) return '';
   const normalized = digits.startsWith('90') ? digits : (digits.startsWith('0') ? '90' + digits.slice(1) : '90' + digits);
   return '+' + normalized.slice(0, 12);
+}
+
+/** E.164 formatından olası DB varyantlarını döndürür (kullanıcı farklı formatta kayıtlı olabilir) */
+function phoneVariants(normalized) {
+  if (!normalized || typeof normalized !== 'string') return [];
+  const digits = normalized.replace(/\D/g, '');
+  if (digits.length < 10) return [];
+  const rest = digits.startsWith('90') ? digits.slice(2) : digits;
+  const variants = [
+    normalized,
+    '0' + rest,
+    rest,
+    '90' + rest,
+  ];
+  return [...new Set(variants)];
 }
 
 /**
@@ -61,6 +78,7 @@ router.post('/basvuru', async (req, res) => {
 
     const tesis = await prisma.tesis.create({
       data: {
+        ...setTrialDefaults(),
         tesisAdi,
         yetkiliAdSoyad,
         telefon,
@@ -229,16 +247,12 @@ router.post('/kayit', async (req, res) => {
       return res.status(400).json({ message: 'Şifre en az 6 karakter olmalıdır' });
     }
 
-    // Telefon formatını düzenle
+    // Telefon E.164 formatında (giriş ile aynı olmalı)
     let formattedPhone = null;
     if (telefon) {
-      formattedPhone = telefon.trim();
-      if (!formattedPhone.startsWith('+')) {
-        if (formattedPhone.startsWith('0')) {
-          formattedPhone = '+90' + formattedPhone.substring(1);
-        } else {
-          formattedPhone = '+90' + formattedPhone;
-        }
+      formattedPhone = normalizePhone(telefon);
+      if (!formattedPhone) {
+        return res.status(400).json({ message: 'Geçersiz telefon numarası' });
       }
     }
 
@@ -273,9 +287,10 @@ router.post('/kayit', async (req, res) => {
     // Şifreyi hash'le
     const hashedSifre = await bcrypt.hash(sifre, 10);
 
-    // Tesis oluştur
+    // Tesis oluştur (ücretsiz deneme: 3 gün, 100 bildirim)
     const tesis = await prisma.tesis.create({
       data: {
+        ...setTrialDefaults(),
         tesisAdi: tesisAdi || adSoyad + ' Tesis',
         yetkiliAdSoyad: adSoyad || 'Tesis Yetkilisi',
         telefon: formattedPhone || '',
@@ -488,9 +503,10 @@ router.post('/kayit/dogrula', async (req, res) => {
       if (!existing) unique = true;
     }
 
-    // Tesis oluştur
+    // Tesis oluştur (ücretsiz deneme: 3 gün, 100 bildirim)
     const tesis = await prisma.tesis.create({
       data: {
+        ...setTrialDefaults(),
         tesisAdi: tesisAdi || adSoyad + ' Tesis',
         yetkiliAdSoyad: adSoyad || 'Tesis Yetkilisi',
         telefon: formattedPhone,
@@ -544,7 +560,9 @@ router.post('/kayit/dogrula', async (req, res) => {
         tesisAdi: tesis.tesisAdi,
         tesisKodu: tesis.tesisKodu,
         paket: tesis.paket,
-        kota: tesis.kota
+        kota: tesis.kota,
+        kullanilanKota: tesis.kullanilanKota,
+        trialEndsAt: tesis.trialEndsAt
       }
     });
   } catch (error) {
@@ -552,6 +570,19 @@ router.post('/kayit/dogrula', async (req, res) => {
     res.status(500).json({ message: 'Kayıt doğrulama başarısız', error: error.message });
   }
 });
+
+/** Prisma hatası girisOnaylandi sütunu eksikse 503 döndür (migrate deploy gerekir) */
+function handlePrismaAuthError(res, error) {
+  const msg = error?.message || '';
+  if (msg.includes('girisOnaylandi') && (msg.includes('does not exist') || msg.includes('no such column'))) {
+    console.error('[auth] Veritabanı migration eksik (girisOnaylandi). Çalıştırın: npx prisma migrate deploy');
+    return res.status(503).json({
+      message: 'Veritabanı güncellemesi gerekli. Lütfen yöneticiye bildirin veya birkaç dakika sonra tekrar deneyin.',
+      code: 'DB_MIGRATION_REQUIRED',
+    });
+  }
+  throw error;
+}
 
 /**
  * Yeni giriş (email/telefon + şifre)
@@ -566,26 +597,25 @@ router.post('/giris/yeni', async (req, res) => {
 
     // Kullanıcıyı bul
     let kullanici;
-    if (email) {
-      kullanici = await prisma.kullanici.findFirst({
-        where: { email: email },
-        include: { tesis: true }
-      });
-    } else if (telefon) {
-      // Telefon formatını düzenle
-      let formattedPhone = telefon.trim();
-      if (!formattedPhone.startsWith('+')) {
-        if (formattedPhone.startsWith('0')) {
-          formattedPhone = '+90' + formattedPhone.substring(1);
-        } else {
-          formattedPhone = '+90' + formattedPhone;
+    try {
+      if (email) {
+        kullanici = await prisma.kullanici.findFirst({
+          where: { email: email },
+          include: { tesis: true }
+        });
+      } else if (telefon) {
+        const formattedPhone = normalizePhone(telefon);
+        if (!formattedPhone) {
+          return res.status(400).json({ message: 'Geçersiz telefon numarası' });
         }
+        const variants = phoneVariants(formattedPhone);
+        kullanici = await prisma.kullanici.findFirst({
+          where: variants.length ? { OR: variants.map((t) => ({ telefon: t })) } : { telefon: formattedPhone },
+          include: { tesis: true }
+        });
       }
-      
-      kullanici = await prisma.kullanici.findFirst({
-        where: { telefon: formattedPhone },
-        include: { tesis: true }
-      });
+    } catch (e) {
+      return handlePrismaAuthError(res, e);
     }
 
     if (!kullanici) {
@@ -635,7 +665,8 @@ router.post('/giris/yeni', async (req, res) => {
         tesisKodu: kullanici.tesis.tesisKodu,
         paket: kullanici.tesis.paket,
         kota: kullanici.tesis.kota,
-        kullanilanKota: kullanici.tesis.kullanilanKota
+        kullanilanKota: kullanici.tesis.kullanilanKota,
+        trialEndsAt: kullanici.tesis.trialEndsAt
       }
     });
   } catch (error) {
@@ -728,10 +759,75 @@ router.post('/giris/otp-iste', async (req, res) => {
 });
 
 /**
- * SMS ile giriş tamamlama (OTP doğrulama)
+ * SMS ile giriş tamamlama (OTP doğrulama).
+ * Body'de access_token varsa (Supabase verifyOtp sonrası) supabase-phone-session ile aynı akış.
  */
 router.post('/giris/otp-dogrula', async (req, res) => {
   try {
+    const accessToken = req.body?.access_token;
+    if (accessToken) {
+      const supabaseUrl = process.env.SUPABASE_URL || '';
+      const apiKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY || '';
+      if (!supabaseUrl || !apiKey) {
+        return res.status(500).json({ message: 'Supabase yapılandırması eksik' });
+      }
+      const userRes = await fetch(`${supabaseUrl.replace(/\/$/, '')}/auth/v1/user`, {
+        headers: { Authorization: `Bearer ${accessToken}`, apikey: apiKey },
+      });
+      if (!userRes.ok) return res.status(401).json({ message: 'Yetkisiz' });
+      const supabaseUser = await userRes.json();
+      const phone = supabaseUser?.phone || supabaseUser?.user_metadata?.phone;
+      if (!phone) return res.status(400).json({ message: 'Telefon bilgisi bulunamadı' });
+      let formattedPhone = String(phone).trim();
+      if (!formattedPhone.startsWith('+')) {
+        if (formattedPhone.startsWith('90')) formattedPhone = '+' + formattedPhone;
+        else if (formattedPhone.startsWith('0')) formattedPhone = '+90' + formattedPhone.slice(1);
+        else formattedPhone = '+90' + formattedPhone;
+      }
+      let kullanici;
+      try {
+        kullanici = await prisma.kullanici.findFirst({
+          where: { telefon: formattedPhone },
+          include: { tesis: true },
+        });
+      } catch (e) {
+        return handlePrismaAuthError(res, e);
+      }
+      if (!kullanici) {
+        return res.status(404).json({ message: 'Bu telefon numarası ile kayıtlı kullanıcı bulunamadı' });
+      }
+      if (kullanici.tesis.durum !== 'aktif') {
+        return res.status(403).json({ message: 'Tesis aktif değil' });
+      }
+      await ensureSupabaseBranchAndProfile(supabaseUser.id, kullanici, kullanici.tesis);
+      const token = jwt.sign(
+        { userId: kullanici.id, tesisId: kullanici.tesis.id },
+        process.env.JWT_SECRET,
+        { expiresIn: process.env.JWT_EXPIRES_IN || '7d' }
+      );
+      return res.json({
+        token,
+        kullanici: {
+          id: kullanici.id,
+          adSoyad: kullanici.adSoyad,
+          email: kullanici.email,
+          telefon: kullanici.telefon,
+          rol: kullanici.rol,
+          biyometriAktif: kullanici.biyometriAktif,
+        },
+        tesis: {
+          id: kullanici.tesis.id,
+          tesisAdi: kullanici.tesis.tesisAdi,
+          tesisKodu: kullanici.tesis.tesisKodu,
+          paket: kullanici.tesis.paket,
+          kota: kullanici.tesis.kota,
+          kullanilanKota: kullanici.tesis.kullanilanKota,
+          trialEndsAt: kullanici.tesis.trialEndsAt,
+        },
+        supabaseAccessToken: accessToken,
+      });
+    }
+
     const { telefon, otp } = req.body;
 
     if (!telefon || !otp) {
@@ -815,7 +911,8 @@ router.post('/giris/otp-dogrula', async (req, res) => {
         tesisKodu: tesis.tesisKodu,
         paket: tesis.paket,
         kota: tesis.kota,
-        kullanilanKota: tesis.kullanilanKota
+        kullanilanKota: tesis.kullanilanKota,
+        trialEndsAt: tesis.trialEndsAt
       }
     });
   } catch (error) {
@@ -836,12 +933,17 @@ router.post('/giris', async (req, res) => {
     }
 
     // Tesis'i bul
-    const tesis = await prisma.tesis.findUnique({
-      where: { tesisKodu },
-      include: {
-        kullanicilar: true
-      }
-    });
+    let tesis;
+    try {
+      tesis = await prisma.tesis.findUnique({
+        where: { tesisKodu },
+        include: {
+          kullanicilar: true
+        }
+      });
+    } catch (e) {
+      return handlePrismaAuthError(res, e);
+    }
 
     console.log('Giriş denemesi:', { tesisKodu, pinLength: pin.length, tesisFound: !!tesis });
 
@@ -920,7 +1022,8 @@ router.post('/giris', async (req, res) => {
         tesisKodu: tesis.tesisKodu,
         paket: tesis.paket,
         kota: tesis.kota,
-        kullanilanKota: tesis.kullanilanKota
+        kullanilanKota: tesis.kullanilanKota,
+        trialEndsAt: tesis.trialEndsAt
       }
     });
   } catch (error) {
@@ -1061,8 +1164,9 @@ router.post('/sifre-sifirla', async (req, res) => {
       return res.status(400).json({ message: 'Doğrulama gerekli. Önce kodu alıp doğrulayın, ardından yeni şifrenizi girin.' });
     }
 
+    const variants = phoneVariants(formattedPhone);
     const kullanici = await prisma.kullanici.findFirst({
-      where: { telefon: formattedPhone },
+      where: variants.length ? { OR: variants.map((t) => ({ telefon: t })) } : { telefon: formattedPhone },
       include: { tesis: true },
     });
     if (!kullanici) {
@@ -1197,6 +1301,7 @@ router.post('/supabase-phone-session', async (req, res) => {
         paket: kullanici.tesis.paket,
         kota: kullanici.tesis.kota,
         kullanilanKota: kullanici.tesis.kullanilanKota,
+        trialEndsAt: kullanici.tesis.trialEndsAt,
       },
       supabaseAccessToken: accessToken,
     });
@@ -1305,6 +1410,7 @@ router.post('/kayit/supabase-create', async (req, res) => {
 
     const tesis = await prisma.tesis.create({
       data: {
+        ...setTrialDefaults(),
         tesisAdi: (tesisAdi && tesisAdi.trim()) || adSoyad.trim() + ' Tesis',
         yetkiliAdSoyad: adSoyad.trim(),
         telefon: formattedPhone,
@@ -1360,6 +1466,7 @@ router.post('/kayit/supabase-create', async (req, res) => {
         paket: tesis.paket,
         kota: tesis.kota,
         kullanilanKota: tesis.kullanilanKota,
+        trialEndsAt: tesis.trialEndsAt,
       },
       supabaseAccessToken: accessToken,
     });
@@ -1370,7 +1477,8 @@ router.post('/kayit/supabase-create', async (req, res) => {
 });
 
 /**
- * Mevcut kullanıcı bilgilerini getir (Supabase token veya legacy JWT)
+ * Mevcut kullanıcı bilgilerini getir (Supabase token veya backend JWT).
+ * role: 'user' | 'admin' — mobil Admin sekmesi görünürlüğü için.
  */
 router.get('/me', authenticateTesisOrSupabase, async (req, res) => {
   try {
@@ -1378,6 +1486,15 @@ router.get('/me', authenticateTesisOrSupabase, async (req, res) => {
       const u = req.user;
       const b = req.branch;
       const profileRole = req.profileRole || 'staff';
+      let is_admin = false;
+      let role = 'user';
+      if (supabaseAdmin) {
+        const { data: profileRow } = await supabaseAdmin.from('profiles').select('is_admin').eq('id', u.id).maybeSingle();
+        is_admin = profileRow?.is_admin === true;
+        const { data: appRole } = await supabaseAdmin.from('app_roles').select('role').eq('user_id', u.id).maybeSingle();
+        if (appRole?.role === 'admin') role = 'admin';
+        else if (is_admin) role = 'admin';
+      }
       return res.json({
         kullanici: {
           id: u.id,
@@ -1387,6 +1504,8 @@ router.get('/me', authenticateTesisOrSupabase, async (req, res) => {
           email: u.email || null,
           rol: profileRole,
           biyometriAktif: false,
+          is_admin,
+          role,
           yetkiler: { checkIn: true, odaDegistirme: true, bilgiDuzenleme: true }
         },
         tesis: {
@@ -1401,21 +1520,35 @@ router.get('/me', authenticateTesisOrSupabase, async (req, res) => {
       });
     }
 
-    const kullanici = await prisma.kullanici.findUnique({
-      where: { id: req.user.id },
-      include: {
-        tesis: {
-          select: {
-            id: true,
-            tesisAdi: true,
-            paket: true,
-            kota: true,
-            kullanilanKota: true,
+    let kullanici;
+    try {
+      kullanici = await prisma.kullanici.findUnique({
+        where: { id: req.user.id },
+        include: {
+          tesis: {
+            select: {
+              id: true,
+              tesisAdi: true,
+              paket: true,
+              kota: true,
+              kullanilanKota: true,
+              trialEndsAt: true,
             kbsTuru: true
           }
         }
       }
     });
+    } catch (e) {
+      return handlePrismaAuthError(res, e);
+    }
+
+    let role = 'user';
+    const adminKullaniciId = process.env.ADMIN_KULLANICI_ID != null ? Number(process.env.ADMIN_KULLANICI_ID) : null;
+    if (adminKullaniciId != null && adminKullaniciId === kullanici.id) role = 'admin';
+    else if (supabaseAdmin) {
+      const { data: appRole } = await supabaseAdmin.from('app_roles').select('role').eq('backend_kullanici_id', kullanici.id).maybeSingle();
+      if (appRole?.role === 'admin') role = 'admin';
+    }
 
     res.json({
       kullanici: {
@@ -1425,6 +1558,8 @@ router.get('/me', authenticateTesisOrSupabase, async (req, res) => {
         email: kullanici.email,
         rol: kullanici.rol,
         biyometriAktif: kullanici.biyometriAktif,
+        is_admin: role === 'admin',
+        role,
         yetkiler: {
           checkIn: kullanici.checkInYetki,
           odaDegistirme: kullanici.odaDegistirmeYetki,

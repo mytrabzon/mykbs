@@ -138,15 +138,60 @@ function parseTD1(lines) {
   };
 }
 
+/** MRZ satırında sadece rakam/check olması gereken pozisyonlarda OCR düzeltmesi (O->0, I/L->1). */
+function fixLineDigitPositions(line, digitRanges) {
+  const arr = line.split('');
+  for (const [start, end] of digitRanges) {
+    for (let i = start; i < end && i < arr.length; i++) {
+      const c = arr[i];
+      if (c === 'O' || c === 'Q') arr[i] = '0';
+      else if (c === 'I' || c === 'L' || c === '|') arr[i] = '1';
+    }
+  }
+  return arr.join('');
+}
+
+export function fixMrzOcrErrors(raw) {
+  if (!raw || typeof raw !== 'string') return raw;
+  const lines = normalizeMrzLines(raw);
+  if (lines.length >= 2 && lines[0].length >= 40) {
+    // TD3: line2 doc 0-9, birth 13-19, expiry 21-27
+    lines[1] = fixLineDigitPositions(lines[1], [[0, 10], [13, 20], [21, 28]]);
+  } else if (lines.length >= 2 && lines[0].length >= 34 && lines[0].length <= 36) {
+    lines[1] = fixLineDigitPositions(lines[1], [[0, 10], [13, 20], [21, 28]]);
+  } else if (lines.length >= 3 && lines[0].length >= 28) {
+    // TD1: line1 doc 5-15, line2 birth 0-7, expiry 8-15
+    lines[0] = fixLineDigitPositions(lines[0], [[5, 15]]);
+    lines[1] = fixLineDigitPositions(lines[1], [[0, 8], [8, 15]]);
+  }
+  return lines.join('\n');
+}
+
+/** Ham MRZ'ı satırlara böl; tek satırda birleşik gelen TD1 (90) / TD2 (72) / TD3 (88) formatını ayır */
+function normalizeMrzLines(raw) {
+  const one = raw.trim().toUpperCase().replace(/\s/g, '');
+  if (one.length === 90 && /^[A-Z0-9<]+$/.test(one)) {
+    return [one.slice(0, 30), one.slice(30, 60), one.slice(60, 90)];
+  }
+  if (one.length === 88 && /^[A-Z0-9<]+$/.test(one)) {
+    return [one.slice(0, 44), one.slice(44, 88)];
+  }
+  if (one.length === 72 && /^[A-Z0-9<]+$/.test(one)) {
+    return [one.slice(0, 36), one.slice(36, 72)];
+  }
+  return raw.replace(/\r\n/g, '\n').replace(/\r/g, '\n').split('\n').map((l) => l.trim().toUpperCase().replace(/\s/g, '')).filter(Boolean);
+}
+
 export function parseMrz(raw) {
   if (!raw || typeof raw !== 'string') {
     return { docType: 'OTHER', issuingCountry: '', surname: '', givenNames: '', passportNumber: '', nationality: '', birthDate: '', sex: 'U', expiryDate: '', raw: '', checks: { ok: false, reason: 'empty_input' } };
   }
-  const lines = raw.replace(/\r\n/g, '\n').replace(/\r/g, '\n').split('\n').map((l) => l.trim().toUpperCase().replace(/\s/g, '')).filter(Boolean);
+  const lines = normalizeMrzLines(raw);
   if (lines.length >= 2 && lines[0].length >= 40) return parseTD3(lines);
   if (lines.length >= 2 && lines[0].length >= 34 && lines[0].length <= 36) return parseTD2(lines);
   if (lines.length >= 3 && lines[0].length >= 28) return parseTD1(lines);
   return { docType: 'OTHER', issuingCountry: '', surname: '', givenNames: '', passportNumber: '', nationality: '', birthDate: '', sex: 'U', expiryDate: '', raw, checks: { ok: false, reason: 'invalid_format' } };
 }
 
+// fixMrzOcrErrors yalnızca "export function" ile dışa aktarılır; burada tekrarlanmamalı (duplicate export hatası).
 export { checkDigit, normalizeYYMMDD };

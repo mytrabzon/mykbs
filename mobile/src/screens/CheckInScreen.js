@@ -18,8 +18,10 @@ import Toast from 'react-native-toast-message';
 import { logger } from '../utils/logger';
 import { Ionicons, MaterialIcons } from '@expo/vector-icons';
 import { theme } from '../theme';
+import { useCredits } from '../context/CreditsContext';
 
 export default function CheckInScreen({ navigation, route }) {
+  const { triggerPaywall } = useCredits();
   const [step, setStep] = useState(1);
   const [odalar, setOdalar] = useState([]);
   const [selectedOda, setSelectedOda] = useState(null);
@@ -289,12 +291,16 @@ export default function CheckInScreen({ navigation, route }) {
       });
       const status = error.response?.status;
       const msg = error.response?.data?.message || error.message || 'Check-in başarısız';
-      Toast.show({
-        type: 'error',
-        text1: status === 401 ? 'Giriş gerekli' : 'Hata',
-        text2: status === 401 ? 'Tekrar giriş yapın.' : msg
-      });
-      // Hata durumunda lobiye/geri gitmiyoruz; kullanıcı ekranda kalır.
+      if (status === 402) {
+        triggerPaywall(error.response?.data?.code || 'no_credits');
+        Toast.show({ type: 'info', text1: 'Bildirim hakkı doldu', text2: msg });
+      } else {
+        Toast.show({
+          type: 'error',
+          text1: status === 401 ? 'Giriş gerekli' : 'Hata',
+          text2: status === 401 ? 'Tekrar giriş yapın.' : msg
+        });
+      }
     } finally {
       setLoading(false);
     }

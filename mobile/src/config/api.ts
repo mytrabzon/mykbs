@@ -1,25 +1,12 @@
 /**
  * Tek kaynak: Backend (Node/KBS) base URL ve path'ler.
- * Test isteği (health) ve tüm API çağrıları bu değerleri kullanır.
- * Backend Express kullanıyor; tRPC yok (Supabase Edge'de ayrı tRPC var).
+ * ENV (EAS build veya process.env) üzerinden okunur.
  */
-
-const getEnvBackendUrl = (): string => {
-  if (typeof process !== 'undefined' && process.env?.EXPO_PUBLIC_BACKEND_URL) {
-    return (process.env.EXPO_PUBLIC_BACKEND_URL || '').replace(/\/$/, '');
-  }
-  try {
-    const Constants = require('expo-constants').default;
-    const extra = Constants.expoConfig?.extra ?? {};
-    return String(extra.backendUrl ?? '').replace(/\/$/, '');
-  } catch {
-    return '';
-  }
-};
+import { ENV } from '../lib/config/env';
 
 /** Node backend base URL (health, checkin, tesis, oda vb.) */
 export function getApiBaseUrl(): string {
-  return getEnvBackendUrl();
+  return ENV.BACKEND_URL.replace(/\/$/, '');
 }
 
 /** Health endpoint path – backend GET /health */
@@ -48,31 +35,18 @@ export function getTrpcUrl(): string {
   return base ? `${base}${TRPC_PATH}` : '';
 }
 
-function getSupabaseBaseUrlInternal(): string {
-  if (typeof process !== 'undefined' && process.env?.EXPO_PUBLIC_SUPABASE_URL) {
-    return (process.env.EXPO_PUBLIC_SUPABASE_URL || '').replace(/\/$/, '');
-  }
-  try {
-    const Constants = require('expo-constants').default;
-    const extra = Constants.expoConfig?.extra ?? {};
-    return String(extra.supabaseUrl ?? '').replace(/\/$/, '');
-  } catch {
-    return '';
-  }
-}
-
 /** Supabase proje base URL (functions için kullanılır) */
 export function getSupabaseBaseUrl(): string {
-  return getSupabaseBaseUrlInternal();
+  return ENV.SUPABASE_URL.replace(/\/$/, '');
 }
 
-/** Supabase yapılandırılmış mı (URL + anon key kontrolü yapılabilir) */
+/** Supabase yapılandırılmış mı (ENV ile her zaman true olur) */
 export function isSupabaseConfigured(): boolean {
-  return getSupabaseBaseUrlInternal().length > 0;
+  return !!ENV.SUPABASE_URL;
 }
 
 /** Supabase Edge Functions URL (tesis/oda listesi vb. – ayrı kaynak) */
 export function buildApiUrl(path: string): string {
-  const base = getSupabaseBaseUrlInternal();
+  const base = ENV.SUPABASE_URL.replace(/\/$/, '');
   return base ? `${base}/functions/v1/${path.replace(/^\//, '')}` : '';
 }

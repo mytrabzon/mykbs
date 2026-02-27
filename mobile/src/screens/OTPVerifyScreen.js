@@ -180,9 +180,33 @@ export default function OTPVerifyScreen() {
           const { data, error } = await supabase.auth.verifyOtp({ phone, token: code, type: 'sms' });
           if (!error && data?.session?.access_token) {
             const accessToken = data.session.access_token;
-            setLoading(false);
-            if (onSuccess) onSuccess({ token: accessToken, kullanici: null, tesis: null });
-            else await loginWithToken(accessToken, null, null, accessToken);
+            if (onSuccess) {
+              onSuccess({ token: accessToken, kullanici: null, tesis: null });
+              setLoading(false);
+              return;
+            }
+            // access_token ile auth_verify_otp çağır: profil/tesis yoksa oluşturur, kullanici/tesis döner (ilerleme için gerekli)
+            try {
+              const sessionRes = await api.post('/auth/giris/otp-dogrula', { access_token: accessToken });
+              const { token: t, kullanici: k, tesis: tesisData } = sessionRes.data || {};
+              if (t && k && tesisData) {
+                await loginWithToken(t, k, tesisData, accessToken);
+              } else {
+                await loginWithToken(accessToken, null, null, accessToken);
+              }
+            } catch (sessionErr) {
+              const status = sessionErr?.response?.status;
+              const msg = sessionErr?.response?.data?.message || sessionErr?.message;
+              logger.error('OTP session bootstrap error', { status, message: msg });
+              if (status === 503 && (msg || '').includes('Veritabanı')) {
+                Toast.show({ type: 'error', text1: 'Bakım', text2: msg || 'Veritabanı güncellemesi gerekli. Lütfen yöneticiye bildirin.' });
+                setLoading(false);
+                return;
+              }
+              await loginWithToken(accessToken, null, null, accessToken);
+            } finally {
+              setLoading(false);
+            }
             return;
           }
           if (error) {
@@ -204,11 +228,13 @@ export default function OTPVerifyScreen() {
         }
         const response = await api.post('/auth/giris/otp-dogrula', { telefon, otp: code });
         const { token, kullanici, tesis } = response.data;
-        setLoading(false);
-        if (onSuccess) onSuccess({ token, kullanici, tesis });
-        else {
-          await loginWithToken(token, kullanici, tesis);
+        try {
+          if (onSuccess) onSuccess({ token, kullanici, tesis });
+          else await loginWithToken(token, kullanici, tesis);
+        } finally {
+          setLoading(false);
         }
+        return;
       }
 
       setLoading(false);
@@ -221,12 +247,15 @@ export default function OTPVerifyScreen() {
       setLoading(false);
       const apiMessage = error.response?.data?.message || error.response?.data?.error;
       const isNetwork = error.message === 'Network Error' || error.code === 'NETWORK_ERROR';
-      const text2 = isNetwork
-        ? 'İnternet bağlantınızı kontrol edip tekrar deneyin.'
-        : (apiMessage || error.message || 'Kod hatalı veya süresi doldu. Yeni kod gönderip tekrar deneyin.');
+      const isTimeout = error.name === 'AbortError' || error.message?.includes('abort');
+      const text2 = isTimeout
+        ? 'İstek zaman aşımına uğradı. İnterneti kontrol edip tekrar deneyin.'
+        : isNetwork
+          ? 'İnternet bağlantınızı kontrol edip tekrar deneyin.'
+          : (apiMessage || error.message || 'Kod hatalı veya süresi doldu. Yeni kod gönderip tekrar deneyin.');
       Toast.show({
         type: 'error',
-        text1: isNetwork ? 'Bağlantı Hatası' : 'Doğrulama Başarısız',
+        text1: isTimeout ? 'Zaman Aşımı' : isNetwork ? 'Bağlantı Hatası' : 'Doğrulama Başarısız',
         text2,
       });
       setOtp(['', '', '', '', '', '']);

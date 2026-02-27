@@ -1,10 +1,11 @@
 /**
- * Expo Push Notifications - token al ve Supabase push_register_token ile kaydet.
- * Supabase token (getSupabaseToken) varsa çağrılır.
+ * Expo Push Notifications - token al ve backend POST /push/register ile kaydet.
+ * Backend JWT (getBackendToken) varsa çağrılır; Supabase Edge çağrılmaz (401 biter).
  */
 import * as Notifications from 'expo-notifications';
 import { Platform } from 'react-native';
-import * as communityApi from './communityApi';
+import * as Application from 'expo-application';
+import { getApiBaseUrl } from '../config/api';
 import { logger } from '../utils/logger';
 
 // Foreground'da bildirim göster
@@ -16,9 +17,10 @@ Notifications.setNotificationHandler({
   }),
 });
 
-export async function registerPushToken(getSupabaseToken) {
-  const supabaseToken = await getSupabaseToken?.();
-  if (!supabaseToken) return;
+/** getBackendToken: () => Promise<string | null> veya string | null — backend JWT döndürmeli */
+export async function registerPushToken(getBackendToken) {
+  const token = typeof getBackendToken === 'function' ? await getBackendToken() : getBackendToken;
+  if (!token) return;
 
   try {
     const { status: existing } = await Notifications.getPermissionsAsync();
@@ -33,14 +35,37 @@ export async function registerPushToken(getSupabaseToken) {
     }
 
     const tokenData = await Notifications.getExpoPushTokenAsync();
-    const token = tokenData?.data;
-    if (!token) {
+    const expoPushToken = tokenData?.data;
+    if (!expoPushToken) {
       logger.log('[Push] No Expo push token');
       return;
     }
 
+    const backendUrl = getApiBaseUrl();
+    if (!backendUrl) {
+      logger.warn('[Push] Backend URL yok, push kaydı atlanıyor');
+      return;
+    }
+
+    let deviceId = null;
+    try {
+      deviceId = Application.androidId ?? (await Application.getIosIdForVendorAsync()) ?? null;
+    } catch (_) {}
+
     const platform = Platform.OS === 'ios' ? 'ios' : 'android';
-    await communityApi.registerPushToken(token, platform, supabaseToken);
+    const r = await fetch(`${backendUrl}/api/push/register`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({ expoPushToken, deviceId, platform }),
+    });
+    const data = await r.json().catch(() => ({}));
+    if (!r.ok) {
+      logger.error('[Push] Register failed', { status: r.status, data });
+      return;
+    }
     logger.log('[Push] Token registered', { platform });
   } catch (e) {
     logger.error('[Push] Register error', e);

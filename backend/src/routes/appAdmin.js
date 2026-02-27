@@ -11,12 +11,19 @@ const { encrypt } = require('../utils/kbsEncrypt');
 const router = express.Router();
 const prisma = new PrismaClient();
 
+const ADMIN_SECRET = process.env.ADMIN_SECRET || 'admin-secret-key';
+
 async function requireAdminPanelUser(req, res, next) {
   try {
     const authHeader = req.headers.authorization;
     const token = authHeader && authHeader.startsWith('Bearer ') ? authHeader.slice(7) : null;
     if (!token) {
       return res.status(401).json({ message: 'Token bulunamadı' });
+    }
+
+    // 0) Admin şifre ile giriş (panel tüm sayfaları tek token ile kullanılabilsin)
+    if (token === ADMIN_SECRET) {
+      return next();
     }
 
     // 1) Önce backend JWT dene (Prisma userId)
@@ -391,4 +398,5 @@ router.post('/users/:id/force-logout', async (req, res) => {
   }
 });
 
+router.requireAdminPanelUser = requireAdminPanelUser;
 module.exports = router;

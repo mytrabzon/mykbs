@@ -7,7 +7,7 @@ export default function IdentityPage() {
       <p className="kbs-page-sub">Bekleyen doğrulamalar kuyruğu. Approve / Reject + reject reason.</p>
       <div className="kbs-card">
         <p className="kbs-card-empty-text" style={{ padding: '2rem' }}>
-          Pending kimlik listesi ve onay/red aksiyonları MVP ile eklenecek.
+          Kimlik ve pasaport bölümü kullanıma açıktır; onay/red listesi geliştirme aşamasındadır.
         </p>
       </div>
     </div>

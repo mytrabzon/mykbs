@@ -2,16 +2,16 @@
 
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
+import Link from 'next/link'
 import toast from 'react-hot-toast'
-import { callEdgeFunction, getSupabaseToken } from '@/services/supabaseEdge'
+import { api } from '@/services/api'
 
 interface UserRow {
-  user_id: string
-  branch_id: string
-  role: string
-  display_name: string | null
-  title: string | null
-  is_disabled: boolean
+  id: string
+  email: string | null
+  phone: string | null
+  created_at: string
+  last_sign_in_at: string | null
 }
 
 export default function UsersPage() {
@@ -20,39 +20,20 @@ export default function UsersPage() {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    if (!getSupabaseToken()) { router.push('/login'); return }
     load()
-  }, [router])
+  }, [])
 
   const load = async () => {
     try {
-      const res = await callEdgeFunction<{ users: UserRow[] }>('admin_user_list', {})
-      setUsers(res.users || [])
+      const res = await api.get<{ users: UserRow[] }>('/app-admin/users')
+      setUsers(res.data.users || [])
     } catch (e: unknown) {
-      toast.error((e as Error).message)
+      const err = e as { response?: { status?: number } }
+      if (err.response?.status === 401) router.push('/login')
+      else toast.error('Kullanıcılar yüklenemedi')
       setUsers([])
     } finally {
       setLoading(false)
-    }
-  }
-
-  const setRole = async (userId: string, role: string) => {
-    try {
-      await callEdgeFunction('admin_user_set_role', { user_id: userId, role })
-      toast.success('Rol güncellendi')
-      load()
-    } catch (e: unknown) {
-      toast.error((e as Error).message)
-    }
-  }
-
-  const setDisabled = async (userId: string, disabled: boolean) => {
-    try {
-      await callEdgeFunction('admin_user_disable', { user_id: userId, disabled })
-      toast.success(disabled ? 'Kullanıcı devre dışı' : 'Kullanıcı tekrar açıldı')
-      load()
-    } catch (e: unknown) {
-      toast.error((e as Error).message)
     }
   }
 
@@ -70,35 +51,32 @@ export default function UsersPage() {
   return (
     <div className="admin-page">
       <h1 className="kbs-page-title">Kullanıcılar</h1>
-      <p className="kbs-page-sub">Rol ve durum yönetimi</p>
+      <p className="kbs-page-sub">Supabase Auth kullanıcı listesi. Detaya tıklayarak kullanıcı bilgilerini görebilirsiniz.</p>
       <div className="kbs-card">
         <div className="kbs-table-wrap">
           <table className="kbs-table">
             <thead>
               <tr>
-                <th>Ad Soyad</th>
-                <th>Rol</th>
-                <th>Durum</th>
+                <th>ID</th>
+                <th>Email</th>
+                <th>Telefon</th>
+                <th>Son giriş</th>
+                <th>Kayıt</th>
                 <th>İşlem</th>
               </tr>
             </thead>
             <tbody>
               {users.map((u) => (
-                <tr key={u.user_id}>
-                  <td>{u.display_name || u.user_id.slice(0, 8)}</td>
+                <tr key={u.id}>
+                  <td style={{ fontSize: '0.85rem', color: 'var(--kbs-text-muted)' }}>{u.id.slice(0, 8)}…</td>
+                  <td>{u.email || '—'}</td>
+                  <td>{u.phone || '—'}</td>
+                  <td style={{ fontSize: '0.9rem' }}>{u.last_sign_in_at ? new Date(u.last_sign_in_at).toLocaleString('tr-TR') : '—'}</td>
+                  <td style={{ fontSize: '0.9rem' }}>{new Date(u.created_at).toLocaleString('tr-TR')}</td>
                   <td>
-                    <select aria-label={`${u.display_name || u.user_id} rolü`} value={u.role} onChange={(e) => setRole(u.user_id, e.target.value)} className="kbs-select" style={{ marginBottom: 0, padding: '0.4rem 0.6rem', width: 'auto' }}>
-                      <option value="admin">Admin</option>
-                      <option value="moderator">Moderator</option>
-                      <option value="operator">Operator</option>
-                      <option value="viewer">Viewer</option>
-                    </select>
-                  </td>
-                  <td>{u.is_disabled ? 'Devre dışı' : 'Aktif'}</td>
-                  <td style={{ textAlign: 'left' }}>
-                    <button type="button" onClick={() => setDisabled(u.user_id, !u.is_disabled)} className="kbs-btn-primary" style={{ width: 'auto', padding: '0.45rem 0.9rem', fontSize: '0.85rem', background: u.is_disabled ? 'linear-gradient(135deg, var(--kbs-success), #10b981)' : 'linear-gradient(135deg, var(--kbs-warning), #f59e0b)' }}>
-                      {u.is_disabled ? 'Aç' : 'Devre dışı bırak'}
-                    </button>
+                    <Link href={`/users/${u.id}`} className="kbs-btn-primary" style={{ width: 'auto', padding: '0.45rem 0.9rem', fontSize: '0.85rem', display: 'inline-block', textDecoration: 'none', background: 'var(--kbs-surface-elevated)', color: 'var(--kbs-accent)' }}>
+                      Detay
+                    </Link>
                   </td>
                 </tr>
               ))}

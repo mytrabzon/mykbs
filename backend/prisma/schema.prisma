@@ -42,11 +42,12 @@ model Tesis {
   aktivasyonSifreExpiresAt DateTime?
   durum             String   @default("incelemede") // incelemede, onaylandi, aktif, pasif
   
-  // Paket ve Kota
-  paket             String   @default("deneme") // deneme, standart, pro
-  kota              Int      @default(500)
+  // Paket ve Kota (deneme: 3 gün 100 bildirim; starter/pro/business/enterprise: kredi bitene kadar)
+  paket             String   @default("deneme") // deneme, starter, pro, business, enterprise
+  kota              Int      @default(100)     // deneme=100, paket satın alınca paket kredisi
   kullanilanKota    Int      @default(0)
   kotaResetTarihi   DateTime?
+  trialEndsAt       DateTime?                  // deneme süresi bitişi (3 gün); paket alınca null
   
   // İlişkiler
   kullanicilar      Kullanici[]

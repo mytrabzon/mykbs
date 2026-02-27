@@ -15,7 +15,7 @@ export async function callEdgeFunction<T = unknown>(name: string, body?: Record<
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL
   const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
   const token = getSupabaseToken()
-  if (!url || !anonKey) throw new Error('Supabase yapılandırması eksik')
+  if (!url || !anonKey) throw new Error('Bu özellik için Supabase yapılandırması gereklidir. .env dosyasında NEXT_PUBLIC_SUPABASE_URL ve NEXT_PUBLIC_SUPABASE_ANON_KEY tanımlayın.')
   if (!token) throw new Error('Oturum gerekli')
   const res = await fetch(`${url.replace(/\/$/, '')}/functions/v1/${name}`, {
     method: 'POST',

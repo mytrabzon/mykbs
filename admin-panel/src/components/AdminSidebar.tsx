@@ -9,7 +9,7 @@ const navItems = [
   { href: '/users', label: 'Kullanıcılar', icon: '👥' },
   { href: '/identity', label: 'Kimlik & Pasaport', icon: '🪪' },
   { href: '/payments', label: 'Paketler & Ödemeler', icon: '💳' },
-  { href: '/tesisler', label: 'Tesis/KBS Talepleri', icon: '🏢' },
+  { href: '/tesisler', label: 'Tesis Listesi', icon: '🏢' },
   { href: '/notifications', label: 'Bildirim & Duyurular', icon: '📢' },
   { href: '/reports', label: 'Raporlar', icon: '📈' },
   { href: '/settings', label: 'Ayarlar', icon: '⚙️' },

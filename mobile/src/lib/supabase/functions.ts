@@ -1,29 +1,6 @@
 import { supabase } from './supabase';
 import { logger } from '../../utils/logger';
-
-const getConfig = () => {
-  if (typeof process !== 'undefined' && process.env?.EXPO_PUBLIC_SUPABASE_URL) {
-    return {
-      url: process.env.EXPO_PUBLIC_SUPABASE_URL,
-      anonKey: process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || '',
-      functionsUrl: process.env.EXPO_PUBLIC_SUPABASE_FUNCTIONS_URL || `${(process.env.EXPO_PUBLIC_SUPABASE_URL || '').replace(/\/$/, '')}/functions/v1`,
-      useTrpc: process.env.EXPO_PUBLIC_USE_TRPC === 'true',
-    };
-  }
-  try {
-    const Constants = require('expo-constants').default;
-    const extra = Constants.expoConfig?.extra ?? {};
-    const url = extra.supabaseUrl || '';
-    return {
-      url,
-      anonKey: extra.supabaseAnonKey || '',
-      functionsUrl: extra.EXPO_PUBLIC_SUPABASE_FUNCTIONS_URL || (url ? `${String(url).replace(/\/$/, '')}/functions/v1` : ''),
-      useTrpc: extra.EXPO_PUBLIC_USE_TRPC === true || extra.EXPO_PUBLIC_USE_TRPC === 'true',
-    };
-  } catch {
-    return { url: '', anonKey: '', functionsUrl: '', useTrpc: false };
-  }
-};
+import { ENV } from '../config/env';
 
 export class EdgeFunctionError extends Error {
   constructor(
@@ -37,50 +14,56 @@ export class EdgeFunctionError extends Error {
   }
 }
 
+/** callFn 3. parametre: token override (string | null) veya { tokenOverride, requireAuth } */
+type CallFnOptions = { tokenOverride?: string | null; requireAuth?: boolean };
+
 /**
  * Supabase Edge Function çağrısı – tek giriş noktası.
- * Session token: tokenOverride verilirse o kullanılır, yoksa supabase.auth.getSession().
+ * Authorization sadece supabase.auth.getSession() access_token ile (veya tokenOverride ile) gönderilir.
+ * requireAuth: true ise token yoksa çağrı yapılmaz, 401 fırlatılır. health gibi anon çağrılar için requireAuth: false.
  */
 export async function callFn<T = unknown>(
   name: string,
   body?: Record<string, unknown>,
-  tokenOverride?: string | null
+  options?: string | null | CallFnOptions
 ): Promise<T> {
-  const { url, anonKey } = getConfig();
-  if (!url || !anonKey) {
-    throw new EdgeFunctionError('Supabase URL veya Anon Key eksik. mobile/.env içinde EXPO_PUBLIC_SUPABASE_URL ve EXPO_PUBLIC_SUPABASE_ANON_KEY (tam JWT) olmalı.', 0, 'CONFIG_MISSING');
-  }
-  if (anonKey.length < 30) {
-    logger.warn('[callFn] API key çok kısa (publishable: sb_publishable_... veya anon JWT). Dashboard → Settings → API.');
-  }
-
-  const baseUrl = url.replace(/\/$/, '');
+  const opts: CallFnOptions =
+    options === null || options === undefined
+      ? {}
+      : typeof options === 'string'
+        ? { tokenOverride: options }
+        : options;
+  const requireAuth = opts.requireAuth !== false;
+  const baseUrl = ENV.SUPABASE_URL.replace(/\/$/, '');
   const fnUrl = `${baseUrl}/functions/v1/${name}`;
 
-  let accessToken: string | null = tokenOverride ?? null;
-  const tokenSource = accessToken ? 'override' : 'session';
+  let accessToken: string | null = opts.tokenOverride ?? null;
   if (typeof accessToken === 'string' && accessToken.startsWith('stub_token_')) {
     accessToken = null;
   }
-  if (!accessToken && supabase) {
+  if (!accessToken) {
     const { data: { session } } = await supabase.auth.getSession();
     accessToken = session?.access_token ?? null;
   }
 
+  if (requireAuth && !accessToken) {
+    logger.warn('[callFn] Token yok, çağrı yapılmıyor (requireAuth)', { name });
+    throw new EdgeFunctionError('Giriş gerekli', 401, 'UNAUTHORIZED');
+  }
+
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
-    'apikey': anonKey,
+    'apikey': ENV.SUPABASE_ANON_KEY,
   };
+  // Authorization sadece session access_token (veya tokenOverride); anon key asla Bearer'a konmaz.
   if (accessToken) {
     headers['Authorization'] = `Bearer ${accessToken}`;
   }
 
-  // Test modu: detaylı log (token kaynağı, uzunluk, endpoint)
   logger.log('[callFn]', {
     name,
     hasBody: !!body,
     hasToken: !!accessToken,
-    tokenSource: accessToken ? tokenSource : 'none',
     tokenLength: accessToken ? accessToken.length : 0,
     url: fnUrl,
   });
@@ -99,7 +82,6 @@ export async function callFn<T = unknown>(
     data = { message: text || res.statusText };
   }
 
-  // Test modu: yanıt özeti
   logger.log('[callFn response]', {
     name,
     status: res.status,

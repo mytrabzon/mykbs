@@ -15,10 +15,11 @@ export default function ScanHelpSheet({ visible, onClose }) {
             </TouchableOpacity>
           </View>
           <View style={styles.list}>
-            <Item icon="sunny-outline" text="İyi aydınlatılmış bir ortam kullanın" />
-            <Item icon="document-text-outline" text="Belgeyi düz bir yüzeyde tutun" />
-            <Item icon="scan-outline" text="Kamera çerçevesi MRZ alanını içine alsın" />
-            <Item icon="hand-left-outline" text="Gölge MRZ üzerine düşmesin" />
+            <Item icon="flash-outline" text="Karanlıkta: Flaş (torch) açın; ekrandaki flaş düğmesini kullanın" />
+            <Item icon="sunny-outline" text="Aydınlıkta: Doğrudan güneş/yansıma MRZ üzerine gelmesin" />
+            <Item icon="document-text-outline" text="Belgeyi düz tutun, MRZ çizgileri net görünsün" />
+            <Item icon="scan-outline" text="Çerçeve MRZ alanını tam içine alsın" />
+            <Item icon="hand-left-outline" text="Gölge veya parmak MRZ üzerine düşmesin" />
           </View>
           <TouchableOpacity style={styles.button} onPress={onClose}>
             <Text style={styles.buttonText}>Tamam</Text>

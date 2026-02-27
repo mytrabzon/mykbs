@@ -17,6 +17,13 @@ serve(async (req) => {
   const auth = await requireAuth(req);
   if (auth instanceof Response) return auth;
 
+  const { data: profileRow } = await auth.supabase
+    .from("profiles")
+    .select("is_admin")
+    .eq("id", auth.userId)
+    .maybeSingle();
+  const is_admin = profileRow?.is_admin === true;
+
   return jsonResponse({
     user_id: auth.userId,
     branch_id: auth.profile.branch_id,
@@ -24,5 +31,6 @@ serve(async (req) => {
     display_name: auth.profile.display_name,
     title: auth.profile.title,
     avatar_url: auth.profile.avatar_url,
+    is_admin,
   });
 });

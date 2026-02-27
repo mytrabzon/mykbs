@@ -1,5 +1,13 @@
 /**
- * Topluluk ve bildirim API - Supabase Edge Functions.
+ * Topluluk, profil ve bildirim API – tümü Supabase üzerinden.
+ *
+ * Supabase kullanılan işlemler:
+ * - Profil: me, profile_update, upload_avatar (profil resmi)
+ * - Gönderiler: community_post_list/create/delete, post yorumları, reaksiyonlar
+ * - Resimler: upload_community_image (gönderi resimleri), upload_avatar (profil fotoğrafı)
+ * - Bildirimler: in_app_notifications_list, mark_read
+ * - Hesaplar: getMe → user_profiles (Supabase); gönderi/hesap verisi Supabase’te.
+ *
  * getSupabaseToken() ile alınan JWT kullanılır (backend login sonrası supabase_access_token dönebilir).
  */
 import { callFn, EdgeFunctionError } from '../lib/supabase/functions';

@@ -1,7 +1,7 @@
 import React, { createContext, useState, useContext, useEffect, useRef } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { api, setApiTokenProvider, setOnUnauthorized } from '../services/api';
-import { setDataServiceTokenProvider } from '../services/dataService';
+import { dataService, setDataServiceTokenProvider } from '../services/dataService';
 import { logger } from '../utils/logger';
 import { supabase } from '../lib/supabase/supabase';
 
@@ -37,7 +37,18 @@ async function fetchMeAndSetState(accessToken, setUser, setTesis, setToken) {
       await AsyncStorage.setItem(AUTH_STORAGE_KEYS.TESIS, JSON.stringify(tesisData));
     }
   } catch (e) {
-    logger.error('AuthContext fetch /me failed', e);
+    const status = e?.response?.status;
+    if (status === 401) {
+      try {
+        await supabase?.auth?.signOut();
+      } catch (_) {}
+      await AsyncStorage.multiRemove([AUTH_STORAGE_KEYS.TOKEN, AUTH_STORAGE_KEYS.SUPABASE_TOKEN, AUTH_STORAGE_KEYS.USER, AUTH_STORAGE_KEYS.TESIS]);
+      setToken(null);
+      setUser(null);
+      setTesis(null);
+    } else {
+      logger.error('AuthContext fetch /me failed', e);
+    }
   }
 }
 
@@ -63,6 +74,12 @@ export const AuthProvider = ({ children }) => {
     setLastTabState(null);
     setApiTokenProvider(null);
     setDataServiceTokenProvider(null);
+    // Önceki kullanıcının oda/misafir/tesis cache'ini temizle; başka kullanıcı verisi görünmesin
+    try {
+      await dataService.clearCache();
+    } catch (e) {
+      logger.error('Cache clear on logout error', e);
+    }
   };
 
   useEffect(() => {
@@ -75,9 +92,38 @@ export const AuthProvider = ({ children }) => {
         if (storedLastTab) setLastTabState(storedLastTab);
 
         if (supabase) {
-          const { data: { session } } = await supabase.auth.getSession();
+          const { data: { session: refreshedSession }, error: refreshError } = await supabase.auth.refreshSession();
+          const session = !refreshError && refreshedSession?.access_token
+            ? refreshedSession
+            : (await supabase.auth.getSession()).data?.session;
           if (session?.access_token && mounted.current) {
             await fetchMeAndSetState(session.access_token, setUser, setTesis, setToken);
+          } else {
+            // Supabase oturumu yok: backend JWT (telefon+şifre girişi) ile kayıtlı token varsa doğrula
+            const storedToken = await AsyncStorage.getItem(AUTH_STORAGE_KEYS.TOKEN);
+            const storedUser = await AsyncStorage.getItem(AUTH_STORAGE_KEYS.USER);
+            const storedTesis = await AsyncStorage.getItem(AUTH_STORAGE_KEYS.TESIS);
+            if (storedToken && storedUser && mounted.current) {
+              setToken(storedToken);
+              setUser(JSON.parse(storedUser));
+              setTesis(storedTesis ? JSON.parse(storedTesis) : null);
+              const getToken = async () => await AsyncStorage.getItem(AUTH_STORAGE_KEYS.TOKEN);
+              setApiTokenProvider(getToken);
+              setDataServiceTokenProvider(() => getToken());
+              try {
+                const res = await api.get('/auth/me');
+                if (res?.data && mounted.current) {
+                  setUser(res.data.kullanici ?? res.data.user);
+                  setTesis(res.data.tesis ?? res.data.tesisData ?? null);
+                  await AsyncStorage.setItem(AUTH_STORAGE_KEYS.USER, JSON.stringify(res.data.kullanici ?? res.data.user));
+                  await AsyncStorage.setItem(AUTH_STORAGE_KEYS.TESIS, JSON.stringify(res.data.tesis ?? res.data.tesisData ?? null));
+                }
+              } catch (e) {
+                if (e?.response?.status === 401 && mounted.current) {
+                  await clearAuth();
+                }
+              }
+            }
           }
           sub = supabase.auth.onAuthStateChange(async (event, session) => {
             if (!mounted.current) return;
@@ -114,8 +160,27 @@ export const AuthProvider = ({ children }) => {
     };
   }, []);
 
+  // Sadece gerçek Supabase access_token döndür. Backend JWT (TOKEN) Edge Function'lara gönderilmemeli.
   const getSupabaseToken = async () => {
-    return await AsyncStorage.getItem(AUTH_STORAGE_KEYS.SUPABASE_TOKEN) || await AsyncStorage.getItem(AUTH_STORAGE_KEYS.TOKEN);
+    return await AsyncStorage.getItem(AUTH_STORAGE_KEYS.SUPABASE_TOKEN);
+  };
+
+  const refreshMe = async () => {
+    const accessToken = await getSupabaseToken();
+    if (accessToken) {
+      await fetchMeAndSetState(accessToken, setUser, setTesis, setToken);
+      return;
+    }
+    const backendToken = await AsyncStorage.getItem(AUTH_STORAGE_KEYS.TOKEN);
+    if (backendToken) {
+      try {
+        const res = await api.get('/auth/me');
+        if (res?.data && mounted.current) {
+          setUser(res.data.kullanici ?? res.data.user);
+          setTesis(res.data.tesis ?? res.data.tesisData);
+        }
+      } catch (_) {}
+    }
   };
 
   const setSupabaseToken = async (accessToken) => {
@@ -130,17 +195,20 @@ export const AuthProvider = ({ children }) => {
   };
 
   const loginWithToken = async (tokenVal, kullanici, tesisData, supabaseAccessToken) => {
-    const accessToken = supabaseAccessToken || tokenVal;
-    if (!accessToken) {
+    // Backend iki token dönebilir: token (backend JWT) + supabaseAccessToken. API çağrıları backend JWT ile yapılmalı.
+    const hasTwoTokens = tokenVal && supabaseAccessToken && tokenVal !== supabaseAccessToken;
+    const tokenForApi = hasTwoTokens ? tokenVal : (supabaseAccessToken || tokenVal);
+    const tokenForSupabase = supabaseAccessToken || tokenVal;
+    if (!tokenForApi) {
       return { success: false, message: 'Oturum bilgisi alınamadı.' };
     }
     try {
-      await AsyncStorage.setItem(AUTH_STORAGE_KEYS.TOKEN, accessToken);
-      await AsyncStorage.setItem(AUTH_STORAGE_KEYS.SUPABASE_TOKEN, accessToken);
-      setToken(accessToken);
-      const getToken = async () => accessToken;
+      await AsyncStorage.setItem(AUTH_STORAGE_KEYS.TOKEN, tokenForApi);
+      await AsyncStorage.setItem(AUTH_STORAGE_KEYS.SUPABASE_TOKEN, tokenForSupabase);
+      setToken(tokenForApi);
+      const getToken = async () => tokenForApi;
       setApiTokenProvider(getToken);
-      setDataServiceTokenProvider(() => getToken());
+      setDataServiceTokenProvider(getToken);
       if (kullanici) {
         setUser(kullanici);
         await AsyncStorage.setItem(AUTH_STORAGE_KEYS.USER, JSON.stringify(kullanici));
@@ -150,7 +218,7 @@ export const AuthProvider = ({ children }) => {
         await AsyncStorage.setItem(AUTH_STORAGE_KEYS.TESIS, JSON.stringify(tesisData));
       }
       if (!kullanici || !tesisData) {
-        await fetchMeAndSetState(accessToken, setUser, setTesis, setToken);
+        await fetchMeAndSetState(tokenForApi, setUser, setTesis, setToken);
       }
       return { success: true };
     } catch (error) {
@@ -285,6 +353,8 @@ export const AuthProvider = ({ children }) => {
         logout,
         getSupabaseToken,
         setSupabaseToken,
+        refreshMe,
+        setTesis,
       }}
     >
       {children}

@@ -7,6 +7,7 @@
     "mobile": "npm run start --prefix mobile",
     "mobile:dev": "npm run start:dev --prefix mobile",
     "backend": "npm start --prefix backend",
+    "deploy": "npm run deploy --prefix backend",
     "admin": "npm run dev --prefix admin-panel"
   }
 }

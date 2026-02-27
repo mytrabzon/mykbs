@@ -23,14 +23,23 @@ serve(async (req) => {
   } catch {
     return errorResponse("Gecersiz JSON", 400);
   }
-  if (!body.branch_id || !body.image_base64) {
+  if (!body.branch_id || body.image_base64 == null) {
     return errorResponse("branch_id ve image_base64 gerekli", 400);
+  }
+  const rawBase64 = typeof body.image_base64 === "string" ? body.image_base64.trim() : "";
+  if (!rawBase64) {
+    return errorResponse("image_base64 gecerli bir metin olmali", 400);
   }
   if (body.branch_id !== auth.profile.branch_id) {
     return errorResponse("Bu tesis icin yetkiniz yok", 403);
   }
 
-  const buf = Uint8Array.from(atob(body.image_base64), (c) => c.charCodeAt(0));
+  let buf: Uint8Array;
+  try {
+    buf = Uint8Array.from(atob(rawBase64.replace(/^data:image\/[^;]+;base64,/i, "")), (c) => c.charCodeAt(0));
+  } catch {
+    return errorResponse("Gecersiz resim verisi (base64 decode hatasi)", 400);
+  }
   const ext = (body.mime || "image/jpeg").split("/")[1] || "jpg";
   const path = `${body.branch_id}/${crypto.randomUUID()}.${ext}`;
 

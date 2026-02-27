@@ -1,37 +1,35 @@
 {
-  "cli": {
-    "version": ">= 5.0.0",
-    "appVersionSource": "local"
-  },
+  "cli": { "version": ">= 5.0.0", "appVersionSource": "local" },
   "build": {
     "development": {
       "developmentClient": true,
       "distribution": "internal",
       "env": {
-        "NPM_FLAGS": "--legacy-peer-deps"
+        "NPM_FLAGS": "--legacy-peer-deps",
+        "EXPO_PUBLIC_SUPABASE_URL": "https://iuxnpxszfvyrdifchwvr.supabase.co",
+        "EXPO_PUBLIC_SUPABASE_ANON_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Iml1eG5weHN6ZnZ5cmRpZmNod3ZyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njg0MTg4ODMsImV4cCI6MjA4Mzk5NDg4M30.0Ye4jGaauWA12lvUqhLcaDS7qqod9ijC9_wow8TJY7k",
+        "EXPO_PUBLIC_BACKEND_URL": "https://mykbs-production.up.railway.app"
       },
-      "android": {
-        "gradleCommand": ":app:assembleDebug",
-        "buildType": "apk"
-      },
-      "ios": {
-        "buildConfiguration": "Debug"
-      }
+      "android": { "gradleCommand": ":app:assembleDebug", "buildType": "apk" },
+      "ios": { "buildConfiguration": "Debug" }
     },
     "preview": {
       "distribution": "internal",
-      "android": {
-        "buildType": "apk"
-      }
+      "env": {
+        "EXPO_PUBLIC_SUPABASE_URL": "https://iuxnpxszfvyrdifchwvr.supabase.co",
+        "EXPO_PUBLIC_SUPABASE_ANON_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Iml1eG5weHN6ZnZ5cmRpZmNod3ZyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njg0MTg4ODMsImV4cCI6MjA4Mzk5NDg4M30.0Ye4jGaauWA12lvUqhLcaDS7qqod9ijC9_wow8TJY7k",
+        "EXPO_PUBLIC_BACKEND_URL": "https://mykbs-production.up.railway.app"
+      },
+      "android": { "buildType": "apk" }
     },
     "production": {
-      "android": {
-        "buildType": "apk"
-      }
+      "env": {
+        "EXPO_PUBLIC_SUPABASE_URL": "https://iuxnpxszfvyrdifchwvr.supabase.co",
+        "EXPO_PUBLIC_SUPABASE_ANON_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Iml1eG5weHN6ZnZ5cmRpZmNod3ZyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njg0MTg4ODMsImV4cCI6MjA4Mzk5NDg4M30.0Ye4jGaauWA12lvUqhLcaDS7qqod9ijC9_wow8TJY7k",
+        "EXPO_PUBLIC_BACKEND_URL": "https://mykbs-production.up.railway.app"
+      },
+      "android": { "buildType": "apk" }
     }
   },
-  "submit": {
-    "production": {}
-  }
+  "submit": { "production": {} }
 }
-
