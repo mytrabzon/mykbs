@@ -4,6 +4,7 @@ const cors = require('cors');
 const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
 const path = require('path');
+const crypto = require('crypto');
 
 // Environment variables (fallbacks for development)
 process.env.JWT_SECRET = process.env.JWT_SECRET || "mykbs-super-secret-jwt-key-2024-change-this";
@@ -12,9 +13,16 @@ process.env.DATABASE_URL = process.env.DATABASE_URL || "file:./dev.db";
 
 const app = express();
 
+// Request ID middleware (observability)
+app.use((req, res, next) => {
+  req.requestId = req.headers['x-request-id'] || crypto.randomBytes(8).toString('hex');
+  res.setHeader('X-Request-Id', req.requestId);
+  next();
+});
+
 // Middleware
 app.use(helmet());
-app.use(cors({ origin: '*', allowedHeaders: ['Content-Type', 'Authorization'] }));
+app.use(cors({ origin: '*', allowedHeaders: ['Content-Type', 'Authorization', 'X-Request-Id'] }));
 app.use(express.json({ limit: '2mb' }));
 app.use(express.urlencoded({ extended: true }));
 
@@ -64,7 +72,12 @@ app.get('/health', (req, res) => {
 app.get('/health/db', async (req, res) => {
   const dbUrl = process.env.DATABASE_URL;
   if (!dbUrl || dbUrl === 'file:./dev.db') {
-    return res.status(500).json({ ok: false, error: { code: 'MISSING_DATABASE_URL', message: 'DATABASE_URL missing' } });
+    return res.status(500).json({
+      ok: false,
+      code: 'MISSING_DATABASE_URL',
+      message: 'DATABASE_URL missing or not configured for production',
+      ...(req.requestId && { requestId: req.requestId }),
+    });
   }
   try {
     const { PrismaClient } = require('@prisma/client');
@@ -73,19 +86,33 @@ app.get('/health/db', async (req, res) => {
     await prisma.$disconnect();
     return res.json({ ok: true, db: true });
   } catch (err) {
-    const code = err.code || err.meta?.code || 'UNKNOWN';
-    const message = err.message || String(err);
-    return res.status(500).json({ ok: false, error: { code, message } });
+    const pgCode = err.code || err.meta?.code;
+    const requestId = req.requestId || '-';
+    return res.status(500).json({
+      ok: false,
+      code: 'DB_CONNECT_ERROR',
+      message: err.message || String(err),
+      ...(requestId !== '-' && { requestId }),
+      ...(pgCode && { pgCode: String(pgCode) }),
+    });
   }
 });
 
-// Error handling
+// Error handling (requestId + error code logging, standart body)
+const { errorResponse: errRes } = require('./lib/errorResponse');
 app.use((err, req, res, next) => {
-  console.error(err.stack);
-  res.status(err.status || 500).json({
-    message: err.message || 'Internal Server Error',
-    ...(process.env.NODE_ENV === 'development' && { stack: err.stack })
-  });
+  const requestId = req.requestId || '-';
+  const endpoint = req.method && req.path ? `${req.method} ${req.path}` : req.url || '-';
+  const userId = req.user?.id ?? req.user?.sub ?? '-';
+  const tenantId = req.branchId ?? req.tesis?.id ?? '-';
+  const errCode = err.code || err.status || (err.meta?.code ?? 'UNKNOWN');
+  console.error(
+    `[REQ ${requestId}] ${endpoint} user=${userId} branch=${tenantId} -> code=${errCode} status=${err.status || 500} ${err.message || err}`,
+    err.stack
+  );
+  const status = err.status || 500;
+  const code = err.code || (status === 503 ? 'SCHEMA_ERROR' : 'UNHANDLED_ERROR');
+  return errRes(req, res, status, code, err.message || 'Internal Server Error', process.env.NODE_ENV === 'development' ? { stack: err.stack } : {});
 });
 
 const PORT = process.env.PORT || 8080;

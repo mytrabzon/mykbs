@@ -243,12 +243,24 @@ router.post('/requests/:id/approve', async (req, res) => {
       }
     }
 
+    const reviewedAt = new Date().toISOString();
     const { error: updateErr } = await supabaseAdmin.from('facility_credentials_requests').update({
       status: 'approved',
       reviewed_by: reviewedBy,
-      reviewed_at: new Date().toISOString(),
+      reviewed_at: reviewedAt,
     }).eq('id', id);
     if (updateErr) return res.status(500).json({ message: 'Talep güncellenemedi', error: updateErr.message });
+
+    if (row.branch_id) {
+      const { error: branchErr } = await supabaseAdmin.from('branches').update({
+        kbs_approved: true,
+        kbs_approved_at: reviewedAt,
+        kbs_configured: true,
+      }).eq('id', row.branch_id);
+      if (branchErr) console.warn('[appAdmin] branches.kbs_approved güncellenemedi:', branchErr.message);
+    }
+
+    console.warn(`[REQ ${req.requestId || '-'}] KBS approve id=${id} branch_id=${row.branch_id || 'n/a'} reviewed_by=${reviewedBy} reviewed_at=${reviewedAt}`);
 
     res.json({ message: 'Talep onaylandı' });
   } catch (err) {

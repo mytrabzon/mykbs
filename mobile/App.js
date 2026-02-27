@@ -31,6 +31,7 @@ import TesisListScreen from './src/screens/TesisListScreen';
 import ToplulukScreen from './src/screens/ToplulukScreen';
 import BildirimlerScreen from './src/screens/BildirimlerScreen';
 import PostDetayScreen from './src/screens/PostDetayScreen';
+import ToplulukProfilScreen from './src/screens/ToplulukProfilScreen';
 import AddRoomScreen from './src/screens/AddRoomScreen';
 import PaylasimEkleScreen from './src/screens/PaylasimEkleScreen';
 import ProfilDuzenleScreen from './src/screens/ProfilDuzenleScreen';
@@ -272,6 +273,7 @@ function AppNavigator() {
             <Stack.Screen name="PostDetay" component={PostDetayScreen} />
             <Stack.Screen name="PaylasimEkle" component={PaylasimEkleScreen} />
             <Stack.Screen name="ProfilDuzenle" component={ProfilDuzenleScreen} />
+            <Stack.Screen name="ToplulukProfil" component={ToplulukProfilScreen} />
             <Stack.Screen name="AdminPanel" component={AdminPanelScreen} />
             <Stack.Screen name="TesisList" component={TesisListScreen} />
             <Stack.Screen name="MrzScan" component={MrzScanScreen} />

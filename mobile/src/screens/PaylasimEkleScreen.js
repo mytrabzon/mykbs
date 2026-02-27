@@ -99,13 +99,17 @@ export default function PaylasimEkleScreen() {
         try {
           let base64 = null;
           if (typeof img.base64 === 'string' && img.base64.length > 0) {
-            base64 = img.base64.replace(/^data:image\/[^;]+;base64,/i, '').replace(/\s/g, '');
+            base64 = img.base64.replace(/^data:image\/[^;]+;base64,/i, '');
+            base64 = base64.replace(/[^A-Za-z0-9+/=]/g, '');
           }
           if (!base64 && img.uri) {
             base64 = await FileSystem.readAsStringAsync(img.uri, {
               encoding: FileSystem.EncodingType.Base64,
             });
-            if (typeof base64 === 'string') base64 = base64.replace(/\s/g, '');
+            if (typeof base64 === 'string') {
+              base64 = base64.replace(/^data:image\/[^;]+;base64,/i, '');
+              base64 = base64.replace(/[^A-Za-z0-9+/=]/g, '');
+            }
           }
           if (!base64 || typeof base64 !== 'string') {
             Toast.show({ type: 'error', text1: 'Resim yüklenemedi', text2: 'Resim verisi alınamadı' });

@@ -189,7 +189,8 @@ export default function OdalarScreen() {
   const [liveUpdates, setLiveUpdates] = useState([]);
   const [backendStatus, setBackendStatus] = useState({ isOnline: null, lastChecked: null, error: null, dbOnline: undefined });
   const [supabaseStatus, setSupabaseStatus] = useState({ configured: false, isOnline: null, lastChecked: null, error: null });
-  const [lastLoadErrorType, setLastLoadErrorType] = useState(null); // 'auth' | 'network' | 'path' | null
+  const [lastLoadErrorType, setLastLoadErrorType] = useState(null); // 'auth' | 'network' | 'path' | 'db' | 'approval' | 'forbidden' | 'server' | null
+  const [lastErrorPayload, setLastErrorPayload] = useState(null); // { requestId, message, code }
   const [showDebugUrls, setShowDebugUrls] = useState(__DEV__);
   const appState = useRef(AppState.currentState);
   const flatListRef = useRef(null);
@@ -524,47 +525,64 @@ export default function OdalarScreen() {
     } catch (error) {
       logger.error('Load data error', error);
       const status = error.response?.status ?? error.status;
-      const isAuth = status === 401 || status === 403;
+      const data = error.response?.data || {};
+      const code = data.code || null;
+      const serverMsg = data.message || data.error || error.message;
+      const requestId = data.requestId || null;
+
+      const isAuth = status === 401;
       const isPath = status === 404;
+      const isApproval = status === 409;
+      const isForbidden = status === 403;
       const isNetwork =
         error.message === 'Network Error' ||
         error.code === 'ERR_NETWORK' ||
         (status >= 500 && status < 600);
+      const isDbError = status === 500 && (code === 'DB_CONNECT_ERROR' || code === 'SCHEMA_ERROR' || code === 'MISSING_DATABASE_URL');
+      const isServerError = status === 500 && !isDbError;
+
+      setLastErrorPayload(requestId || serverMsg ? { requestId, message: serverMsg, code } : null);
+
       if (isAuth) {
         setLastLoadErrorType(null);
-        if (typeof logout === 'function') {
-          logout();
-        }
+        if (typeof logout === 'function') logout();
         return;
-      } else if (isPath) {
+      }
+      if (isApproval) {
+        setLastLoadErrorType('approval');
+        setBackendStatus((p) => ({ ...p, isOnline: true }));
+        if (!isInitial) Toast.show({ type: 'info', text1: 'Onay Bekleniyor', text2: serverMsg, visibilityTime: 4000 });
+        return;
+      }
+      if (isForbidden) {
+        setLastLoadErrorType('forbidden');
+        setBackendStatus((p) => ({ ...p, isOnline: true }));
+        if (!isInitial) Toast.show({ type: 'error', text1: 'Yetki yok', text2: serverMsg, visibilityTime: 4000 });
+        return;
+      }
+      if (isPath) {
         setLastLoadErrorType('path');
         setBackendStatus((p) => ({ ...p, isOnline: true }));
-      } else if (isNetwork) {
-        setLastLoadErrorType('network');
-        const serverMsg = error.response?.data?.message || error.response?.data?.error || error.message;
+        return;
+      }
+      if (isNetwork) {
+        setLastLoadErrorType(isDbError ? 'db' : isServerError ? 'server' : 'network');
         if (isInitial) {
           setOdalar([]);
           setOzet(null);
-          setBackendStatus({ isOnline: false, lastChecked: new Date(), error: serverMsg });
-          logger.warn('Network/5xx on initial load - showing empty state', { serverMsg });
+          setBackendStatus({ isOnline: status < 500, lastChecked: new Date(), error: serverMsg });
         } else {
           Toast.show({
             type: 'error',
-            text1: status >= 500 ? 'Sunucu Hatası' : 'Bağlantı Hatası',
-            text2: serverMsg || 'Sunucuya erişilemiyor. İnterneti veya sunucu adresini kontrol edin.',
+            text1: isDbError ? 'Sunucu hatası' : isServerError ? 'Sunucu hatası' : 'Bağlantı Hatası',
+            text2: serverMsg || (status >= 500 ? 'Sunucuda sorun var. Daha sonra tekrar deneyin.' : 'Sunucuya erişilemiyor.'),
             visibilityTime: 5000,
           });
         }
-      } else {
-        setLastLoadErrorType(null);
-        const msg = getApiErrorMessage(error);
-        Toast.show({
-          type: 'error',
-          text1: isAuth ? 'Oturum' : isPath ? 'Endpoint' : 'Hata',
-          text2: error.response?.data?.message || msg,
-          visibilityTime: 3000,
-        });
+        return;
       }
+      setLastLoadErrorType('server');
+      Toast.show({ type: 'error', text1: 'Hata', text2: serverMsg || getApiErrorMessage(error), visibilityTime: 3000 });
     } finally {
       if (isInitial) {
         setInitialLoading(false);
@@ -889,6 +907,8 @@ export default function OdalarScreen() {
                 errorType={lastLoadErrorType || (backendStatus.isOnline && backendStatus.dbOnline === false ? 'db' : null)}
                 testedUrl={getHealthUrl()}
                 apiBaseUrl={getBackendUrl()}
+                requestId={lastErrorPayload?.requestId}
+                serverMessage={lastErrorPayload?.message}
                 showDebug={showDebugUrls}
                 onToggleDebug={() => setShowDebugUrls((v) => !v)}
               />

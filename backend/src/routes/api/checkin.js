@@ -5,6 +5,7 @@
 const express = require('express');
 const { supabaseAdmin } = require('../../lib/supabaseAdmin');
 const { authenticateSupabase } = require('../../middleware/authSupabase');
+const { errorResponse } = require('../../lib/errorResponse');
 const { createOutbox } = require('../../repo/kbsOutboxRepo');
 const { attemptSendOutbox } = require('../../worker/kbsOutboxWorker');
 
@@ -20,6 +21,10 @@ router.post('/checkin', async (req, res) => {
   try {
     const body = req.body || {};
     const branchId = req.branchId;
+    const branch = req.branch || {};
+    if (branch.kbs_configured && !branch.kbs_approved) {
+      return errorResponse(req, res, 409, 'APPROVAL_REQUIRED', 'KBS bilgileriniz admin onayından sonra aktif olacaktır.');
+    }
 
     const ad = body.ad || '';
     const soyad = body.soyad || '';
@@ -87,8 +92,7 @@ router.post('/checkin', async (req, res) => {
     };
 
     let kbsStatus = 'kbs_off';
-    const branch = req.branch || {};
-    const kbsEnabled = branch.kbs_configured && branch.kbs_turu && branch.kbs_tesis_kodu && branch.kbs_web_servis_sifre;
+    const kbsEnabled = branch.kbs_configured && branch.kbs_approved && branch.kbs_turu && branch.kbs_tesis_kodu && branch.kbs_web_servis_sifre;
 
     if (kbsEnabled) {
       try {

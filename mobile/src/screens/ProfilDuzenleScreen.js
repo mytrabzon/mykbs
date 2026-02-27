@@ -25,6 +25,7 @@ export default function ProfilDuzenleScreen() {
   const { colors } = useTheme();
   const { tesis, getSupabaseToken } = useAuth();
   const [displayName, setDisplayName] = useState('');
+  const [title, setTitle] = useState('');
   const [avatarUrl, setAvatarUrl] = useState(null);
   const [localAvatarUri, setLocalAvatarUri] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -42,6 +43,7 @@ export default function ProfilDuzenleScreen() {
         const me = await communityApi.getMe(t);
         if (!cancelled) {
           setDisplayName(me?.display_name || '');
+          setTitle(me?.title || '');
           setAvatarUrl(me?.avatar_url || null);
         }
       } catch (_) {}
@@ -82,7 +84,8 @@ export default function ProfilDuzenleScreen() {
         });
         // Data URL öneki veya boşluk atob'u bozabilir; sadece ham base64 gönder
         if (typeof base64 === 'string') {
-          base64 = base64.replace(/^data:image\/[^;]+;base64,/i, '').replace(/\s/g, '');
+          base64 = base64.replace(/^data:image\/[^;]+;base64,/i, '');
+          base64 = base64.replace(/[^A-Za-z0-9+/=]/g, '');
         }
         if (!base64 || base64.length === 0) {
           Toast.show({ type: 'error', text1: 'Resim okunamadı' });
@@ -92,7 +95,11 @@ export default function ProfilDuzenleScreen() {
         finalAvatarUrl = await communityApi.uploadAvatar(base64, token);
       }
       await communityApi.updateProfile(
-        { display_name: displayName.trim() || null, avatar_url: finalAvatarUrl || null },
+        {
+          display_name: displayName.trim() || null,
+          avatar_url: finalAvatarUrl || null,
+          title: title.trim() || null,
+        },
         token
       );
       Toast.show({ type: 'success', text1: 'Profil güncellendi' });
@@ -136,12 +143,20 @@ export default function ProfilDuzenleScreen() {
               <Ionicons name="camera" size={16} color="#fff" />
             </View>
           </TouchableOpacity>
-          <Text style={[styles.label, { color: colors.textSecondary }]}>Görünen ad</Text>
+          <Text style={[styles.label, { color: colors.textSecondary }]}>Ad Soyad / Görünen ad</Text>
           <TextInput
             style={[styles.input, { backgroundColor: colors.background, color: colors.textPrimary, borderColor: colors.border }]}
             value={displayName}
             onChangeText={setDisplayName}
             placeholder="Adınız"
+            placeholderTextColor={colors.textSecondary}
+          />
+          <Text style={[styles.label, { color: colors.textSecondary }]}>Ünvan / Pozisyon</Text>
+          <TextInput
+            style={[styles.input, { backgroundColor: colors.background, color: colors.textPrimary, borderColor: colors.border }]}
+            value={title}
+            onChangeText={setTitle}
+            placeholder="Örn. Resepsiyon, Ön Büro Müdürü..."
             placeholderTextColor={colors.textSecondary}
           />
         </View>

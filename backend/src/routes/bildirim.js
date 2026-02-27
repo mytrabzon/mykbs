@@ -1,6 +1,7 @@
 const express = require('express');
 const { PrismaClient } = require('@prisma/client');
 const { authenticateTesisOrSupabase } = require('../middleware/authTesisOrSupabase');
+const { errorResponse } = require('../lib/errorResponse');
 const { createKBSService } = require('../services/kbs');
 const { canSendBildirim } = require('../config/packages');
 const PDFDocument = require('pdfkit');
@@ -66,7 +67,12 @@ router.get('/', async (req, res) => {
     res.json({ bildirimler });
   } catch (error) {
     console.error('Bildirim listesi hatası:', error);
-    res.status(500).json({ message: 'Bildirimler alınamadı', error: error.message });
+    const msg = error?.message || '';
+    const isSchema = /column|relation|does not exist|no such column/i.test(msg);
+    const isDb = /prisma|ECONNREFUSED|connect|migrate|relation|column|table/i.test(msg);
+    if (isSchema) return errorResponse(req, res, 500, 'SCHEMA_ERROR', 'Veritabanı şeması güncel değil. Lütfen yöneticiye bildirin.');
+    if (isDb) return errorResponse(req, res, 500, 'DB_CONNECT_ERROR', 'Sunucuda geçici bir sorun var. Daha sonra tekrar deneyin.');
+    return errorResponse(req, res, 500, 'UNHANDLED_ERROR', 'Bildirimler alınamadı.');
   }
 });
 
@@ -200,7 +206,7 @@ router.post('/toplu-gonder', async (req, res) => {
     });
   } catch (error) {
     console.error('Toplu bildirim hatası:', error);
-    res.status(500).json({ message: 'Toplu bildirim başarısız', error: error.message });
+    return errorResponse(req, res, 500, 'UNHANDLED_ERROR', error?.message || 'Toplu bildirim başarısız');
   }
 });
 
@@ -270,17 +276,14 @@ router.post('/:bildirimId/tekrar-dene', async (req, res) => {
           }
         });
 
-        res.status(500).json({
-          message: 'Bildirim gönderilemedi',
-          error: error.message
-        });
+        return errorResponse(req, res, 500, 'UNHANDLED_ERROR', error?.message || 'Bildirim gönderilemedi');
       }
     } else {
       res.status(400).json({ message: 'KBS ayarları eksik' });
     }
   } catch (error) {
     console.error('Tekrar deneme hatası:', error);
-    res.status(500).json({ message: 'İşlem başarısız', error: error.message });
+    return errorResponse(req, res, 500, 'UNHANDLED_ERROR', error?.message || 'İşlem başarısız');
   }
 });
 
@@ -404,7 +407,7 @@ router.get('/:bildirimId/pdf', async (req, res) => {
     doc.end();
   } catch (error) {
     console.error('PDF oluşturma hatası:', error);
-    res.status(500).json({ message: 'PDF oluşturulamadı', error: error.message });
+    return errorResponse(req, res, 500, 'UNHANDLED_ERROR', error?.message || 'PDF oluşturulamadı');
   }
 });
 

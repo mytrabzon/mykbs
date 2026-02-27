@@ -32,18 +32,13 @@ const SUPPORT_PHONE_TEL = Constants.expoConfig?.extra?.EXPO_PUBLIC_SUPPORT_PHONE
 export default function LoginScreen({ route }) {
   const navigation = useNavigation();
   const { colors } = useTheme();
-  const { login, loginWithPassword, loginWithPhoneAndPassword } = useAuth();
-  const [tab, setTab] = useState('hesap'); // 'hesap' = telefon/e-posta + şifre (varsayılan), 'tesis' = tesis kodu + PIN
-  const [tesisKodu, setTesisKodu] = useState('');
-  const [pin, setPin] = useState('');
+  const { loginWithPassword, loginWithPhoneAndPassword } = useAuth();
   const [telefon, setTelefon] = useState('');
   const [sifre, setSifre] = useState('');
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [errorDetails, setErrorDetails] = useState(null);
   const [showErrorModal, setShowErrorModal] = useState(false);
-  const [pendingApproval, setPendingApproval] = useState(false);
-  const [checkingApproval, setCheckingApproval] = useState(false);
 
   useEffect(() => {
     (async () => {
@@ -61,51 +56,6 @@ export default function LoginScreen({ route }) {
     const s = v.trim();
     if (s.includes('@')) return s.length >= 5;
     return s.replace(/\D/g, '').length >= 10;
-  };
-
-  const handleTesisLogin = async () => {
-    if (!tesisKodu?.trim() || !pin?.trim()) {
-      Toast.show({ type: 'error', text1: 'Eksik alan', text2: 'Tesis kodu ve PIN giriniz' });
-      return;
-    }
-    setLoading(true);
-    setPendingApproval(false);
-    try {
-      const result = await login(tesisKodu.trim(), pin);
-      setLoading(false);
-      if (result?.success) {
-        Toast.show({ type: 'success', text1: 'Giriş başarılı' });
-      } else if (result?.pendingApproval) {
-        setPendingApproval(true);
-        // Tesis kodu ve PIN sıfırlanmaz (manuel dışında)
-      } else {
-        Toast.show({ type: 'error', text1: 'Giriş başarısız', text2: result?.message });
-      }
-    } catch (e) {
-      setLoading(false);
-      setErrorDetails({ message: e?.message });
-      Toast.show({ type: 'error', text1: 'Hata', text2: e?.response?.data?.message || e?.message });
-    }
-  };
-
-  const handleCheckApproval = async () => {
-    if (!tesisKodu?.trim() || !pin?.trim()) return;
-    setCheckingApproval(true);
-    try {
-      const result = await login(tesisKodu.trim(), pin);
-      if (result?.success) {
-        setPendingApproval(false);
-        Toast.show({ type: 'success', text1: 'Onaylandı', text2: 'Giriş başarılı' });
-      } else if (result?.pendingApproval) {
-        Toast.show({ type: 'info', text1: 'Henüz onaylanmadı', text2: 'Kısa süre içinde onaylanacaktır.' });
-      } else {
-        Toast.show({ type: 'error', text1: 'Hata', text2: result?.message });
-      }
-    } catch (e) {
-      Toast.show({ type: 'error', text1: 'Hata', text2: e?.response?.data?.message || e?.message });
-    } finally {
-      setCheckingApproval(false);
-    }
   };
 
   const handleHesapLogin = async () => {
@@ -156,57 +106,11 @@ export default function LoginScreen({ route }) {
         </View>
 
         <View style={[styles.formCard, { backgroundColor: colors.surface }]}>
-          <SegmentedControl
-            options={[
-              { key: 'hesap', label: 'Telefon / E-posta + Şifre' },
-              { key: 'tesis', label: 'Tesis Kodu + PIN' },
-            ]}
-            value={tab}
-            onChange={setTab}
-            style={styles.segmented}
-          />
-
-          {tab === 'tesis' ? (
-            <>
-              <Input
-                label="Tesis Kodu"
-                value={tesisKodu}
-                onChangeText={(t) => { setTesisKodu(t); setPendingApproval(false); }}
-                placeholder=""
-                autoCapitalize="characters"
-              />
-              <Input
-                label="PIN"
-                value={pin}
-                onChangeText={(t) => { setPin(t); setPendingApproval(false); }}
-                placeholder=""
-                secureTextEntry
-                keyboardType="numeric"
-              />
-              {pendingApproval ? (
-                <View style={[styles.pendingBox, { backgroundColor: colors.gray100 || '#f1f5f9', borderColor: colors.border }]}>
-                  <View style={[styles.statusDot, { backgroundColor: colors.textSecondary }]} />
-                  <Text style={[styles.pendingTitle, { color: colors.textPrimary }]}>Admin onayına sunuldu</Text>
-                  <Text style={[styles.pendingMessage, { color: colors.textSecondary }]}>
-                    Onaylandığı an bildirim yapabileceksin. Çok kısa sürecek.{'\n'}
-                    Onaydan sonra yeşil gösterge ile giriş yapabileceksin.
-                  </Text>
-                  <Button variant="secondary" onPress={handleCheckApproval} loading={checkingApproval} disabled={checkingApproval}>
-                    Durumu kontrol et
-                  </Button>
-                </View>
-              ) : null}
-              <Button
-                variant="primary"
-                onPress={handleTesisLogin}
-                loading={loading}
-                disabled={loading || !tesisKodu?.trim() || !pin?.trim()}
-              >
-                Giriş Yap
-              </Button>
-            </>
-          ) : (
-            <>
+          <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>Hesap ile Giriş</Text>
+          <Text style={[styles.sectionSubtitle, { color: colors.textSecondary }]}>
+            Telefon numaranız veya e-posta adresiniz ve şifrenizle giriş yapın.
+          </Text>
+          <>
               <Input
                 label="Telefon veya E-posta"
                 value={telefon}
@@ -248,7 +152,7 @@ export default function LoginScreen({ route }) {
                 <Text style={[styles.smsLinkText, { color: colors.primary }]}>SMS kodu ile giriş</Text>
               </TouchableOpacity>
             </>
-          )}
+          }
 
           <Text style={[styles.secureNote, { color: colors.textSecondary }]}>
             Veriler şifreli iletilir.

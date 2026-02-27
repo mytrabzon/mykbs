@@ -37,7 +37,7 @@ const CATEGORIES = [
   { key: 'general', label: 'Genel' },
 ];
 
-function PostCard({ item, colors, onPress, onCommentPress, categoryLabel }) {
+function PostCard({ item, colors, onPostPress, onAuthorPress, onCommentPress, categoryLabel }) {
   const imageUri = item.media?.images?.[0];
   const authorName = item.author?.display_name || 'Kullanıcı';
   const authorAvatar = item.author?.avatar_url || null;
@@ -47,7 +47,7 @@ function PostCard({ item, colors, onPress, onCommentPress, categoryLabel }) {
       {/* Üst: avatar + isim + pin */}
       <TouchableOpacity
         style={styles.postHeader}
-        onPress={onPress}
+        onPress={onAuthorPress || onPostPress}
         activeOpacity={0.8}
       >
         <View style={[styles.avatarWrap, { backgroundColor: colors.border }]}>
@@ -74,7 +74,7 @@ function PostCard({ item, colors, onPress, onCommentPress, categoryLabel }) {
 
       {/* Görsel - tam genişlik, Instagram oranı */}
       {imageUri ? (
-        <TouchableOpacity onPress={onPress} activeOpacity={1}>
+        <TouchableOpacity onPress={onPostPress} activeOpacity={1}>
           <Image
             source={{ uri: imageUri }}
             style={styles.postImage}
@@ -303,7 +303,13 @@ export default function ToplulukScreen({ navigation }) {
               item={item}
               colors={colors}
               categoryLabel={CATEGORIES.find((c) => c.key === item.category)?.label || item.category || ''}
-              onPress={() => navigation.navigate('PostDetay', { postId: item.id, post: item })}
+              onPostPress={() => navigation.navigate('PostDetay', { postId: item.id, post: item })}
+              onAuthorPress={() =>
+                navigation.navigate('ToplulukProfil', {
+                  userId: item.author_id,
+                  profile: item.author || null,
+                })
+              }
               onCommentPress={() => navigation.navigate('PostDetay', { postId: item.id, post: item })}
             />
           )}

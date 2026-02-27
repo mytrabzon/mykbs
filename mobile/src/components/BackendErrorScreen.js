@@ -19,9 +19,11 @@ export default function BackendErrorScreen({
   lastChecked,
   showDebug = false,
   onToggleDebug,
-  errorType = null, // 'auth' | 'network' | 'path' | 'db' | null
+  errorType = null, // 'auth' | 'network' | 'path' | 'db' | 'approval' | 'forbidden' | 'server' | null
   testedUrl = '',
   apiBaseUrl = '',
+  requestId = null,
+  serverMessage = null,
 }) {
   const { colors } = useTheme();
   const [debugVisible, setDebugVisible] = useState(showDebug);
@@ -29,29 +31,41 @@ export default function BackendErrorScreen({
   const isAuth = errorType === 'auth';
   const isPath = errorType === 'path';
   const isDb = errorType === 'db';
+  const isApproval = errorType === 'approval';
+  const isForbidden = errorType === 'forbidden';
+  const isServer = errorType === 'server';
 
-  const title = isAuth
-    ? 'Oturum doğrulanamadı'
-    : isPath
-      ? 'Endpoint bulunamadı'
-      : isDb
-        ? 'Veritabanı bağlantısı yok'
-        : 'Backend Bağlantı Hatası';
-  const message = isAuth
-    ? 'Oturum süreniz dolmuş veya yetkiniz yok. Lütfen tekrar giriş yapın.'
-    : isPath
-      ? 'İstek yapılan adres sunucuda bulunamadı. Test ve API adresleri aynı base\'i kullanıyor mu kontrol edin.'
-      : isDb
-        ? 'Sunucu çalışıyor ama veritabanına bağlanamıyor. Railway\'de DATABASE_URL ve migration kontrol edin.'
-        : apiBaseUrl
-          ? 'Sunucu adresi doğrulanamadı. İnternet bağlantınızı ve sunucu adresini kontrol edin.'
-          : 'EXPO_PUBLIC_BACKEND_URL tanımlı değil. mobile/.env içinde backend adresi gerekli.';
+  const title = isApproval
+    ? 'Onay Bekleniyor'
+    : isForbidden
+      ? 'Yetki yok'
+      : isAuth
+        ? 'Oturum doğrulanamadı'
+        : isPath
+          ? 'Endpoint bulunamadı'
+          : isDb || isServer
+            ? 'Sunucu hatası'
+            : 'Backend Bağlantı Hatası';
+  const message = isApproval
+    ? (serverMessage || 'KBS bilgileriniz veya şube atamanız admin onayından sonra aktif olacaktır.')
+    : isForbidden
+      ? 'Bu sayfaya erişim yetkiniz yok.'
+      : isAuth
+        ? 'Oturum süreniz dolmuş veya yetkiniz yok. Lütfen tekrar giriş yapın.'
+        : isPath
+          ? 'İstek yapılan adres sunucuda bulunamadı. Test ve API adresleri aynı base\'i kullanıyor mu kontrol edin.'
+          : isDb || isServer
+            ? (serverMessage || 'Sunucuda sorun var. Daha sonra tekrar deneyin.')
+            : apiBaseUrl
+              ? 'Sunucu adresi doğrulanamadı. İnternet bağlantınızı ve sunucu adresini kontrol edin.'
+              : 'EXPO_PUBLIC_BACKEND_URL tanımlı değil. mobile/.env içinde backend adresi gerekli.';
 
   const debugLines = [
     testedUrl ? `Test edilen adres: ${testedUrl}` : null,
     apiBaseUrl ? `API adresi: ${apiBaseUrl}` : null,
-    lastChecked ? `Son deneme: ${new Date(lastChecked).toLocaleString('tr-TR')}` : null,
+    lastChecked ? `Son deneme: ${lastChecked instanceof Date ? lastChecked.toLocaleString('tr-TR') : new Date(lastChecked).toLocaleString('tr-TR')}` : null,
     lastError ? `Hata: ${lastError}` : null,
+    requestId ? `requestId: ${requestId}` : null,
   ].filter(Boolean);
   const hasDebug = debugLines.length > 0;
 
@@ -61,19 +75,19 @@ export default function BackendErrorScreen({
     Share.share({ message: text, title: 'Backend debug' }).catch(() => {});
   };
 
+  const pillColor = isApproval || isForbidden ? colors.warningSoft : (isAuth || isDb ? colors.warningSoft : colors.errorSoft);
+  const textColor = isApproval || isForbidden ? colors.warning : (isAuth || isDb ? colors.warning : colors.error);
+  const iconName = isApproval ? 'time-outline' : isForbidden ? 'lock-closed-outline' : isAuth ? 'person-outline' : isDb ? 'server-outline' : 'cloud-offline-outline';
+
   return (
     <View style={styles.container}>
-      <View style={[styles.pill, { backgroundColor: isAuth ? colors.warningSoft : isDb ? colors.warningSoft : colors.errorSoft }]}>
-        <Text style={[styles.pillText, { color: isAuth ? colors.warning : isDb ? colors.warning : colors.error }]}>
-          {isAuth ? 'Oturum' : isDb ? 'Veritabanı' : 'Offline'}
+      <View style={[styles.pill, { backgroundColor: pillColor }]}>
+        <Text style={[styles.pillText, { color: textColor }]}>
+          {isApproval ? 'Onay' : isForbidden ? 'Yetki' : isAuth ? 'Oturum' : isDb ? 'Sunucu' : 'Offline'}
         </Text>
       </View>
-      <View style={[styles.iconWrap, { backgroundColor: isAuth ? colors.warningSoft : isDb ? colors.warningSoft : colors.errorSoft }]}>
-        <Ionicons
-          name={isAuth ? 'person-outline' : isDb ? 'server-outline' : 'cloud-offline-outline'}
-          size={56}
-          color={isAuth ? colors.warning : isDb ? colors.warning : colors.error}
-        />
+      <View style={[styles.iconWrap, { backgroundColor: pillColor }]}>
+        <Ionicons name={iconName} size={56} color={textColor} />
       </View>
       <Text style={[styles.title, { color: colors.textPrimary }]}>{title}</Text>
       <Text style={[styles.message, { color: colors.textSecondary }]}>{message}</Text>
@@ -94,16 +108,9 @@ export default function BackendErrorScreen({
       )}
 
       <View style={styles.actions}>
-        {!isAuth && (
-          <Button variant="primary" onPress={onRetry} style={styles.btn}>
-            Yeniden Dene
-          </Button>
-        )}
-        {isAuth && (
-          <Button variant="primary" onPress={onRetry} style={styles.btn}>
-            Tekrar giriş yap
-          </Button>
-        )}
+        <Button variant="primary" onPress={onRetry} style={styles.btn}>
+          {isApproval ? 'Durumu Yenile' : isAuth ? 'Tekrar giriş yap' : 'Yeniden Dene'}
+        </Button>
         <Button variant="secondary" onPress={onTestConnection} style={styles.btn}>
           Bağlantıyı Test Et
         </Button>

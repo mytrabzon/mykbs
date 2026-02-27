@@ -17,19 +17,22 @@ serve(async (req) => {
   const auth = await requireAuth(req);
   if (auth instanceof Response) return auth;
 
-  let body: { display_name?: string; avatar_url?: string };
+  let body: { display_name?: string; avatar_url?: string; title?: string };
   try {
     body = await req.json();
   } catch {
     return errorResponse("Gecersiz JSON", 400);
   }
 
-  const updates: { display_name?: string; avatar_url?: string } = {};
+  const updates: { display_name?: string; avatar_url?: string; title?: string | null } = {};
   if (typeof body.display_name === "string") {
     updates.display_name = body.display_name.trim() || null;
   }
   if (typeof body.avatar_url === "string") {
     updates.avatar_url = body.avatar_url.trim() || null;
+  }
+  if (typeof body.title === "string") {
+    updates.title = body.title.trim() || null;
   }
 
   if (Object.keys(updates).length === 0) {

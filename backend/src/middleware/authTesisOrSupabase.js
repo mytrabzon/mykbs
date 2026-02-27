@@ -7,6 +7,7 @@
 const jwt = require('jsonwebtoken');
 const { PrismaClient } = require('@prisma/client');
 const { supabaseAdmin } = require('../lib/supabaseAdmin');
+const { errorResponse } = require('../lib/errorResponse');
 
 const prisma = new PrismaClient();
 
@@ -28,7 +29,7 @@ async function authenticateTesisOrSupabase(req, res, next) {
   const authHeader = req.headers.authorization;
   const token = authHeader && authHeader.startsWith('Bearer ') ? authHeader.slice(7) : null;
   if (!token) {
-    return res.status(401).json({ message: 'Token bulunamadı' });
+    return errorResponse(req, res, 401, 'INVALID_TOKEN', 'Token bulunamadı');
   }
 
   const isStubToken = typeof token === 'string' && token.startsWith('stub_token');
@@ -42,7 +43,7 @@ async function authenticateTesisOrSupabase(req, res, next) {
         const isExpired = msg.includes('expired') || msg.includes('invalid') || msg.includes('jwt');
         console.warn('[authTesisOrSupabase] Supabase getUser failed:', msg);
         if (isExpired) {
-          return res.status(401).json({ message: 'Oturum süresi doldu. Lütfen tekrar giriş yapın.', code: 'TOKEN_EXPIRED' });
+          return errorResponse(req, res, 401, 'TOKEN_EXPIRED', 'Oturum süresi doldu. Lütfen tekrar giriş yapın.');
         }
         // Supabase dışı token (örn. backend JWT) olabilir; legacy JWT denenir
       }
@@ -56,7 +57,7 @@ async function authenticateTesisOrSupabase(req, res, next) {
         if (!profileError && profile && profile.branch_id) {
           let branch = null;
           let branchError = null;
-          const fullSelect = 'id, name, kbs_turu, kbs_tesis_kodu, kbs_web_servis_sifre, kbs_configured, kbs_endpoint_url';
+          const fullSelect = 'id, name, kbs_turu, kbs_tesis_kodu, kbs_web_servis_sifre, kbs_configured, kbs_endpoint_url, kbs_approved, kbs_approved_at';
           const res = await supabaseAdmin
             .from('branches')
             .select(fullSelect)
@@ -72,7 +73,7 @@ async function authenticateTesisOrSupabase(req, res, next) {
               .limit(1);
             const row = Array.isArray(fallback.data) && fallback.data.length > 0 ? fallback.data[0] : null;
             if (row) {
-              branch = { ...row, kbs_turu: null, kbs_tesis_kodu: null, kbs_web_servis_sifre: null, kbs_configured: false, kbs_endpoint_url: null };
+              branch = { ...row, kbs_turu: null, kbs_tesis_kodu: null, kbs_web_servis_sifre: null, kbs_configured: false, kbs_endpoint_url: null, kbs_approved: false, kbs_approved_at: null };
               branchError = null;
             }
           }
@@ -97,7 +98,7 @@ async function authenticateTesisOrSupabase(req, res, next) {
             if (appRole?.role === 'admin') isAdmin = true;
           }
           if (isAdmin) {
-            const fullSelect = 'id, name, kbs_turu, kbs_tesis_kodu, kbs_web_servis_sifre, kbs_configured, kbs_endpoint_url';
+            const fullSelect = 'id, name, kbs_turu, kbs_tesis_kodu, kbs_web_servis_sifre, kbs_configured, kbs_endpoint_url, kbs_approved, kbs_approved_at';
             const branchRes = await supabaseAdmin.from('branches').select(fullSelect).limit(1);
             const firstBranch = Array.isArray(branchRes.data) && branchRes.data.length > 0 ? branchRes.data[0] : null;
             if (firstBranch) {
@@ -114,24 +115,15 @@ async function authenticateTesisOrSupabase(req, res, next) {
         }
         if (!profile && !profileError) {
           console.warn('[authTesisOrSupabase] Supabase user geçerli ama user_profiles kaydı yok:', user.id);
-          return res.status(401).json({
-            message: 'Hesabınız henüz bir şubeye bağlı değil. Yöneticinize başvurun.',
-            code: 'PROFILE_MISSING',
-          });
+          return errorResponse(req, res, 409, 'BRANCH_NOT_ASSIGNED', 'Hesabınız henüz bir şubeye bağlı değil. Yöneticinize başvurun.');
         }
         if (profile && !profile.branch_id) {
           console.warn('[authTesisOrSupabase] Supabase profile var ama branch_id yok:', user.id);
-          return res.status(401).json({
-            message: 'Hesabınıza şube atanmamış. Yöneticinize başvurun.',
-            code: 'BRANCH_NOT_ASSIGNED',
-          });
+          return errorResponse(req, res, 409, 'BRANCH_NOT_ASSIGNED', 'Hesabınıza şube atanmamış. Yöneticinize başvurun.');
         }
         if (profile && profile.branch_id && (branchError || !branch)) {
           console.warn('[authTesisOrSupabase] Supabase branch yüklenemedi:', profile.branch_id, branchError?.message);
-          return res.status(401).json({
-            message: 'Şube bilgisi yüklenemedi. Yöneticinize başvurun.',
-            code: 'BRANCH_LOAD_FAILED',
-          });
+          return errorResponse(req, res, 409, 'BRANCH_LOAD_FAILED', 'Şube bilgisi yüklenemedi. Yöneticinize başvurun.');
         }
       }
     } catch (e) {
@@ -156,16 +148,13 @@ async function authenticateTesisOrSupabase(req, res, next) {
     }
     if (kullanici && !kullanici.tesis) {
       console.warn('[authTesisOrSupabase] Legacy JWT: kullanici var ama tesis yok, userId=', kullanici.id);
-      return res.status(401).json({ message: 'Tesis bilgisi bulunamadı. Yöneticinize başvurun.', code: 'TESIS_MISSING' });
+      return errorResponse(req, res, 409, 'BRANCH_NOT_ASSIGNED', 'Tesis bilgisi bulunamadı. Yöneticinize başvurun.');
     }
   } catch (e) {
     const msg = e?.message || '';
     if (msg.includes('girisOnaylandi') && (msg.includes('does not exist') || msg.includes('no such column'))) {
       console.error('[authTesisOrSupabase] Veritabanı migration eksik. npx prisma migrate deploy çalıştırın.');
-      return res.status(503).json({
-        message: 'Veritabanı güncellemesi gerekli. Lütfen yöneticiye bildirin.',
-        code: 'DB_MIGRATION_REQUIRED',
-      });
+      return errorResponse(req, res, 503, 'SCHEMA_ERROR', 'Veritabanı güncellemesi gerekli. Lütfen yöneticiye bildirin.');
     }
     /* legacy auth failed */
   }
@@ -175,8 +164,8 @@ async function authenticateTesisOrSupabase(req, res, next) {
     try {
       const branchId = process.env.BYPASS_BRANCH_ID || null;
       const { data: branchRows } = branchId
-        ? await supabaseAdmin.from('branches').select('id, name, kbs_turu, kbs_tesis_kodu, kbs_configured, kbs_endpoint_url').eq('id', branchId).limit(1)
-        : await supabaseAdmin.from('branches').select('id, name, kbs_turu, kbs_tesis_kodu, kbs_configured, kbs_endpoint_url').limit(1);
+        ? await supabaseAdmin.from('branches').select('id, name, kbs_turu, kbs_tesis_kodu, kbs_configured, kbs_endpoint_url, kbs_approved, kbs_approved_at').eq('id', branchId).limit(1)
+        : await supabaseAdmin.from('branches').select('id, name, kbs_turu, kbs_tesis_kodu, kbs_configured, kbs_endpoint_url, kbs_approved, kbs_approved_at').limit(1);
       const branch = Array.isArray(branchRows) && branchRows.length > 0 ? branchRows[0] : null;
       if (branch) {
         const { data: profileRows } = await supabaseAdmin.from('user_profiles').select('user_id, role').eq('branch_id', branch.id).limit(1);
@@ -195,7 +184,7 @@ async function authenticateTesisOrSupabase(req, res, next) {
     }
   }
 
-  return res.status(401).json({ message: 'Geçersiz token', code: 'INVALID_TOKEN' });
+  return errorResponse(req, res, 401, 'INVALID_TOKEN', 'Geçersiz token');
 }
 
 module.exports = { authenticateTesisOrSupabase };

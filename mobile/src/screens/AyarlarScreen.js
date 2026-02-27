@@ -29,7 +29,7 @@ import AppHeader from '../components/AppHeader';
 export default function AyarlarScreen() {
   const navigation = useNavigation();
   const { colors } = useTheme();
-  const { logout, tesis, user, setPin, setTesis } = useAuth();
+  const { logout, tesis, user, setTesis } = useAuth();
   const { triggerPaywall } = useCredits();
   const [tesisDetail, setTesisDetail] = useState(null);
   const [tesisAdiEdit, setTesisAdiEdit] = useState('');
@@ -43,8 +43,6 @@ export default function AyarlarScreen() {
   });
   const [testResult, setTestResult] = useState(null);
   const [loading, setLoading] = useState(false);
-  const [pinValue, setPinValue] = useState('');
-  const [pinLoading, setPinLoading] = useState(false);
   const [sifreValue, setSifreValue] = useState('');
   const [sifreTekrar, setSifreTekrar] = useState('');
   const [sifreLoading, setSifreLoading] = useState(false);
@@ -232,27 +230,6 @@ export default function AyarlarScreen() {
     handleKbsRequest('update', changeTesisKodu.trim(), changeSifre);
   };
 
-  const handlePinSave = async () => {
-    if (!pinValue || pinValue.length < 4) {
-      Toast.show({ type: 'error', text1: 'Hata', text2: 'PIN en az 4 karakter olmalıdır' });
-      return;
-    }
-    setPinLoading(true);
-    try {
-      const result = await setPin(pinValue, false);
-      if (result.success) {
-        Toast.show({ type: 'success', text1: 'Başarılı', text2: 'PIN kaydedildi. Tesis kodu + PIN ile giriş yapabilirsiniz.' });
-        setPinValue('');
-      } else {
-        Toast.show({ type: 'error', text1: 'Hata', text2: result.message || 'PIN kaydedilemedi' });
-      }
-    } catch (e) {
-      Toast.show({ type: 'error', text1: 'Hata', text2: e?.response?.data?.message || 'PIN kaydedilemedi' });
-    } finally {
-      setPinLoading(false);
-    }
-  };
-
   const handleSifreSave = async () => {
     if (!sifreValue || sifreValue.length < 6) {
       Toast.show({ type: 'error', text1: 'Hata', text2: 'Şifre en az 6 karakter olmalıdır' });
@@ -379,33 +356,20 @@ export default function AyarlarScreen() {
         </View>
 
         <View style={[styles.section, { backgroundColor: colors.surface }]}>
-          <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>Giriş Ayarları</Text>
+          <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>Güvenlik & Giriş</Text>
           <Text style={[styles.infoText, { color: colors.textSecondary }]}>
-            PIN: tesis kodu + PIN ile giriş. Şifre: telefon veya e-posta + şifre ile giriş.
+            Uygulamaya sadece telefon veya e-posta + şifre ile giriş yapılır. Şifrenizi buradan güncelleyebilirsiniz.
           </Text>
-          <Input
-            label="PIN (Tesis kodu ile giriş)"
-            value={pinValue}
-            onChangeText={setPinValue}
-            placeholder="En az 4 karakter"
-            secureTextEntry
-            keyboardType="numeric"
-            maxLength={20}
-          />
-          <Button variant="secondary" onPress={handlePinSave} loading={pinLoading} disabled={pinLoading || pinValue.length < 4}>
-            PIN Kaydet
-          </Button>
-
-          <Text style={[styles.label, { color: colors.textPrimary, marginTop: spacing.lg }]}>Şifre (Telefon/e-posta ile giriş)</Text>
+          <Text style={[styles.label, { color: colors.textPrimary, marginTop: spacing.lg }]}>Yeni Şifre</Text>
           <Input value={sifreValue} onChangeText={setSifreValue} placeholder="En az 6 karakter" secureTextEntry />
-          <Input value={sifreTekrar} onChangeText={setSifreTekrar} placeholder="Şifre tekrar" secureTextEntry />
+          <Input value={sifreTekrar} onChangeText={setSifreTekrar} placeholder="Yeni şifre tekrar" secureTextEntry />
           <Button
             variant="secondary"
             onPress={handleSifreSave}
             loading={sifreLoading}
             disabled={sifreLoading || sifreValue.length < 6 || sifreValue !== sifreTekrar}
           >
-            Şifre Kaydet
+            Şifreyi Güncelle
           </Button>
         </View>
 

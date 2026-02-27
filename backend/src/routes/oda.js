@@ -3,6 +3,7 @@ const { PrismaClient } = require('@prisma/client');
 const { authenticateTesisOrSupabase } = require('../middleware/authTesisOrSupabase');
 const { maskAdSoyad } = require('../utils/mask');
 const { ensureTesisForBranch } = require('../lib/ensureTesisForBranch');
+const { errorResponse } = require('../lib/errorResponse');
 const prisma = new PrismaClient();
 
 const router = express.Router();
@@ -85,8 +86,16 @@ router.get('/', async (req, res) => {
 
     res.json({ odalar: formattedOdalar });
   } catch (error) {
-    console.error('Oda listesi hatası:', error);
-    res.status(500).json({ message: 'Odalar alınamadı', error: error.message });
+    const msg = error?.message || '';
+    const isSchema = /column|relation|does not exist|no such column/i.test(msg);
+    const isDb = /prisma|ECONNREFUSED|connect|migrate|relation|column|table/i.test(msg);
+    if (isSchema) {
+      return errorResponse(req, res, 500, 'SCHEMA_ERROR', 'Veritabanı şeması güncel değil. Lütfen yöneticiye bildirin.');
+    }
+    if (isDb) {
+      return errorResponse(req, res, 500, 'DB_CONNECT_ERROR', 'Sunucuda geçici bir sorun var. Daha sonra tekrar deneyin.');
+    }
+    return errorResponse(req, res, 500, 'UNHANDLED_ERROR', 'Odalar alınamadı.');
   }
 });
 
