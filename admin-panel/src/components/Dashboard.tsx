@@ -54,7 +54,12 @@ const IconChart = () => (
   </svg>
 )
 
-export default function Dashboard() {
+interface DashboardProps {
+  /** Admin layout içinde kullanıldığında nav ve tam sayfa arka planı gizlenir */
+  embedLayout?: boolean
+}
+
+export default function Dashboard({ embedLayout = false }: DashboardProps) {
   const router = useRouter()
   const [stats, setStats] = useState<DashboardStats | null>(null)
   const [loading, setLoading] = useState(true)
@@ -78,11 +83,6 @@ export default function Dashboard() {
     }
   }
 
-  const handleLogout = () => {
-    localStorage.removeItem('admin_token')
-    router.push('/login')
-  }
-
   if (loading) {
     return (
       <div className="kbs-loading">
@@ -94,39 +94,9 @@ export default function Dashboard() {
     )
   }
 
-  return (
-    <div className="kbs-lobby">
-      <div className="kbs-bg-canvas">
-        <div className="kbs-bg-gradient" />
-        <div className="kbs-bg-blobs">
-          <div className="kbs-blob kbs-blob--1" aria-hidden />
-          <div className="kbs-blob kbs-blob--2" aria-hidden />
-          <div className="kbs-blob kbs-blob--3" aria-hidden />
-        </div>
-        <div className="kbs-bg-grid" />
-      </div>
-
-      <nav className="kbs-nav">
-        <div className="kbs-nav-inner">
-          <Link href="/" className="kbs-logo">
-            <span className="kbs-logo-dot" />
-            MyKBS
-          </Link>
-          <div className="kbs-nav-links">
-            <Link href="/tesisler" className="kbs-nav-link">Tesisler</Link>
-            <Link href="/users" className="kbs-nav-link">Kullanıcılar</Link>
-            <Link href="/community" className="kbs-nav-link">Topluluk</Link>
-            <Link href="/kbs-notifications" className="kbs-nav-link">KBS Bildirimleri</Link>
-            <Link href="/audit" className="kbs-nav-link">Audit</Link>
-            <button type="button" onClick={handleLogout} className="kbs-btn-logout">
-              Çıkış
-            </button>
-          </div>
-        </div>
-      </nav>
-
-      <main className="kbs-main">
-        <header className="kbs-hero">
+  const content = (
+    <>
+      <header className="kbs-hero">
           <div className="kbs-hero-wrap">
             <div className="kbs-hero-border" aria-hidden />
             <div className="kbs-hero-badge">
@@ -223,7 +193,43 @@ export default function Dashboard() {
             </div>
           </section>
         )}
-      </main>
+    </>
+  )
+
+  if (embedLayout) {
+    return <div className="admin-dashboard-embed">{content}</div>
+  }
+
+  return (
+    <div className="kbs-lobby">
+      <div className="kbs-bg-canvas">
+        <div className="kbs-bg-gradient" />
+        <div className="kbs-bg-blobs">
+          <div className="kbs-blob kbs-blob--1" aria-hidden />
+          <div className="kbs-blob kbs-blob--2" aria-hidden />
+          <div className="kbs-blob kbs-blob--3" aria-hidden />
+        </div>
+        <div className="kbs-bg-grid" />
+      </div>
+      <nav className="kbs-nav">
+        <div className="kbs-nav-inner">
+          <Link href="/" className="kbs-logo">
+            <span className="kbs-logo-dot" />
+            MyKBS
+          </Link>
+          <div className="kbs-nav-links">
+            <Link href="/tesisler" className="kbs-nav-link">Tesisler</Link>
+            <Link href="/users" className="kbs-nav-link">Kullanıcılar</Link>
+            <Link href="/community" className="kbs-nav-link">Topluluk</Link>
+            <Link href="/kbs-notifications" className="kbs-nav-link">KBS Bildirimleri</Link>
+            <Link href="/audit" className="kbs-nav-link">Audit</Link>
+            <button type="button" onClick={() => { localStorage.removeItem('admin_token'); router.push('/login') }} className="kbs-btn-logout">
+              Çıkış
+            </button>
+          </div>
+        </div>
+      </nav>
+      <main className="kbs-main">{content}</main>
     </div>
   )
 }

@@ -6,6 +6,9 @@ name: Deploy to GitHub Pages
 on:
   push:
     branches: [main]
+    paths:
+      - 'admin-panel/**'
+      - '.github/workflows/deploy.yml'
   workflow_dispatch:
 
 permissions:
@@ -37,6 +40,7 @@ jobs:
         working-directory: admin-panel
         env:
           NEXT_PUBLIC_BASE_PATH: /${{ github.event.repository.name }}
+          NEXT_PUBLIC_API_URL: https://mykbs-production.up.railway.app/api
           API_URL: https://mykbs-production.up.railway.app
         run: npm run build
 
