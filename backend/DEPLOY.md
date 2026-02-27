@@ -5,6 +5,7 @@
 | Değişken | Zorunlu | Açıklama |
 |----------|---------|----------|
 | `PORT` | Hayır | Sunucu portu (Railway otomatik verir) |
+| `DATABASE_URL` | **Evet (Railway)** | Supabase PostgreSQL: Dashboard → **Settings → Database** → Connection string → **URI**. Örnek: `postgresql://postgres:[ŞİFRE]@db.xxxx.supabase.co:5432/postgres`. Railway Variables'a ekleyin; ilk deploy sonrası (veya deploy script'te) `npx prisma db push` çalıştırın. |
 | `SUPABASE_URL` | Evet | Supabase proje URL |
 | `SUPABASE_SERVICE_ROLE_KEY` | Evet | Supabase Settings → API → service_role key (mobilde ASLA kullanma). Adım adım: [docs/ADMIN_PANEL_SERVICE_ROLE.md](../docs/ADMIN_PANEL_SERVICE_ROLE.md) |
 | `SYNC_BRANCH_SECRET` | Evet (OTP giriş için) | Rastgele uzun string; branch/profile sync için. Aynı değer Supabase Edge Function secret olarak da eklenmeli (`sync_branch_profile`) |
@@ -15,10 +16,18 @@
 
 ## Railway
 
+### Supabase PostgreSQL (DATABASE_URL)
+- Supabase Dashboard → **Settings** → **Database** → **Connection string** → **URI** kopyalayın.
+- **Port 5432** (direct) sadece IPv6 destekler; "P1001: Can't reach" alıyorsan **port 6543** (Supavisor) kullanın:  
+  `postgresql://postgres:[ŞİFRE]@db.xxxx.supabase.co:6543/postgres?sslmode=require&pgbouncer=true`
+- **Railway Variables** içine `DATABASE_URL` olarak ekleyin.
+- Tabloları oluşturmak için bir kez: `cd backend && npx prisma db push`
+- **Hâlâ P1001:** Proje paused olabilir → Dashboard’da **Restore project**. Veya Connect → **Session mode** (pooler) URI’sini kopyalayıp deneyin.
+
 ### Seçenek A: GitHub ile (otomatik deploy)
 1. New Project → Deploy from GitHub Repo → repo seç.
 2. **Root Directory:** Settings → Root Directory = `backend` (proje kökü değil, backend klasörü).
-3. **Variables:** `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `WORKER_SECRET` (uzun rastgele), isteğe `POLIS_KBS_URL`, `JANDARMA_KBS_URL`.
+3. **Variables:** `DATABASE_URL` (Supabase Postgres URI), `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `WORKER_SECRET` (uzun rastgele), isteğe `POLIS_KBS_URL`, `JANDARMA_KBS_URL`.
 4. Deploy bitince **BACKEND_URL:** `https://<proje>.up.railway.app` (trailing slash yok). Her push’ta otomatik deploy.
 
 ### Seçenek B: CLI ile deploy

@@ -82,6 +82,10 @@ export default {
     plugins: [
       "expo-camera",
       [
+        "react-native-iap",
+        { "paymentProvider": "both" }
+      ],
+      [
         "react-native-nfc-manager",
         {
           nfcPermission: "Kimlik okumak için NFC izni gerekli"

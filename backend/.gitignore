@@ -1,5 +1,8 @@
 node_modules/
+# Gizlilik: asla commit etmeyin (şifre, API key)
 .env
+.env.*
+!.env.example
 .env.local
 .env.*.local
 uploads/

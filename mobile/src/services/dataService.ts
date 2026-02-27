@@ -272,8 +272,9 @@ class DataService {
           this.emit('tesis:updated', tesisData);
           return tesisData;
         }
-        const errData = await r.json().catch(() => ({}));
-        throw Object.assign(new Error((errData as { message?: string }).message || 'Tesis alınamadı'), { response: { status: r.status, data: errData } });
+        const errData = (await r.json().catch(() => ({}))) as { message?: string; error?: string };
+        const msg = errData?.message || errData?.error || 'Tesis alınamadı';
+        throw Object.assign(new Error(msg), { response: { status: r.status, data: errData } });
       }
 
       logger.log('Fetching tesis from API (Supabase)');

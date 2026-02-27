@@ -7,8 +7,8 @@ generator client {
 }
 
 datasource db {
-  provider = "sqlite"
-  url      = "file:./dev.db"
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
 }
 
 // Tesis (Otel) Modeli
@@ -56,9 +56,29 @@ model Tesis {
   loglar            Log[]
   hatalar           Hata[]
   auditLogs         AuditLog[]
-  
+  siparisler        Siparis[]
+
   createdAt         DateTime  @default(now())
   updatedAt         DateTime  @updatedAt
+}
+
+// Sipariş (Paket satışı) — mobil "Satın Al" veya admin manuel atama
+model Siparis {
+  id          String   @id @default(cuid())
+  siparisNo  String   @unique  // Okunabilir: ORD-2024-0001
+  tesisId    String
+  paket      String   // starter, pro, business, enterprise
+  tutarTL    Int      // Kuruş değil, TL
+  kredi      Int      // Bildirim kotası
+  durum      String   @default("pending") // pending, odendi, iptal
+  odemeAt    DateTime? // Ödeme alındığında
+  adminNot   String?  // Admin notu (havale ref no vb.)
+  tesis      Tesis    @relation(fields: [tesisId], references: [id], onDelete: Cascade)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  @@index([tesisId])
+  @@index([durum])
+  @@index([createdAt])
 }
 
 // Kullanıcı Modeli

@@ -9,6 +9,7 @@
     "migrate": "prisma migrate dev",
     "generate": "prisma generate",
     "postinstall": "prisma generate",
+    "db:push": "prisma db push",
     "deploy": "node scripts/deploy-railway.js"
   },
   "dependencies": {
@@ -25,7 +26,7 @@
     "jsonwebtoken": "^9.0.2",
     "moment": "^2.29.4",
     "multer": "^2.0.0",
-    "nodemailer": "^6.9.7",
+    "nodemailer": "^8.0.1",
     "pdfkit": "^0.14.0",
     "prisma": "^5.7.1",
     "qrcode": "^1.5.3",

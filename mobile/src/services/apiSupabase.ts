@@ -607,6 +607,19 @@ export const api = {
         const res = await callFn('checkout', { misafirId: guestId }, token);
         return toResponse(res);
       }
+      // Paket siparişi (Satın Al) — backend JWT ile tesis bilgisi gerekir
+      if (pathname === '/siparis' || pathname === 'siparis') {
+        const backendUrl = getBackendUrl();
+        if (!backendUrl || !token) throw Object.assign(new Error('Giriş gerekli'), { response: { status: 401, data: {} } });
+        const r = await fetch(`${backendUrl}/api/siparis`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+          body: JSON.stringify(payload || {}),
+        });
+        const data = await r.json().catch(() => ({}));
+        if (!r.ok) throw Object.assign(new Error((data as { message?: string })?.message || 'Sipariş oluşturulamadı'), { response: { status: r.status, data } });
+        return toResponse(data);
+      }
       logger.warn('[apiSupabase] Unmapped POST', path);
       return toResponse(await callFn(pathname.replace(/^\//, '').replace(/\//g, '_'), payload, token));
     } catch (e) {

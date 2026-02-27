@@ -527,17 +527,18 @@ export default function OdalarScreen() {
         setBackendStatus((p) => ({ ...p, isOnline: true }));
       } else if (isNetwork) {
         setLastLoadErrorType('network');
+        const serverMsg = error.response?.data?.message || error.response?.data?.error || error.message;
         if (isInitial) {
           setOdalar([]);
           setOzet(null);
-          setBackendStatus({ isOnline: false, lastChecked: new Date(), error: error.message });
-          logger.warn('Network/5xx on initial load - showing empty state');
+          setBackendStatus({ isOnline: false, lastChecked: new Date(), error: serverMsg });
+          logger.warn('Network/5xx on initial load - showing empty state', { serverMsg });
         } else {
           Toast.show({
             type: 'error',
-            text1: 'Bağlantı Hatası',
-            text2: 'Sunucuya erişilemiyor. İnterneti veya sunucu adresini kontrol edin.',
-            visibilityTime: 4000,
+            text1: status >= 500 ? 'Sunucu Hatası' : 'Bağlantı Hatası',
+            text2: serverMsg || 'Sunucuya erişilemiyor. İnterneti veya sunucu adresini kontrol edin.',
+            visibilityTime: 5000,
           });
         }
       } else {

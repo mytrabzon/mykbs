@@ -41,6 +41,7 @@ app.use('/api/nfc', require('./routes/nfc'));
 app.use('/api/supabase', require('./routes/supabase'));
 app.use('/api/kyc', require('./routes/kyc'));
 app.use('/api/app-admin', require('./routes/appAdmin'));
+app.use('/api/siparis', require('./routes/siparis'));
 app.use('/api/push', require('./routes/push'));
 app.use('/api/kbs/credentials', require('./routes/kbsCredentials'));
 

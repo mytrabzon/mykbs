@@ -38,6 +38,7 @@
     "expo-updates": "~29.0.16",
     "react": "19.1.0",
     "react-native": "0.81.5",
+    "react-native-iap": "^12.15.0",
     "react-native-gesture-handler": "~2.28.0",
     "react-native-masked-text": "^1.13.0",
     "react-native-nfc-manager": "^3.14.3",

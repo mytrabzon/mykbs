@@ -398,5 +398,94 @@ router.post('/users/:id/force-logout', async (req, res) => {
   }
 });
 
+// --- Satışlar (Siparişler) ---
+const { getPackageCredits } = require('../config/packages');
+
+/**
+ * GET /app-admin/satislar — Tüm siparişler (filtre: durum, paket, tarih)
+ */
+router.get('/satislar', async (req, res) => {
+  try {
+    const { durum, paket, limit = 100, offset = 0 } = req.query;
+    const where = {};
+    if (durum) where.durum = durum;
+    if (paket) where.paket = paket;
+
+    const [siparisler, total] = await Promise.all([
+      prisma.siparis.findMany({
+        where,
+        include: { tesis: { select: { id: true, tesisAdi: true, tesisKodu: true, paket: true, kota: true } } },
+        orderBy: { createdAt: 'desc' },
+        take: parseInt(limit, 10) || 100,
+        skip: parseInt(offset, 10) || 0,
+      }),
+      prisma.siparis.count({ where }),
+    ]);
+
+    res.json({ siparisler, total });
+  } catch (err) {
+    console.error('[appAdmin] satislar', err);
+    res.status(500).json({ message: 'Satışlar alınamadı', error: err.message });
+  }
+});
+
+/**
+ * POST /app-admin/satislar/:id/odendi — Ödeme alındı işaretle ve tesis paketini güncelle
+ * Body: { adminNot?: string }
+ */
+router.post('/satislar/:id/odendi', async (req, res) => {
+  try {
+    const id = req.params.id;
+    const adminNot = req.body?.adminNot || null;
+
+    const siparis = await prisma.siparis.findUnique({ where: { id }, include: { tesis: true } });
+    if (!siparis) return res.status(404).json({ message: 'Sipariş bulunamadı' });
+    if (siparis.durum === 'odendi') return res.status(400).json({ message: 'Sipariş zaten ödendi' });
+    if (siparis.durum === 'iptal') return res.status(400).json({ message: 'Sipariş iptal' });
+
+    const kredi = getPackageCredits(siparis.paket);
+    const now = new Date();
+
+    await prisma.$transaction([
+      prisma.siparis.update({
+        where: { id },
+        data: { durum: 'odendi', odemeAt: now, adminNot },
+      }),
+      prisma.tesis.update({
+        where: { id: siparis.tesisId },
+        data: {
+          paket: siparis.paket,
+          trialEndsAt: null,
+          kota: kredi,
+          kullanilanKota: 0,
+        },
+      }),
+    ]);
+
+    res.json({ message: 'Ödeme kaydedildi, paket tesisine atandı.', siparisNo: siparis.siparisNo });
+  } catch (err) {
+    console.error('[appAdmin] satislar odendi', err);
+    res.status(500).json({ message: 'İşlem başarısız', error: err.message });
+  }
+});
+
+/**
+ * POST /app-admin/satislar/:id/iptal — Sipariş iptal
+ */
+router.post('/satislar/:id/iptal', async (req, res) => {
+  try {
+    const id = req.params.id;
+    const siparis = await prisma.siparis.findUnique({ where: { id } });
+    if (!siparis) return res.status(404).json({ message: 'Sipariş bulunamadı' });
+    if (siparis.durum !== 'pending') return res.status(400).json({ message: 'Sadece bekleyen sipariş iptal edilebilir' });
+
+    await prisma.siparis.update({ where: { id }, data: { durum: 'iptal' } });
+    res.json({ message: 'Sipariş iptal edildi', siparisNo: siparis.siparisNo });
+  } catch (err) {
+    console.error('[appAdmin] satislar iptal', err);
+    res.status(500).json({ message: 'İşlem başarısız', error: err.message });
+  }
+});
+
 router.requireAdminPanelUser = requireAdminPanelUser;
 module.exports = router;

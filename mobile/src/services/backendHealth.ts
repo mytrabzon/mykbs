@@ -35,8 +35,8 @@ class BackendHealthService {
   private listeners: Array<(status: BackendStatus) => void> = [];
   private supabaseListeners: Array<(status: SupabaseStatus) => void> = [];
 
-  /** Health check timeout (ms); aşılırsa "Sunucu yanıt vermedi" benzeri mesaj döner */
-  private static HEALTH_TIMEOUT_MS = 12000;
+  /** Health check timeout (ms). Railway cold start 30–60 sn sürebilir. */
+  private static HEALTH_TIMEOUT_MS = 28000;
 
   async checkHealth(): Promise<BackendStatus> {
     const backendUrl = getApiBaseUrl();
@@ -93,8 +93,8 @@ class BackendHealthService {
         ? undefined
         : isNetwork
           ? isAbort
-            ? 'Sunucu yanıt vermedi (zaman aşımı). Railway çalışıyor mu kontrol edin.'
-            : 'Sunucuya ulaşılamadı. İnternet ve BACKEND_URL adresini kontrol edin.'
+            ? 'Sunucu yanıt vermedi. Railway uyuyor olabilir — 30 sn sonra "Yeniden Dene" veya "Bağlantıyı Test Et" kullanın.'
+            : 'Sunucuya ulaşılamadı. İnternet ve sunucu adresini kontrol edin.'
           : rawMessage || (backendUrl ? 'Backend erişilemiyor' : 'Supabase erişilemiyor');
       logger.error('Backend health check failed', error);
       this.status = {

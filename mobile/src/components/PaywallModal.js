@@ -1,83 +1,119 @@
-import React from 'react';
-import { View, Text, Modal, TouchableOpacity, StyleSheet, ScrollView, Pressable } from 'react-native';
+import React, { useState } from 'react';
+import { View, Text, Modal, TouchableOpacity, StyleSheet, ScrollView, Pressable, ActivityIndicator, Alert } from 'react-native';
 import { useTheme } from '../context/ThemeContext';
 import { Ionicons } from '@expo/vector-icons';
 import { PAYWALL_PACKAGES, CREDITS_DEPLETED_MESSAGE, TRIAL_END_MESSAGE } from '../constants/packages';
+import { api } from '../services/api';
+import { getApiErrorMessage } from '../services/apiSupabase';
 
 /**
  * 0 kredi veya deneme süresi bitince: "Bildirim hakkın doldu. Devam etmek için paket seç."
- * Altında 3 paket kartı; ortadaki (Pro) hafif glow + "En Çok Tercih Edilen" rozeti.
+ * "Satın Al" ile sipariş oluşturulur; ödeme bilgisi iletilecek.
  */
 export default function PaywallModal({ visible, onClose, reason = 'no_credits' }) {
   const { colors } = useTheme();
+  const [loading, setLoading] = useState(false);
+  const [success, setSuccess] = useState(null); // { siparisNo }
 
   const message = reason === 'trial_ended' ? TRIAL_END_MESSAGE : CREDITS_DEPLETED_MESSAGE;
+
+  const handleSatınAl = async (pkg) => {
+    setLoading(true);
+    setSuccess(null);
+    try {
+      const { data } = await api.post('/siparis', { paket: pkg.id });
+      setSuccess({ siparisNo: data.siparisNo, tutarTL: data.tutarTL });
+    } catch (err) {
+      const msg = getApiErrorMessage(err);
+      Alert.alert('Sipariş alınamadı', msg);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleClose = () => {
+    setSuccess(null);
+    onClose();
+  };
 
   return (
     <Modal
       visible={visible}
       transparent
       animationType="fade"
-      onRequestClose={onClose}
+      onRequestClose={handleClose}
     >
-      <Pressable style={styles.overlay} onPress={onClose}>
+      <Pressable style={styles.overlay} onPress={handleClose}>
         <Pressable style={[styles.box, { backgroundColor: colors.surface }]} onPress={(e) => e.stopPropagation()}>
           <View style={styles.header}>
             <Text style={[styles.title, { color: colors.textPrimary }]}>
-              Bildirim hakkın doldu
+              {success ? 'Siparişiniz alındı' : 'Bildirim hakkın doldu'}
             </Text>
             <Text style={[styles.subtitle, { color: colors.textSecondary }]}>
-              {message}
+              {success
+                ? `Sipariş no: ${success.siparisNo}. Ödeme bilgisi e-posta veya SMS ile iletilecektir. (${success.tutarTL} ₺)`
+                : message}
             </Text>
-            <TouchableOpacity onPress={onClose} style={styles.closeBtn} hitSlop={12}>
+            <TouchableOpacity onPress={handleClose} style={styles.closeBtn} hitSlop={12}>
               <Ionicons name="close" size={24} color={colors.textSecondary} />
             </TouchableOpacity>
           </View>
 
-          <ScrollView style={styles.cardsScroll} contentContainerStyle={styles.cardsContent} showsVerticalScrollIndicator={false}>
-            {PAYWALL_PACKAGES.map((pkg) => {
-              const isPro = pkg.id === 'pro';
-              return (
-                <View
-                  key={pkg.id}
-                  style={[
-                    styles.card,
-                    { backgroundColor: colors.surfaceCard, borderColor: colors.border },
-                    isPro && styles.cardPro,
-                    isPro && { borderColor: colors.primary, shadowColor: colors.primary },
-                  ]}
-                >
-                  {pkg.badge ? (
-                    <View style={[styles.badge, { backgroundColor: colors.primary }]}>
-                      <Text style={styles.badgeText}>{pkg.badge}</Text>
-                    </View>
-                  ) : null}
-                  <Text style={[styles.cardLabel, { color: colors.textPrimary }]}>{pkg.label}</Text>
-                  <Text style={[styles.cardCredits, { color: colors.textPrimary }]}>
-                    {pkg.credits.toLocaleString('tr-TR')} Bildirim
-                  </Text>
-                  <Text style={[styles.cardPrice, { color: colors.primary }]}>
-                    {pkg.priceTL.toLocaleString('tr-TR')} ₺
-                  </Text>
-                  {isPro ? (
-                    <Text style={[styles.unitPrice, { color: colors.textSecondary }]}>
-                      Birim: {(pkg.priceTL / pkg.credits).toFixed(2)} ₺/bildirim
-                    </Text>
-                  ) : null}
-                  <TouchableOpacity
-                    style={[styles.cta, { backgroundColor: colors.primary }]}
-                    onPress={() => {
-                      // TODO: ödeme akışı
-                      onClose();
-                    }}
-                    activeOpacity={0.8}
+          {success ? (
+            <View style={styles.successFooter}>
+              <TouchableOpacity style={[styles.cta, { backgroundColor: colors.primary }]} onPress={handleClose} activeOpacity={0.8}>
+                <Text style={styles.ctaText}>Tamam</Text>
+              </TouchableOpacity>
+            </View>
+          ) : (
+            <ScrollView style={styles.cardsScroll} contentContainerStyle={styles.cardsContent} showsVerticalScrollIndicator={false}>
+              {PAYWALL_PACKAGES.map((pkg) => {
+                const isPro = pkg.id === 'pro';
+                const isLoading = loading;
+                return (
+                  <View
+                    key={pkg.id}
+                    style={[
+                      styles.card,
+                      { backgroundColor: colors.surfaceCard, borderColor: colors.border },
+                      isPro && styles.cardPro,
+                      isPro && { borderColor: colors.primary, shadowColor: colors.primary },
+                    ]}
                   >
-                    <Text style={styles.ctaText}>Seç</Text>
-                  </TouchableOpacity>
-                </View>
-              );
-            })}
-          </ScrollView>
+                    {pkg.badge ? (
+                      <View style={[styles.badge, { backgroundColor: colors.primary }]}>
+                        <Text style={styles.badgeText}>{pkg.badge}</Text>
+                      </View>
+                    ) : null}
+                    <Text style={[styles.cardLabel, { color: colors.textPrimary }]}>{pkg.label}</Text>
+                    <Text style={[styles.cardCredits, { color: colors.textPrimary }]}>
+                      {pkg.credits.toLocaleString('tr-TR')} Bildirim
+                    </Text>
+                    <Text style={[styles.cardPrice, { color: colors.primary }]}>
+                      {pkg.priceTL.toLocaleString('tr-TR')} ₺
+                    </Text>
+                    {isPro ? (
+                      <Text style={[styles.unitPrice, { color: colors.textSecondary }]}>
+                        Birim: {(pkg.priceTL / pkg.credits).toFixed(2)} ₺/bildirim
+                      </Text>
+                    ) : null}
+                    <TouchableOpacity
+                      style={[styles.cta, { backgroundColor: colors.primary, opacity: isLoading ? 0.7 : 1 }]}
+                      onPress={() => handleSatınAl(pkg)}
+                      disabled={isLoading}
+                      activeOpacity={0.8}
+                    >
+                      {isLoading ? (
+                        <ActivityIndicator color="#FFF" size="small" />
+                      ) : (
+                        <Text style={styles.ctaText}>Satın Al</Text>
+                      )}
+                    </TouchableOpacity>
+                  </View>
+                );
+              })}
+            </ScrollView>
+          )}
         </Pressable>
       </Pressable>
     </Modal>
@@ -180,5 +216,9 @@ const styles = StyleSheet.create({
     color: '#FFF',
     fontSize: 16,
     fontWeight: '600',
+  },
+  successFooter: {
+    padding: 20,
+    paddingTop: 0,
   },
 });

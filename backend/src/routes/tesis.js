@@ -125,8 +125,14 @@ router.get('/', async (req, res) => {
       }
     });
   } catch (error) {
-    console.error('Tesis bilgisi hatası:', error);
-    res.status(500).json({ message: 'Bilgi alınamadı', error: error.message });
+    console.error('Tesis bilgisi hatası:', error?.message || error, error?.stack);
+    const msg = error?.message || '';
+    const isDb = /prisma|ECONNREFUSED|connect|migrate|relation|column|table/i.test(msg);
+    res.status(500).json({
+      message: isDb ? 'Veritabanı hatası. Railway\'de DATABASE_URL ve migration kontrol edin.' : 'Bilgi alınamadı',
+      error: error?.message,
+      code: isDb ? 'DB_ERROR' : undefined,
+    });
   }
 });
 
