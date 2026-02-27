@@ -59,6 +59,31 @@ Bundan sonra `main`’e (veya `backend/` altında değişiklik içeren) push’l
 
 - **"Supabase yapılandırması eksik" (kayıt / giriş 500):** Railway Variables’da `SUPABASE_URL` ve `SUPABASE_SERVICE_ROLE_KEY` (veya en azından `SUPABASE_ANON_KEY`) tanımlı olmalı. Ekledikten sonra redeploy edin.
 
+### "Backend Bağlantı Hatası" / "Sunucu adresi doğrulanamadı" / "Bilgi alınamadı"
+
+Mobil uygulama `EXPO_PUBLIC_BACKEND_URL` ile `/health` adresine istek atar. Cevap gelmezse bu ekran görünür. Adım adım kontrol:
+
+1. **Railway’de servis çalışıyor mu?**  
+   Railway Dashboard → Proje → Backend servisi → **Deployments**. Status **Running** olmalı. Failed/Crashed ise **Logs** sekmesinden hata mesajına bakın.
+
+2. **Tarayıcıdan /health testi:**  
+   Telefon veya bilgisayar tarayıcısında açın:  
+   `https://mykbs-production.up.railway.app/health`  
+   - **Cevap yok / sayfa açılmıyor:** Backend kapalı, uyuyor veya domain yanlış. Railway → Settings → **Networking** / **Public URL** kısmından gerçek URL’yi kopyalayın; mobil `EXPO_PUBLIC_BACKEND_URL` ve EAS env’de bu URL (sonda `/` olmadan) kullanılmalı.  
+   - **404:** Backend’te `GET /health` route’u yok (bu projede var; deploy eski olabilir → yeniden deploy).  
+   - **500:** Backend çöküyor; Railway **Logs**’a bakın.  
+   - **`{"ok":true,"status":"ok",...}`:** Backend sağlam; sorun mobil tarafta (URL yanlış, farklı build, cache).
+
+3. **Railway ayarları:**  
+   - **Root Directory:** `backend` (repo kökü değil).  
+   - **Build Command:** (boş bırakılabilir; Nixpacks varsayılanı `npm install` + `npm run build` veya sadece `npm install`).  
+   - **Start Command:** `npm start` veya `node src/server.js` (package.json’daki `start` script’i).  
+   - **PORT:** Sabit yazmayın; Railway `PORT` env ile verir. Backend zaten `process.env.PORT || 8080` kullanıyor.
+
+4. **Mobil env:**  
+   - `mobile/.env` ve EAS build env’de `EXPO_PUBLIC_BACKEND_URL=https://mykbs-production.up.railway.app` (sonda **slash yok**).  
+   - Değiştirdikten sonra uygulamayı yeniden başlatın / yeni build alın.
+
 ## Health
 
 - `GET /health` → `{ "ok": true, "status": "ok", "version": "1.0.0", "time": "..." }`

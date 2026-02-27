@@ -40,7 +40,7 @@ apply plugin: "com.facebook.react.rootproject"
 
 // Read SDK versions from gradle.properties
 ext {
-    minSdkVersion = findProperty('android.minSdkVersion')?.toInteger() ?: 23
+    minSdkVersion = findProperty('android.minSdkVersion')?.toInteger() ?: 24
     compileSdkVersion = findProperty('android.compileSdkVersion')?.toInteger() ?: 35
     targetSdkVersion = findProperty('android.targetSdkVersion')?.toInteger() ?: 35
     buildToolsVersion = findProperty('android.buildToolsVersion') ?: "35.0.0"

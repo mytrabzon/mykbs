@@ -35,16 +35,22 @@ class BackendHealthService {
   private listeners: Array<(status: BackendStatus) => void> = [];
   private supabaseListeners: Array<(status: SupabaseStatus) => void> = [];
 
+  /** Health check timeout (ms); aşılırsa "Sunucu yanıt vermedi" benzeri mesaj döner */
+  private static HEALTH_TIMEOUT_MS = 12000;
+
   async checkHealth(): Promise<BackendStatus> {
     const backendUrl = getApiBaseUrl();
     const healthUrl = getHealthUrl();
     try {
       if (backendUrl && healthUrl) {
         logger.log('Checking backend health (KBS Node backend)...', healthUrl);
-        const res = await fetch(healthUrl, { method: 'GET' });
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), BackendHealthService.HEALTH_TIMEOUT_MS);
+        const res = await fetch(healthUrl, { method: 'GET', signal: controller.signal });
+        clearTimeout(timeoutId);
         const data = (await res.json().catch(() => ({}))) as { ok?: boolean; status?: string };
         if (!res.ok || (data.ok !== true && data.status !== 'ok')) {
-          throw new Error(data?.message || `HTTP ${res.status}`);
+          throw new Error((data as { message?: string })?.message || `HTTP ${res.status}`);
         }
         this.status = {
           isOnline: true,
@@ -78,12 +84,18 @@ class BackendHealthService {
     } catch (error: unknown) {
       const statusCode = (error as { response?: { status?: number } })?.response?.status;
       const isAuthError = statusCode === 401 || statusCode === 403;
-      const message =
-        error instanceof Error
-          ? error.message
-          : backendUrl
-            ? 'Backend erişilemiyor'
-            : 'Supabase erişilemiyor';
+      const rawMessage = error instanceof Error ? error.message : '';
+      const isAbort = error instanceof Error && error.name === 'AbortError';
+      const isNetwork =
+        isAbort ||
+        /failed to fetch|network request failed|network error|load failed|connection refused/i.test(rawMessage);
+      const message = isAuthError
+        ? undefined
+        : isNetwork
+          ? isAbort
+            ? 'Sunucu yanıt vermedi (zaman aşımı). Railway çalışıyor mu kontrol edin.'
+            : 'Sunucuya ulaşılamadı. İnternet ve BACKEND_URL adresini kontrol edin.'
+          : rawMessage || (backendUrl ? 'Backend erişilemiyor' : 'Supabase erişilemiyor');
       logger.error('Backend health check failed', error);
       this.status = {
         isOnline: isAuthError ? true : false,
