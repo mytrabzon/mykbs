@@ -46,7 +46,7 @@ Expo Go'da `process.env.EXPO_PUBLIC_*` değişkenleri çalışır. Bu yüzden:
 ```env
 EXPO_PUBLIC_API_URL=http://192.168.1.3:3000/api
 EXPO_PUBLIC_SUPABASE_URL=https://iuxnpxszfvyrdifchwvr.supabase.co
-EXPO_PUBLIC_SUPABASE_ANON_KEY=sb_publishable_xzlZ7XfGyx9CfBaQyLWgKw_ic_v5K1J
+EXPO_PUBLIC_SUPABASE_ANON_KEY=sb_publishable_xxxx
 ```
 
 ## 📝 Değişiklikler

@@ -73,19 +73,23 @@ ALTER TABLE public.verification_documents ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.verification_scans ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.verification_extracted_fields ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS verification_sessions_user ON public.verification_sessions;
 CREATE POLICY verification_sessions_user ON public.verification_sessions
   FOR ALL USING (auth.uid() = user_id);
 
+DROP POLICY IF EXISTS verification_documents_via_session ON public.verification_documents;
 CREATE POLICY verification_documents_via_session ON public.verification_documents
   FOR ALL USING (
     EXISTS (SELECT 1 FROM public.verification_sessions s WHERE s.id = session_id AND s.user_id = auth.uid())
   );
 
+DROP POLICY IF EXISTS verification_scans_via_session ON public.verification_scans;
 CREATE POLICY verification_scans_via_session ON public.verification_scans
   FOR ALL USING (
     EXISTS (SELECT 1 FROM public.verification_sessions s WHERE s.id = session_id AND s.user_id = auth.uid())
   );
 
+DROP POLICY IF EXISTS verification_extracted_via_session ON public.verification_extracted_fields;
 CREATE POLICY verification_extracted_via_session ON public.verification_extracted_fields
   FOR ALL USING (
     EXISTS (SELECT 1 FROM public.verification_sessions s WHERE s.id = session_id AND s.user_id = auth.uid())

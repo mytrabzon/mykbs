@@ -46,7 +46,7 @@ EXPO_PUBLIC_API_URL=$apiUrl
 
 # Supabase Configuration
 EXPO_PUBLIC_SUPABASE_URL=https://iuxnpxszfvyrdifchwvr.supabase.co
-EXPO_PUBLIC_SUPABASE_ANON_KEY=sb_publishable_xzlZ7XfGyx9CfBaQyLWgKw_ic_v5K1J
+EXPO_PUBLIC_SUPABASE_ANON_KEY=sb_publishable_xxxx
 "@
         $envContent | Out-File -FilePath $envFile -Encoding utf8
         Write-Host "✅ .env dosyası oluşturuldu" -ForegroundColor Green

@@ -13,7 +13,7 @@ Bu dokümantasyon, Supabase Edge Functions (özellikle tRPC endpoint) kullanım�
 ```javascript
 extra: {
   EXPO_PUBLIC_SUPABASE_URL: "https://iuxnpxszfvyrdifchwvr.supabase.co",
-  EXPO_PUBLIC_SUPABASE_ANON_KEY: "sb_publishable_xzlZ7XfGyx9CfBaQyLWgKw_ic_v5K1J",
+  EXPO_PUBLIC_SUPABASE_ANON_KEY: "sb_publishable_xxxx",
   EXPO_PUBLIC_SUPABASE_FUNCTIONS_URL: "https://iuxnpxszfvyrdifchwvr.supabase.co/functions/v1",
 }
 ```

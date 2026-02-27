@@ -68,6 +68,20 @@ Bundan sonra `main`’e (veya `backend/` altında değişiklik içeren) push’l
 
 - **"Supabase yapılandırması eksik" (kayıt / giriş 500):** Railway Variables’da `SUPABASE_URL` ve `SUPABASE_SERVICE_ROLE_KEY` (veya en azından `SUPABASE_ANON_KEY`) tanımlı olmalı. Ekledikten sonra redeploy edin.
 
+### "Veritabanı hatası" / "Can't reach database server" (Supabase paused)
+
+Railway loglarında `Can't reach database server at db.xxxx.supabase.co:6543` görüyorsan, backend’in **Supabase Postgres**’e bağlanamadığı anlamına gelir. **Development kullanman bunun sebebi değildir**; hata sunucu tarafında.
+
+**En sık sebep: Supabase projesi uykuya alınmış (paused).** Ücretsiz planda 7 gün kullanım yoksa proje otomatik duraklar.
+
+**Yapman gerekenler:**
+1. [Supabase Dashboard](https://supabase.com/dashboard) → projeni aç (iuxnpxszfvyrdifchwvr).
+2. Ana sayfada **"Project paused"** / **"Proje duraklatıldı"** yazıyorsa **"Restore project"** / **"Projeyi geri yükle"** butonuna tıkla.
+3. Birkaç dakika bekle; tamamlanınca e-posta gelebilir.
+4. Sonra mobil uygulamada tekrar dene (Odalar / tesis verisi).
+
+Hâlâ bağlanamıyorsa: Supabase → **Settings → Database** → Connection string’i kontrol et; **Session mode (port 6543)** kullanıyorsan Railway’deki `DATABASE_URL` aynı URI olmalı. Proje aktif mi Dashboard’dan kontrol et.
+
 ### "Backend Bağlantı Hatası" / "Sunucu adresi doğrulanamadı" / "Bilgi alınamadı"
 
 Mobil uygulama `EXPO_PUBLIC_BACKEND_URL` ile `/health` adresine istek atar. Cevap gelmezse bu ekran görünür. Adım adım kontrol:

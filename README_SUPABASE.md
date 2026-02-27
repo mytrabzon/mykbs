@@ -34,20 +34,20 @@ MYKBS/
 **Backend** (`backend/.env`):
 ```env
 SUPABASE_URL=https://iuxnpxszfvyrdifchwvr.supabase.co
-SUPABASE_ANON_KEY=sb_publishable_xzlZ7XfGyx9CfBaQyLWgKw_ic_v5K1J
+SUPABASE_ANON_KEY=sb_publishable_xxxx
 SUPABASE_SERVICE_ROLE_KEY=your-service-role-key-here
 ```
 
 **Mobile** (`mobile/.env`):
 ```env
 EXPO_PUBLIC_SUPABASE_URL=https://iuxnpxszfvyrdifchwvr.supabase.co
-EXPO_PUBLIC_SUPABASE_ANON_KEY=sb_publishable_xzlZ7XfGyx9CfBaQyLWgKw_ic_v5K1J
+EXPO_PUBLIC_SUPABASE_ANON_KEY=sb_publishable_xxxx
 ```
 
 **Admin Panel** (`admin-panel/.env.local`):
 ```env
 NEXT_PUBLIC_SUPABASE_URL=https://iuxnpxszfvyrdifchwvr.supabase.co
-NEXT_PUBLIC_SUPABASE_ANON_KEY=sb_publishable_xzlZ7XfGyx9CfBaQyLWgKw_ic_v5K1J
+NEXT_PUBLIC_SUPABASE_ANON_KEY=sb_publishable_xxxx
 ```
 
 ### 2. Paketleri Yükle

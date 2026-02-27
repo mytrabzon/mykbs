@@ -135,7 +135,7 @@ Edge Function için environment variables Supabase Dashboard'dan ayarlanır:
 2. **Settings** → **Environment Variables**
 3. Şu değişkenleri ekleyin:
    - `SUPABASE_URL`: `https://iuxnpxszfvyrdifchwvr.supabase.co`
-   - `SUPABASE_ANON_KEY`: `sb_publishable_xzlZ7XfGyx9CfBaQyLWgKw_ic_v5K1J`
+   - `SUPABASE_ANON_KEY`: `sb_publishable_xxxx`
    - `SUPABASE_SERVICE_ROLE_KEY`: (Supabase Dashboard'dan alın)
 
 ## 📌 Hızlı Komutlar

@@ -14,7 +14,7 @@ npm install @supabase/supabase-js
 `.env` dosyasına ekleyin:
 ```env
 SUPABASE_URL=https://iuxnpxszfvyrdifchwvr.supabase.co
-SUPABASE_ANON_KEY=sb_publishable_xzlZ7XfGyx9CfBaQyLWgKw_ic_v5K1J
+SUPABASE_ANON_KEY=sb_publishable_xxxx
 SUPABASE_SERVICE_ROLE_KEY=your-service-role-key-here
 ```
 
@@ -30,7 +30,7 @@ npm install @supabase/supabase-js
 `.env` dosyası oluşturun:
 ```env
 EXPO_PUBLIC_SUPABASE_URL=https://iuxnpxszfvyrdifchwvr.supabase.co
-EXPO_PUBLIC_SUPABASE_ANON_KEY=sb_publishable_xzlZ7XfGyx9CfBaQyLWgKw_ic_v5K1J
+EXPO_PUBLIC_SUPABASE_ANON_KEY=sb_publishable_xxxx
 ```
 
 ### 3. Admin Panel Entegrasyonu
@@ -45,7 +45,7 @@ npm install @supabase/supabase-js
 `.env.local` dosyasına ekleyin:
 ```env
 NEXT_PUBLIC_SUPABASE_URL=https://iuxnpxszfvyrdifchwvr.supabase.co
-NEXT_PUBLIC_SUPABASE_ANON_KEY=sb_publishable_xzlZ7XfGyx9CfBaQyLWgKw_ic_v5K1J
+NEXT_PUBLIC_SUPABASE_ANON_KEY=sb_publishable_xxxx
 ```
 
 ## Edge Functions - tRPC
@@ -134,20 +134,20 @@ const tesisler = await trpc.getTesisler.query();
 ### Backend (.env)
 ```env
 SUPABASE_URL=https://iuxnpxszfvyrdifchwvr.supabase.co
-SUPABASE_ANON_KEY=sb_publishable_xzlZ7XfGyx9CfBaQyLWgKw_ic_v5K1J
+SUPABASE_ANON_KEY=sb_publishable_xxxx
 SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
 ```
 
 ### Mobile (.env)
 ```env
 EXPO_PUBLIC_SUPABASE_URL=https://iuxnpxszfvyrdifchwvr.supabase.co
-EXPO_PUBLIC_SUPABASE_ANON_KEY=sb_publishable_xzlZ7XfGyx9CfBaQyLWgKw_ic_v5K1J
+EXPO_PUBLIC_SUPABASE_ANON_KEY=sb_publishable_xxxx
 ```
 
 ### Admin Panel (.env.local)
 ```env
 NEXT_PUBLIC_SUPABASE_URL=https://iuxnpxszfvyrdifchwvr.supabase.co
-NEXT_PUBLIC_SUPABASE_ANON_KEY=sb_publishable_xzlZ7XfGyx9CfBaQyLWgKw_ic_v5K1J
+NEXT_PUBLIC_SUPABASE_ANON_KEY=sb_publishable_xxxx
 ```
 
 ## Supabase Client Kullanımı
