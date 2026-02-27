@@ -13,6 +13,7 @@ import { useNavigation } from '@react-navigation/native';
 import Toast from 'react-native-toast-message';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../context/ThemeContext';
+import { useAuth } from '../context/AuthContext';
 import { supabase } from '../lib/supabase/supabase';
 import { getApiBaseUrl } from '../config/api';
 import { Button, Input } from '../components/ui';
@@ -28,11 +29,16 @@ function formatPhoneForSupabase(telefon) {
 
 const formatPhone = (t) => t.replace(/[^\d]/g, '').slice(0, 10);
 
+const isValidEmail = (e) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test((e || '').trim());
+
 export default function ForgotPasswordScreen() {
   const navigation = useNavigation();
   const { colors } = useTheme();
+  const { resetPasswordForEmail: sendResetLink } = useAuth();
   const [step, setStep] = useState('telefon'); // 'telefon' | 'otp' | 'sifre'
   const [telefon, setTelefon] = useState('');
+  const [email, setEmail] = useState('');
+  const [useEmailReset, setUseEmailReset] = useState(false);
   const [otp, setOtp] = useState(['', '', '', '', '', '']);
   const [yeniSifre, setYeniSifre] = useState('');
   const [yeniSifreTekrar, setYeniSifreTekrar] = useState('');
@@ -40,9 +46,42 @@ export default function ForgotPasswordScreen() {
   const [loading, setLoading] = useState(false);
   const [supabaseSession, setSupabaseSession] = useState(null);
   const [useBackendOtp, setUseBackendOtp] = useState(false);
+  const [useEmailOtp, setUseEmailOtp] = useState(false);
   const inputRefs = useRef([]);
 
   const handleSendOtp = async () => {
+    if (useEmailReset) {
+      if (!email.trim() || !isValidEmail(email)) {
+        Toast.show({ type: 'error', text1: 'Geçersiz e-posta', text2: 'Geçerli bir e-posta adresi girin' });
+        return;
+      }
+      setLoading(true);
+      setUseBackendOtp(false);
+      setUseEmailOtp(false);
+      try {
+        if (supabase) {
+          const { error } = await supabase.auth.signInWithOtp({
+            email: email.trim().toLowerCase(),
+            options: { shouldCreateUser: false },
+          });
+          if (!error) {
+            setUseEmailOtp(true);
+            Toast.show({ type: 'success', text1: 'Kod gönderildi', text2: 'E-postanıza gelen 6 haneli kodu girin.' });
+            setStep('otp');
+            setLoading(false);
+            return;
+          }
+          Toast.show({ type: 'error', text1: 'Hata', text2: error.message || 'Kod gönderilemedi' });
+        } else {
+          Toast.show({ type: 'error', text1: 'Hata', text2: 'Şifre sıfırlama servisi kullanılamıyor' });
+        }
+      } catch (e) {
+        Toast.show({ type: 'error', text1: 'Hata', text2: e?.message || 'Kod gönderilemedi' });
+      }
+      setLoading(false);
+      return;
+    }
+
     const raw = telefon.trim().replace(/\D/g, '');
     if (raw.length < 10) {
       Toast.show({ type: 'error', text1: 'Geçersiz telefon', text2: '10 haneli telefon giriniz' });
@@ -50,10 +89,10 @@ export default function ForgotPasswordScreen() {
     }
     setLoading(true);
     setUseBackendOtp(false);
+    setUseEmailOtp(false);
     try {
       const backendUrl = getApiBaseUrl();
 
-      // Önce Supabase dene
       if (supabase) {
         const phone = formatPhoneForSupabase(telefon);
         const { error } = await supabase.auth.signInWithOtp({ phone });
@@ -65,7 +104,6 @@ export default function ForgotPasswordScreen() {
         }
       }
 
-      // Supabase yoksa veya hata verirse backend dene
       if (backendUrl) {
         const res = await fetch(`${backendUrl}/api/auth/sifre-sifirla/otp-iste`, {
           method: 'POST',
@@ -129,8 +167,21 @@ export default function ForgotPasswordScreen() {
     setLoading(true);
     try {
       if (useBackendOtp) {
-        // Backend akışı: OTP'yi sifre adımında göndereceğiz
         setSupabaseSession({ otp: code });
+        setStep('sifre');
+        Toast.show({ type: 'success', text1: 'Doğrulandı', text2: 'Yeni şifrenizi belirleyin' });
+      } else if (useEmailOtp && supabase) {
+        const { data, error } = await supabase.auth.verifyOtp({
+          email: email.trim().toLowerCase(),
+          token: code,
+          type: 'email',
+        });
+        if (error) {
+          Toast.show({ type: 'error', text1: 'Doğrulama başarısız', text2: error.message });
+          setLoading(false);
+          return;
+        }
+        setSupabaseSession(data?.session);
         setStep('sifre');
         Toast.show({ type: 'success', text1: 'Doğrulandı', text2: 'Yeni şifrenizi belirleyin' });
       } else {
@@ -230,24 +281,67 @@ export default function ForgotPasswordScreen() {
 
         <Text style={[styles.title, { color: colors.textPrimary }]}>Şifremi Unuttum</Text>
         <Text style={[styles.subtitle, { color: colors.textSecondary }]}>
-          {step === 'telefon' && 'Kayıtlı telefon numaranızı girin. Size doğrulama kodu göndereceğiz.'}
-          {step === 'otp' && `${telefon} numarasına gönderilen 6 haneli kodu girin.`}
+          {step === 'telefon' && (useEmailReset ? 'Kayıtlı e-posta adresinizi girin. Size doğrulama kodu göndereceğiz.' : 'Kayıtlı telefon numaranızı girin. Size doğrulama kodu göndereceğiz.')}
+          {step === 'otp' && (useEmailOtp ? `${email} adresine gönderilen 6 haneli kodu girin.` : `${telefon} numarasına gönderilen 6 haneli kodu girin.`)}
           {step === 'sifre' && 'Yeni şifrenizi belirleyin (en az 6 karakter).'}
         </Text>
 
         {step === 'telefon' && (
           <>
-            <Input
-              label="Telefon"
-              value={telefon}
-              onChangeText={(t) => setTelefon(formatPhone(t))}
-              placeholder=""
-              keyboardType="phone-pad"
-              autoFocus
-            />
-            <Button variant="primary" onPress={handleSendOtp} loading={loading} disabled={loading || telefon.replace(/\D/g, '').length < 10}>
+            <TouchableOpacity
+              style={styles.toggleRow}
+              onPress={() => { setUseEmailReset(!useEmailReset); setTelefon(''); setEmail(''); }}
+            >
+              <Text style={[styles.toggleText, { color: colors.primary }]}>
+                {useEmailReset ? 'Telefon ile sıfırla' : 'E-posta ile sıfırla'}
+              </Text>
+            </TouchableOpacity>
+            {useEmailReset ? (
+              <Input
+                label="E-posta"
+                value={email}
+                onChangeText={setEmail}
+                placeholder="ornek@email.com"
+                keyboardType="email-address"
+                autoCapitalize="none"
+                autoFocus
+              />
+            ) : (
+              <Input
+                label="Telefon"
+                value={telefon}
+                onChangeText={(t) => setTelefon(formatPhone(t))}
+                placeholder=""
+                keyboardType="phone-pad"
+                autoFocus
+              />
+            )}
+            <Button
+              variant="primary"
+              onPress={handleSendOtp}
+              loading={loading}
+              disabled={
+                loading ||
+                (useEmailReset ? !email.trim() || !isValidEmail(email) : telefon.replace(/\D/g, '').length < 10)
+              }
+            >
               Kod Gönder
             </Button>
+            {useEmailReset && email.trim() && isValidEmail(email) && (
+              <TouchableOpacity
+                style={styles.linkRow}
+                onPress={async () => {
+                  const res = await sendResetLink(email);
+                  if (res.success) {
+                    Toast.show({ type: 'success', text1: 'Link gönderildi', text2: res.message });
+                  } else {
+                    Toast.show({ type: 'error', text1: 'Hata', text2: res.message });
+                  }
+                }}
+              >
+                <Text style={[styles.linkText, { color: colors.primary }]}>E-postanıza şifre sıfırlama linki gönder</Text>
+              </TouchableOpacity>
+            )}
           </>
         )}
 
@@ -319,6 +413,10 @@ const styles = StyleSheet.create({
   backText: { fontSize: typography.text.body.fontSize, fontWeight: '600' },
   title: { fontSize: typography.text.h1.fontSize, fontWeight: typography.fontWeight.semibold, marginBottom: spacing.sm },
   subtitle: { fontSize: typography.text.body.fontSize, marginBottom: spacing.xl },
+  toggleRow: { alignItems: 'center', marginBottom: spacing.lg },
+  toggleText: { fontSize: typography.text.body.fontSize, fontWeight: '600' },
+  linkRow: { alignItems: 'center', marginTop: spacing.lg },
+  linkText: { fontSize: typography.text.body.fontSize, fontWeight: '600' },
   otpRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',

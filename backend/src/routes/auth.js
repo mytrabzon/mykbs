@@ -780,24 +780,40 @@ router.post('/giris/otp-dogrula', async (req, res) => {
       if (!userRes.ok) return res.status(401).json({ message: 'Yetkisiz' });
       const supabaseUser = await userRes.json();
       const phone = supabaseUser?.phone || supabaseUser?.user_metadata?.phone;
-      if (!phone) return res.status(400).json({ message: 'Telefon bilgisi bulunamadı' });
-      let formattedPhone = String(phone).trim();
-      if (!formattedPhone.startsWith('+')) {
-        if (formattedPhone.startsWith('90')) formattedPhone = '+' + formattedPhone;
-        else if (formattedPhone.startsWith('0')) formattedPhone = '+90' + formattedPhone.slice(1);
-        else formattedPhone = '+90' + formattedPhone;
-      }
+      const emailFromSupabase = supabaseUser?.email || supabaseUser?.user_metadata?.email;
+
       let kullanici;
       try {
-        kullanici = await prisma.kullanici.findFirst({
-          where: { telefon: formattedPhone },
-          include: { tesis: true },
-        });
+        if (phone) {
+          let formattedPhone = String(phone).trim();
+          if (!formattedPhone.startsWith('+')) {
+            if (formattedPhone.startsWith('90')) formattedPhone = '+' + formattedPhone;
+            else if (formattedPhone.startsWith('0')) formattedPhone = '+90' + formattedPhone.slice(1);
+            else formattedPhone = '+90' + formattedPhone;
+          }
+          kullanici = await prisma.kullanici.findFirst({
+            where: { telefon: formattedPhone },
+            include: { tesis: true },
+          });
+        }
+        if (!kullanici && emailFromSupabase) {
+          const emailTrimmed = String(emailFromSupabase).trim().toLowerCase();
+          kullanici = await prisma.kullanici.findFirst({
+            where: { email: emailTrimmed },
+            include: { tesis: true },
+          });
+        }
       } catch (e) {
         return handlePrismaAuthError(res, e);
       }
       if (!kullanici) {
-        return res.status(404).json({ message: 'Bu telefon numarası ile kayıtlı kullanıcı bulunamadı' });
+        return res.status(404).json({
+          message: phone
+            ? 'Bu telefon numarası ile kayıtlı kullanıcı bulunamadı'
+            : emailFromSupabase
+              ? 'Bu e-posta adresi ile kayıtlı kullanıcı bulunamadı'
+              : 'Telefon veya e-posta bilgisi bulunamadı',
+        });
       }
       if (kullanici.tesis.durum !== 'aktif') {
         return res.status(403).json({ message: 'Tesis aktif değil' });
@@ -1387,20 +1403,31 @@ router.post('/kayit/supabase-create', async (req, res) => {
     }
     const supabaseUser = await userRes.json();
     const phone = supabaseUser?.phone || supabaseUser?.user_metadata?.phone;
-    if (!phone) {
-      return res.status(400).json({ message: 'Telefon bilgisi bulunamadı' });
-    }
+    const emailFromSupabase = supabaseUser?.email || supabaseUser?.user_metadata?.email;
 
-    let formattedPhone = String(phone).trim();
-    if (!formattedPhone.startsWith('+')) {
-      if (formattedPhone.startsWith('90')) formattedPhone = '+' + formattedPhone;
-      else if (formattedPhone.startsWith('0')) formattedPhone = '+90' + formattedPhone.slice(1);
-      else formattedPhone = '+90' + formattedPhone;
-    }
+    let formattedPhone = '';
+    let userEmail = (email && email.trim()) || emailFromSupabase || null;
 
-    const existing = await prisma.kullanici.findFirst({ where: { telefon: formattedPhone } });
-    if (existing) {
-      return res.status(400).json({ message: 'Bu telefon numarası zaten kayıtlı. Giriş yapın.' });
+    if (phone) {
+      formattedPhone = String(phone).trim();
+      if (!formattedPhone.startsWith('+')) {
+        if (formattedPhone.startsWith('90')) formattedPhone = '+' + formattedPhone;
+        else if (formattedPhone.startsWith('0')) formattedPhone = '+90' + formattedPhone.slice(1);
+        else formattedPhone = '+90' + formattedPhone;
+      }
+      const existingByPhone = await prisma.kullanici.findFirst({ where: { telefon: formattedPhone } });
+      if (existingByPhone) {
+        return res.status(400).json({ message: 'Bu telefon numarası zaten kayıtlı. Giriş yapın.' });
+      }
+    } else if (emailFromSupabase) {
+      userEmail = emailFromSupabase.trim();
+      const existingByEmail = await prisma.kullanici.findFirst({ where: { email: userEmail } });
+      if (existingByEmail) {
+        return res.status(400).json({ message: 'Bu e-posta adresi zaten kayıtlı. Giriş yapın.' });
+      }
+      formattedPhone = '-'; // E-posta ile kayıtta telefon zorunlu alan için placeholder
+    } else {
+      return res.status(400).json({ message: 'E-posta veya telefon bilgisi bulunamadı' });
     }
 
     let tesisKodu;
@@ -1411,13 +1438,15 @@ router.post('/kayit/supabase-create', async (req, res) => {
       if (!ex) unique = true;
     }
 
+    const tesisEmail = (email && email.trim()) || userEmail || (formattedPhone !== '-' ? `${formattedPhone.replace(/\D/g, '')}@mykbs.com` : 'kayit@mykbs.com');
+
     const tesis = await prisma.tesis.create({
       data: {
         ...setTrialDefaults(),
         tesisAdi: (tesisAdi && tesisAdi.trim()) || adSoyad.trim() + ' Tesis',
         yetkiliAdSoyad: adSoyad.trim(),
         telefon: formattedPhone,
-        email: email && email.trim() ? email.trim() : `${formattedPhone.replace(/\D/g, '')}@mykbs.com`,
+        email: tesisEmail,
         il: il || 'İstanbul',
         ilce: ilce || '',
         adres: adres || '',
@@ -1434,7 +1463,7 @@ router.post('/kayit/supabase-create', async (req, res) => {
         tesisId: tesis.id,
         adSoyad: adSoyad.trim(),
         telefon: formattedPhone,
-        email: email && email.trim() ? email.trim() : null,
+        email: userEmail || null,
         sifre: hashedSifre,
         rol: 'sahip',
         checkInYetki: true,

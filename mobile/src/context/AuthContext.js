@@ -225,15 +225,19 @@ export const AuthProvider = ({ children }) => {
 
   const loginWithToken = async (tokenVal, kullanici, tesisData, supabaseAccessToken) => {
     // Backend iki token dönebilir: token (backend JWT) + supabaseAccessToken. API çağrıları backend JWT ile yapılmalı.
+    // SUPABASE_TOKEN sadece gerçek Supabase Auth JWT ile set edilmeli; backend JWT Edge Function'larda 401 verir.
     const hasTwoTokens = tokenVal && supabaseAccessToken && tokenVal !== supabaseAccessToken;
     const tokenForApi = hasTwoTokens ? tokenVal : (supabaseAccessToken || tokenVal);
-    const tokenForSupabase = supabaseAccessToken || tokenVal;
     if (!tokenForApi) {
       return { success: false, message: 'Oturum bilgisi alınamadı.' };
     }
     try {
       await AsyncStorage.setItem(AUTH_STORAGE_KEYS.TOKEN, tokenForApi);
-      await AsyncStorage.setItem(AUTH_STORAGE_KEYS.SUPABASE_TOKEN, tokenForSupabase);
+      if (supabaseAccessToken) {
+        await AsyncStorage.setItem(AUTH_STORAGE_KEYS.SUPABASE_TOKEN, supabaseAccessToken);
+      } else {
+        await AsyncStorage.removeItem(AUTH_STORAGE_KEYS.SUPABASE_TOKEN);
+      }
       setToken(tokenForApi);
       const getToken = async () => tokenForApi;
       setApiTokenProvider(getToken);
@@ -292,6 +296,22 @@ export const AuthProvider = ({ children }) => {
         success: false,
         message: error.response?.data?.message || error.message || 'Giriş başarısız',
       };
+    }
+  };
+
+  const resetPasswordForEmail = async (emailAddress) => {
+    if (!supabase) {
+      return { success: false, message: 'Şifre sıfırlama servisi kullanılamıyor.' };
+    }
+    try {
+      const { error } = await supabase.auth.resetPasswordForEmail((emailAddress || '').trim().toLowerCase(), {
+        redirectTo: undefined,
+      });
+      if (error) return { success: false, message: error.message };
+      return { success: true, message: 'E-postanıza şifre sıfırlama linki gönderildi.' };
+    } catch (error) {
+      logger.error('resetPasswordForEmail error', error);
+      return { success: false, message: error?.message || 'Link gönderilemedi.' };
     }
   };
 
@@ -382,6 +402,7 @@ export const AuthProvider = ({ children }) => {
         loginWithPassword,
         loginWithPhoneAndPassword,
         loginWithToken,
+        resetPasswordForEmail,
         aktivasyon,
         setPin,
         logout,

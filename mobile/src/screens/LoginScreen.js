@@ -149,7 +149,7 @@ export default function LoginScreen({ route }) {
                 onPress={() => navigation.navigate('OTPVerify', { islemTipi: 'giris' })}
                 disabled={loading}
               >
-                <Text style={[styles.smsLinkText, { color: colors.primary }]}>SMS kodu ile giriş</Text>
+                <Text style={[styles.smsLinkText, { color: colors.primary }]}>Kod ile giriş (SMS veya e-posta)</Text>
               </TouchableOpacity>
             </>
           }

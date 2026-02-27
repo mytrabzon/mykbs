@@ -19,11 +19,13 @@ Yani: **Mobil → BACKEND_URL (Railway) → Node /api/oda → (Supabase auth ise
    - **Çözüm:** Aynı `DATABASE_URL` ile `npx prisma migrate deploy` (Railway’de veya lokal).
 
 2. **08P01 "insufficient data left in message"** (özellikle oda eklerken / `tesis.create`)  
-   - Supabase **pooler** (Transaction mode, port 6543) + Prisma uyumsuzluğu.  
-   - **Çözüm (kalıcı):**
-     - **A)** Railway’de `DATABASE_URL` = Supabase **Direct connection** (port 5432, `db.xxx.supabase.co`).  
-     - **B)** Supabase **Session mode** kullanıyorsanız: URI sonuna **`&pgbouncer=true`** ekleyin.  
-   - Kod tarafında: `ensureTesisForBranch` 08P01’de otomatik tekrar deniyor; oda route’unda da 08P01 için özel mesaj ve isteğe bağlı retry var.
+   - Supabase **pooler** (Supavisor, port 6543 veya Session mode) + Prisma uyumsuzluğu.  
+   - Log’da görünen: `INSERT INTO "public"."Tesis" (...) VALUES ($1..$19) RETURNING ...` ve **"unnamed portal parameter $12"** (ipAdresleri). Prisma INSERT’e 19 parametre gönderiyor, RETURNING’de tüm sütunları istiyor; pooler bu protokolü kesiyor → 08P01.  
+   - **Çözüm (kalıcı, en güvenilir):** Railway’de `DATABASE_URL` = Supabase **Direct connection** (pooler kullanma).  
+     - Supabase Dashboard → Project Settings → Database → **Direct** connection string (port **5432**, host `db.xxx.supabase.co`).  
+     - Şifreyi yapıştır, sonda `?sslmode=require` olsun.  
+   - Alternatif: Session mode URI + sonuna **`&pgbouncer=true`** (bazen yeterli olmayabilir; Direct daha kesin).  
+   - Kod tarafında: `ensureTesisForBranch` 08P01’de 3 kez tekrar deniyor; kalıcı 08P01’de mutlaka Direct URL kullanın.
 
 ## Backend URL nereden geliyor?
 

@@ -36,29 +36,69 @@ export default function OTPVerifyScreen() {
   const navigation = useNavigation();
   const route = useRoute();
   const { loginWithToken } = useAuth();
-  const { telefon: paramTelefon, islemTipi, onSuccess } = route.params || {};
-  const [phoneInput, setPhoneInput] = useState(paramTelefon || '');
+  const { telefon: paramTelefon, email: paramEmail, islemTipi, onSuccess } = route.params || {};
+  const [phoneInput, setPhoneInput] = useState(paramTelefon || paramEmail || '');
   const [otpSent, setOtpSent] = useState(false);
   const [sentToPhone, setSentToPhone] = useState('');
+  const [sentToEmail, setSentToEmail] = useState('');
   const [otp, setOtp] = useState(['', '', '', '', '', '']);
   const [loading, setLoading] = useState(false);
   const [countdown, setCountdown] = useState(0);
   const inputRefs = useRef([]);
   const usedSupabaseForOtp = useRef(false);
+  const isEmailOtpRef = useRef(false);
 
-  const telefon = otpSent ? sentToPhone : (phoneInput.trim().replace(/\D/g, '').length >= 10 ? phoneInput.trim() : paramTelefon || '');
+  const isEmail = (v) => (v || '').trim().includes('@');
+  const telefon = otpSent ? sentToPhone : (phoneInput.trim().replace(/\D/g, '').length >= 10 && !isEmail(phoneInput) ? phoneInput.trim() : paramTelefon || '');
+  const emailForOtp = otpSent ? sentToEmail : (isEmail(phoneInput) ? phoneInput.trim().toLowerCase() : paramEmail || '');
 
   useEffect(() => {
     logger.log('OTPVerifyScreen mounted', { paramTelefon, islemTipi });
   }, []);
 
   const handleSendOtp = async () => {
+    const trimmed = phoneInput.trim();
+    const isEmailFlow = isEmail(trimmed);
+
+    if (isEmailFlow) {
+      if (!trimmed || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmed)) {
+        Toast.show({ type: 'error', text1: 'Geçersiz e-posta', text2: 'Geçerli bir e-posta adresi girin' });
+        return;
+      }
+      setLoading(true);
+      try {
+        if (supabase) {
+          const { error } = await supabase.auth.signInWithOtp({
+            email: trimmed.toLowerCase(),
+            options: { shouldCreateUser: islemTipi === 'kayit' },
+          });
+          if (error) throw error;
+          usedSupabaseForOtp.current = true;
+          isEmailOtpRef.current = true;
+        } else {
+          Toast.show({ type: 'error', text1: 'Hata', text2: 'E-posta kodu servisi kullanılamıyor.' });
+          setLoading(false);
+          return;
+        }
+        setOtpSent(true);
+        setSentToEmail(trimmed.toLowerCase());
+        setSentToPhone('');
+        setCountdown(300);
+        Toast.show({ type: 'success', text1: 'Kod gönderildi', text2: `${trimmed} adresine doğrulama kodu gönderildi` });
+      } catch (e) {
+        Toast.show({ type: 'error', text1: 'Kod gönderilemedi', text2: e?.response?.data?.message || e?.message || 'Tekrar deneyin.' });
+      }
+      setLoading(false);
+      return;
+    }
+
     const raw = phoneInput.replace(/\D/g, '');
     if (raw.length < 10) {
-      Toast.show({ type: 'error', text1: 'Geçersiz numara', text2: '10 haneli telefon numaranızı girin' });
+      Toast.show({ type: 'error', text1: 'Geçersiz numara', text2: '10 haneli telefon numaranızı veya e-posta girin' });
       return;
     }
     setLoading(true);
+    isEmailOtpRef.current = false;
     try {
       const num = raw.length >= 10 ? raw : phoneInput.trim();
       if (islemTipi === 'kayit') {
@@ -86,6 +126,7 @@ export default function OTPVerifyScreen() {
       }
       setOtpSent(true);
       setSentToPhone(phoneInput.trim());
+      setSentToEmail('');
       setCountdown(300);
       Toast.show({ type: 'success', text1: 'SMS gönderildi', text2: `${formatPhoneDisplay(num)} numarasına kod gönderildi` });
     } catch (e) {
@@ -174,10 +215,13 @@ export default function OTPVerifyScreen() {
           await loginWithToken(token, kullanici, tesis);
         }
       } else {
-        // Giriş: Önce Supabase ile dene (SMS Supabase'den geldiyse). Hata alırsan API ile dene.
-        const phone = formatPhoneForSupabase(telefon);
-        if (supabase) {
-          const { data, error } = await supabase.auth.verifyOtp({ phone, token: code, type: 'sms' });
+        // Giriş: E-posta OTP veya SMS OTP
+        if (isEmailOtpRef.current && emailForOtp && supabase) {
+          const { data, error } = await supabase.auth.verifyOtp({
+            email: emailForOtp,
+            token: code,
+            type: 'email',
+          });
           if (!error && data?.session?.access_token) {
             const accessToken = data.session.access_token;
             if (onSuccess) {
@@ -185,7 +229,6 @@ export default function OTPVerifyScreen() {
               setLoading(false);
               return;
             }
-            // access_token ile auth_verify_otp çağır: profil/tesis yoksa oluşturur, kullanici/tesis döner (ilerleme için gerekli)
             try {
               const sessionRes = await api.post('/auth/giris/otp-dogrula', { access_token: accessToken });
               const { token: t, kullanici: k, tesis: tesisData } = sessionRes.data || {};
@@ -197,29 +240,68 @@ export default function OTPVerifyScreen() {
             } catch (sessionErr) {
               const status = sessionErr?.response?.status;
               const msg = sessionErr?.response?.data?.message || sessionErr?.message;
-              logger.error('OTP session bootstrap error', { status, message: msg });
               if (status === 503 && (msg || '').includes('Veritabanı')) {
-                Toast.show({ type: 'error', text1: 'Bakım', text2: msg || 'Veritabanı güncellemesi gerekli. Lütfen yöneticiye bildirin.' });
+                Toast.show({ type: 'error', text1: 'Bakım', text2: msg || 'Veritabanı güncellemesi gerekli.' });
                 setLoading(false);
                 return;
               }
               await loginWithToken(accessToken, null, null, accessToken);
-            } finally {
-              setLoading(false);
             }
+            setLoading(false);
             return;
           }
           if (error) {
-            const isExpired = error?.message?.toLowerCase?.().includes('expired') ||
-              error?.message?.toLowerCase?.().includes('otp_expired') ||
-              error?.status === 403;
+            const isExpired = error?.message?.toLowerCase?.().includes('expired') || error?.code === 'otp_expired';
             setLoading(false);
             Toast.show({
               type: 'error',
               text1: isExpired ? 'Kodun süresi doldu' : 'Doğrulama Başarısız',
-              text2: isExpired
-                ? "Doğrulama kodunun süresi doldu. 'Yeni kod gönder' ile tekrar kod isteyin."
-                : (error?.message || 'Kod hatalı. Yeni kod gönderip tekrar deneyin.'),
+              text2: isExpired ? "'Yeni kod gönder' ile tekrar kod isteyin." : (error?.message || 'Kod hatalı.'),
+            });
+            setOtp(['', '', '', '', '', '']);
+            inputRefs.current[0]?.focus();
+            return;
+          }
+        }
+
+        const phone = formatPhoneForSupabase(telefon);
+        if (supabase && !isEmailOtpRef.current) {
+          const { data, error } = await supabase.auth.verifyOtp({ phone, token: code, type: 'sms' });
+          if (!error && data?.session?.access_token) {
+            const accessToken = data.session.access_token;
+            if (onSuccess) {
+              onSuccess({ token: accessToken, kullanici: null, tesis: null });
+              setLoading(false);
+              return;
+            }
+            try {
+              const sessionRes = await api.post('/auth/giris/otp-dogrula', { access_token: accessToken });
+              const { token: t, kullanici: k, tesis: tesisData } = sessionRes.data || {};
+              if (t && k && tesisData) {
+                await loginWithToken(t, k, tesisData, accessToken);
+              } else {
+                await loginWithToken(accessToken, null, null, accessToken);
+              }
+            } catch (sessionErr) {
+              const status = sessionErr?.response?.status;
+              const msg = sessionErr?.response?.data?.message || sessionErr?.message;
+              if (status === 503 && (msg || '').includes('Veritabanı')) {
+                Toast.show({ type: 'error', text1: 'Bakım', text2: msg || 'Veritabanı güncellemesi gerekli.' });
+                setLoading(false);
+                return;
+              }
+              await loginWithToken(accessToken, null, null, accessToken);
+            }
+            setLoading(false);
+            return;
+          }
+          if (error) {
+            const isExpired = error?.message?.toLowerCase?.().includes('expired') || error?.code === 'otp_expired';
+            setLoading(false);
+            Toast.show({
+              type: 'error',
+              text1: isExpired ? 'Kodun süresi doldu' : 'Doğrulama Başarısız',
+              text2: isExpired ? "'Yeni kod gönder' ile tekrar kod isteyin." : (error?.message || 'Kod hatalı.'),
             });
             setOtp(['', '', '', '', '', '']);
             inputRefs.current[0]?.focus();
@@ -264,9 +346,27 @@ export default function OTPVerifyScreen() {
   };
 
   const handleResend = async () => {
+    if (isEmailOtpRef.current && emailForOtp) {
+      try {
+        setLoading(true);
+        const { error } = await supabase.auth.signInWithOtp({
+          email: emailForOtp,
+          options: { shouldCreateUser: islemTipi === 'kayit' },
+        });
+        if (error) throw error;
+        setCountdown(300);
+        Toast.show({ type: 'success', text1: 'Kod gönderildi', text2: `${emailForOtp} adresine yeni kod gönderildi` });
+        setOtp(['', '', '', '', '', '']);
+        inputRefs.current[0]?.focus();
+      } catch (error) {
+        Toast.show({ type: 'error', text1: 'Hata', text2: error?.message || 'Kod gönderilemedi' });
+      }
+      setLoading(false);
+      return;
+    }
     const num = telefon || phoneInput.trim().replace(/\D/g, '');
     if (!num || num.replace(/\D/g, '').length < 10) {
-      Toast.show({ type: 'error', text1: 'Numara gerekli', text2: 'Önce telefon numaranızı girin' });
+      Toast.show({ type: 'error', text1: 'Numara gerekli', text2: 'Önce telefon numaranızı veya e-posta girin' });
       return;
     }
     try {
@@ -312,25 +412,38 @@ export default function OTPVerifyScreen() {
     >
       <View style={styles.content}>
         <Text style={styles.title}>
-          {otpSent ? 'Doğrulama Kodu' : 'Telefon Numaranız'}
+          {otpSent ? 'Doğrulama Kodu' : isEmail(phoneInput) ? 'E-posta Adresiniz' : 'Telefon veya E-posta'}
         </Text>
         {!otpSent ? (
           <>
             <Text style={styles.subtitle}>
-              Kod alacağınız 10 haneli telefon numaranızı girin
+              Kod alacağınız 10 haneli telefon numaranızı veya e-posta adresinizi girin
             </Text>
             <TextInput
               style={styles.phoneInput}
               value={phoneInput}
-              onChangeText={(t) => setPhoneInput(t.replace(/[^\d\s]/g, '').slice(0, 14))}
-              placeholder="5xx xxx xx xx"
-              keyboardType="phone-pad"
+              onChangeText={(t) => setPhoneInput(isEmail(t) ? t : t.replace(/[^\d\s]/g, '').slice(0, 14))}
+              placeholder="5xx xxx xx xx veya ornek@email.com"
+              keyboardType={isEmail(phoneInput) ? 'email-address' : 'phone-pad'}
+              autoCapitalize="none"
               autoFocus
             />
             <TouchableOpacity
-              style={[styles.button, (loading || phoneInput.replace(/\D/g, '').length < 10) && styles.buttonDisabled]}
+              style={[
+                styles.button,
+                (loading ||
+                  (isEmail(phoneInput)
+                    ? !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(phoneInput.trim())
+                    : phoneInput.replace(/\D/g, '').length < 10)) &&
+                  styles.buttonDisabled,
+              ]}
               onPress={handleSendOtp}
-              disabled={loading || phoneInput.replace(/\D/g, '').length < 10}
+              disabled={
+                loading ||
+                (isEmail(phoneInput)
+                  ? !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(phoneInput.trim())
+                  : phoneInput.replace(/\D/g, '').length < 10)
+              }
             >
               <Text style={styles.buttonText}>
                 {loading ? 'Gönderiliyor...' : 'Kod Gönder'}
@@ -340,7 +453,9 @@ export default function OTPVerifyScreen() {
         ) : (
           <>
             <Text style={styles.subtitle}>
-              {formatPhoneDisplay(sentToPhone)} numarasına gönderilen 6 haneli kodu giriniz
+              {sentToEmail
+                ? `${sentToEmail} adresine gönderilen 6 haneli kodu giriniz`
+                : `${formatPhoneDisplay(sentToPhone)} numarasına gönderilen 6 haneli kodu giriniz`}
             </Text>
 
             <View style={styles.otpContainer}>
