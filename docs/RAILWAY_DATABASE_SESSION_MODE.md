@@ -31,3 +31,15 @@ Mobil uygulamada Odalar / tesis ekranını tekrar aç. Backend artık pooler üz
 
 - **Transaction mode** (port 6543, `db.xxx.supabase.co`) bazen Railway ağından erişilemez.
 - **Session mode** (port 5432, `aws-0-xxx.pooler.supabase.com`) IPv4 destekler ve dış bağlantılarda genelde daha sorunsuz çalışır.
+- **08P01 "insufficient data left in message"** (özellikle oda eklerken / `tesis.create` sırasında): Prisma + pooler kullanırken görülebilir. Çözümler:
+  1. DATABASE_URL sonuna **`&pgbouncer=true`** ekleyin (Prisma pooler uyum modu).
+  2. Mümkünse **direct connection** (Supabase → Database → Connection string → **Direct**, port 5432, `db.xxx.supabase.co`) kullanın; pooler yerine doğrudan DB’ye bağlanır.
+  3. Kod tarafında `ensureTesisForBranch` 08P01’de bir kez otomatik tekrar dener; yine de kalıcı 08P01’de yukarıdaki URL değişikliği gerekir.
+  4. Supavisor logunda **parameter $12** (INSERT Tesis → `ipAdresleri`) görünüyorsa: kodda `ipAdresleri: ''` ve `ipKisitAktif: false` artık açık gönderiliyor; yine de 08P01 devam ederse direct connection veya `pgbouncer=true` deneyin.
+
+### "Veritabanı şeması güncel değil" (SCHEMA_ERROR)
+
+Bu mesaj **iki** kaynaktan gelebilir:
+
+1. **Supabase `branches` tablosu:** `kbs_approved` / `kbs_approved_at` kolonları yok → auth sırasında 42703. **Çözüm:** Migration 0017’yi Supabase’te çalıştırın (bkz. `docs/MIGRATION_0017_BRANCHES_KBS_APPROVED.md`). Backend 42703’te fallback yapıyor; yine de migration’ı uygulayın.
+2. **Prisma / Postgres (Tesis, Oda tabloları):** Prisma şemasındaki kolonlar DB’de yok (migration uygulanmamış). **Çözüm:** Aynı `DATABASE_URL` ile `npx prisma migrate deploy` çalıştırın (Railway’de deploy hook veya manuel bir kez).

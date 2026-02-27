@@ -447,87 +447,90 @@ export default function OdalarScreen() {
   };
 
   const loadData = useCallback(async (isInitial = false) => {
+    const LOAD_STEP = { START: 'start', TESIS_CACHE: 'tesis_cache', ODALAR_CACHE: 'odalar_cache', TESIS_FRESH: 'tesis_fresh', ODALAR_FRESH: 'odalar_fresh', APPLY: 'apply' };
+    let lastLoadStep = LOAD_STEP.START;
     try {
       if (isInitial) {
         setInitialLoading(true);
       }
-      
-      logger.log('Loading odalar data', { filtre, isInitial });
-      
-      // DataService kullanarak verileri çek (cache desteği ile)
-      // İlk yüklemede önce cache'den dene, yoksa API'den çek
-      const forceRefresh = false; // Her zaman önce cache'i kontrol et
-      
+      logger.log('[OdalarScreen] loadData başladı', { filtre, isInitial });
+
       let tesis = null;
       let odalar = [];
-      
+
       try {
-        // Önce cache'den dene (hızlı yükleme için)
+        lastLoadStep = LOAD_STEP.TESIS_CACHE;
+        logger.log('[OdalarScreen] adım: tesis (cache)', { step: lastLoadStep });
         tesis = await dataService.getTesis(false);
+        lastLoadStep = LOAD_STEP.ODALAR_CACHE;
+        logger.log('[OdalarScreen] adım: odalar (cache)', { step: lastLoadStep, filtre });
         odalar = await dataService.getOdalar(filtre, false);
-        
-        // Cache'den veri geldiyse kullan ve arka planda fresh data çek
+
         if (tesis && odalar.length > 0) {
-          logger.log('Using cached data', { odaCount: odalar.length });
+          logger.log('[OdalarScreen] cache dolu, ekranda gösteriliyor; arka planda taze veri çekiliyor', { odaCount: odalar.length });
           setOzet(tesis.ozet);
           setOdalar(odalar);
-          
-          // Arka planda fresh data çek (silent refresh, hata olursa sessizce geç)
           Promise.all([
-            dataService.getTesis(true).catch(() => {}),
-            dataService.getOdalar(filtre, true).catch(() => {})
+            dataService.getTesis(true).catch((e) => { logger.warn('[OdalarScreen] silent refresh tesis hatası', e?.message || e); }),
+            dataService.getOdalar(filtre, true).catch((e) => { logger.warn('[OdalarScreen] silent refresh odalar hatası', e?.message || e, e?.step); })
           ]).then(([freshTesis, freshOdalar]) => {
             if (freshTesis && freshOdalar) {
-              logger.log('Silent refresh completed', { odaCount: freshOdalar.length });
+              logger.log('[OdalarScreen] silent refresh tamamlandı', { odaCount: freshOdalar.length });
               setOzet(freshTesis.ozet);
               setOdalar(freshOdalar);
             }
-          }).catch(() => {
-            // Silent refresh hatası, sessizce geç
-          });
+          }).catch((e) => { logger.warn('[OdalarScreen] silent refresh genel hata', e?.message || e); });
         } else {
-          // Cache yoksa veya boşsa API'den çek
-          logger.log('No cache or empty cache, fetching from API');
+          lastLoadStep = LOAD_STEP.TESIS_FRESH;
+          logger.log('[OdalarScreen] cache yok/boş, API ile taze veri', { step: lastLoadStep });
           const [freshTesis, freshOdalar] = await Promise.all([
             dataService.getTesis(true),
             dataService.getOdalar(filtre, true)
           ]);
-          
+          lastLoadStep = LOAD_STEP.ODALAR_FRESH;
           tesis = freshTesis;
           odalar = freshOdalar || [];
+          logger.log('[OdalarScreen] taze veri alındı', { step: lastLoadStep, odaCount: odalar?.length ?? 0 });
         }
       } catch (apiError) {
-        logger.error('API error, trying cache fallback', apiError);
-        
-        // API hatası varsa cache'den dene (fallback)
+        const step = apiError?.step ?? lastLoadStep;
+        logger.error('[OdalarScreen] API hatası, adım:', step, {
+          message: apiError?.message,
+          status: apiError?.response?.status,
+          code: apiError?.response?.data?.code,
+        }, apiError);
         const cachedTesis = dataService.getCachedTesis();
         const cachedOdalar = dataService.getCachedOdalar(filtre);
-        
         if (cachedTesis || cachedOdalar) {
-          logger.log('Using cache as fallback', { 
-            hasTesis: !!cachedTesis, 
-            odaCount: cachedOdalar?.length || 0 
-          });
+          logger.log('[OdalarScreen] cache fallback kullanılıyor', { hasTesis: !!cachedTesis, odaCount: cachedOdalar?.length || 0 });
           tesis = cachedTesis;
           odalar = cachedOdalar || [];
         } else {
-          // Cache de yoksa hata fırlat
+          Object.assign(apiError, { loadStep: step });
           throw apiError;
         }
       }
 
-      if (tesis) {
-        setOzet(tesis.ozet);
-      }
+      lastLoadStep = LOAD_STEP.APPLY;
+      if (tesis) setOzet(tesis.ozet);
       setOdalar(odalar || []);
       if ((odalar || []).length > 0) setBackendStatus((p) => ({ ...p, isOnline: true }));
-      logger.log('Odalar data loaded successfully', { odaCount: odalar?.length || 0 });
+      logger.log('[OdalarScreen] loadData tamamlandı', { step: lastLoadStep, odaCount: (odalar || []).length });
     } catch (error) {
-      logger.error('Load data error', error);
+      const loadStep = error?.loadStep ?? error?.step ?? lastLoadStep;
+      logger.error('[OdalarScreen] loadData hatası', {
+        loadStep,
+        message: error?.message,
+        status: error?.response?.status,
+        code: error?.response?.data?.code,
+      }, error);
       const status = error.response?.status ?? error.status;
       const data = error.response?.data || {};
       const code = data.code || null;
-      const serverMsg = data.message || data.error || error.message;
+      let serverMsg = data.message || data.error || error.message;
+      if (loadStep && !serverMsg.includes('yüklenirken') && !serverMsg.includes('adım')) {
+        serverMsg = `${serverMsg} (adım: ${loadStep})`;
+      }
       const requestId = data.requestId || null;
 
       const isAuth = status === 401;

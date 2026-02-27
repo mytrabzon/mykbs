@@ -147,16 +147,16 @@ router.put('/bilgi', async (req, res) => {
     const { tesisAdi } = req.body;
 
     if (req.authSource === 'supabase') {
-      if (!supabaseAdmin) return res.status(503).json({ message: 'Supabase yapılandırılmamış' });
+      if (!supabaseAdmin) return errorResponse(req, res, 503, 'UNHANDLED_ERROR', 'Supabase yapılandırılmamış');
       const name = (tesisAdi && String(tesisAdi).trim()) || null;
       if (!name) return res.status(400).json({ message: 'Tesis adı boş olamaz' });
       const { data, error } = await supabaseAdmin.from('branches').update({ name }).eq('id', req.branchId).select('id, name').single();
-      if (error) return res.status(500).json({ message: 'Tesis adı güncellenemedi', error: error.message });
+      if (error) return errorResponse(req, res, 500, 'UNHANDLED_ERROR', error?.message || 'Tesis adı güncellenemedi');
       return res.json({ message: 'Tesis bilgileri güncellendi', tesis: { id: data.id, tesisAdi: data.name } });
     }
 
     if (!req.user.bilgiDuzenlemeYetki) {
-      return res.status(403).json({ message: 'Tesis bilgilerini değiştirme yetkiniz yok' });
+      return errorResponse(req, res, 403, 'ROLE_FORBIDDEN', 'Tesis bilgilerini değiştirme yetkiniz yok');
     }
     const name = (tesisAdi && String(tesisAdi).trim()) || null;
     if (!name) return res.status(400).json({ message: 'Tesis adı boş olamaz' });
@@ -180,8 +180,12 @@ router.put('/bilgi', async (req, res) => {
       tesis: { id: tesis.id, tesisAdi: tesis.tesisAdi }
     });
   } catch (error) {
-    console.error('Tesis bilgi güncelleme hatası:', error);
-    res.status(500).json({ message: 'Tesis bilgileri güncellenemedi', error: error.message });
+    const msg = error?.message || '';
+    const isSchema = /column|relation|does not exist|no such column/i.test(msg);
+    const isDb = /prisma|ECONNREFUSED|connect|migrate|relation|column|table/i.test(msg);
+    if (isSchema) return errorResponse(req, res, 500, 'SCHEMA_ERROR', 'Veritabanı şeması güncel değil. Lütfen yöneticiye bildirin.');
+    if (isDb) return errorResponse(req, res, 500, 'DB_CONNECT_ERROR', 'Sunucuda geçici bir sorun var. Daha sonra tekrar deneyin.');
+    return errorResponse(req, res, 500, 'UNHANDLED_ERROR', 'Tesis bilgileri güncellenemedi.');
   }
 });
 
@@ -211,8 +215,12 @@ router.get('/kbs', async (req, res) => {
 
     res.json(tesis);
   } catch (error) {
-    console.error('KBS ayarları hatası:', error);
-    res.status(500).json({ message: 'Ayarlar alınamadı', error: error.message });
+    const msg = error?.message || '';
+    const isSchema = /column|relation|does not exist|no such column/i.test(msg);
+    const isDb = /prisma|ECONNREFUSED|connect|migrate|relation|column|table/i.test(msg);
+    if (isSchema) return errorResponse(req, res, 500, 'SCHEMA_ERROR', 'Veritabanı şeması güncel değil. Lütfen yöneticiye bildirin.');
+    if (isDb) return errorResponse(req, res, 500, 'DB_CONNECT_ERROR', 'Sunucuda geçici bir sorun var. Daha sonra tekrar deneyin.');
+    return errorResponse(req, res, 500, 'UNHANDLED_ERROR', 'Ayarlar alınamadı.');
   }
 });
 
@@ -224,19 +232,19 @@ router.put('/kbs', async (req, res) => {
     const { kbsTuru, kbsTesisKodu, kbsWebServisSifre, ipKisitAktif, ipAdresleri } = req.body;
 
     if (req.authSource === 'supabase') {
-      if (!supabaseAdmin) return res.status(503).json({ message: 'Supabase yapılandırılmamış' });
+      if (!supabaseAdmin) return errorResponse(req, res, 503, 'UNHANDLED_ERROR', 'Supabase yapılandırılmamış');
       const updateData = {};
       if (kbsTuru !== undefined) updateData.kbs_turu = kbsTuru;
       if (kbsTesisKodu !== undefined) updateData.kbs_tesis_kodu = kbsTesisKodu;
       if (kbsWebServisSifre !== undefined) updateData.kbs_web_servis_sifre = kbsWebServisSifre;
       if (Object.keys(updateData).length === 0) return res.json({ message: 'KBS ayarları güncellendi' });
       const { error } = await supabaseAdmin.from('branches').update(updateData).eq('id', req.branchId).select().single();
-      if (error) return res.status(500).json({ message: 'Ayarlar güncellenemedi', error: error.message });
+      if (error) return errorResponse(req, res, 500, 'UNHANDLED_ERROR', error?.message || 'Ayarlar güncellenemedi');
       return res.json({ message: 'KBS ayarları güncellendi' });
     }
 
     if (!['sahip', 'yonetici'].includes(req.user.rol)) {
-      return res.status(403).json({ message: 'Bu işlem için yetkiniz yok' });
+      return errorResponse(req, res, 403, 'ROLE_FORBIDDEN', 'Bu işlem için yetkiniz yok');
     }
 
     const updateData = {};
@@ -262,8 +270,12 @@ router.put('/kbs', async (req, res) => {
 
     res.json({ message: 'KBS ayarları güncellendi' });
   } catch (error) {
-    console.error('KBS ayar güncelleme hatası:', error);
-    res.status(500).json({ message: 'Ayarlar güncellenemedi', error: error.message });
+    const msg = error?.message || '';
+    const isSchema = /column|relation|does not exist|no such column/i.test(msg);
+    const isDb = /prisma|ECONNREFUSED|connect|migrate|relation|column|table/i.test(msg);
+    if (isSchema) return errorResponse(req, res, 500, 'SCHEMA_ERROR', 'Veritabanı şeması güncel değil. Lütfen yöneticiye bildirin.');
+    if (isDb) return errorResponse(req, res, 500, 'DB_CONNECT_ERROR', 'Sunucuda geçici bir sorun var. Daha sonra tekrar deneyin.');
+    return errorResponse(req, res, 500, 'UNHANDLED_ERROR', 'Ayarlar güncellenemedi.');
   }
 });
 
@@ -281,7 +293,7 @@ router.post('/kbs/talebi', async (req, res) => {
     }
     const action = type === 'change' ? 'kbs_degisiklik_talebi' : 'kbs_kaldirma_talebi';
     if (req.authSource === 'supabase') {
-      if (!supabaseAdmin) return res.status(503).json({ message: 'Supabase yapılandırılmamış' });
+      if (!supabaseAdmin) return errorResponse(req, res, 503, 'UNHANDLED_ERROR', 'Supabase yapılandırılmamış');
       const { error } = await supabaseAdmin.from('audit_logs').insert({
         branch_id: req.branchId,
         user_id: req.user.id,
@@ -289,7 +301,7 @@ router.post('/kbs/talebi', async (req, res) => {
         entity: 'kbs_settings',
         meta_json: { type, status: 'pending' }
       });
-      if (error) return res.status(500).json({ message: 'Talep kaydedilemedi', error: error.message });
+      if (error) return errorResponse(req, res, 500, 'UNHANDLED_ERROR', error?.message || 'Talep kaydedilemedi');
       return res.json({ message: 'Talep admin onayına iletildi' });
     }
     await prisma.auditLog.create({
@@ -302,8 +314,12 @@ router.post('/kbs/talebi', async (req, res) => {
     });
     return res.json({ message: 'Talep admin onayına iletildi' });
   } catch (error) {
-    console.error('KBS talep hatası:', error);
-    res.status(500).json({ message: 'Talep gönderilemedi', error: error.message });
+    const msg = error?.message || '';
+    const isSchema = /column|relation|does not exist|no such column/i.test(msg);
+    const isDb = /prisma|ECONNREFUSED|connect|migrate|relation|column|table/i.test(msg);
+    if (isSchema) return errorResponse(req, res, 500, 'SCHEMA_ERROR', 'Veritabanı şeması güncel değil. Lütfen yöneticiye bildirin.');
+    if (isDb) return errorResponse(req, res, 500, 'DB_CONNECT_ERROR', 'Sunucuda geçici bir sorun var. Daha sonra tekrar deneyin.');
+    return errorResponse(req, res, 500, 'UNHANDLED_ERROR', 'Talep gönderilemedi.');
   }
 });
 
@@ -329,11 +345,12 @@ router.post('/kbs/test', async (req, res) => {
 
     res.json(testResult);
   } catch (error) {
-    console.error('KBS test hatası:', error);
-    res.status(500).json({
-      success: false,
-      message: error.message || 'Test başarısız'
-    });
+    const msg = error?.message || '';
+    const isSchema = /column|relation|does not exist|no such column/i.test(msg);
+    const isDb = /prisma|ECONNREFUSED|connect|migrate|relation|column|table/i.test(msg);
+    if (isSchema) return errorResponse(req, res, 500, 'SCHEMA_ERROR', 'Veritabanı şeması güncel değil. Lütfen yöneticiye bildirin.');
+    if (isDb) return errorResponse(req, res, 500, 'DB_CONNECT_ERROR', 'Sunucuda geçici bir sorun var. Daha sonra tekrar deneyin.');
+    return errorResponse(req, res, 500, 'UNHANDLED_ERROR', msg || 'Test başarısız');
   }
 });
 

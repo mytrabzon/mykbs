@@ -1,3 +1,4 @@
+-- DEPRECATED: Çalıştırmayın. ipAdresleri TEXT[] Prisma (TEXT) ile uyumsuz; trialEndsAt/girisOnaylandi yok. Prisma migrate + docs/supabase_schema_fix_once.sql kullanın. Detay: docs/SQL_CAKISMA_VE_GEREKSIZ_RAPORU.md
 -- Admin Tesis Oluşturma SQL Scripti
 -- Supabase SQL Editor'den çalıştırın: https://supabase.com/dashboard/project/iuxnpxszfvyrdifchwvr/sql/new
 -- Bu script önce tabloları kontrol eder, yoksa oluşturur, sonra admin kaydını ekler

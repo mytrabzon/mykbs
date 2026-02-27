@@ -250,13 +250,16 @@ class DataService {
 
       // Backend URL varsa sadece Node kullan (Edge Supabase JWT bekler; Node JWT ile 401 alınır)
       if (backendUrl) {
+        const url = `${backendUrl}/api/tesis`;
+        console.log('[REQUEST] fullUrl=', url);
         logger.log('Fetching tesis from API (Node)');
-        const r = await fetch(`${backendUrl}/api/tesis`, {
+        const r = await fetch(url, {
           method: 'GET',
           headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : {},
         });
+        const data = await r.json().catch(() => ({}));
+        console.log('[REQUEST] status=', r.status, 'ok=', (data as { ok?: boolean })?.ok, 'code=', (data as { code?: string })?.code, 'message=', (data as { message?: string })?.message);
         if (r.ok) {
-          const data = await r.json();
           const tesisData: TesisData = {
             id: data.tesis.id,
             tesisAdi: data.tesis.tesisAdi,
@@ -272,7 +275,7 @@ class DataService {
           this.emit('tesis:updated', tesisData);
           return tesisData;
         }
-        const errData = (await r.json().catch(() => ({}))) as { message?: string; error?: string };
+        const errData = data as { message?: string; error?: string };
         const msg = errData?.message || errData?.error || 'Tesis alınamadı';
         throw Object.assign(new Error(msg), { response: { status: r.status, data: errData } });
       }
@@ -315,62 +318,83 @@ class DataService {
    * Odaları getir (filtreli) – önce Node backend dene, yoksa Edge
    */
   async getOdalar(filtre: string = 'tumu', forceRefresh = false): Promise<OdaData[]> {
-    try {
-      const cacheKey = `odalar:${filtre}`;
+    const STEP = { CACHE: 'cache', TOKEN: 'token', NODE_REQUEST: 'node_request', NODE_PARSE: 'node_parse', SUPABASE_CALL: 'supabase_call', MAP: 'map' };
+    const cacheKey = `odalar:${filtre}`;
+    let lastStep = '';
 
-      // Cache geçerliyse ve force refresh değilse cache'den dön
+    try {
+      lastStep = STEP.CACHE;
       if (!forceRefresh && this.isCacheValid() && this.odalarCache.has(cacheKey)) {
         const cached = this.odalarCache.get(cacheKey);
         if (cached) {
-          logger.log('Returning odalar from cache', { filtre, count: cached.length });
+          logger.log('[odalar] cache hit', { filtre, count: cached.length, step: STEP.CACHE });
           return cached;
         }
       }
 
+      lastStep = STEP.TOKEN;
       const accessToken = await getAccessToken();
       const backendUrl = getApiBaseUrl();
+      logger.log('[odalar] kaynak seçiliyor', { step: STEP.TOKEN, hasBackendUrl: !!backendUrl, hasToken: !!accessToken, filtre });
 
-      // Backend URL varsa sadece Node kullan (Edge Supabase JWT bekler; Node JWT ile 401 alınır)
       if (backendUrl) {
-        logger.log('Fetching odalar from API (Node)', { filtre });
-        const r = await fetch(`${backendUrl}/api/oda?filtre=${encodeURIComponent(filtre)}`, {
+        lastStep = STEP.NODE_REQUEST;
+        const url = `${backendUrl}/api/oda?filtre=${encodeURIComponent(filtre)}`;
+        logger.log('[odalar] Node API isteği', { step: lastStep, url });
+        const r = await fetch(url, {
           method: 'GET',
           headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : {},
         });
-        if (r.ok) {
-          const data = await r.json();
-          const odalar: OdaData[] = (data.odalar || []).map((oda: any) => ({
-            id: oda.id,
-            odaNumarasi: oda.odaNumarasi,
-            odaTipi: oda.odaTipi || 'Standart Oda',
-            kapasite: oda.kapasite || 2,
-            fotograf: oda.fotograf,
-            durum: oda.durum || 'bos',
-            fiyat: oda.fiyat,
-            odadaMi: oda.odadaMi ?? (oda.durum === 'dolu' && !!oda.misafir),
-            misafir: oda.misafir
-              ? {
-                  id: oda.misafir.id,
-                  ad: oda.misafir.ad,
-                  soyad: oda.misafir.soyad,
-                  girisTarihi: oda.misafir.girisTarihi,
-                  cikisTarihi: oda.misafir.cikisTarihi,
-                }
-              : undefined,
-            kbsDurumu: oda.kbsDurumu,
-            kbsHataMesaji: oda.kbsHataMesaji,
-          }));
-          this.odalarCache.set(cacheKey, odalar);
-          await this.saveCache();
-          return odalar;
+        lastStep = STEP.NODE_PARSE;
+        let data: any = {};
+        const raw = await r.text();
+        try {
+          data = raw ? JSON.parse(raw) : {};
+        } catch (parseErr: any) {
+          logger.error('[odalar] Node yanıt parse hatası', { step: lastStep, status: r.status, rawPreview: (raw || '').slice(0, 200), parseError: parseErr?.message });
+          throw Object.assign(new Error(`Odalar yüklenirken: Sunucu yanıtı okunamadı (HTTP ${r.status}).`), { response: { status: r.status, data: {} }, step: lastStep });
         }
-        const errData = await r.json().catch(() => ({}));
-        throw Object.assign(new Error((errData as { message?: string }).message || 'Odalar alınamadı'), { response: { status: r.status, data: errData } });
+        logger.log('[odalar] Node yanıt', { step: lastStep, status: r.status, hasOdalar: Array.isArray(data?.odalar), odalarLength: data?.odalar?.length ?? 0, code: data?.code, message: data?.message });
+
+        if (!r.ok) {
+          const msg = (data?.message || data?.error) || `HTTP ${r.status}`;
+          const code = data?.code || (r.status === 401 ? 'UNAUTHORIZED' : r.status === 403 ? 'FORBIDDEN' : 'API_ERROR');
+          logger.error('[odalar] Node API hatası', { step: lastStep, status: r.status, code, message: msg });
+          throw Object.assign(new Error(`Odalar yüklenirken: ${msg} (Node API, ${r.status}).`), { response: { status: r.status, data: { ...data, code } }, step: lastStep });
+        }
+
+        lastStep = STEP.MAP;
+        const odalar: OdaData[] = (data.odalar || []).map((oda: any) => ({
+          id: oda.id,
+          odaNumarasi: oda.odaNumarasi,
+          odaTipi: oda.odaTipi || 'Standart Oda',
+          kapasite: oda.kapasite || 2,
+          fotograf: oda.fotograf,
+          durum: oda.durum || 'bos',
+          fiyat: oda.fiyat,
+          odadaMi: oda.odadaMi ?? (oda.durum === 'dolu' && !!oda.misafir),
+          misafir: oda.misafir
+            ? {
+                id: oda.misafir.id,
+                ad: oda.misafir.ad,
+                soyad: oda.misafir.soyad,
+                girisTarihi: oda.misafir.girisTarihi,
+                cikisTarihi: oda.misafir.cikisTarihi,
+              }
+            : undefined,
+          kbsDurumu: oda.kbsDurumu,
+          kbsHataMesaji: oda.kbsHataMesaji,
+        }));
+        this.odalarCache.set(cacheKey, odalar);
+        await this.saveCache();
+        logger.log('[odalar] Node ile tamamlandı', { step: lastStep, count: odalar.length });
+        return odalar;
       }
 
-      logger.log('Fetching odalar from API (Supabase)', { filtre });
-      logger.log('[dataService] rooms_list çağrılıyor', { filtre, hasToken: !!accessToken });
+      lastStep = STEP.SUPABASE_CALL;
+      logger.log('[odalar] Supabase rooms_list çağrılıyor', { step: lastStep, filtre, hasToken: !!accessToken });
       const odalarResponse = await callFn<{ odalar?: any[] }>('rooms_list', { filtre }, accessToken);
+      lastStep = STEP.MAP;
       const odalar: OdaData[] = (odalarResponse?.odalar || []).map((oda: any) => ({
         id: oda.id,
         odaNumarasi: oda.odaNumarasi,
@@ -392,26 +416,34 @@ class DataService {
         kbsDurumu: oda.kbsDurumu,
         kbsHataMesaji: oda.kbsHataMesaji,
       }));
-
       this.odalarCache.set(cacheKey, odalar);
       await this.saveCache();
       this.emit('odalar:updated', { filtre, odalar });
-
+      logger.log('[odalar] Supabase ile tamamlandı', { step: lastStep, count: odalar.length });
       return odalar;
     } catch (error: any) {
-      logger.error('Get odalar error', error);
+      const step = error?.step ?? lastStep;
+      const status = error?.response?.status;
+      const code = error?.response?.data?.code;
+      logger.error('[odalar] hata', {
+        step,
+        message: error?.message,
+        status,
+        code,
+        name: error?.name,
+        stack: error?.stack?.split('\n').slice(0, 3),
+      });
 
-      // Hata durumunda cache'den dön
-      const cacheKey = `odalar:${filtre}`;
       if (this.odalarCache.has(cacheKey)) {
         const cached = this.odalarCache.get(cacheKey);
         if (cached) {
-          logger.log('Returning odalar from cache due to error', { filtre });
+          logger.log('[odalar] hata sonrası cache fallback', { filtre, count: cached.length });
           return cached;
         }
       }
 
-      throw error;
+      const friendlyMessage = error?.message || `Odalar yüklenemedi (adım: ${step}).`;
+      throw Object.assign(new Error(friendlyMessage), { response: error?.response, step, code: error?.code ?? code });
     }
   }
 
@@ -567,6 +599,16 @@ class DataService {
   /**
    * Cache'den tesis verisini al (hata durumunda kullanım için)
    */
+  /** Backend URL varsa 'backend', yoksa 'supabase'. Boot log için. */
+  getMode(): 'backend' | 'supabase' | 'unknown' {
+    try {
+      const url = getApiBaseUrl();
+      return url && url.length > 0 ? 'backend' : 'supabase';
+    } catch {
+      return 'unknown';
+    }
+  }
+
   getCachedTesis(): TesisData | null {
     return this.tesisCache;
   }

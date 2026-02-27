@@ -1,6 +1,8 @@
 import 'react-native-gesture-handler';
 import React, { useEffect, useState } from 'react';
 import { NavigationContainer } from '@react-navigation/native';
+import { getApiBaseUrl } from './src/config/api';
+import { dataService } from './src/services/dataService';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createStackNavigator } from '@react-navigation/stack';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -307,6 +309,11 @@ function PushRegistration() {
 
 export default function App() {
   useEffect(() => {
+    // Tek seferlik boot log
+    console.log('[BOOT] EXPO_PUBLIC_BACKEND_URL=', process.env.EXPO_PUBLIC_BACKEND_URL);
+    console.log('[BOOT] resolvedBackendUrl=', getApiBaseUrl());
+    console.log('[BOOT] dataService mode=', dataService.getMode?.() ?? 'unknown');
+
     logger.log('App started', { timestamp: new Date().toISOString() });
 
     // Backend health check başlat

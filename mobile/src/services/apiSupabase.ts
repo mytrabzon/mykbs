@@ -86,6 +86,24 @@ function toResponse<T>(data: T): { data: T } {
   return { data };
 }
 
+/** Backend fetch + her request için log: full URL, status, ok/code/message */
+async function fetchWithLog(url: string, opts: RequestInit): Promise<Response> {
+  console.log('[REQUEST] fullUrl=', url);
+  const r = await fetch(url, opts);
+  r
+    .clone()
+    .text()
+    .then((text) => {
+      let parsed: { ok?: boolean; code?: string; message?: string } = {};
+      try {
+        parsed = text ? JSON.parse(text) : {};
+      } catch (_) {}
+      console.log('[REQUEST] status=', r.status, 'ok=', parsed?.ok, 'code=', parsed?.code, 'message=', parsed?.message);
+    })
+    .catch(() => console.log('[REQUEST] status=', r.status, 'body=non-json'));
+  return r;
+}
+
 /** Hata yakalayıp axios-benzeri error.response ile fırlat; 401 ise (ve zaten token varken) onUnauthorized çağır. Token yokken 401 = henüz yüklenmedi, lobiye atma. */
 async function wrapError(err: unknown): Promise<never> {
   if (err instanceof EdgeFunctionError) {
@@ -118,7 +136,7 @@ export const api = {
       if (pathname === '/health' || pathname === 'health') {
         const backendUrl = getBackendUrl();
         if (backendUrl) {
-          const r = await fetch(`${backendUrl}/health`, { method: 'GET' });
+          const r = await fetchWithLog(`${backendUrl}/health`, { method: 'GET' });
           const data = await r.json().catch(() => ({}));
           return toResponse(data || { ok: true, status: 'ok' });
         }
@@ -143,7 +161,7 @@ export const api = {
         const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
         let r: Response;
         try {
-          r = await fetch(`${backendUrl}/api/auth/me`, {
+          r = await fetchWithLog(`${backendUrl}/api/auth/me`, {
             method: 'GET',
             headers: { Authorization: `Bearer ${token}` },
             signal: controller.signal,
@@ -158,7 +176,7 @@ export const api = {
       if (pathname === '/tesis' || pathname === 'tesis') {
         const backendUrl = getBackendUrl();
         if (backendUrl) {
-          const r = await fetch(`${backendUrl}/api/tesis`, {
+          const r = await fetchWithLog(`${backendUrl}/api/tesis`, {
             method: 'GET',
             headers: token ? { Authorization: `Bearer ${token}` } : {},
           });
@@ -172,7 +190,7 @@ export const api = {
       if (pathname.startsWith('/tesis/kbs') || pathname === 'tesis/kbs') {
         const backendUrl = getBackendUrl();
         if (backendUrl) {
-          const r = await fetch(`${backendUrl}/api/tesis/kbs`, {
+          const r = await fetchWithLog(`${backendUrl}/api/tesis/kbs`, {
             method: 'GET',
             headers: token ? { Authorization: `Bearer ${token}` } : {},
           });
@@ -187,7 +205,7 @@ export const api = {
         const backendUrl = getBackendUrl();
         if (!backendUrl || !token) throw Object.assign(new Error('Giriş gerekli'), { response: { status: 401, data: {} } });
         const qs = query && Object.keys(query).length ? '?' + new URLSearchParams(query).toString() : '';
-        const r = await fetch(`${backendUrl}/api/kbs/credentials/status${qs}`, {
+        const r = await fetchWithLog(`${backendUrl}/api/kbs/credentials/status${qs}`, {
           method: 'GET',
           headers: { Authorization: `Bearer ${token}` },
         });
@@ -199,7 +217,7 @@ export const api = {
         const filtre = query.filtre || 'tumu';
         const backendUrl = getBackendUrl();
         if (backendUrl) {
-          const r = await fetch(`${backendUrl}/api/oda?filtre=${encodeURIComponent(filtre)}`, {
+          const r = await fetchWithLog(`${backendUrl}/api/oda?filtre=${encodeURIComponent(filtre)}`, {
             method: 'GET',
             headers: token ? { Authorization: `Bearer ${token}` } : {},
           });
@@ -214,7 +232,7 @@ export const api = {
       if (odaMatch) {
         const backendUrl = getBackendUrl();
         if (backendUrl) {
-          const r = await fetch(`${backendUrl}/api/oda/${odaMatch[1]}`, {
+          const r = await fetchWithLog(`${backendUrl}/api/oda/${odaMatch[1]}`, {
             method: 'GET',
             headers: token ? { Authorization: `Bearer ${token}` } : {},
           });
@@ -232,7 +250,7 @@ export const api = {
           err.response = { status: 503, data: { message: 'EXPO_PUBLIC_BACKEND_URL tanımlayın.' } };
           throw err;
         }
-        const r = await fetch(`${backendUrl}/api/rapor`, {
+        const r = await fetchWithLog(`${backendUrl}/api/rapor`, {
           method: 'GET',
           headers: token ? { Authorization: `Bearer ${token}` } : {},
         });
@@ -257,7 +275,7 @@ export const api = {
       if (pathname === '/auth/giris' || pathname === 'auth/giris') {
         const backendUrl = getBackendUrl();
         if (backendUrl && (payload.tesisKodu || payload.pin)) {
-          const r = await fetch(`${backendUrl}/api/auth/giris`, {
+          const r = await fetchWithLog(`${backendUrl}/api/auth/giris`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(payload),
@@ -272,7 +290,7 @@ export const api = {
       if (pathname === '/auth/aktivasyon' || pathname === 'auth/aktivasyon') {
         const backendUrl = getBackendUrl();
         if (backendUrl && payload.tesisKodu) {
-          const r = await fetch(`${backendUrl}/api/auth/aktivasyon`, {
+          const r = await fetchWithLog(`${backendUrl}/api/auth/aktivasyon`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(payload),
@@ -295,7 +313,7 @@ export const api = {
       if (pathname === '/auth/sifre-sifirla/otp-iste' || pathname === 'auth/sifre-sifirla/otp-iste') {
         const backendUrl = getBackendUrl();
         if (!backendUrl) throw new Error('Sunucu adresi eksik. EXPO_PUBLIC_BACKEND_URL tanımlayın.');
-        const r = await fetch(`${backendUrl}/api/auth/sifre-sifirla/otp-iste`, {
+        const r = await fetchWithLog(`${backendUrl}/api/auth/sifre-sifirla/otp-iste`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(payload),
@@ -310,7 +328,7 @@ export const api = {
         const accessToken = (payload?.access_token as string) || '';
         const headers: Record<string, string> = { 'Content-Type': 'application/json' };
         if (accessToken) headers.Authorization = `Bearer ${accessToken}`;
-        const r = await fetch(`${backendUrl}/api/auth/sifre-sifirla`, {
+        const r = await fetchWithLog(`${backendUrl}/api/auth/sifre-sifirla`, {
           method: 'POST',
           headers,
           body: JSON.stringify(payload),
@@ -324,7 +342,7 @@ export const api = {
         const backendUrl = getBackendUrl();
         if ((payload.telefon || payload.email) && payload.sifre) {
           if (!backendUrl) throw new Error('Sunucu adresi eksik. EXPO_PUBLIC_BACKEND_URL tanımlayın.');
-          const r = await fetch(`${backendUrl}/api/auth/giris/yeni`, {
+          const r = await fetchWithLog(`${backendUrl}/api/auth/giris/yeni`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(payload),
@@ -343,7 +361,7 @@ export const api = {
       if (pathname === '/auth/giris/otp-dogrula' || pathname === 'auth/giris/otp-dogrula') {
         const backendUrl = getBackendUrl();
         if (backendUrl && payload && (payload as { access_token?: string }).access_token) {
-          const r = await fetch(`${backendUrl}/api/auth/giris/otp-dogrula`, {
+          const r = await fetchWithLog(`${backendUrl}/api/auth/giris/otp-dogrula`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(payload),
@@ -365,7 +383,7 @@ export const api = {
       if (pathname === '/auth/kayit/otp-iste' || pathname === 'auth/kayit/otp-iste') {
         const backendUrl = getBackendUrl();
         if (backendUrl) {
-          const r = await fetch(`${backendUrl}/api/auth/kayit/otp-iste`, {
+          const r = await fetchWithLog(`${backendUrl}/api/auth/kayit/otp-iste`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ telefon: payload.telefon }),
@@ -380,7 +398,7 @@ export const api = {
       if (pathname === '/auth/kayit/dogrula' || pathname === 'auth/kayit/dogrula') {
         const backendUrl = getBackendUrl();
         if (backendUrl) {
-          const r = await fetch(`${backendUrl}/api/auth/kayit/dogrula`, {
+          const r = await fetchWithLog(`${backendUrl}/api/auth/kayit/dogrula`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(payload),
@@ -395,7 +413,7 @@ export const api = {
       if (pathname === '/auth/kayit/supabase-verify-otp' || pathname === 'auth/kayit/supabase-verify-otp') {
         const backendUrl = getBackendUrl();
         if (!backendUrl) throw new Error('Sunucu adresi eksik. EXPO_PUBLIC_BACKEND_URL tanımlayın.');
-        const r = await fetch(`${backendUrl}/api/auth/kayit/supabase-verify-otp`, {
+        const r = await fetchWithLog(`${backendUrl}/api/auth/kayit/supabase-verify-otp`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ phone: payload.phone, token: payload.token }),
@@ -407,7 +425,7 @@ export const api = {
       if (pathname === '/auth/kayit/supabase-create' || pathname === 'auth/kayit/supabase-create') {
         const backendUrl = getBackendUrl();
         if (!backendUrl) throw new Error('Sunucu adresi eksik. EXPO_PUBLIC_BACKEND_URL tanımlayın.');
-        const r = await fetch(`${backendUrl}/api/auth/kayit/supabase-create`, {
+        const r = await fetchWithLog(`${backendUrl}/api/auth/kayit/supabase-create`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(payload),
@@ -427,7 +445,7 @@ export const api = {
       if (pathname === '/ocr/mrz' || pathname === 'ocr/mrz') {
         const backendUrl = getBackendUrl();
         if (backendUrl && token && body instanceof FormData) {
-          const r = await fetch(`${backendUrl}/api/ocr/mrz`, {
+          const r = await fetchWithLog(`${backendUrl}/api/ocr/mrz`, {
             method: 'POST',
             headers: { Authorization: `Bearer ${token}` },
             body: body as FormData,
@@ -445,7 +463,7 @@ export const api = {
       if (pathname === '/ocr/document' || pathname === 'ocr/document') {
         const backendUrl = getBackendUrl();
         if (backendUrl && token && body instanceof FormData) {
-          const r = await fetch(`${backendUrl}/api/ocr/document`, {
+          const r = await fetchWithLog(`${backendUrl}/api/ocr/document`, {
             method: 'POST',
             headers: { Authorization: `Bearer ${token}` },
             body: body as FormData,
@@ -463,7 +481,7 @@ export const api = {
       if (pathname === '/ocr/documents-batch' || pathname === 'ocr/documents-batch') {
         const backendUrl = getBackendUrl();
         if (backendUrl && token && body instanceof FormData) {
-          const r = await fetch(`${backendUrl}/api/ocr/documents-batch`, {
+          const r = await fetchWithLog(`${backendUrl}/api/ocr/documents-batch`, {
             method: 'POST',
             headers: { Authorization: `Bearer ${token}` },
             body: body as FormData,
@@ -500,7 +518,7 @@ export const api = {
       if (pathname === '/misafir/checkin' || pathname === 'misafir/checkin') {
         const backendUrl = getBackendUrl();
         if (backendUrl && token) {
-          const r = await fetch(`${backendUrl}/api/checkin`, {
+          const r = await fetchWithLog(`${backendUrl}/api/checkin`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
             body: JSON.stringify(payload),
@@ -523,7 +541,7 @@ export const api = {
       if (pathname === '/tesis/kbs/test' || pathname === 'tesis/kbs/test') {
         const backendUrl = getBackendUrl();
         if (backendUrl && token) {
-          const r = await fetch(`${backendUrl}/api/tesis/kbs/test`, {
+          const r = await fetchWithLog(`${backendUrl}/api/tesis/kbs/test`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
             body: JSON.stringify({}),
@@ -542,7 +560,7 @@ export const api = {
       if (pathname === '/tesis/kbs/talebi' || pathname === 'tesis/kbs/talebi') {
         const backendUrl = getBackendUrl();
         if (backendUrl && token) {
-          const r = await fetch(`${backendUrl}/api/tesis/kbs/talebi`, {
+          const r = await fetchWithLog(`${backendUrl}/api/tesis/kbs/talebi`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
             body: JSON.stringify(payload || {}),
@@ -557,7 +575,7 @@ export const api = {
       if (pathname === '/kbs/credentials/request' || pathname === 'kbs/credentials/request') {
         const backendUrl = getBackendUrl();
         if (!backendUrl || !token) throw Object.assign(new Error('Giriş gerekli'), { response: { status: 401, data: {} } });
-        const r = await fetch(`${backendUrl}/api/kbs/credentials/request`, {
+        const r = await fetchWithLog(`${backendUrl}/api/kbs/credentials/request`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
           body: JSON.stringify(payload || {}),
@@ -573,7 +591,7 @@ export const api = {
       if (pathname === '/oda' || pathname === 'oda') {
         const backendUrl = getBackendUrl();
         if (backendUrl && token) {
-          const r = await fetch(`${backendUrl}/api/oda`, {
+          const r = await fetchWithLog(`${backendUrl}/api/oda`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
             body: JSON.stringify(payload || {}),
@@ -584,14 +602,17 @@ export const api = {
           }
           return toResponse(data);
         }
-        throw new Error('Oda eklemek için sunucu adresi ve giriş gerekli. EXPO_PUBLIC_BACKEND_URL tanımlayın.');
+        if (!token) {
+          throw Object.assign(new Error('Giriş gerekli. Oda eklemek için lütfen tekrar giriş yapın.'), { response: { status: 401, data: { message: 'Giriş gerekli' } } });
+        }
+        throw new Error('Sunucu adresi tanımlı değil. EXPO_PUBLIC_BACKEND_URL tanımlayın.');
       }
       const checkoutMatch = pathname.match(/^\/?misafir\/checkout\/([^/]+)$/);
       if (checkoutMatch) {
         const guestId = checkoutMatch[1];
         const backendUrl = getBackendUrl();
         if (backendUrl && token) {
-          const r = await fetch(`${backendUrl}/api/checkout/${guestId}`, {
+          const r = await fetchWithLog(`${backendUrl}/api/checkout/${guestId}`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
             body: JSON.stringify({}),
@@ -611,7 +632,7 @@ export const api = {
       if (pathname === '/siparis' || pathname === 'siparis') {
         const backendUrl = getBackendUrl();
         if (!backendUrl || !token) throw Object.assign(new Error('Giriş gerekli'), { response: { status: 401, data: {} } });
-        const r = await fetch(`${backendUrl}/api/siparis`, {
+        const r = await fetchWithLog(`${backendUrl}/api/siparis`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
           body: JSON.stringify(payload || {}),
@@ -634,7 +655,7 @@ export const api = {
       if (pathname === '/tesis/bilgi' || pathname === 'tesis/bilgi') {
         const backendUrl = getBackendUrl();
         if (backendUrl && token) {
-          const r = await fetch(`${backendUrl}/api/tesis/bilgi`, {
+          const r = await fetchWithLog(`${backendUrl}/api/tesis/bilgi`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
             body: JSON.stringify(body || {}),
@@ -649,7 +670,7 @@ export const api = {
       if (pathname === '/tesis/kbs' || pathname === 'tesis/kbs') {
         const backendUrl = getBackendUrl();
         if (backendUrl) {
-          const r = await fetch(`${backendUrl}/api/tesis/kbs`, {
+          const r = await fetchWithLog(`${backendUrl}/api/tesis/kbs`, {
             method: 'PUT',
             headers: {
               'Content-Type': 'application/json',

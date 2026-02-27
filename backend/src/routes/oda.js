@@ -1,3 +1,15 @@
+/**
+ * Oda ekleme / listeleme — bağlantı zinciri:
+ *
+ * 1) Mobil: POST/GET → EXPO_PUBLIC_BACKEND_URL (örn. https://mykbs-production.up.railway.app) + /api/oda
+ * 2) Backend: server.js → /api/oda → bu router (oda.js)
+ * 3) Auth: authenticateTesisOrSupabase → req.branchId (Supabase) veya req.tesis.id (legacy)
+ * 4) DB: Tek kaynak = Railway env DATABASE_URL (Supabase Postgres). Prisma bu URL ile bağlanır.
+ * 5) Oda eklerken: Supabase kullanıcıysa önce ensureTesisForBranch(prisma, branchId, branchName)
+ *    → Prisma'da bu branch için Tesis kaydı yoksa prisma.tesis.create() çalışır.
+ *    → Bu create pooler (Supavisor) ile 08P01 "insufficient data left in message" verebilir.
+ *    → Çözüm: DATABASE_URL'de direct (5432) veya Session mode + ?pgbouncer=true
+ */
 const express = require('express');
 const { PrismaClient } = require('@prisma/client');
 const { authenticateTesisOrSupabase } = require('../middleware/authTesisOrSupabase');
@@ -15,12 +27,17 @@ function getTesisId(req) {
   return req.authSource === 'supabase' ? req.branchId : req.tesis.id;
 }
 
+const ODA_STEP = { START: 'oda_start', ENSURE_TESIS: 'oda_ensure_tesis', QUERY: 'oda_query', FILTER: 'oda_filter', FORMAT: 'oda_format' };
+
 /**
  * Tüm odaları listele (filtreli)
  */
 router.get('/', async (req, res) => {
+  const requestId = req.requestId || '-';
   try {
+    console.log('[oda GET] step=START', { requestId, filtre: req.query?.filtre, authSource: req.authSource });
     if (req.authSource === 'supabase' && req.branch) {
+      console.log('[oda GET] step=ENSURE_TESIS', { requestId, branchId: req.branchId });
       await ensureTesisForBranch(prisma, req.branchId, req.branch.name);
     }
     const { filtre } = req.query; // tumu, bos, dolu, hatali
@@ -33,6 +50,7 @@ router.get('/', async (req, res) => {
       where.durum = 'dolu';
     }
 
+    console.log('[oda GET] step=QUERY', { requestId, tesisId, filtre });
     const odalar = await prisma.oda.findMany({
       where,
       include: {
@@ -50,6 +68,7 @@ router.get('/', async (req, res) => {
       },
       orderBy: { odaNumarasi: 'asc' }
     });
+    console.log('[oda GET] step=FILTER', { requestId, odalarCount: odalar.length, filtre });
 
     // Hatalı bildirim filtresi
     let filteredOdalar = odalar;
@@ -60,6 +79,7 @@ router.get('/', async (req, res) => {
       });
     }
 
+    console.log('[oda GET] step=FORMAT', { requestId, formattedCount: filteredOdalar.length });
     const formattedOdalar = filteredOdalar.map(oda => {
       const misafir = oda.misafirler[0];
       const bildirim = misafir?.bildirimler[0];
@@ -87,15 +107,23 @@ router.get('/', async (req, res) => {
     res.json({ odalar: formattedOdalar });
   } catch (error) {
     const msg = error?.message || '';
+    const step = error?.step || ODA_STEP.QUERY;
+    console.error('[oda GET] hata', {
+      requestId: req.requestId,
+      step,
+      message: msg,
+      code: error?.code,
+      meta: error?.meta,
+    });
     const isSchema = /column|relation|does not exist|no such column/i.test(msg);
     const isDb = /prisma|ECONNREFUSED|connect|migrate|relation|column|table/i.test(msg);
     if (isSchema) {
-      return errorResponse(req, res, 500, 'SCHEMA_ERROR', 'Veritabanı şeması güncel değil. Lütfen yöneticiye bildirin.');
+      return errorResponse(req, res, 500, 'SCHEMA_ERROR', 'Veritabanı şeması güncel değil. Lütfen yöneticiye bildirin.', { step });
     }
     if (isDb) {
-      return errorResponse(req, res, 500, 'DB_CONNECT_ERROR', 'Sunucuda geçici bir sorun var. Daha sonra tekrar deneyin.');
+      return errorResponse(req, res, 500, 'DB_CONNECT_ERROR', 'Sunucuda geçici bir sorun var. Daha sonra tekrar deneyin.', { step });
     }
-    return errorResponse(req, res, 500, 'UNHANDLED_ERROR', 'Odalar alınamadı.');
+    return errorResponse(req, res, 500, 'UNHANDLED_ERROR', 'Odalar alınamadı.', { step });
   }
 });
 
@@ -129,16 +157,25 @@ router.get('/:odaId', async (req, res) => {
 
     res.json({ oda });
   } catch (error) {
-    console.error('Oda detay hatası:', error);
-    res.status(500).json({ message: 'Oda bilgisi alınamadı', error: error.message });
+    const msg = error?.message || '';
+    const isSchema = /column|relation|does not exist|no such column/i.test(msg);
+    const isDb = /prisma|ECONNREFUSED|connect|migrate|relation|column|table/i.test(msg);
+    if (isSchema) return errorResponse(req, res, 500, 'SCHEMA_ERROR', 'Veritabanı şeması güncel değil. Lütfen yöneticiye bildirin.');
+    if (isDb) return errorResponse(req, res, 500, 'DB_CONNECT_ERROR', 'Sunucuda geçici bir sorun var. Daha sonra tekrar deneyin.');
+    return errorResponse(req, res, 500, 'UNHANDLED_ERROR', 'Oda bilgisi alınamadı.');
   }
 });
 
 /**
  * Yeni oda ekle
  */
+function is08P01(err) {
+  const msg = String(err?.message || err?.meta?.code || '');
+  return err?.code === '08P01' || msg.includes('08P01') || msg.includes('insufficient data left in message');
+}
+
 router.post('/', async (req, res) => {
-  try {
+  const run = async () => {
     if (req.authSource === 'supabase' && req.branch) {
       await ensureTesisForBranch(prisma, req.branchId, req.branch.name);
     }
@@ -149,13 +186,11 @@ router.post('/', async (req, res) => {
       return res.status(400).json({ message: 'Oda numarası ve kapasite gerekli' });
     }
 
-    // Aynı oda numarası kontrolü
+    const tesisId = getTesisId(req);
+
     const existing = await prisma.oda.findUnique({
       where: {
-        tesisId_odaNumarasi: {
-          tesisId: getTesisId(req),
-          odaNumarasi
-        }
+        tesisId_odaNumarasi: { tesisId, odaNumarasi }
       }
     });
 
@@ -165,7 +200,7 @@ router.post('/', async (req, res) => {
 
     const oda = await prisma.oda.create({
       data: {
-        tesisId: getTesisId(req),
+        tesisId,
         odaNumarasi,
         odaTipi: odaTipi || '',
         kapasite: parseInt(kapasite),
@@ -174,10 +209,9 @@ router.post('/', async (req, res) => {
       }
     });
 
-    // Log
     await prisma.log.create({
       data: {
-        tesisId: getTesisId(req),
+        tesisId,
         kullaniciId: req.user.id,
         islem: 'oda-ekle',
         detay: { odaNumarasi, kapasite }
@@ -185,9 +219,31 @@ router.post('/', async (req, res) => {
     });
 
     res.status(201).json({ message: 'Oda eklendi', oda });
+  };
+
+  let lastError;
+  try {
+    await run();
+    return;
   } catch (error) {
-    console.error('Oda ekleme hatası:', error);
-    res.status(500).json({ message: 'Oda eklenemedi', error: error.message });
+    lastError = error;
+    if (is08P01(error)) {
+      try {
+        await run();
+        return;
+      } catch (retryErr) {
+        if (is08P01(retryErr)) {
+          return errorResponse(req, res, 503, 'DB_POOLER_ERROR', 'Veritabanı bağlantısı geçici hata verdi. Tekrar deneyin. (Yönetici: DATABASE_URL için direct veya pgbouncer=true)');
+        }
+        lastError = retryErr;
+      }
+    }
+    const msg = lastError?.message || '';
+    const isSchema = /column|relation|does not exist|no such column/i.test(msg);
+    const isDb = /prisma|ECONNREFUSED|connect|migrate|relation|column|table/i.test(msg);
+    if (isSchema) return errorResponse(req, res, 500, 'SCHEMA_ERROR', 'Veritabanı şeması güncel değil. Lütfen yöneticiye bildirin.');
+    if (isDb) return errorResponse(req, res, 500, 'DB_CONNECT_ERROR', 'Sunucuda geçici bir sorun var. Daha sonra tekrar deneyin.');
+    return errorResponse(req, res, 500, 'UNHANDLED_ERROR', 'Oda eklenemedi.');
   }
 });
 
@@ -223,8 +279,12 @@ router.put('/:odaId', async (req, res) => {
 
     res.json({ message: 'Oda güncellendi', oda });
   } catch (error) {
-    console.error('Oda güncelleme hatası:', error);
-    res.status(500).json({ message: 'Oda güncellenemedi', error: error.message });
+    const msg = error?.message || '';
+    const isSchema = /column|relation|does not exist|no such column/i.test(msg);
+    const isDb = /prisma|ECONNREFUSED|connect|migrate|relation|column|table/i.test(msg);
+    if (isSchema) return errorResponse(req, res, 500, 'SCHEMA_ERROR', 'Veritabanı şeması güncel değil. Lütfen yöneticiye bildirin.');
+    if (isDb) return errorResponse(req, res, 500, 'DB_CONNECT_ERROR', 'Sunucuda geçici bir sorun var. Daha sonra tekrar deneyin.');
+    return errorResponse(req, res, 500, 'UNHANDLED_ERROR', 'Oda güncellenemedi.');
   }
 });
 
@@ -270,8 +330,12 @@ router.delete('/:odaId', async (req, res) => {
 
     res.json({ message: 'Oda silindi' });
   } catch (error) {
-    console.error('Oda silme hatası:', error);
-    res.status(500).json({ message: 'Oda silinemedi', error: error.message });
+    const msg = error?.message || '';
+    const isSchema = /column|relation|does not exist|no such column/i.test(msg);
+    const isDb = /prisma|ECONNREFUSED|connect|migrate|relation|column|table/i.test(msg);
+    if (isSchema) return errorResponse(req, res, 500, 'SCHEMA_ERROR', 'Veritabanı şeması güncel değil. Lütfen yöneticiye bildirin.');
+    if (isDb) return errorResponse(req, res, 500, 'DB_CONNECT_ERROR', 'Sunucuda geçici bir sorun var. Daha sonra tekrar deneyin.');
+    return errorResponse(req, res, 500, 'UNHANDLED_ERROR', 'Oda silinemedi.');
   }
 });
 

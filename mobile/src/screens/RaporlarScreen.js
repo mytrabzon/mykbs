@@ -32,10 +32,16 @@ export default function RaporlarScreen({ navigation }) {
       const res = await api.get('/rapor');
       setData(res?.data ?? null);
     } catch (err) {
-      const msg = err?.message || err?.response?.data?.message || 'Rapor alınamadı';
+      const status = err?.response?.status;
+      const code = err?.response?.data?.code;
+      const msg = err?.response?.data?.message || err?.message || 'Rapor alınamadı';
       setError(msg);
       setData(null);
-      if (!isRefresh) Toast.show({ type: 'error', text1: 'Rapor yüklenemedi', text2: msg });
+      if (!isRefresh) {
+        if (status === 409) Toast.show({ type: 'info', text1: 'Onay Bekleniyor', text2: msg || 'Şube/KBS onayından sonra raporlar açılacaktır.', visibilityTime: 4000 });
+        else if (status === 403) Toast.show({ type: 'error', text1: 'Yetki yok', text2: msg });
+        else Toast.show({ type: 'error', text1: status === 500 ? 'Sunucu hatası' : 'Rapor yüklenemedi', text2: msg });
+      }
     } finally {
       setLoading(false);
       setRefreshing(false);

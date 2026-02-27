@@ -83,21 +83,24 @@ export default function CheckInScreen({ navigation, route }) {
 
   const loadOdalar = async () => {
     try {
-      logger.log('Loading odalar');
+      logger.log('[CheckInScreen] loadOdalar başladı', { filtre: 'bos' });
       logger.api('GET', '/oda?filtre=bos');
       const response = await api.get('/oda?filtre=bos');
-      logger.api('GET', '/oda?filtre=bos', null, { 
+      logger.api('GET', '/oda?filtre=bos', null, {
         status: response.status,
-        odaCount: response.data.odalar?.length 
+        odaCount: response.data.odalar?.length,
       });
-      setOdalar(response.data.odalar);
-      logger.log('Odalar loaded', { count: response.data.odalar?.length });
+      setOdalar(response.data.odalar ?? []);
+      logger.log('[CheckInScreen] Odalar yüklendi', { count: response.data.odalar?.length ?? 0 });
     } catch (error) {
-      logger.error('Load odalar error', error);
+      const msg = error?.response?.data?.message || error?.message || 'Odalar yüklenemedi';
+      const step = error?.step || error?.response?.data?.step;
+      logger.error('[CheckInScreen] loadOdalar hatası', { message: msg, step, status: error?.response?.status }, error);
       Toast.show({
         type: 'error',
-        text1: 'Hata',
-        text2: 'Odalar yüklenemedi'
+        text1: 'Odalar yüklenemedi',
+        text2: step ? `${msg} (adım: ${step})` : msg,
+        visibilityTime: 5000,
       });
     }
   };

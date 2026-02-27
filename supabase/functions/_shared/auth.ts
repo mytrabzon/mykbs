@@ -55,6 +55,7 @@ export async function requireAuth(req: Request): Promise<AuthResult | Response> 
   const token = authHeader?.replace(/Bearer\s+/i, "");
 
   if (!token) {
+    console.warn("[requireAuth] Authorization header veya Bearer token yok");
     return errorResponse("Yetkilendirme gerekli", 401, "UNAUTHORIZED");
   }
 
@@ -71,7 +72,16 @@ export async function requireAuth(req: Request): Promise<AuthResult | Response> 
   } = await supabase.auth.getUser(token);
 
   if (userError || !user) {
-    return errorResponse("Gecersiz veya suresi dolmus oturum", 401, "UNAUTHORIZED");
+    console.error("[requireAuth] getUser failed", {
+      message: userError?.message,
+      status: userError?.status,
+      hasUser: !!user,
+    });
+    return errorResponse(
+      "Gecersiz veya suresi dolmus oturum. Edge Function icin Supabase Auth JWT gerekir (backend JWT degil).",
+      401,
+      "INVALID_TOKEN"
+    );
   }
 
   const { data: profile, error: profileError } = await supabase

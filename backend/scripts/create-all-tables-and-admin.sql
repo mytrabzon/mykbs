@@ -1,3 +1,4 @@
+-- DEPRECATED: Çalıştırmayın. Eski şema (ipAdresleri TEXT[], trialEndsAt/Siparis vb. yok). Prisma migrate + docs/supabase_schema_fix_once.sql kullanın. Detay: docs/SQL_CAKISMA_VE_GEREKSIZ_RAPORU.md
 -- TÜM TABLOLAR VE ADMIN KAYDI OLUŞTURMA SQL SCRIPTİ
 -- Supabase SQL Editor'den çalıştırın: https://supabase.com/dashboard/project/iuxnpxszfvyrdifchwvr/sql/new
 -- Bu script önce tüm tabloları oluşturur, sonra admin tesis ve kullanıcıyı ekler

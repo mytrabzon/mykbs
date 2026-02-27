@@ -48,6 +48,22 @@ export function getSupabaseBaseUrl(): string {
   return ENV.SUPABASE_URL.replace(/\/$/, '');
 }
 
+/**
+ * Supabase Storage S3-compatible endpoint — resim/dosya yükleme buraya yapılacak.
+ * Örnek: https://iuxnpxszfvyrdifchwvr.storage.supabase.co/storage/v1/s3
+ */
+export function getSupabaseStorageS3Url(): string {
+  const base = getSupabaseBaseUrl();
+  if (!base) return '';
+  try {
+    const u = new URL(base);
+    const host = u.hostname.replace(/\.supabase\.co$/i, '');
+    return `https://${host}.storage.supabase.co/storage/v1/s3`;
+  } catch {
+    return '';
+  }
+}
+
 /** Supabase yapılandırılmış mı (ENV ile her zaman true olur) */
 export function isSupabaseConfigured(): boolean {
   return !!ENV.SUPABASE_URL;

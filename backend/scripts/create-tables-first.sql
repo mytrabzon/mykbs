@@ -1,3 +1,4 @@
+-- DEPRECATED: Çalıştırmayın. Eski şema (ipAdresleri TEXT[], trialEndsAt vb. yok). Prisma migrate deploy veya docs/supabase_schema_fix_once.sql kullanın. Detay: docs/SQL_CAKISMA_VE_GEREKSIZ_RAPORU.md
 -- ÖNCE BU SQL'İ ÇALIŞTIRIN: Tabloları oluşturmak için
 -- Supabase SQL Editor'den çalıştırın: https://supabase.com/dashboard/project/iuxnpxszfvyrdifchwvr/sql/new
 

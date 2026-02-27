@@ -60,12 +60,13 @@ export default function BackendErrorScreen({
               ? 'Sunucu adresi doğrulanamadı. İnternet bağlantınızı ve sunucu adresini kontrol edin.'
               : 'EXPO_PUBLIC_BACKEND_URL tanımlı değil. mobile/.env içinde backend adresi gerekli.';
 
+  // Test edilen adres = health (apiBaseUrl + /health). requestId = hata veren API isteğinden (örn. /api/tesis), health ile aynı istek değil.
   const debugLines = [
-    testedUrl ? `Test edilen adres: ${testedUrl}` : null,
-    apiBaseUrl ? `API adresi: ${apiBaseUrl}` : null,
+    apiBaseUrl ? `API adresi (base): ${apiBaseUrl}` : null,
+    testedUrl ? `Health test adresi: ${testedUrl}` : null,
     lastChecked ? `Son deneme: ${lastChecked instanceof Date ? lastChecked.toLocaleString('tr-TR') : new Date(lastChecked).toLocaleString('tr-TR')}` : null,
     lastError ? `Hata: ${lastError}` : null,
-    requestId ? `requestId: ${requestId}` : null,
+    requestId ? `Hata veren istek (requestId): ${requestId}` : null,
   ].filter(Boolean);
   const hasDebug = debugLines.length > 0;
 

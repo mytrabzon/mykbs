@@ -45,7 +45,7 @@ router.post('/checkin', async (req, res) => {
     }
 
     if (!supabaseAdmin) {
-      return res.status(503).json({ message: 'Supabase yapılandırılmamış' });
+      return errorResponse(req, res, 503, 'UNHANDLED_ERROR', 'Supabase yapılandırılmamış');
     }
 
     const { data: guest, error: guestErr } = await supabaseAdmin
@@ -64,7 +64,7 @@ router.post('/checkin', async (req, res) => {
 
     if (guestErr) {
       console.error('[checkin] guests insert', guestErr);
-      return res.status(500).json({ message: 'Misafir kaydı oluşturulamadı', error: guestErr.message });
+      return errorResponse(req, res, 500, 'UNHANDLED_ERROR', guestErr?.message || 'Misafir kaydı oluşturulamadı');
     }
 
     const guestId = guest.id;
@@ -114,7 +114,7 @@ router.post('/checkin', async (req, res) => {
     });
   } catch (err) {
     console.error('[checkin]', err);
-    res.status(500).json({ message: 'Check-in başarısız', error: err.message });
+    return errorResponse(req, res, 500, 'UNHANDLED_ERROR', err?.message || 'Check-in başarısız');
   }
 });
 
@@ -149,7 +149,7 @@ router.post('/checkout/:guestId?', async (req, res) => {
       .eq('id', guestId);
 
     if (upErr) {
-      return res.status(500).json({ message: 'Çıkış güncellenemedi' });
+      return errorResponse(req, res, 500, 'UNHANDLED_ERROR', upErr?.message || 'Çıkış güncellenemedi');
     }
 
     const kimlikNo = guest.document_type === 'tc' ? guest.document_no : null;
@@ -184,7 +184,7 @@ router.post('/checkout/:guestId?', async (req, res) => {
     res.json({ ok: true, message: 'Çıkış yapıldı', guest_id: guestId });
   } catch (err) {
     console.error('[checkout]', err);
-    res.status(500).json({ message: 'Çıkış başarısız', error: err.message });
+    return errorResponse(req, res, 500, 'UNHANDLED_ERROR', err?.message || 'Çıkış başarısız');
   }
 });
 
@@ -222,7 +222,7 @@ router.post('/room-change', async (req, res) => {
       .eq('id', guestId);
 
     if (upErr) {
-      return res.status(500).json({ message: 'Oda güncellenemedi' });
+      return errorResponse(req, res, 500, 'UNHANDLED_ERROR', upErr?.message || 'Oda güncellenemedi');
     }
 
     const kimlikNo = guest.document_type === 'tc' ? guest.document_no : null;
@@ -258,7 +258,7 @@ router.post('/room-change', async (req, res) => {
     res.json({ ok: true, message: 'Oda değiştirildi', guest_id: guestId });
   } catch (err) {
     console.error('[room-change]', err);
-    res.status(500).json({ message: 'Oda değişikliği başarısız', error: err.message });
+    return errorResponse(req, res, 500, 'UNHANDLED_ERROR', err?.message || 'Oda değişikliği başarısız');
   }
 });
 

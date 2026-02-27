@@ -63,12 +63,14 @@ export async function callFn<T = unknown>(
     headers['Authorization'] = `Bearer ${accessToken}`;
   }
 
-  logger.log('[callFn]', {
+  const isRoomsList = name === 'rooms_list';
+  logger.log(isRoomsList ? '[callFn] odalar (rooms_list)' : '[callFn]', {
     name,
     hasBody: !!body,
     hasToken: !!accessToken,
     tokenLength: accessToken ? accessToken.length : 0,
     url: fnUrl,
+    ...(isRoomsList && body ? { filtre: (body as { filtre?: string }).filtre } : {}),
   });
 
   let res = await fetch(fnUrl, {
@@ -104,34 +106,48 @@ export async function callFn<T = unknown>(
     }
   }
 
-  logger.log('[callFn response]', {
-    name,
-    status: res.status,
-    ok: res.ok,
-    bodyPreview: typeof (data as { message?: string })?.message === 'string'
-      ? (data as { message?: string }).message
-      : res.ok ? 'ok' : (typeof text === 'string' ? text?.slice(0, 120) : ''),
-  });
+  const bodyObj = data as { ok?: boolean; code?: string; message?: string };
+  const backendCode = (data as { code?: string })?.code;
+  const backendMessage = (data as { message?: string })?.message;
+  if (isRoomsList) {
+    logger.log('[callFn] rooms_list yanıt', {
+      status: res.status,
+      ok: res.ok,
+      code: backendCode,
+      message: backendMessage,
+      hasOdalar: !!(data as { odalar?: unknown[] })?.odalar,
+      odalarLength: (data as { odalar?: unknown[] })?.odalar?.length ?? 0,
+    });
+  } else {
+    logger.log('[callFn response]', {
+      name,
+      status: res.status,
+      ok: res.ok,
+      bodyPreview: typeof backendMessage === 'string' ? backendMessage : res.ok ? 'ok' : (typeof text === 'string' ? text?.slice(0, 120) : ''),
+    });
+  }
 
   if (!res.ok) {
-    const message = (data as { message?: string })?.message || res.statusText || 'Edge Function error';
+    const message = backendMessage || res.statusText || 'Edge Function error';
+    const prefix = isRoomsList ? 'Odalar (Supabase): ' : '';
     if (res.status === 401) {
-      logger.error('[callFn] 401 Unauthorized', { name, backendMessage: (data as { message?: string })?.message, code: (data as { code?: string })?.code });
-      throw new EdgeFunctionError('Giriş gerekli', 401, (data as { code?: string })?.code || 'UNAUTHORIZED', data);
+      logger.error('[callFn] 401 Unauthorized', { name, backendMessage, code: backendCode });
+      throw new EdgeFunctionError(prefix + 'Giriş gerekli', 401, backendCode || 'UNAUTHORIZED', data);
     }
     if (res.status === 404) {
-      throw new EdgeFunctionError('Endpoint bulunamadı', 404, 'NOT_FOUND', data);
+      throw new EdgeFunctionError(prefix + 'Endpoint bulunamadı', 404, 'NOT_FOUND', data);
     }
     if (res.status === 403) {
-      throw new EdgeFunctionError('Bu işlem için yetkiniz yok', 403, 'FORBIDDEN', data);
+      const msg = backendMessage || 'Bu işlem için yetkiniz yok';
+      throw new EdgeFunctionError(prefix + msg, 403, backendCode || 'FORBIDDEN', data);
     }
     if (res.status === 429) {
-      throw new EdgeFunctionError('Çok fazla istek, lütfen bekleyin', 429, 'RATE_LIMIT', data);
+      throw new EdgeFunctionError(prefix + 'Çok fazla istek, lütfen bekleyin', 429, 'RATE_LIMIT', data);
     }
     if (res.status >= 500) {
-      throw new EdgeFunctionError('Sunucu hatası, lütfen tekrar deneyin', res.status, 'SERVER_ERROR', data);
+      throw new EdgeFunctionError(prefix + (backendMessage || 'Sunucu hatası, lütfen tekrar deneyin'), res.status, backendCode || 'SERVER_ERROR', data);
     }
-    throw new EdgeFunctionError(message, res.status, undefined, data);
+    throw new EdgeFunctionError(prefix + message, res.status, backendCode, data);
   }
 
   return data as T;

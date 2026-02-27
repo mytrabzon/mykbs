@@ -1,3 +1,4 @@
+-- DEPRECATED: Bu scripti ÇALIŞTIRMAYIN. tesis/kullanici (küçük harf) oluşturur; Prisma "Tesis"/"Kullanici" kullanır. ipAdresleri TEXT[] Prisma ile uyumsuz. Detay: docs/SQL_CAKISMA_VE_GEREKSIZ_RAPORU.md
 -- Admin Tesis Oluşturma SQL Scripti (Küçük harf tablo isimleri)
 -- Supabase SQL Editor'den çalıştırın: https://supabase.com/dashboard/project/iuxnpxszfvyrdifchwvr/sql/new
 -- Prisma genellikle tablo isimlerini küçük harfle oluşturur

@@ -11,7 +11,10 @@ serve(async (req) => {
     return new Response("ok", { headers: getCorsHeaders() });
   }
   if (req.method !== "POST") {
-    return errorResponse("Method not allowed", 405);
+    return jsonResponse(
+      { error: "Sadece POST desteklenir. Authorization: Bearer <token> ve body: { branch_id, image_base64 } gerekir.", code: "METHOD_NOT_ALLOWED" },
+      405
+    );
   }
 
   const auth = await requireAuth(req);

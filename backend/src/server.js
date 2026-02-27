@@ -11,7 +11,15 @@ process.env.JWT_SECRET = process.env.JWT_SECRET || "mykbs-super-secret-jwt-key-2
 process.env.JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || "365d";
 process.env.DATABASE_URL = process.env.DATABASE_URL || "file:./dev.db";
 
+// Supabase pooler (PgBouncer) ile Prisma 08P01 hatasını önlemek için
+if (process.env.DATABASE_URL && process.env.DATABASE_URL.startsWith('postgres') && process.env.DATABASE_URL.includes('pooler') && !process.env.DATABASE_URL.includes('pgbouncer=true')) {
+  process.env.DATABASE_URL = process.env.DATABASE_URL.includes('?') ? process.env.DATABASE_URL + '&pgbouncer=true' : process.env.DATABASE_URL + '?pgbouncer=true';
+}
+
 const app = express();
+
+// Reverse proxy (Railway, Nginx vb.) arkasında rate-limit doğru IP alsın
+app.set('trust proxy', 1);
 
 // Request ID middleware (observability)
 app.use((req, res, next) => {

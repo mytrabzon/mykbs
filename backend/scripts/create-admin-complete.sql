@@ -1,3 +1,4 @@
+-- DEPRECATED: Çalıştırmayın. Eski şema; Prisma migrate + docs/supabase_schema_fix_once.sql kullanın. Detay: docs/SQL_CAKISMA_VE_GEREKSIZ_RAPORU.md
 -- Admin Tesis Oluşturma SQL Scripti (Tüm İşlemler - Tablolar + Kayıt)
 -- Supabase SQL Editor'den çalıştırın: https://supabase.com/dashboard/project/iuxnpxszfvyrdifchwvr/sql/new
 

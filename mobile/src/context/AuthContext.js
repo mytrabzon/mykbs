@@ -88,23 +88,22 @@ export const AuthProvider = ({ children }) => {
   const isAuthenticated = !!token && !!user;
 
   const clearAuth = async () => {
-    await AsyncStorage.removeItem(AUTH_STORAGE_KEYS.TOKEN);
-    await AsyncStorage.removeItem(AUTH_STORAGE_KEYS.USER);
-    await AsyncStorage.removeItem(AUTH_STORAGE_KEYS.TESIS);
-    await AsyncStorage.removeItem(AUTH_STORAGE_KEYS.SUPABASE_TOKEN);
-    await AsyncStorage.removeItem(AUTH_STORAGE_KEYS.LAST_TAB);
+    // Önce state temizle ki ekran hemen girişe dönsün (tek tıkla çıkış)
     setToken(null);
     setUser(null);
     setTesis(null);
     setLastTabState(null);
     setApiTokenProvider(null);
     setDataServiceTokenProvider(null);
-    // Önceki kullanıcının oda/misafir/tesis cache'ini temizle; başka kullanıcı verisi görünmesin
-    try {
-      await dataService.clearCache();
-    } catch (e) {
-      logger.error('Cache clear on logout error', e);
-    }
+    // Storage ve cache arka planda temizlensin (çıkışı yavaşlatmasın)
+    Promise.all([
+      AsyncStorage.removeItem(AUTH_STORAGE_KEYS.TOKEN),
+      AsyncStorage.removeItem(AUTH_STORAGE_KEYS.USER),
+      AsyncStorage.removeItem(AUTH_STORAGE_KEYS.TESIS),
+      AsyncStorage.removeItem(AUTH_STORAGE_KEYS.SUPABASE_TOKEN),
+      AsyncStorage.removeItem(AUTH_STORAGE_KEYS.LAST_TAB),
+    ]).catch(() => {});
+    dataService.clearCache().catch((e) => logger.error('Cache clear on logout error', e));
   };
 
   useEffect(() => {
@@ -185,8 +184,13 @@ export const AuthProvider = ({ children }) => {
     };
   }, []);
 
-  // Sadece gerçek Supabase access_token döndür. Backend JWT (TOKEN) Edge Function'lara gönderilmemeli.
+  // Önce canlı Supabase oturumunu kullan; yoksa storage'daki SUPABASE_TOKEN (backend sadece Supabase token dönmüşse geçerli).
+  // Edge me/upload_community_image vb. sadece Supabase Auth JWT ile çalışır; backend JWT 401 (INVALID_TOKEN) döner.
   const getSupabaseToken = async () => {
+    if (supabase?.auth) {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session?.access_token) return session.access_token;
+    }
     return await AsyncStorage.getItem(AUTH_STORAGE_KEYS.SUPABASE_TOKEN);
   };
 
@@ -339,15 +343,20 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
+  const loggingOutRef = useRef(false);
   const logout = async () => {
-    if (supabase) {
-      try {
-        await supabase.auth.signOut();
-      } catch (e) {
-        logger.error('Supabase signOut error', e);
+    if (loggingOutRef.current) return;
+    loggingOutRef.current = true;
+    try {
+      // Önce yerel state ve storage temizlensin; ekran hemen giriş sayfasına dönsün (tek tıkla çıkış)
+      await clearAuth();
+      // Supabase oturumunu arka planda kapat (yavaş olsa da UI zaten güncellendi)
+      if (supabase) {
+        supabase.auth.signOut().catch((e) => logger.error('Supabase signOut error', e));
       }
+    } finally {
+      loggingOutRef.current = false;
     }
-    await clearAuth();
   };
 
   useEffect(() => {
