@@ -15,7 +15,8 @@ import { logger } from './src/utils/logger';
 import { getIsAdminPanelUser } from './src/utils/adminAuth';
 import { backendHealth } from './src/services/backendHealth';
 import { registerPushToken } from './src/services/pushNotifications';
-import { BackHandler, Alert, Platform, View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import { BackHandler, Alert, Platform, View, Text, StyleSheet, TouchableOpacity, Linking } from 'react-native';
+import { supabase } from './src/lib/supabase/supabase';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 // Screens
@@ -37,6 +38,7 @@ import ToplulukProfilScreen from './src/screens/ToplulukProfilScreen';
 import AddRoomScreen from './src/screens/AddRoomScreen';
 import PaylasimEkleScreen from './src/screens/PaylasimEkleScreen';
 import ProfilDuzenleScreen from './src/screens/ProfilDuzenleScreen';
+import ProfilIletisimScreen from './src/screens/ProfilIletisimScreen';
 import OkumaScreen from './src/screens/OkumaScreen';
 import RaporlarScreen from './src/screens/RaporlarScreen';
 import MrzScanScreen from './src/features/kyc/MrzScanScreen';
@@ -247,18 +249,68 @@ function CreditsOverlay() {
   );
 }
 
+const RECOVERY_PENDING_KEY = '@mykbs:auth:recovery_pending';
+
+function parseRecoveryParams(url) {
+  const hash = url?.split('#')[1];
+  if (!hash) return null;
+  const params = {};
+  hash.split('&').forEach((part) => {
+    const [k, v] = part.split('=');
+    if (k && v) params[decodeURIComponent(k)] = decodeURIComponent(v);
+  });
+  if (params.access_token && params.refresh_token) return params;
+  return null;
+}
+
 function AppNavigator() {
-  const { isAuthenticated, isLoading } = useAuth();
+  const { isAuthenticated, isLoading, recoverySessionPending, clearRecoveryPending } = useAuth();
+
+  useEffect(() => {
+    if (!supabase?.auth) return;
+    const handleUrl = async (url) => {
+      if (!url || !url.startsWith('mykbs://reset-password')) return;
+      const params = parseRecoveryParams(url);
+      if (!params) return;
+      try {
+        await AsyncStorage.setItem(RECOVERY_PENDING_KEY, '1');
+        const { error } = await supabase.auth.setSession({
+          access_token: params.access_token,
+          refresh_token: params.refresh_token,
+        });
+        if (error) {
+          await AsyncStorage.removeItem(RECOVERY_PENDING_KEY);
+          logger.error('Recovery setSession error', error);
+        }
+      } catch (e) {
+        await AsyncStorage.removeItem(RECOVERY_PENDING_KEY);
+        logger.error('Recovery handleUrl error', e);
+      }
+    };
+    Linking.getInitialURL().then((url) => url && handleUrl(url));
+    const sub = Linking.addEventListener('url', ({ url }) => handleUrl(url));
+    return () => sub.remove();
+  }, []);
 
   if (isLoading) {
     return null; // Loading screen
   }
 
+  const showRecovery = !isAuthenticated && recoverySessionPending;
+
   return (
     <NavigationContainer>
       {isAuthenticated && <CreditsOverlay />}
-      <Stack.Navigator screenOptions={{ headerShown: false }}>
-        {!isAuthenticated ? (
+      <Stack.Navigator screenOptions={{ headerShown: false }} initialRouteName={showRecovery ? 'ForgotPassword' : undefined}>
+        {showRecovery ? (
+          <>
+            <Stack.Screen name="ForgotPassword" component={ForgotPasswordScreen} initialParams={{ fromRecoveryLink: true }} />
+            <Stack.Screen name="Login" component={LoginScreen} />
+            <Stack.Screen name="Kayit" component={KayitScreen} />
+            <Stack.Screen name="OTPVerify" component={OTPVerifyScreen} />
+            <Stack.Screen name="Basvuru" component={BasvuruScreen} />
+          </>
+        ) : !isAuthenticated ? (
           <>
             <Stack.Screen name="Login" component={LoginScreen} />
             <Stack.Screen name="ForgotPassword" component={ForgotPasswordScreen} />
@@ -275,6 +327,7 @@ function AppNavigator() {
             <Stack.Screen name="PostDetay" component={PostDetayScreen} />
             <Stack.Screen name="PaylasimEkle" component={PaylasimEkleScreen} />
             <Stack.Screen name="ProfilDuzenle" component={ProfilDuzenleScreen} />
+            <Stack.Screen name="ProfilIletisim" component={ProfilIletisimScreen} />
             <Stack.Screen name="ToplulukProfil" component={ToplulukProfilScreen} />
             <Stack.Screen name="AdminPanel" component={AdminPanelScreen} />
             <Stack.Screen name="TesisList" component={TesisListScreen} />

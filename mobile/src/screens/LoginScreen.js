@@ -32,22 +32,34 @@ const SUPPORT_PHONE_TEL = Constants.expoConfig?.extra?.EXPO_PUBLIC_SUPPORT_PHONE
 export default function LoginScreen({ route }) {
   const navigation = useNavigation();
   const { colors } = useTheme();
-  const { loginWithPassword, loginWithPhoneAndPassword } = useAuth();
+  const { loginWithPassword, loginWithPhoneAndPassword, login } = useAuth();
+  const [loginMode, setLoginMode] = useState('hesap'); // 'hesap' | 'pin'
+  const [hesapInputMode, setHesapInputMode] = useState('email'); // 'email' | 'phone' — klavye: e-posta için harf, telefon için rakam
   const [telefon, setTelefon] = useState('');
   const [sifre, setSifre] = useState('');
+  const [tesisKodu, setTesisKodu] = useState('');
+  const [pin, setPin] = useState('');
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [errorDetails, setErrorDetails] = useState(null);
   const [showErrorModal, setShowErrorModal] = useState(false);
+  const [pendingApprovalMessage, setPendingApprovalMessage] = useState(null);
 
   useEffect(() => {
     (async () => {
       try {
         const saved = await AsyncStorage.getItem(STORAGE_KEYS.TELEFON);
-        if (saved) setTelefon(saved);
+        if (saved) {
+          setTelefon(saved);
+          setHesapInputMode(saved.includes('@') ? 'email' : 'phone');
+        }
       } catch (e) {}
     })();
-    if (route?.params?.testAccount?.telefon) setTelefon(route.params.testAccount.telefon || '');
+    if (route?.params?.testAccount?.telefon) {
+      const t = route.params.testAccount.telefon || '';
+      setTelefon(t);
+      setHesapInputMode(t.includes('@') ? 'email' : 'phone');
+    }
   }, [route]);
 
   const formatPhone = (t) => t.replace(/[^\d]/g, '').slice(0, 10);
@@ -67,7 +79,8 @@ export default function LoginScreen({ route }) {
       Toast.show({ type: 'error', text1: 'Geçersiz giriş', text2: 'E-posta veya 10 haneli telefon numarası giriniz.' });
       return;
     }
-    if (!sifre || sifre.length < 6) {
+    const sifreTrim = (sifre || '').trim();
+    if (!sifreTrim || sifreTrim.length < 6) {
       Toast.show({ type: 'error', text1: 'Şifre', text2: 'En az 6 karakter giriniz' });
       return;
     }
@@ -75,11 +88,42 @@ export default function LoginScreen({ route }) {
     try {
       if (telefon) await AsyncStorage.setItem(STORAGE_KEYS.TELEFON, telefon);
       const result = isEmail
-        ? await loginWithPassword(telefon.trim(), sifre)
-        : await loginWithPhoneAndPassword(telefon.trim(), sifre);
+        ? await loginWithPassword((telefon || '').trim().toLowerCase(), sifreTrim)
+        : await loginWithPhoneAndPassword((telefon || '').trim(), sifreTrim);
       setLoading(false);
       if (result?.success) Toast.show({ type: 'success', text1: 'Giriş başarılı' });
       else Toast.show({ type: 'error', text1: 'Giriş başarısız', text2: result?.message });
+    } catch (e) {
+      setLoading(false);
+      setErrorDetails({ message: e?.message });
+      Toast.show({ type: 'error', text1: 'Hata', text2: e?.response?.data?.message || e?.message });
+    }
+  };
+
+  const handlePinLogin = async () => {
+    const kod = (tesisKodu || '').trim();
+    const pinVal = (pin || '').trim();
+    if (!kod) {
+      Toast.show({ type: 'error', text1: 'Tesis kodu giriniz' });
+      return;
+    }
+    if (!pinVal || pinVal.length < 4) {
+      Toast.show({ type: 'error', text1: 'PIN', text2: 'En az 4 karakter giriniz' });
+      return;
+    }
+    setPendingApprovalMessage(null);
+    setLoading(true);
+    try {
+      const result = await login(kod, pinVal);
+      setLoading(false);
+      if (result?.success) {
+        Toast.show({ type: 'success', text1: 'Giriş başarılı' });
+      } else if (result?.pendingApproval) {
+        setPendingApprovalMessage(result.message || 'Admin onayına sunuldu. Onaylandığında giriş yapabileceksiniz.');
+        Toast.show({ type: 'info', text1: 'Onay bekleniyor', text2: result.message });
+      } else {
+        Toast.show({ type: 'error', text1: 'Giriş başarısız', text2: result?.message });
+      }
     } catch (e) {
       setLoading(false);
       setErrorDetails({ message: e?.message });
@@ -106,17 +150,74 @@ export default function LoginScreen({ route }) {
         </View>
 
         <View style={[styles.formCard, { backgroundColor: colors.surface }]}>
-          <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>Hesap ile Giriş</Text>
-          <Text style={[styles.sectionSubtitle, { color: colors.textSecondary }]}>
-            Telefon numaranız veya e-posta adresiniz ve şifrenizle giriş yapın.
+          <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>
+            {loginMode === 'pin' ? 'Tesis kodu ve PIN ile Giriş' : 'Hesap ile Giriş'}
           </Text>
-          <>
+          <Text style={[styles.sectionSubtitle, { color: colors.textSecondary }]}>
+            {loginMode === 'pin'
+              ? 'Tesis kodunuz ve PIN ile giriş yapın. İlk girişte admin onayı gerekebilir.'
+              : 'Telefon numaranız veya e-posta adresiniz ve şifrenizle giriş yapın.'}
+          </Text>
+
+          {pendingApprovalMessage ? (
+            <View style={[styles.pendingBox, { borderColor: colors.warning || '#f59e0b', backgroundColor: (colors.warning || '#f59e0b') + '15' }]}>
+              <View style={[styles.statusDot, { backgroundColor: colors.warning || '#f59e0b' }]} />
+              <Text style={[styles.pendingTitle, { color: colors.textPrimary }]}>Onay Bekleniyor</Text>
+              <Text style={[styles.pendingMessage, { color: colors.textSecondary }]}>{pendingApprovalMessage}</Text>
+            </View>
+          ) : null}
+
+          {loginMode === 'pin' ? (
+            <>
               <Input
-                label="Telefon veya E-posta"
+                label="Tesis kodu"
+                value={tesisKodu}
+                onChangeText={(t) => setTesisKodu(t.trim())}
+                placeholder=""
+                autoCapitalize="none"
+                autoCorrect={false}
+              />
+              <Input
+                label="PIN"
+                value={pin}
+                onChangeText={setPin}
+                placeholder=""
+                secureTextEntry
+              />
+              <Button
+                variant="primary"
+                onPress={handlePinLogin}
+                loading={loading}
+                disabled={loading || !tesisKodu.trim() || !pin.trim()}
+              >
+                PIN ile Giriş Yap
+              </Button>
+              <TouchableOpacity
+                style={styles.smsLinkWrap}
+                onPress={() => setLoginMode('hesap')}
+                disabled={loading}
+              >
+                <Text style={[styles.smsLinkText, { color: colors.primary }]}>Hesap veya kod ile girişe dön</Text>
+              </TouchableOpacity>
+            </>
+          ) : (
+            <>
+              <Text style={[styles.inputLabel, { color: colors.textSecondary }]}>Telefon veya E-posta</Text>
+              <SegmentedControl
+                options={[{ key: 'email', label: 'E-posta' }, { key: 'phone', label: 'Telefon' }]}
+                value={hesapInputMode}
+                onChange={(mode) => {
+                  setHesapInputMode(mode);
+                  if (mode === 'phone') setTelefon(formatPhone(telefon));
+                }}
+                style={styles.hesapSegment}
+              />
+              <Input
+                label=""
                 value={telefon}
-                onChangeText={(t) => setTelefon(t.includes('@') ? t : formatPhone(t))}
-                placeholder="05XX XXX XX XX veya e-posta"
-                keyboardType={telefon?.includes('@') ? 'email-address' : 'phone-pad'}
+                onChangeText={(t) => setTelefon(hesapInputMode === 'email' ? t : formatPhone(t))}
+                placeholder={hesapInputMode === 'email' ? 'ornek@email.com' : '5XX XXX XX XX'}
+                keyboardType={hesapInputMode === 'email' ? 'email-address' : 'phone-pad'}
                 autoCapitalize="none"
               />
               <Input
@@ -139,7 +240,8 @@ export default function LoginScreen({ route }) {
                   loading ||
                   !(telefon || '').trim() ||
                   ((telefon || '').includes('@') ? !(telefon || '').trim() : (telefon || '').replace(/\D/g, '').length < 10) ||
-                  !sifre
+                  !(sifre || '').trim() ||
+                  (sifre || '').trim().length < 6
                 }
               >
                 Giriş Yap
@@ -151,8 +253,17 @@ export default function LoginScreen({ route }) {
               >
                 <Text style={[styles.smsLinkText, { color: colors.primary }]}>Kod ile giriş (SMS veya e-posta)</Text>
               </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.smsLinkWrap, { marginTop: spacing.xs }]}
+                onPress={() => { setLoginMode('pin'); setPendingApprovalMessage(null); }}
+                disabled={loading}
+              >
+                <Text style={[styles.smsLinkText, { color: colors.textSecondary, fontSize: typography.text.caption.fontSize }]}>
+                  Tesis kodu ve PIN ile giriş
+                </Text>
+              </TouchableOpacity>
             </>
-          }
+          )}
 
           <Text style={[styles.secureNote, { color: colors.textSecondary }]}>
             Veriler şifreli iletilir.
@@ -243,6 +354,12 @@ const styles = StyleSheet.create({
     elevation: 4,
   },
   segmented: { marginBottom: spacing.lg },
+  inputLabel: {
+    fontSize: typography.text.body.fontSize,
+    fontWeight: typography.fontWeight.medium,
+    marginBottom: spacing.xs,
+  },
+  hesapSegment: { marginBottom: spacing.md },
   pendingBox: {
     flexDirection: 'column',
     alignItems: 'center',

@@ -74,8 +74,8 @@ export default function TesislerPage() {
     <div className="admin-page">
       <h1 className="kbs-page-title">Tesisler</h1>
       <p className="kbs-page-sub">KBS tesis listesi ve onay</p>
-      <div style={{ display: 'flex', gap: '10px', marginBottom: '1.25rem' }}>
-        <select value={filtre.paket} onChange={(e) => setFiltre({ ...filtre, paket: e.target.value })} className="kbs-select" style={{ marginBottom: 0, width: 'auto' }}>
+      <div className="admin-filters-bar">
+        <select aria-label="Paket filtresi" value={filtre.paket} onChange={(e) => setFiltre({ ...filtre, paket: e.target.value })} className="kbs-select admin-select-inline">
           <option value="">Tüm Paketler</option>
           <option value="deneme">Deneme</option>
           <option value="starter">Starter</option>
@@ -83,7 +83,7 @@ export default function TesislerPage() {
           <option value="business">Business</option>
           <option value="enterprise">Enterprise</option>
         </select>
-        <select value={filtre.durum} onChange={(e) => setFiltre({ ...filtre, durum: e.target.value })} className="kbs-select" style={{ marginBottom: 0, width: 'auto' }}>
+        <select aria-label="Durum filtresi" value={filtre.durum} onChange={(e) => setFiltre({ ...filtre, durum: e.target.value })} className="kbs-select admin-select-inline">
           <option value="">Tüm Durumlar</option>
           <option value="incelemede">İncelemede</option>
           <option value="onaylandi">Onaylandı</option>
@@ -122,11 +122,14 @@ export default function TesislerPage() {
                   </td>
                   <td>
                     {tesis.durum === 'incelemede' && (
-                      <button type="button" onClick={() => handleOnayla(tesis.id)} className="kbs-btn-primary" style={{ width: 'auto', padding: '0.45rem 0.9rem', fontSize: '0.85rem', marginRight: '8px' }}>
+                      <button type="button" onClick={() => handleOnayla(tesis.id)} className="kbs-btn-primary kbs-btn-sm kbs-btn-sm-mr">
                         Onayla
                       </button>
                     )}
-                    <Link href={`/tesisler/${tesis.id}`} className="kbs-btn-primary" style={{ width: 'auto', padding: '0.45rem 0.9rem', fontSize: '0.85rem', display: 'inline-block', textDecoration: 'none', background: 'var(--kbs-surface-elevated)', color: 'var(--kbs-accent)' }}>
+                    <Link href={`/tesisler/${tesis.id}/kullanicilar`} className="kbs-btn-primary kbs-btn-sm-alt" style={{ marginRight: 6 }}>
+                      Kullanıcılar
+                    </Link>
+                    <Link href={`/tesisler/${tesis.id}`} className="kbs-btn-primary kbs-btn-sm-alt">
                       Detay
                     </Link>
                   </td>
@@ -135,7 +138,7 @@ export default function TesislerPage() {
             </tbody>
           </table>
         </div>
-        {tesisler.length === 0 && <p className="kbs-card-empty-text" style={{ padding: '1.25rem' }}>Tesis bulunamadı.</p>}
+        {tesisler.length === 0 && <p className="kbs-card-empty-text kbs-card-empty-pad">Tesis bulunamadı.</p>}
       </div>
     </div>
   )

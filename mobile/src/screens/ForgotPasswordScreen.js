@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   View,
   Text,
@@ -31,11 +31,12 @@ const formatPhone = (t) => t.replace(/[^\d]/g, '').slice(0, 10);
 
 const isValidEmail = (e) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test((e || '').trim());
 
-export default function ForgotPasswordScreen() {
+export default function ForgotPasswordScreen({ route }) {
   const navigation = useNavigation();
   const { colors } = useTheme();
-  const { resetPasswordForEmail: sendResetLink } = useAuth();
-  const [step, setStep] = useState('telefon'); // 'telefon' | 'otp' | 'sifre'
+  const { resetPasswordForEmail: sendResetLink, clearRecoveryPending } = useAuth();
+  const fromRecoveryLink = route?.params?.fromRecoveryLink === true;
+  const [step, setStep] = useState(fromRecoveryLink ? 'sifre' : 'telefon'); // 'telefon' | 'otp' | 'sifre'
   const [telefon, setTelefon] = useState('');
   const [email, setEmail] = useState('');
   const [useEmailReset, setUseEmailReset] = useState(false);
@@ -48,6 +49,10 @@ export default function ForgotPasswordScreen() {
   const [useBackendOtp, setUseBackendOtp] = useState(false);
   const [useEmailOtp, setUseEmailOtp] = useState(false);
   const inputRefs = useRef([]);
+
+  useEffect(() => {
+    if (fromRecoveryLink) setStep('sifre');
+  }, [fromRecoveryLink]);
 
   const handleSendOtp = async () => {
     if (useEmailReset) {
@@ -159,7 +164,7 @@ export default function ForgotPasswordScreen() {
   };
 
   const handleVerifyOtp = async () => {
-    const code = otp.join('');
+    const code = otp.join('').replace(/\D/g, '').slice(0, 6);
     if (code.length !== 6) {
       Toast.show({ type: 'error', text1: 'Kod', text2: '6 haneli kodu girin' });
       return;
@@ -244,6 +249,31 @@ export default function ForgotPasswordScreen() {
       return;
     }
 
+    if (fromRecoveryLink) {
+      setLoading(true);
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session) {
+          Toast.show({ type: 'error', text1: 'Oturum sonlandı', text2: 'Linki tekrar deneyin veya Kod Gönder ile sıfırlayın.' });
+          setLoading(false);
+          if (clearRecoveryPending) clearRecoveryPending();
+          navigation.replace('Login');
+          return;
+        }
+        const { error } = await supabase.auth.updateUser({ password: yeniSifre });
+        if (error) throw error;
+        await supabase.auth.signOut();
+        if (clearRecoveryPending) clearRecoveryPending();
+        Toast.show({ type: 'success', text1: 'Şifre güncellendi', text2: 'Yeni şifrenizle giriş yapabilirsiniz.' });
+        navigation.replace('Login');
+      } catch (e) {
+        const msg = e?.message || e?.response?.data?.message || 'Tekrar deneyin';
+        Toast.show({ type: 'error', text1: 'Güncellenemedi', text2: msg });
+      }
+      setLoading(false);
+      return;
+    }
+
     if (!supabaseSession?.access_token) {
       Toast.show({ type: 'error', text1: 'Oturum sonlandı', text2: 'Baştan başlayıp tekrar kod isteyin' });
       setStep('telefon');
@@ -274,19 +304,30 @@ export default function ForgotPasswordScreen() {
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
       >
-        <TouchableOpacity style={styles.backRow} onPress={() => (step === 'telefon' ? navigation.goBack() : setStep(step === 'sifre' ? 'otp' : 'telefon'))}>
+        <TouchableOpacity
+          style={styles.backRow}
+          onPress={() => {
+            if (fromRecoveryLink) {
+              if (clearRecoveryPending) clearRecoveryPending();
+              supabase?.auth?.signOut().catch(() => {});
+              navigation.replace('Login');
+            } else {
+              step === 'telefon' ? navigation.goBack() : setStep(step === 'sifre' ? 'otp' : 'telefon');
+            }
+          }}
+        >
           <Ionicons name="arrow-back" size={24} color={colors.primary} />
           <Text style={[styles.backText, { color: colors.primary }]}>Geri</Text>
         </TouchableOpacity>
 
-        <Text style={[styles.title, { color: colors.textPrimary }]}>Şifremi Unuttum</Text>
+        <Text style={[styles.title, { color: colors.textPrimary }]}>{fromRecoveryLink ? 'Yeni şifre belirleyin' : 'Şifremi Unuttum'}</Text>
         <Text style={[styles.subtitle, { color: colors.textSecondary }]}>
           {step === 'telefon' && (useEmailReset ? 'Kayıtlı e-posta adresinizi girin. Size doğrulama kodu göndereceğiz.' : 'Kayıtlı telefon numaranızı girin. Size doğrulama kodu göndereceğiz.')}
           {step === 'otp' && (useEmailOtp ? `${email} adresine gönderilen 6 haneli kodu girin.` : `${telefon} numarasına gönderilen 6 haneli kodu girin.`)}
-          {step === 'sifre' && 'Yeni şifrenizi belirleyin (en az 6 karakter).'}
+          {(step === 'sifre' || fromRecoveryLink) && 'Yeni şifrenizi belirleyin (en az 6 karakter).'}
         </Text>
 
-        {step === 'telefon' && (
+        {step === 'telefon' && !fromRecoveryLink && (
           <>
             <TouchableOpacity
               style={styles.toggleRow}
@@ -301,7 +342,7 @@ export default function ForgotPasswordScreen() {
                 label="E-posta"
                 value={email}
                 onChangeText={setEmail}
-                placeholder="ornek@email.com"
+                placeholder=""
                 keyboardType="email-address"
                 autoCapitalize="none"
                 autoFocus

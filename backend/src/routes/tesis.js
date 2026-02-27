@@ -266,7 +266,11 @@ router.put('/kbs', async (req, res) => {
     if (kbsTesisKodu) updateData.kbsTesisKodu = kbsTesisKodu;
     if (kbsWebServisSifre) updateData.kbsWebServisSifre = kbsWebServisSifre;
     if (ipKisitAktif !== undefined) updateData.ipKisitAktif = ipKisitAktif;
-    if (ipAdresleri) updateData.ipAdresleri = ipAdresleri;
+    if (ipAdresleri !== undefined) {
+      updateData.ipAdresleri = Array.isArray(ipAdresleri)
+        ? ipAdresleri.join(',')
+        : typeof ipAdresleri === 'string' ? ipAdresleri : '';
+    }
 
     const tesis = await prisma.tesis.update({
       where: { id: req.tesis.id },

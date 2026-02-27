@@ -10,10 +10,16 @@ function createKBSService(tesis) {
     throw new Error('KBS bilgileri eksik');
   }
 
+  const raw = tesis.ipAdresleri;
+  const ipAdresleri = Array.isArray(raw)
+    ? raw
+    : typeof raw === 'string' && raw
+      ? raw.split(',').map((s) => s.trim()).filter(Boolean)
+      : [];
   const config = {
     tesisKodu: tesis.kbsTesisKodu,
     webServisSifre: tesis.kbsWebServisSifre,
-    ipAdresleri: tesis.ipAdresleri || []
+    ipAdresleri
   };
 
   if (tesis.kbsTuru === 'jandarma') {

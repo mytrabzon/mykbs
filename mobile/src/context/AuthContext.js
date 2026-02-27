@@ -13,6 +13,7 @@ const AUTH_STORAGE_KEYS = {
   TESIS: `@${APP_PREFIX}:auth:tesis`,
   SUPABASE_TOKEN: `@${APP_PREFIX}:auth:supabase_token`,
   LAST_TAB: `@${APP_PREFIX}:auth:last_tab`,
+  RECOVERY_PENDING: `@${APP_PREFIX}:auth:recovery_pending`,
 };
 
 const AuthContext = createContext({});
@@ -58,6 +59,7 @@ export const AuthProvider = ({ children }) => {
   const [token, setToken] = useState(null);
   const [lastTab, setLastTabState] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [recoverySessionPending, setRecoverySessionPending] = useState(false);
   const mounted = useRef(true);
 
   /** Supabase kullanılıyorsa her istekte güncel session'dan token alır; süresi dolmuşsa refresh eder. Böylece "Geçersiz token" 401 önlenir. */
@@ -154,6 +156,12 @@ export const AuthProvider = ({ children }) => {
             if (event === 'SIGNED_OUT') {
               await clearAuth();
             } else if ((event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') && session?.access_token) {
+              const recoveryPending = await AsyncStorage.getItem(AUTH_STORAGE_KEYS.RECOVERY_PENDING);
+              if (recoveryPending === '1') {
+                await AsyncStorage.removeItem(AUTH_STORAGE_KEYS.RECOVERY_PENDING);
+                setRecoverySessionPending(true);
+                return;
+              }
               await fetchMeAndSetState(session.access_token, setUser, setTesis, setToken, getSupabaseAwareTokenProvider);
             }
           });
@@ -261,25 +269,23 @@ export const AuthProvider = ({ children }) => {
   };
 
   const loginWithPassword = async (email, sifre) => {
-    if (!supabase) {
-      return { success: false, message: 'Giriş servisi kullanılamıyor.' };
+    const emailNorm = (email || '').trim().toLowerCase();
+    const passwordNorm = (sifre || '').trim();
+    if (!emailNorm || !passwordNorm) {
+      return { success: false, message: 'E-posta ve şifre giriniz.' };
     }
     try {
-      const { data, error } = await supabase.auth.signInWithPassword({
-        email: email.trim(),
-        password: sifre,
-      });
-      if (error) {
-        return { success: false, message: error.message || 'Giriş başarısız' };
+      const res = await api.post('/auth/giris/yeni', { email: emailNorm, sifre: passwordNorm });
+      const { token: newToken, kullanici, tesis: tesisData } = res.data || {};
+      if (newToken && kullanici && tesisData) {
+        return await loginWithToken(newToken, kullanici, tesisData, newToken);
       }
-      if (data?.session?.access_token) {
-        await fetchMeAndSetState(data.session.access_token, setUser, setTesis, setToken, getSupabaseAwareTokenProvider);
-        return { success: true };
-      }
-      return { success: false, message: 'Oturum alınamadı.' };
-    } catch (error) {
-      logger.error('Login with password error', error);
-      return { success: false, message: error?.message || 'Giriş başarısız' };
+      return { success: false, message: res.data?.message || 'Giriş başarısız' };
+    } catch (err) {
+      const status = err?.response?.status;
+      const msg = err?.response?.data?.message || err?.message;
+      logger.error('Login with password error', err);
+      return { success: false, message: msg || 'Giriş başarısız' };
     }
   };
 
@@ -304,10 +310,18 @@ export const AuthProvider = ({ children }) => {
       return { success: false, message: 'Şifre sıfırlama servisi kullanılamıyor.' };
     }
     try {
+      // Şifre sıfırlama linki uygulamada açılsın (Supabase Dashboard → Auth → URL Configuration'da mykbs://reset-password ekleyin)
+      const redirectTo = 'mykbs://reset-password';
       const { error } = await supabase.auth.resetPasswordForEmail((emailAddress || '').trim().toLowerCase(), {
-        redirectTo: undefined,
+        redirectTo,
       });
-      if (error) return { success: false, message: error.message };
+      if (error) {
+        const msg = (error.message || '').toLowerCase();
+        if (msg.includes('invalid') && msg.includes('credential')) {
+          return { success: false, message: 'Bu e-posta ile giriş yapılmıyor. Telefon ile kayıt olduysanız yukarıdaki "Kod Gönder" ile şifre sıfırlayabilirsiniz.' };
+        }
+        return { success: false, message: error.message };
+      }
       return { success: true, message: 'E-postanıza şifre sıfırlama linki gönderildi.' };
     } catch (error) {
       logger.error('resetPasswordForEmail error', error);
@@ -398,6 +412,8 @@ export const AuthProvider = ({ children }) => {
         setLastTab,
         isAuthenticated: !!token && !!user,
         isLoading,
+        recoverySessionPending,
+        clearRecoveryPending: () => { setRecoverySessionPending(false); },
         login,
         loginWithPassword,
         loginWithPhoneAndPassword,

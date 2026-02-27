@@ -68,10 +68,7 @@ async function authenticateTesisOrSupabase(req, res, next) {
           if (profile.is_disabled) {
             return errorResponse(req, res, 403, 'DISABLED', 'Hesabınız devre dışı bırakıldı.');
           }
-          const approvalStatus = profile.approval_status;
-          if (approvalStatus && approvalStatus !== 'approved') {
-            return errorResponse(req, res, 403, 'APPROVAL_REQUIRED', approvalStatus === 'rejected' ? 'Hesabınız onaylanmadı. Yöneticinize başvurun.' : 'Hesabınız henüz onaylanmadı. Yönetici onayından sonra devam edebilirsiniz.');
-          }
+          // Hesap onayı zorunlu değil: kayıt olan herkes tüm özellikleri kullanabilir
           let branch = null;
           let branchError = null;
           const fullSelect = 'id, name, kbs_turu, kbs_tesis_kodu, kbs_web_servis_sifre, kbs_configured, kbs_endpoint_url, kbs_approved, kbs_approved_at';
@@ -104,11 +101,8 @@ async function authenticateTesisOrSupabase(req, res, next) {
             return next();
           }
         }
-        if (profile && (profile.is_disabled || (profile.approval_status && profile.approval_status !== 'approved'))) {
-          if (profile.is_disabled) {
-            return errorResponse(req, res, 403, 'DISABLED', 'Hesabınız devre dışı bırakıldı.');
-          }
-          return errorResponse(req, res, 403, 'APPROVAL_REQUIRED', profile.approval_status === 'rejected' ? 'Hesabınız onaylanmadı. Yöneticinize başvurun.' : 'Hesabınız henüz onaylanmadı. Yönetici onayından sonra devam edebilirsiniz.');
+        if (profile && profile.is_disabled) {
+          return errorResponse(req, res, 403, 'DISABLED', 'Hesabınız devre dışı bırakıldı.');
         }
         // Şube atanmamış kullanıcı: admin ise ilk şubeyi kullan (anasayfa/tesis/oda çalışsın)
         const noBranch = !profile || !profile?.branch_id;

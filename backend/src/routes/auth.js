@@ -212,161 +212,162 @@ router.post('/pin', authenticate, async (req, res) => {
 });
 
 /**
- * Yeni kayıt (email/telefon + şifre ile)
+ * Yeni kayıt (tek adım: ad soyad, telefon, e-posta, şifre, otel adı, oda sayısı, ortalama bildirim).
+ * Kayıt olan kullanıcı hemen uygulamayı kullanabilir; KBS için Ayarlar'dan tesis kodu ve şifre ile onaya gönderir.
  */
 router.post('/kayit', async (req, res) => {
   try {
-    const { 
-      telefon, 
-      email, 
-      sifre, 
-      sifreTekrar, 
-      adSoyad, 
-      tesisAdi, 
-      il, 
-      ilce, 
-      adres, 
-      odaSayisi, 
-      tesisTuru 
+    const {
+      adSoyad,
+      telefon,
+      email,
+      sifre,
+      sifreTekrar,
+      tesisAdi,
+      odaSayisi,
+      ortalamaBildirim,
+      il,
+      ilce,
+      adres,
+      tesisTuru,
     } = req.body;
 
-    // Validasyon
-    if (!telefon && !email) {
-      return res.status(400).json({ message: 'Telefon veya email gereklidir' });
+    if (!adSoyad || String(adSoyad).trim().length < 2) {
+      return res.status(400).json({ message: 'Ad soyad en az 2 karakter olmalıdır' });
     }
-
-    if (!sifre || !sifreTekrar) {
-      return res.status(400).json({ message: 'Şifre ve şifre tekrarı gereklidir' });
+    if (!telefon || String(telefon).trim().length < 10) {
+      return res.status(400).json({ message: 'Telefon numarası giriniz' });
     }
-
+    if (!email || String(email).trim().length < 5) {
+      return res.status(400).json({ message: 'E-posta adresi giriniz' });
+    }
+    const emailNorm = String(email).trim().toLowerCase();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailNorm)) {
+      return res.status(400).json({ message: 'Geçerli bir e-posta adresi giriniz' });
+    }
+    if (!sifre || sifre.length < 6) {
+      return res.status(400).json({ message: 'Şifre en az 6 karakter olmalıdır' });
+    }
     if (sifre !== sifreTekrar) {
       return res.status(400).json({ message: 'Şifreler eşleşmiyor' });
     }
-
-    if (sifre.length < 6) {
-      return res.status(400).json({ message: 'Şifre en az 6 karakter olmalıdır' });
+    if (!tesisAdi || String(tesisAdi).trim().length < 2) {
+      return res.status(400).json({ message: 'Otel / tesis adı giriniz' });
+    }
+    const odaNum = parseInt(odaSayisi, 10);
+    if (isNaN(odaNum) || odaNum < 1 || odaNum > 10000) {
+      return res.status(400).json({ message: 'Oda sayısı 1–10000 arası olmalıdır' });
     }
 
-    // Telefon E.164 formatında (giriş ile aynı olmalı)
-    let formattedPhone = null;
-    if (telefon) {
-      formattedPhone = normalizePhone(telefon);
-      if (!formattedPhone) {
-        return res.status(400).json({ message: 'Geçersiz telefon numarası' });
-      }
+    const formattedPhone = normalizePhone(telefon);
+    if (!formattedPhone) {
+      return res.status(400).json({ message: 'Geçersiz telefon numarası' });
     }
 
-    // Email/telefon kontrolü
-    if (email) {
-      const existingEmail = await prisma.kullanici.findFirst({
-        where: { email: email }
-      });
-      if (existingEmail) {
-        return res.status(400).json({ message: 'Bu email adresi zaten kayıtlı' });
-      }
+    const existingEmail = await prisma.kullanici.findFirst({ where: { email: emailNorm } });
+    if (existingEmail) {
+      return res.status(400).json({ message: 'Bu e-posta adresi zaten kayıtlı' });
+    }
+    const variants = phoneVariants(formattedPhone);
+    const existingPhone = await prisma.kullanici.findFirst({
+      where: variants.length ? { OR: variants.map((t) => ({ telefon: t })) } : { telefon: formattedPhone },
+    });
+    if (existingPhone) {
+      return res.status(400).json({ message: 'Bu telefon numarası zaten kayıtlı' });
     }
 
-    if (formattedPhone) {
-      const existingPhone = await prisma.kullanici.findFirst({
-        where: { telefon: formattedPhone }
-      });
-      if (existingPhone) {
-        return res.status(400).json({ message: 'Bu telefon numarası zaten kayıtlı' });
-      }
-    }
-
-    // Tesis kodu oluştur
     let tesisKodu;
     let unique = false;
     while (!unique) {
       tesisKodu = `MYKBS-${Math.floor(100000 + Math.random() * 900000)}`;
-      const existing = await prisma.tesis.findUnique({ where: { tesisKodu } });
-      if (!existing) unique = true;
+      const ex = await prisma.tesis.findUnique({ where: { tesisKodu } });
+      if (!ex) unique = true;
     }
 
-    // Şifreyi hash'le
-    const hashedSifre = await bcrypt.hash(sifre, 10);
+    const trialDefaults = setTrialDefaults();
+    const kota = Math.min(Math.max(parseInt(ortalamaBildirim, 10) || trialDefaults.kota, 50), 10000);
 
-    // Tesis oluştur (ücretsiz deneme: 3 gün, 100 bildirim)
     const tesis = await prisma.tesis.create({
       data: {
-        ...setTrialDefaults(),
-        tesisAdi: tesisAdi || adSoyad + ' Tesis',
-        yetkiliAdSoyad: adSoyad || 'Tesis Yetkilisi',
-        telefon: formattedPhone || '',
-        email: email || `${formattedPhone}@mykbs.com`,
-        il: il || 'İstanbul',
-        ilce: ilce || '',
-        adres: adres || '',
-        odaSayisi: odaSayisi ? parseInt(odaSayisi) : 10,
-        tesisTuru: tesisTuru || 'otel',
+        ...trialDefaults,
+        kota,
+        tesisAdi: String(tesisAdi).trim(),
+        yetkiliAdSoyad: String(adSoyad).trim(),
+        telefon: formattedPhone,
+        email: emailNorm,
+        il: (il && String(il).trim()) || '',
+        ilce: (ilce && String(ilce).trim()) || '',
+        adres: (adres && String(adres).trim()) || '',
+        odaSayisi: odaNum,
+        tesisTuru: (tesisTuru && String(tesisTuru).trim()) || 'otel',
         tesisKodu,
-        durum: 'aktif'
-      }
+        durum: 'aktif',
+      },
     });
 
-    // Kullanıcı oluştur (sahip rolü ile)
+    const hashedSifre = await bcrypt.hash(sifre, 10);
     const kullanici = await prisma.kullanici.create({
       data: {
         tesisId: tesis.id,
-        adSoyad: adSoyad || 'Tesis Yetkilisi',
-        telefon: formattedPhone || null,
-        email: email || null,
-        sifre: hashedSifre, // Yeni alan: hash'lenmiş şifre
+        adSoyad: String(adSoyad).trim(),
+        telefon: formattedPhone,
+        email: emailNorm,
+        sifre: hashedSifre,
         rol: 'sahip',
         checkInYetki: true,
         odaDegistirmeYetki: true,
-        bilgiDuzenlemeYetki: true
-      }
+        bilgiDuzenlemeYetki: true,
+      },
     });
 
-    // Email gönder (eğer email varsa)
-    if (email) {
-      await emailService.sendRegistrationEmail(email, {
-        adSoyad: adSoyad || 'Tesis Yetkilisi',
-        tesisAdi: tesis.tesisAdi,
-        tesisKodu: tesis.tesisKodu,
-        telefon: formattedPhone || 'Belirtilmemiş'
-      });
+    try {
+      if (emailNorm) {
+        await emailService.sendRegistrationEmail(emailNorm, {
+          adSoyad: String(adSoyad).trim(),
+          tesisAdi: tesis.tesisAdi,
+          tesisKodu: tesis.tesisKodu,
+          telefon: formattedPhone,
+        });
+      }
+    } catch (e) {
+      console.warn('Kayıt e-posta gönderilemedi:', e?.message);
+    }
+    try {
+      if (formattedPhone) {
+        await smsService.sendSMS(formattedPhone, "MyKBS'ye hoş geldiniz! Tesis: " + tesis.tesisAdi + ". Giriş: telefon/e-posta ve şifreniz.");
+      }
+    } catch (e) {
+      console.warn('Kayıt SMS gönderilemedi:', e?.message);
     }
 
-    // SMS gönder (eğer telefon varsa)
-    if (formattedPhone) {
-      const smsMessage = `MyKBS'ye hoş geldiniz! Tesis Kodu: ${tesis.tesisKodu}\nGiriş için telefon/email ve şifrenizi kullanın.`;
-      await smsService.sendSMS(formattedPhone, smsMessage);
-    }
-
-    // JWT token oluştur
     const token = jwt.sign(
       { userId: kullanici.id, tesisId: tesis.id },
       process.env.JWT_SECRET,
       { expiresIn: process.env.JWT_EXPIRES_IN || '7d' }
     );
 
-    console.log('Yeni kayıt başarılı:', { 
-      tesisId: tesis.id, 
-      kullaniciId: kullanici.id,
-      email: !!email,
-      telefon: !!formattedPhone
-    });
+    console.log('Yeni kayıt başarılı:', { tesisId: tesis.id, kullaniciId: kullanici.id });
 
     res.status(201).json({
-      message: 'Kayıt başarıyla tamamlandı',
+      message: "Kayıt tamamlandı. Uygulamayı kullanabilirsiniz. KBS için Ayarlar'dan tesis kodu ve şifre ile onaya gönderin.",
       token,
       kullanici: {
         id: kullanici.id,
         adSoyad: kullanici.adSoyad,
         email: kullanici.email,
         telefon: kullanici.telefon,
-        rol: kullanici.rol
+        rol: kullanici.rol,
+        yetkiler: { checkIn: true, odaDegistirme: true, bilgiDuzenleme: true },
       },
       tesis: {
         id: tesis.id,
         tesisAdi: tesis.tesisAdi,
-        tesisKodu: tesis.tesisKodu
-      }
+        tesisKodu: tesis.tesisKodu,
+        paket: tesis.paket,
+        kota: tesis.kota,
+        kullanilanKota: tesis.kullanilanKota ?? 0,
+      },
     });
-
   } catch (error) {
     console.error('Kayıt hatası:', error);
     res.status(500).json({ message: 'Kayıt işlemi başarısız', error: error.message });
@@ -591,7 +592,8 @@ router.post('/giris/yeni', async (req, res) => {
   try {
     const { email, telefon, sifre } = req.body;
 
-    if ((!email && !telefon) || !sifre) {
+    const sifreTrim = (sifre && String(sifre).trim()) || '';
+    if ((!email && !telefon) || !sifreTrim) {
       return res.status(400).json({ message: 'Email/telefon ve şifre gereklidir' });
     }
 
@@ -599,10 +601,17 @@ router.post('/giris/yeni', async (req, res) => {
     let kullanici;
     try {
       if (email) {
+        const emailNorm = String(email).trim().toLowerCase();
         kullanici = await prisma.kullanici.findFirst({
-          where: { email: email },
+          where: { email: emailNorm },
           include: { tesis: true }
         });
+        if (!kullanici) {
+          kullanici = await prisma.kullanici.findFirst({
+            where: { email: email },
+            include: { tesis: true }
+          });
+        }
       } else if (telefon) {
         const formattedPhone = normalizePhone(telefon);
         if (!formattedPhone) {
@@ -627,7 +636,7 @@ router.post('/giris/yeni', async (req, res) => {
       return res.status(401).json({ message: 'Şifre ile giriş yapılamaz. Lütfen OTP ile giriş yapın.' });
     }
 
-    const sifreDogru = await bcrypt.compare(sifre, kullanici.sifre);
+    const sifreDogru = await bcrypt.compare(sifreTrim, kullanici.sifre);
     if (!sifreDogru) {
       return res.status(401).json({ message: 'Geçersiz şifre' });
     }

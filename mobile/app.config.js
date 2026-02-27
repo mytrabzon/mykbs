@@ -24,6 +24,7 @@ export default {
     name: "MyKBS",
     slug: "mykbs",
     owner: "luvolive",
+    scheme: "mykbs",
     version: "1.0.0",
     orientation: "portrait",
     // icon: "./assets/icon.png", // Asset dosyası oluşturulana kadar yorum satırı

@@ -60,8 +60,8 @@ export default function AuditPage() {
       <p className="kbs-page-sub">
         Sistem işlem kayıtları. {filterUserId && (
           <span>
-            Kullanıcı filtresi: <code style={{ background: 'var(--kbs-surface)', padding: '0.2rem 0.5rem', borderRadius: 6 }}>{filterUserId}</code>
-            {' '}<Link href="/audit" style={{ color: 'var(--kbs-accent)' }}>Filtreyi kaldır</Link>
+            Kullanıcı filtresi: <code className="kbs-code-inline">{filterUserId}</code>
+            {' '}<Link href="/audit" className="kbs-link-accent">Filtreyi kaldır</Link>
           </span>
         )}
         {!filterUserId && 'Tüm kullanıcıların işlemleri listelenir.'}
@@ -86,12 +86,12 @@ export default function AuditPage() {
                   <td>{l.entity} {l.entity_id ? `#${String(l.entity_id).slice(0, 8)}` : ''}</td>
                   <td>
                     {l.user_id ? (
-                      <Link href={`/users/${l.user_id}`} style={{ color: 'var(--kbs-accent)', textDecoration: 'none' }} title="Kullanıcı aktiviteleri">
+                      <Link href={`/users/${l.user_id}`} className="admin-audit-link" title="Kullanıcı aktiviteleri">
                         {l.user_id.slice(0, 8)}…
                       </Link>
                     ) : '-'}
                   </td>
-                  <td style={{ fontSize: '0.85rem', color: 'var(--kbs-text-muted)', textAlign: 'left' }}>
+                  <td className="admin-audit-meta-cell">
                     {l.meta_json ? JSON.stringify(l.meta_json) : '-'}
                   </td>
                 </tr>
@@ -99,7 +99,7 @@ export default function AuditPage() {
             </tbody>
           </table>
         </div>
-        {logs.length === 0 && <p className="kbs-card-empty-text" style={{ padding: '1.25rem' }}>Kayıt yok.</p>}
+        {logs.length === 0 && <p className="kbs-card-empty-text admin-audit-empty">Kayıt yok.</p>}
       </div>
     </div>
   )

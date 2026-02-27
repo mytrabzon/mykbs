@@ -175,7 +175,9 @@ export default function OTPVerifyScreen() {
 
   const handleVerify = async (otpCode = null) => {
     try {
-      const code = otpCode || otp.join('');
+      // E-posta ve SMS kodları her zaman 6 haneli; sadece rakam kabul et
+      const raw = (otpCode || otp.join('')).replace(/\D/g, '');
+      const code = raw.slice(0, 6);
       logger.button('Verify OTP Button', 'clicked');
       logger.log('OTP verification started', { telefon, otpLength: code.length, islemTipi });
 
@@ -423,7 +425,7 @@ export default function OTPVerifyScreen() {
               style={styles.phoneInput}
               value={phoneInput}
               onChangeText={(t) => setPhoneInput(isEmail(t) ? t : t.replace(/[^\d\s]/g, '').slice(0, 14))}
-              placeholder="5xx xxx xx xx veya ornek@email.com"
+              placeholder=""
               keyboardType={isEmail(phoneInput) ? 'email-address' : 'phone-pad'}
               autoCapitalize="none"
               autoFocus

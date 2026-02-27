@@ -123,13 +123,12 @@ export default function PendingUsersPage() {
                     {u.email || '—'}
                     {u.phone ? ` / ${u.phone}` : ''}
                   </td>
-                  <td style={{ fontSize: '0.9rem' }}>{new Date(u.created_at).toLocaleString('tr-TR')}</td>
+                  <td className="admin-pending-date">{new Date(u.created_at).toLocaleString('tr-TR')}</td>
                   <td>
-                    <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                    <div className="admin-pending-btns">
                       <button
                         type="button"
-                        className="kbs-btn-primary"
-                        style={{ padding: '0.4rem 0.8rem', fontSize: '0.85rem' }}
+                        className="kbs-btn-primary admin-pending-btn-pri"
                         disabled={acting !== null}
                         onClick={() => handleApprove(u.user_id)}
                       >
@@ -137,8 +136,7 @@ export default function PendingUsersPage() {
                       </button>
                       <button
                         type="button"
-                        className="kbs-btn-secondary"
-                        style={{ padding: '0.4rem 0.8rem', fontSize: '0.85rem' }}
+                        className="kbs-btn-secondary admin-pending-btn-sec"
                         disabled={acting !== null}
                         onClick={() => setRejectModal({ userId: u.user_id, name: u.display_name || u.email || u.phone || u.user_id })}
                       >
@@ -146,8 +144,7 @@ export default function PendingUsersPage() {
                       </button>
                       <button
                         type="button"
-                        className="kbs-btn-secondary"
-                        style={{ padding: '0.4rem 0.8rem', fontSize: '0.85rem', color: 'var(--kbs-error)' }}
+                        className="kbs-btn-secondary admin-pending-btn-danger"
                         disabled={acting !== null}
                         onClick={() => handleDisable(u.user_id)}
                       >
@@ -161,7 +158,7 @@ export default function PendingUsersPage() {
           </table>
         </div>
         {users.length === 0 && (
-          <p className="kbs-card-empty-text" style={{ padding: '1.25rem' }}>
+          <p className="kbs-card-empty-text kbs-card-empty-pad">
             Onay bekleyen kullanıcı yok.
           </p>
         )}
@@ -171,22 +168,21 @@ export default function PendingUsersPage() {
         <div className="admin-modal-overlay" onClick={() => setRejectModal(null)}>
           <div className="admin-modal" onClick={(e) => e.stopPropagation()}>
             <h3>Reddet: {rejectModal.name}</h3>
-            <p style={{ marginBottom: '0.75rem', color: 'var(--kbs-text-muted)' }}>İsteğe bağlı red nedeni:</p>
+            <p className="admin-modal-reject-p">İsteğe bağlı red nedeni:</p>
             <textarea
               value={rejectReason}
               onChange={(e) => setRejectReason(e.target.value)}
               placeholder="Örn: Eksik bilgi"
               rows={3}
-              style={{ width: '100%', marginBottom: '1rem', padding: '0.5rem' }}
+              className="admin-modal-reject-textarea"
             />
-            <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'flex-end' }}>
+            <div className="admin-modal-reject-actions">
               <button type="button" className="kbs-btn-secondary" onClick={() => setRejectModal(null)}>
                 İptal
               </button>
               <button
                 type="button"
-                className="kbs-btn-primary"
-                style={{ background: 'var(--kbs-danger)' }}
+                className="kbs-btn-primary admin-reject-btn-danger"
                 disabled={acting !== null}
                 onClick={handleReject}
               >

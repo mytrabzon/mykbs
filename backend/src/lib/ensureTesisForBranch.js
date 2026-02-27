@@ -1,8 +1,8 @@
 /**
  * Supabase branch_id için Prisma'da Tesis kaydı yoksa oluşturur.
  * Oda/Misafir/Bildirim route'ları branch_id ile Prisma kullandığı için bu kayıt gerekli.
- * Not: 08P01 "insufficient data left in message" pooler (port 6543) ile Prisma'da görülebilir;
- *      DATABASE_URL için direct (port 5432) kullanın veya tekrar deneyin.
+ * Not: 08P01 pooler (port 6543) ile Prisma'da görülebilir. Çözüm: DATABASE_URL = Direct (port 5432).
+ *      Bkz: docs/RAILWAY_DATABASE_URL_08P01_FIX.md
  * @param {object} prisma - PrismaClient instance
  * @param {string} branchId - Supabase branches.id (UUID)
  * @param {string} branchName - branches.name (tesis adı)

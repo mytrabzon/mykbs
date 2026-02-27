@@ -95,7 +95,7 @@ export default function TesisDetayPage() {
     return (
       <div className="admin-page">
         <p className="kbs-page-sub">Tesis bulunamadı.</p>
-        <Link href="/tesisler" className="kbs-btn-primary" style={{ display: 'inline-block', width: 'auto', padding: '0.6rem 1.2rem', textDecoration: 'none', color: '#0b0f1a' }}>
+        <Link href="/tesisler" className="kbs-btn-primary admin-detail-link">
           ← Tesis listesine dön
         </Link>
       </div>
@@ -106,8 +106,8 @@ export default function TesisDetayPage() {
 
   return (
     <div className="admin-page admin-page-detail">
-      <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '1rem', flexWrap: 'wrap' }}>
-        <Link href="/tesisler" className="kbs-page-back" style={{ color: 'var(--kbs-accent)', textDecoration: 'none', fontSize: '0.95rem' }}>
+      <div className="admin-tesis-detail-back">
+        <Link href="/tesisler" className="kbs-page-back">
           ← Tesisler
         </Link>
       </div>
@@ -116,56 +116,56 @@ export default function TesisDetayPage() {
         {tesis.tesisKodu} · {tesis.durum}
       </p>
 
-      <div style={{ display: 'flex', gap: '0.75rem', marginBottom: '1.5rem', flexWrap: 'wrap' }}>
+      <div className="admin-tesis-detail-bar">
         {tesis.durum === 'incelemede' && (
-          <button type="button" onClick={handleOnayla} className="kbs-btn-primary" style={{ width: 'auto', padding: '0.5rem 1rem' }}>
+          <button type="button" onClick={handleOnayla} className="kbs-btn-primary admin-tesis-detail-btn">
             Onayla
           </button>
         )}
         {(tesis.durum === 'onaylandi' || tesis.durum === 'aktif') && (
-          <button type="button" onClick={handleYeniSifre} className="kbs-btn-primary" style={{ width: 'auto', padding: '0.5rem 1rem', background: 'var(--kbs-surface-elevated)', color: 'var(--kbs-accent)' }}>
+          <button type="button" onClick={handleYeniSifre} className="kbs-btn-primary admin-tesis-detail-btn-alt">
             Yeni aktivasyon şifresi
           </button>
         )}
       </div>
 
-      <div className="kbs-card" style={{ marginBottom: '1.5rem' }}>
+      <div className="kbs-card admin-tesis-info-card">
         <h2 className="kbs-card-title">Bilgiler</h2>
-        <dl style={{ display: 'grid', gridTemplateColumns: 'auto 1fr', gap: '0.5rem 1.5rem', margin: 0 }}>
-          <dt style={{ color: 'var(--kbs-text-muted)' }}>Yetkili</dt>
-          <dd style={{ margin: 0 }}>{tesis.yetkiliAdSoyad}</dd>
-          <dt style={{ color: 'var(--kbs-text-muted)' }}>Telefon</dt>
-          <dd style={{ margin: 0 }}><a href={`tel:${tesis.telefon}`} style={{ color: 'var(--kbs-accent)' }}>{tesis.telefon}</a></dd>
-          <dt style={{ color: 'var(--kbs-text-muted)' }}>E-posta</dt>
-          <dd style={{ margin: 0 }}><a href={`mailto:${tesis.email}`} style={{ color: 'var(--kbs-accent)' }}>{tesis.email}</a></dd>
-          <dt style={{ color: 'var(--kbs-text-muted)' }}>İl</dt>
-          <dd style={{ margin: 0 }}>{tesis.il}</dd>
+        <dl className="admin-tesis-dl">
+          <dt className="admin-tesis-info-dt">Yetkili</dt>
+          <dd className="admin-tesis-info-dd">{tesis.yetkiliAdSoyad}</dd>
+          <dt className="admin-tesis-info-dt">Telefon</dt>
+          <dd className="admin-tesis-info-dd"><a href={`tel:${tesis.telefon}`}>{tesis.telefon}</a></dd>
+          <dt className="admin-tesis-info-dt">E-posta</dt>
+          <dd className="admin-tesis-info-dd"><a href={`mailto:${tesis.email}`}>{tesis.email}</a></dd>
+          <dt className="admin-tesis-info-dt">İl</dt>
+          <dd className="admin-tesis-info-dd">{tesis.il}</dd>
           {tesis.adres && (
             <>
-              <dt style={{ color: 'var(--kbs-text-muted)' }}>Adres</dt>
-              <dd style={{ margin: 0 }}>{tesis.adres}</dd>
+              <dt className="admin-tesis-info-dt">Adres</dt>
+              <dd className="admin-tesis-info-dd">{tesis.adres}</dd>
             </>
           )}
-          <dt style={{ color: 'var(--kbs-text-muted)' }}>Paket</dt>
-          <dd style={{ margin: 0 }}>{tesis.paket}</dd>
-          <dt style={{ color: 'var(--kbs-text-muted)' }}>Kota</dt>
-          <dd style={{ margin: 0 }}>{tesis.kullanilanKota} / {tesis.kota}</dd>
-          <dt style={{ color: 'var(--kbs-text-muted)' }}>KBS Türü</dt>
-          <dd style={{ margin: 0 }}>{tesis.kbsTuru || '-'}</dd>
-          <dt style={{ color: 'var(--kbs-text-muted)' }}>Kayıt</dt>
-          <dd style={{ margin: 0 }}>{new Date(tesis.createdAt).toLocaleString('tr-TR')}</dd>
+          <dt className="admin-tesis-info-dt">Paket</dt>
+          <dd className="admin-tesis-info-dd">{tesis.paket}</dd>
+          <dt className="admin-tesis-info-dt">Kota</dt>
+          <dd className="admin-tesis-info-dd">{tesis.kullanilanKota} / {tesis.kota}</dd>
+          <dt className="admin-tesis-info-dt">KBS Türü</dt>
+          <dd className="admin-tesis-info-dd">{tesis.kbsTuru || '-'}</dd>
+          <dt className="admin-tesis-info-dt">Kayıt</dt>
+          <dd className="admin-tesis-info-dd">{new Date(tesis.createdAt).toLocaleString('tr-TR')}</dd>
         </dl>
       </div>
 
       <div className="kbs-card">
         <h2 className="kbs-card-title">Özet</h2>
-        <p style={{ color: 'var(--kbs-text-muted)', marginBottom: '1rem' }}>
-          Oda: <strong style={{ color: 'var(--kbs-text)' }}>{counts.odalar}</strong> ·
-          Bildirim: <strong style={{ color: 'var(--kbs-text)' }}>{counts.bildirimler}</strong> ·
-          Kullanıcı: <strong style={{ color: 'var(--kbs-text)' }}>{counts.kullanicilar}</strong>
+        <p className="admin-tesis-summary">
+          Oda: <strong className="admin-detail-strong">{counts.odalar}</strong> ·
+          Bildirim: <strong className="admin-detail-strong">{counts.bildirimler}</strong> ·
+          Kullanıcı: <strong className="admin-detail-strong">{counts.kullanicilar}</strong>
         </p>
-        <p style={{ fontSize: '0.9rem', color: 'var(--kbs-text-muted)' }}>
-          Log ve hata listesi backend API üzerinden: <code style={{ background: 'var(--kbs-bg)', padding: '0.2rem 0.5rem', borderRadius: 6 }}>GET /api/admin/tesis/{tesis.id}/loglar</code> ve <code style={{ background: 'var(--kbs-bg)', padding: '0.2rem 0.5rem', borderRadius: 6 }}>GET /api/admin/tesis/{tesis.id}/hatalar</code>
+        <p className="admin-tesis-summary-sm">
+          Log ve hata listesi backend API üzerinden: <code>GET /api/admin/tesis/{tesis.id}/loglar</code> ve <code>GET /api/admin/tesis/{tesis.id}/hatalar</code>
         </p>
       </div>
     </div>

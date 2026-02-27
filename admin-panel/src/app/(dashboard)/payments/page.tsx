@@ -104,28 +104,27 @@ export default function PaymentsPage() {
         Satış listesi: mobil &quot;Satın Al&quot; ile oluşturulan siparişler. Ödeme alındığında <strong>Ödeme alındı + Paket ata</strong> ile tesis paketi güncellenir.
       </p>
 
-      <div className="kbs-card" style={{ marginBottom: '1rem' }}>
-        <div style={{ marginBottom: '0.75rem' }}>
-          <label style={{ fontSize: '0.9rem' }}>
+      <div className="kbs-card admin-payments-note-card">
+        <div className="admin-payments-note-row">
+          <label className="admin-payments-label">
             Ödeme notu (havale ref vb. — &quot;Ödeme alındı&quot; tıklandığında gönderilir):
             <input
               type="text"
               placeholder="Opsiyonel"
               value={adminNot}
               onChange={(e) => setAdminNot(e.target.value)}
-              className="kbs-input"
-              style={{ marginLeft: '0.5rem', width: 240, padding: '0.4rem 0.6rem' }}
+              className="kbs-input admin-payments-note-input"
             />
           </label>
         </div>
-        <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap', alignItems: 'center' }}>
+        <div className="admin-payments-filters-row">
           <label>
             Durum:
             <select
+              aria-label="Sipariş durumu filtresi"
               value={filtre.durum}
               onChange={(e) => setFiltre({ ...filtre, durum: e.target.value })}
-              className="kbs-select"
-              style={{ marginLeft: '0.5rem', width: 'auto' }}
+              className="kbs-select admin-payments-select-inline"
             >
               <option value="">Tümü</option>
               <option value="pending">Bekliyor</option>
@@ -136,10 +135,10 @@ export default function PaymentsPage() {
           <label>
             Paket:
             <select
+              aria-label="Paket filtresi"
               value={filtre.paket}
               onChange={(e) => setFiltre({ ...filtre, paket: e.target.value })}
-              className="kbs-select"
-              style={{ marginLeft: '0.5rem', width: 'auto' }}
+              className="kbs-select admin-payments-select-inline"
             >
               <option value="">Tümü</option>
               <option value="starter">Starter</option>
@@ -148,7 +147,7 @@ export default function PaymentsPage() {
               <option value="enterprise">Enterprise</option>
             </select>
           </label>
-          <button type="button" onClick={() => load()} className="kbs-btn-primary" style={{ padding: '0.45rem 0.9rem' }}>
+          <button type="button" onClick={() => load()} className="kbs-btn-primary admin-payments-refresh-btn">
             Yenile
           </button>
         </div>
@@ -172,33 +171,23 @@ export default function PaymentsPage() {
             <tbody>
               {siparisler.map((s) => (
                 <tr key={s.id}>
-                  <td style={{ fontFamily: 'monospace' }}>{s.siparisNo}</td>
+                  <td className="admin-siparis-no">{s.siparisNo}</td>
                   <td>
-                    {s.tesis?.tesisAdi ?? '—'} <span style={{ color: 'var(--kbs-text-muted)', fontSize: '0.85rem' }}>({s.tesis?.tesisKodu})</span>
+                    {s.tesis?.tesisAdi ?? '—'} <span className="admin-tesis-code">({s.tesis?.tesisKodu})</span>
                   </td>
                   <td>{s.paket}</td>
                   <td>{s.tutarTL.toLocaleString('tr-TR')} ₺</td>
                   <td>{s.kredi}</td>
                   <td>
                     <span
-                      style={{
-                        padding: '0.2rem 0.5rem',
-                        borderRadius: 6,
-                        fontSize: '0.85rem',
-                        background:
-                          s.durum === 'odendi'
-                            ? 'var(--kbs-success-bg, #dcfce7)'
-                            : s.durum === 'iptal'
-                              ? 'var(--kbs-surface-elevated)'
-                              : 'var(--kbs-warning-bg, #fef3c7)',
-                        color:
-                          s.durum === 'odendi' ? 'var(--kbs-success, #16a34a)' : s.durum === 'iptal' ? 'var(--kbs-text-muted)' : 'var(--kbs-warning, #b45309)',
-                      }}
+                      className={
+                        s.durum === 'odendi' ? 'kbs-badge-odendi' : s.durum === 'iptal' ? 'kbs-badge-iptal' : 'kbs-badge-pending'
+                      }
                     >
                       {s.durum === 'pending' ? 'Bekliyor' : s.durum === 'odendi' ? 'Ödendi' : 'İptal'}
                     </span>
                   </td>
-                  <td style={{ fontSize: '0.9rem' }}>{new Date(s.createdAt).toLocaleString('tr-TR')}</td>
+                  <td className="admin-table-date">{new Date(s.createdAt).toLocaleString('tr-TR')}</td>
                   <td>
                     {s.durum === 'pending' && (
                       <>
@@ -206,8 +195,7 @@ export default function PaymentsPage() {
                           type="button"
                           onClick={() => handleOdendi(s.id)}
                           disabled={actingId !== null}
-                          className="kbs-btn-primary"
-                          style={{ padding: '0.35rem 0.7rem', fontSize: '0.85rem', marginRight: 4 }}
+                          className="kbs-btn-primary admin-btn-row"
                         >
                           {actingId === s.id ? '...' : 'Ödeme alındı + Paket ata'}
                         </button>
@@ -215,15 +203,14 @@ export default function PaymentsPage() {
                           type="button"
                           onClick={() => handleIptal(s.id)}
                           disabled={actingId !== null}
-                          className="kbs-btn-secondary"
-                          style={{ padding: '0.35rem 0.7rem', fontSize: '0.85rem' }}
+                          className="kbs-btn-secondary admin-btn-iptal"
                         >
                           İptal
                         </button>
                       </>
                     )}
                     {s.durum === 'odendi' && s.odemeAt && (
-                      <span style={{ fontSize: '0.85rem', color: 'var(--kbs-text-muted)' }}>
+                      <span className="admin-odeme-date">
                         Ödeme: {new Date(s.odemeAt).toLocaleString('tr-TR')}
                       </span>
                     )}
@@ -234,7 +221,7 @@ export default function PaymentsPage() {
           </table>
         </div>
         {siparisler.length === 0 && (
-          <p className="kbs-card-empty-text" style={{ padding: '1.25rem' }}>
+          <p className="kbs-card-empty-text kbs-card-empty-pad">
             Sipariş bulunamadı. Mobil uygulamada &quot;Satın Al&quot; ile sipariş oluşturulduğunda burada listelenir.
           </p>
         )}

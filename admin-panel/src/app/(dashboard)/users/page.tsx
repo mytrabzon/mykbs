@@ -68,13 +68,13 @@ export default function UsersPage() {
             <tbody>
               {users.map((u) => (
                 <tr key={u.id}>
-                  <td style={{ fontSize: '0.85rem', color: 'var(--kbs-text-muted)' }}>{u.id.slice(0, 8)}…</td>
+                  <td className="admin-table-id">{u.id.slice(0, 8)}…</td>
                   <td>{u.email || '—'}</td>
                   <td>{u.phone || '—'}</td>
-                  <td style={{ fontSize: '0.9rem' }}>{u.last_sign_in_at ? new Date(u.last_sign_in_at).toLocaleString('tr-TR') : '—'}</td>
-                  <td style={{ fontSize: '0.9rem' }}>{new Date(u.created_at).toLocaleString('tr-TR')}</td>
+                  <td className="admin-user-table-date">{u.last_sign_in_at ? new Date(u.last_sign_in_at).toLocaleString('tr-TR') : '—'}</td>
+                  <td className="admin-table-date-cell">{new Date(u.created_at).toLocaleString('tr-TR')}</td>
                   <td>
-                    <Link href={`/users/${u.id}`} className="kbs-btn-primary" style={{ width: 'auto', padding: '0.45rem 0.9rem', fontSize: '0.85rem', display: 'inline-block', textDecoration: 'none', background: 'var(--kbs-surface-elevated)', color: 'var(--kbs-accent)' }}>
+                    <Link href={`/users/${u.id}`} className="kbs-btn-primary admin-users-link">
                       Detay
                     </Link>
                   </td>
@@ -83,7 +83,7 @@ export default function UsersPage() {
             </tbody>
           </table>
         </div>
-        {users.length === 0 && <p className="kbs-card-empty-text" style={{ padding: '1.25rem' }}>Kullanıcı bulunamadı.</p>}
+        {users.length === 0 && <p className="kbs-card-empty-text kbs-card-empty-pad">Kullanıcı bulunamadı.</p>}
       </div>
     </div>
   )

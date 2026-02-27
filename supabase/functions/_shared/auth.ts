@@ -50,7 +50,7 @@ export function errorResponse(
 
 /**
  * Authorization: Bearer <jwt> ile istegi dogrula, user + profile dondur.
- * is_disabled ise 403.
+ * is_disabled ise 403. Hesap onayi (approval_status) kontrolu yok — kayit olan herkes tum ozellikleri kullanabilir.
  * Edge'de auth bypass (DISABLE_AUTH) yok; production'da config ile auth kapatılmaz.
  */
 export async function requireAuth(req: Request): Promise<AuthResult | Response> {
@@ -101,17 +101,7 @@ export async function requireAuth(req: Request): Promise<AuthResult | Response> 
     return errorResponse("Hesabiniz devre disi birakildi", 403, "DISABLED");
   }
 
-  const status = (profile as { approval_status?: string }).approval_status;
-  if (status !== "approved") {
-    return errorResponse(
-      status === "rejected"
-        ? "Hesabiniz onaylanmadi. Yoneticinize basvurun."
-        : "Hesabiniz henuz onaylanmadi. Yonetici onayindan sonra islem yapabileceksiniz.",
-      403,
-      "APPROVAL_REQUIRED"
-    );
-  }
-
+  // Hesap onayi zorunlu degil: pending/rejected kullanıcılar da tum ozellikleri kullanabilir
   return {
     userId: user.id,
     profile: profile as UserProfile,

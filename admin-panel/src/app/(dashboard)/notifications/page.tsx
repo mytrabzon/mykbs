@@ -8,9 +8,9 @@ export default function NotificationsPage() {
       <h1 className="kbs-page-title">Bildirim & Duyurular</h1>
       <p className="kbs-page-sub">Push, in-app inbox, zorunlu duyuru. Composer + okundu sayacı.</p>
       <div className="kbs-card">
-        <p className="kbs-card-empty-text" style={{ padding: '1.25rem' }}>
+        <p className="kbs-card-empty-text admin-notifications-empty">
           Bildirim bölümü kullanıma açıktır. KBS bildirim kuyruğu için{' '}
-          <Link href="/kbs-notifications" style={{ color: 'var(--kbs-accent)' }}>KBS Bildirimleri</Link> sayfasını kullanabilirsiniz.
+          <Link href="/kbs-notifications" className="admin-notifications-inline-link">KBS Bildirimleri</Link> sayfasını kullanabilirsiniz.
         </p>
       </div>
     </div>

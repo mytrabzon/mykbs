@@ -55,14 +55,14 @@ export default function UserDetayPage() {
 
   return (
     <div className="admin-page admin-page-detail">
-      <div style={{ marginBottom: '1rem' }}>
-        <Link href="/users" className="kbs-page-back" style={{ color: 'var(--kbs-accent)', textDecoration: 'none', fontSize: '0.95rem' }}>
+      <div className="admin-detail-back">
+        <Link href="/users" className="kbs-page-back">
           ← Kullanıcılar
         </Link>
       </div>
       <h1 className="kbs-page-title">Kullanıcı aktiviteleri</h1>
       <p className="kbs-page-sub">
-        User ID: <code style={{ background: 'var(--kbs-surface)', padding: '0.2rem 0.5rem', borderRadius: 6 }}>{userId}</code>
+        User ID: <code className="admin-detail-code">{userId}</code>
       </p>
 
       <div className="kbs-card">
@@ -82,7 +82,7 @@ export default function UserDetayPage() {
                   <td>{new Date(l.created_at).toLocaleString('tr-TR')}</td>
                   <td>{l.action}</td>
                   <td>{l.entity} {l.entity_id ? `#${String(l.entity_id).slice(0, 8)}` : ''}</td>
-                  <td style={{ fontSize: '0.85rem', color: 'var(--kbs-text-muted)', textAlign: 'left', maxWidth: 280, overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                  <td className="admin-detail-meta">
                     {l.meta_json ? JSON.stringify(l.meta_json) : '-'}
                   </td>
                 </tr>
@@ -91,7 +91,7 @@ export default function UserDetayPage() {
           </table>
         </div>
         {logs.length === 0 && (
-          <p className="kbs-card-empty-text" style={{ padding: '1.25rem' }}>
+          <p className="kbs-card-empty-text kbs-card-empty-pad">
             Bu kullanıcıya ait kayıt yok.
           </p>
         )}

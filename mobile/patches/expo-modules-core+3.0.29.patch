@@ -1018,6 +1018,26 @@ index 8fed037..254058f 100644
    dns = '6ba7b810-9dad-11d1-80b4-00c04fd430c8',
    url = '6ba7b811-9dad-11d1-80b4-00c04fd430c8',
    oid = '6ba7b812-9dad-11d1-80b4-00c04fd430c8',
+diff --git a/node_modules/expo-modules-core/tsconfig.json b/node_modules/expo-modules-core/tsconfig.json
+index ae1ae0d..e87fa86 100644
+--- a/node_modules/expo-modules-core/tsconfig.json
++++ b/node_modules/expo-modules-core/tsconfig.json
+@@ -1,8 +1,13 @@
+ {
+-  "extends": "expo-module-scripts/tsconfig.base",
+   "compilerOptions": {
+     "outDir": "./build",
+-    "emitDeclarationOnly": true
++    "declaration": true,
++    "emitDeclarationOnly": true,
++    "skipLibCheck": true,
++    "module": "ESNext",
++    "moduleResolution": "node",
++    "target": "ESNext",
++    "jsx": "react-jsx"
+   },
+   "include": ["./src"],
+   "exclude": ["**/__mocks__/*", "**/__tests__/*", "**/__rsc_tests__/*"]
 diff --git a/node_modules/expo-modules-core/types.d.ts b/node_modules/expo-modules-core/types.d.ts
 deleted file mode 100644
 index 2415697..0000000

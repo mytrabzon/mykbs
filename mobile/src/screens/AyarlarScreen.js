@@ -290,10 +290,17 @@ export default function AyarlarScreen() {
         <View style={[styles.section, { backgroundColor: colors.surface }]}>
           <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>Profil</Text>
           <TouchableOpacity
-            style={[styles.menuRow, { borderBottomWidth: 0 }]}
+            style={[styles.menuRow, { borderBottomColor: colors.border }]}
             onPress={() => navigation.navigate('ProfilDuzenle')}
           >
             <Text style={[styles.menuRowText, { color: colors.textPrimary }]}>Profil düzenle & avatar</Text>
+            <Ionicons name="chevron-forward" size={20} color={colors.textSecondary} />
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.menuRow, { borderBottomWidth: 0 }]}
+            onPress={() => navigation.navigate('ProfilIletisim')}
+          >
+            <Text style={[styles.menuRowText, { color: colors.textPrimary }]}>Telefon ve e-posta bağla / değiştir</Text>
             <Ionicons name="chevron-forward" size={20} color={colors.textSecondary} />
           </TouchableOpacity>
         </View>

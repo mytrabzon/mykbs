@@ -6,7 +6,7 @@ export default function ReportsPage() {
       <h1 className="kbs-page-title">Raporlar</h1>
       <p className="kbs-page-sub">Özet raporlar ve export.</p>
       <div className="kbs-card">
-        <p className="kbs-card-empty-text" style={{ padding: '2rem' }}>
+        <p className="kbs-card-empty-text admin-reports-empty">
           Raporlar bölümü kullanıma açıktır; özet ve export özellikleri geliştirme aşamasındadır.
         </p>
       </div>

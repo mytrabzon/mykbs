@@ -69,9 +69,9 @@ export default function CommunityPage() {
       <h1 className="kbs-page-title">Topluluk Moderation</h1>
       <p className="kbs-page-sub">Soft delete yapılan paylaşımları geri alabilirsiniz.</p>
       {configRequired && (
-        <div className="kbs-card" style={{ marginBottom: '1.25rem', background: 'var(--kbs-surface-elevated)', border: '1px solid var(--kbs-border)' }}>
-          <p className="kbs-card-empty-text" style={{ padding: '1.25rem', margin: 0 }}>
-            Bu sayfa Supabase Edge Functions kullanır. Kullanmak için <code style={{ background: 'var(--kbs-bg)', padding: '0.2rem 0.5rem', borderRadius: 6 }}>NEXT_PUBLIC_SUPABASE_URL</code> ve <code style={{ background: 'var(--kbs-bg)', padding: '0.2rem 0.5rem', borderRadius: 6 }}>NEXT_PUBLIC_SUPABASE_ANON_KEY</code> değerlerini admin paneli <code>.env</code> dosyasına ekleyin.
+        <div className="kbs-card admin-community-config">
+          <p className="kbs-card-empty-text admin-community-config">
+            Bu sayfa Supabase Edge Functions kullanır. Kullanmak için <code>NEXT_PUBLIC_SUPABASE_URL</code> ve <code>NEXT_PUBLIC_SUPABASE_ANON_KEY</code> değerlerini admin paneli <code>.env</code> dosyasına ekleyin.
           </p>
         </div>
       )}
@@ -94,9 +94,9 @@ export default function CommunityPage() {
                   <td>{p.title || p.body.slice(0, 50)}...</td>
                   <td>{p.type} / {p.category}</td>
                   <td>{p.is_deleted ? 'Silindi' : 'Yayında'}</td>
-                  <td style={{ textAlign: 'left' }}>
+                  <td className="admin-community-actions">
                     {p.is_deleted && (
-                      <button type="button" onClick={() => restore(p.id)} className="kbs-btn-primary" style={{ width: 'auto', padding: '0.45rem 0.9rem', fontSize: '0.85rem', background: 'linear-gradient(135deg, var(--kbs-success), #10b981)' }}>
+                      <button type="button" onClick={() => restore(p.id)} className="kbs-btn-primary admin-community-restore">
                         Geri al
                       </button>
                     )}
@@ -106,7 +106,7 @@ export default function CommunityPage() {
             </tbody>
           </table>
         </div>
-        {posts.length === 0 && <p className="kbs-card-empty-text" style={{ padding: '1.25rem' }}>Paylaşım yok.</p>}
+        {posts.length === 0 && <p className="kbs-card-empty-text admin-community-empty">Paylaşım yok.</p>}
       </div>
     </div>
   )

@@ -1,204 +1,62 @@
-import React, { useState, useRef } from 'react';
+/**
+ * Yeni kayıt ekranı (tek adım).
+ * Ad soyad, telefon, e-posta, şifre, otel adı, oda sayısı, ortalama bildirim.
+ * Kayıt sonrası kullanıcı uygulamayı kullanabilir; KBS için Ayarlar'dan tesis kodu ve şifre ile onaya gönderir.
+ */
+import React, { useState } from 'react';
 import {
   View,
   Text,
-  TextInput,
-  TouchableOpacity,
-  StyleSheet,
   ScrollView,
   KeyboardAvoidingView,
   Platform,
   StatusBar,
+  TouchableOpacity,
 } from 'react-native';
-import { Ionicons, MaterialIcons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
-import { api, getBackendUrl } from '../services/api';
-import { supabase } from '../lib/supabase/supabase';
+import { Ionicons, MaterialIcons } from '@expo/vector-icons';
 import Toast from 'react-native-toast-message';
-import { logger } from '../utils/logger';
 import { useAuth } from '../context/AuthContext';
-import { theme } from '../theme';
-
-const { colors, typography, spacing } = theme;
-
-function formatPhoneForSupabase(telefon) {
-  if (!telefon) return '';
-  let p = String(telefon).trim().replace(/\D/g, '');
-  if (p.startsWith('0')) p = p.slice(1);
-  if (!p.startsWith('90')) p = '90' + p;
-  return '+' + p.slice(0, 12);
-}
+import { useTheme } from '../context/ThemeContext';
+import { api } from '../services/api';
+import { SegmentedControl, Button, Input } from '../components/ui';
+import { typography, spacing } from '../theme';
 
 const isValidEmail = (e) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test((e || '').trim());
 
 export default function KayitScreen() {
   const navigation = useNavigation();
+  const { colors } = useTheme();
   const { loginWithToken } = useAuth();
-  const usedSupabaseForKayit = useRef(false);
-  const lastSupabasePhoneRef = useRef(null);
-  /** E-posta kayıtta doğrulanan e-posta ve session token (adım 3 için) */
-  const verifiedEmailRef = useRef(null);
-  const verifiedAccessTokenRef = useRef(null);
 
-  const [step, setStep] = useState(1);
+  const [adSoyad, setAdSoyad] = useState('');
   const [telefon, setTelefon] = useState('');
   const [email, setEmail] = useState('');
-  const [otp, setOtp] = useState(['', '', '', '', '', '']);
   const [sifre, setSifre] = useState('');
   const [sifreTekrar, setSifreTekrar] = useState('');
-  const [adSoyad, setAdSoyad] = useState('');
   const [tesisAdi, setTesisAdi] = useState('');
-  const [il, setIl] = useState('İstanbul');
-  const [ilce, setIlce] = useState('');
-  const [adres, setAdres] = useState('');
   const [odaSayisi, setOdaSayisi] = useState('10');
-  const [tesisTuru, setTesisTuru] = useState('otel');
+  const [ortalamaBildirim, setOrtalamaBildirim] = useState('100');
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [showPasswordRepeat, setShowPasswordRepeat] = useState(false);
-  const [countdown, setCountdown] = useState(0);
-  const [useEmailKayit, setUseEmailKayit] = useState(true);
-  const otpInputRefs = useRef([]);
 
-  const formatPhoneNumber = (text) => {
-    const numbers = text.replace(/[^\d]/g, '');
-    if (numbers.length <= 10) return numbers;
-    return numbers.substring(0, 10);
-  };
-
-  const handleOtpRequest = async () => {
-    if (useEmailKayit) {
-      if (!email.trim() || !isValidEmail(email)) {
-        Toast.show({ type: 'error', text1: 'Geçersiz E-posta', text2: 'Geçerli bir e-posta adresi girin' });
-        return;
-      }
-      try {
-        setLoading(true);
-        if (supabase) {
-          const { error } = await supabase.auth.signInWithOtp({
-            email: email.trim().toLowerCase(),
-            options: { shouldCreateUser: true },
-          });
-          if (!error) {
-            usedSupabaseForKayit.current = true;
-            Toast.show({ type: 'success', text1: 'Kod gönderildi', text2: 'E-postanıza gelen 6 haneli kodu girin.' });
-            setStep(2);
-            setCountdown(300);
-            setLoading(false);
-            return;
-          }
-          Toast.show({ type: 'error', text1: 'Hata', text2: error.message || 'Kod gönderilemedi.' });
-        } else {
-          Toast.show({ type: 'error', text1: 'Hata', text2: 'Doğrulama servisi kullanılamıyor.' });
-        }
-      } catch (err) {
-        Toast.show({ type: 'error', text1: 'Hata', text2: err?.message || 'Kod gönderilemedi.' });
-      }
-      setLoading(false);
-      return;
-    }
-
-    if (!telefon || telefon.length < 10) {
-      Toast.show({ type: 'error', text1: 'Geçersiz Telefon', text2: '10 haneli telefon giriniz' });
-      return;
-    }
-    try {
-      setLoading(true);
-      const phone = formatPhoneForSupabase(telefon);
-      if (supabase) {
-        const { error } = await supabase.auth.signInWithOtp({ phone });
-        if (!error) {
-          usedSupabaseForKayit.current = true;
-          lastSupabasePhoneRef.current = phone;
-          Toast.show({ type: 'success', text1: 'SMS gönderildi', text2: 'Doğrulama kodunu girin.' });
-          setStep(2);
-          setCountdown(300);
-          setLoading(false);
-          return;
-        }
-        logger.log('Kayıt: Supabase OTP fallback', { message: error.message });
-      }
-      usedSupabaseForKayit.current = false;
-      const { data } = await api.post('/auth/kayit/otp-iste', { telefon });
-      Toast.show({ type: 'success', text1: 'SMS gönderildi', text2: 'Doğrulama kodunu girin.' });
-      setStep(2);
-      setCountdown(300);
-      if (__DEV__ && data?.otpForDev) {
-        setOtp(data.otpForDev.split(''));
-        Toast.show({ type: 'info', text1: 'Test modu', text2: `Kod otomatik dolduruldu: ${data.otpForDev}` });
-      }
-    } catch (error) {
-      Toast.show({
-        type: 'error',
-        text1: 'Hata',
-        text2: error.response?.data?.message || 'SMS gönderilemedi.'
-      });
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleOtpChange = (text, index) => {
-    const digits = text.replace(/\D/g, '');
-    if (digits.length >= 6) {
-      const code = digits.slice(0, 6).split('');
-      setOtp(code);
-      otpInputRefs.current[5]?.focus();
-      return;
-    }
-    const ch = digits.slice(-1);
-    const newOtp = [...otp];
-    newOtp[index] = ch;
-    setOtp(newOtp);
-    if (ch && index < 5) otpInputRefs.current[index + 1]?.focus();
-  };
-
-  const handleOtpKeyPress = (e, index) => {
-    if (e.nativeEvent.key === 'Backspace' && !otp[index] && index > 0) {
-      otpInputRefs.current[index - 1]?.focus();
-    }
-  };
-
-  const canGoStep3 = otp.every((d) => d !== '') && otp.join('').length === 6;
-
-  const goToStep3 = async () => {
-    if (!canGoStep3) {
-      Toast.show({ type: 'error', text1: 'Kod', text2: '6 haneli kodu girin' });
-      return;
-    }
-    if (useEmailKayit && supabase) {
-      setLoading(true);
-      try {
-        const { data: supabaseData, error: verifyError } = await supabase.auth.verifyOtp({
-          email: email.trim().toLowerCase(),
-          token: otp.join(''),
-          type: 'email',
-        });
-        if (verifyError || !supabaseData?.session?.access_token) {
-          const isExpired = verifyError?.message?.toLowerCase?.().includes('expired') || verifyError?.code === 'otp_expired';
-          Toast.show({
-            type: 'error',
-            text1: isExpired ? 'Kodun süresi doldu' : 'Kod geçersiz',
-            text2: isExpired ? "'Yeni kod gönder' ile tekrar kod isteyin." : (verifyError?.message || 'Doğrulama başarısız.'),
-          });
-          setLoading(false);
-          return;
-        }
-        verifiedEmailRef.current = email.trim().toLowerCase();
-        verifiedAccessTokenRef.current = supabaseData.session.access_token;
-        setStep(3);
-      } catch (e) {
-        Toast.show({ type: 'error', text1: 'Doğrulama hatası', text2: e?.message || 'Tekrar deneyin.' });
-      }
-      setLoading(false);
-      return;
-    }
-    setStep(3);
-  };
+  const formatPhone = (t) => t.replace(/[^\d]/g, '').slice(0, 10);
 
   const handleKayit = async () => {
-    if (!adSoyad || adSoyad.trim().length < 3) {
-      Toast.show({ type: 'error', text1: 'Ad Soyad', text2: 'En az 3 karakter girin' });
+    const ad = (adSoyad || '').trim();
+    if (ad.length < 2) {
+      Toast.show({ type: 'error', text1: 'Ad Soyad', text2: 'En az 2 karakter girin' });
+      return;
+    }
+    const tel = (telefon || '').replace(/\D/g, '');
+    if (tel.length < 10) {
+      Toast.show({ type: 'error', text1: 'Telefon', text2: '10 haneli telefon girin' });
+      return;
+    }
+    const em = (email || '').trim().toLowerCase();
+    if (!em || !isValidEmail(em)) {
+      Toast.show({ type: 'error', text1: 'E-posta', text2: 'Geçerli bir e-posta girin' });
       return;
     }
     if (!sifre || sifre.length < 6) {
@@ -209,587 +67,212 @@ export default function KayitScreen() {
       Toast.show({ type: 'error', text1: 'Şifreler eşleşmiyor', text2: 'Aynı şifreyi iki kez girin' });
       return;
     }
-    if (!useEmailKayit && email && !email.includes('@')) {
-      Toast.show({ type: 'error', text1: 'E-posta', text2: 'Geçerli bir e-posta girin' });
+    const tesis = (tesisAdi || '').trim();
+    if (tesis.length < 2) {
+      Toast.show({ type: 'error', text1: 'Otel adı', text2: 'Otel / tesis adı girin' });
       return;
     }
+    const oda = parseInt(odaSayisi, 10);
+    if (isNaN(oda) || oda < 1 || oda > 10000) {
+      Toast.show({ type: 'error', text1: 'Oda sayısı', text2: '1–10000 arası girin' });
+      return;
+    }
+    const bildirim = parseInt(ortalamaBildirim, 10) || 100;
 
+    setLoading(true);
     try {
-      setLoading(true);
-
-      if (useEmailKayit && verifiedAccessTokenRef.current) {
-        const accessToken = verifiedAccessTokenRef.current;
-        const currentSession = (await supabase?.auth?.getSession())?.data?.session;
-        if (currentSession?.access_token === accessToken) {
-          const { error: updateError } = await supabase.auth.updateUser({ password: sifre });
-          if (updateError) {
-            Toast.show({ type: 'error', text1: 'Şifre ayarlanamadı', text2: updateError.message });
-            setLoading(false);
-            return;
-          }
-        }
-        const response = await api.post('/auth/kayit/supabase-create', {
-          access_token: accessToken,
-          adSoyad: adSoyad.trim(),
-          email: verifiedEmailRef.current || email?.trim() || null,
-          tesisAdi: tesisAdi || adSoyad.trim() + ' Tesis',
-          il: il || 'İstanbul',
-          ilce: ilce || '',
-          adres: adres || '',
-          odaSayisi: odaSayisi || '10',
-          tesisTuru: tesisTuru || 'otel',
-          sifre,
-          sifreTekrar,
-        });
-        const { token, kullanici, tesis, supabaseAccessToken } = response.data;
-        await loginWithToken(token, kullanici, tesis, supabaseAccessToken);
-        Toast.show({ type: 'success', text1: 'Kayıt tamamlandı', text2: 'Hesabınız oluşturuldu.' });
-        setLoading(false);
-        return;
-      }
-
-      if (usedSupabaseForKayit.current && !useEmailKayit) {
-        const phone = lastSupabasePhoneRef.current || formatPhoneForSupabase(telefon);
-        let accessToken = null;
-        const backendUrl = typeof getBackendUrl === 'function' ? getBackendUrl() : null;
-        if (backendUrl) {
-          try {
-            const verifyRes = await api.post('/auth/kayit/supabase-verify-otp', { phone, token: otp.join('') });
-            accessToken = verifyRes.data?.access_token || null;
-          } catch (verifyErr) {
-            const msg = verifyErr.response?.data?.message || verifyErr.message || 'Doğrulama başarısız.';
-            const isExpired = msg.toLowerCase().includes('süresi doldu') || msg.toLowerCase().includes('expired');
-            Toast.show({
-              type: 'error',
-              text1: isExpired ? 'Kodun süresi doldu' : 'Kod geçersiz',
-              text2: isExpired ? "'Yeni kod gönder' ile tekrar kod isteyin." : msg,
-            });
-            setLoading(false);
-            return;
-          }
-        }
-        if (!accessToken && supabase) {
-          const { data: supabaseData, error: verifyError } = await supabase.auth.verifyOtp({
-            phone,
-            token: otp.join(''),
-            type: 'sms',
-          });
-          if (verifyError || !supabaseData?.session?.access_token) {
-            const isExpired = verifyError?.message?.toLowerCase?.().includes('expired') ||
-              verifyError?.message?.toLowerCase?.().includes('otp_expired') ||
-              verifyError?.status === 403 ||
-              verifyError?.code === 'otp_expired';
-            Toast.show({
-              type: 'error',
-              text1: isExpired ? 'Kodun süresi doldu' : 'Kod geçersiz',
-              text2: isExpired
-                ? "'Yeni kod gönder' ile tekrar kod isteyin."
-                : (verifyError?.message || 'Doğrulama başarısız. Yeni kod isteyip tekrar deneyin.'),
-            });
-            setLoading(false);
-            return;
-          }
-          accessToken = supabaseData.session.access_token;
-        }
-        if (!accessToken) {
-          Toast.show({ type: 'error', text1: 'Doğrulama başarısız', text2: 'Sunucu adresi eksik veya doğrulama yapılamadı.' });
-          setLoading(false);
-          return;
-        }
-        const response = await api.post('/auth/kayit/supabase-create', {
-          access_token: accessToken,
-          adSoyad: adSoyad.trim(),
-          email: email || null,
-          tesisAdi: tesisAdi || adSoyad.trim() + ' Tesis',
-          il: il || 'İstanbul',
-          ilce: ilce || '',
-          adres: adres || '',
-          odaSayisi: odaSayisi || '10',
-          tesisTuru: tesisTuru || 'otel',
-          sifre,
-          sifreTekrar,
-        });
-        const { token, kullanici, tesis, supabaseAccessToken } = response.data;
-        await loginWithToken(token, kullanici, tesis, supabaseAccessToken);
-      } else if (!useEmailKayit) {
-        const response = await api.post('/auth/kayit/dogrula', {
-          telefon,
-          otp: otp.join(''),
-          sifre,
-          sifreTekrar,
-          adSoyad: adSoyad.trim(),
-          email: email || null,
-          tesisAdi: tesisAdi || adSoyad.trim() + ' Tesis',
-          il: il || 'İstanbul',
-          ilce: ilce || '',
-          adres: adres || '',
-          odaSayisi: odaSayisi || '10',
-          tesisTuru: tesisTuru || 'otel',
-        });
-        const { token, kullanici, tesis } = response.data;
-        await loginWithToken(token, kullanici, tesis);
-      }
-      if (!useEmailKayit) Toast.show({ type: 'success', text1: 'Kayıt tamamlandı', text2: 'Hesabınız oluşturuldu.' });
-    } catch (error) {
-      Toast.show({
-        type: 'error',
-        text1: 'Kayıt başarısız',
-        text2: error.response?.data?.message || 'Tekrar deneyin.'
+      const res = await api.post('/auth/kayit', {
+        adSoyad: ad,
+        telefon: telefon.trim(),
+        email: em,
+        sifre,
+        sifreTekrar,
+        tesisAdi: tesis,
+        odaSayisi: oda,
+        ortalamaBildirim: bildirim,
       });
+      const { token, kullanici, tesis: tesisData } = res.data || {};
+      if (token && kullanici && tesisData) {
+        await loginWithToken(token, kullanici, tesisData);
+        Toast.show({ type: 'success', text1: 'Kayıt tamamlandı', text2: 'Uygulamayı kullanabilirsiniz.' });
+        navigation.reset({ index: 0, routes: [{ name: 'Main' }] });
+      } else {
+        Toast.show({ type: 'error', text1: 'Hata', text2: res.data?.message || 'Kayıt tamamlanamadı' });
+      }
+    } catch (err) {
+      const msg = err?.response?.data?.message || err?.message || 'Kayıt başarısız';
+      Toast.show({ type: 'error', text1: 'Kayıt başarısız', text2: msg });
     } finally {
       setLoading(false);
     }
   };
 
-  React.useEffect(() => {
-    if (step !== 2 || countdown <= 0) return;
-    const t = setInterval(() => setCountdown((c) => (c <= 0 ? 0 : c - 1)), 1000);
-    return () => clearInterval(t);
-  }, [step, countdown]);
-
-  const progress = (step / 3) * 100;
+  const odaNum = parseInt(odaSayisi, 10) || 0;
+  const valid =
+    adSoyad.trim().length >= 2 &&
+    telefon.replace(/\D/g, '').length >= 10 &&
+    isValidEmail(email) &&
+    sifre.length >= 6 &&
+    sifre === sifreTekrar &&
+    tesisAdi.trim().length >= 2 &&
+    !isNaN(odaNum) && odaNum >= 1 && odaNum <= 10000;
 
   return (
     <KeyboardAvoidingView
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      style={styles.container}
+      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      style={[styles.container, { backgroundColor: colors.background }]}
     >
-      <StatusBar barStyle="dark-content" backgroundColor={colors.background} />
-
-      <View style={styles.header}>
-        <TouchableOpacity style={styles.backBtn} onPress={() => (step > 1 ? setStep(step - 1) : navigation.goBack())}>
-          <Ionicons name="arrow-back" size={24} color={colors.textPrimary} />
-        </TouchableOpacity>
-        <View style={styles.progressWrap}>
-          <View style={[styles.progressBar, { width: `${progress}%` }]} />
-        </View>
-        <Text style={styles.stepLabel}>
-          Adım {step} / 3
-        </Text>
-      </View>
-
+      <StatusBar barStyle="dark-content" backgroundColor={colors.primary} />
       <ScrollView
         contentContainerStyle={styles.scrollContent}
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
       >
-        {/* Adım 1: E-posta veya Telefon */}
-        {step === 1 && (
-          <View style={styles.card}>
-            <View style={styles.iconWrap}>
-              <MaterialIcons name={useEmailKayit ? 'email' : 'phone-android'} size={40} color={colors.primary} />
-            </View>
-            <Text style={styles.cardTitle}>{useEmailKayit ? 'E-posta adresiniz' : 'Telefon numaranız'}</Text>
-            <Text style={styles.cardSubtitle}>
-              {useEmailKayit
-                ? 'Doğrulama kodu e-postanıza gönderilecek. Geçerli bir e-posta girin.'
-                : 'Doğrulama kodu göndereceğiz. 10 haneli numarayı girin.'}
-            </Text>
-            <TouchableOpacity
-              style={styles.toggleRow}
-              onPress={() => { setUseEmailKayit(!useEmailKayit); setEmail(''); setTelefon(''); }}
-            >
-              <Text style={styles.toggleText}>
-                {useEmailKayit ? 'Telefon ile kayıt' : 'E-posta ile kayıt'}
-              </Text>
-              <Ionicons name="swap-horizontal" size={20} color={colors.primary} />
-            </TouchableOpacity>
-            {useEmailKayit ? (
-              <View style={styles.inputWrap}>
-                <Ionicons name="mail-outline" size={22} color={colors.textSecondary} style={styles.inputIcon} />
-                <TextInput
-                  style={styles.input}
-                  placeholder="ornek@email.com"
-                  placeholderTextColor={colors.textDisabled}
-                  value={email}
-                  onChangeText={setEmail}
-                  keyboardType="email-address"
-                  autoCapitalize="none"
-                />
-              </View>
-            ) : (
-              <View style={styles.inputWrap}>
-                <Ionicons name="call-outline" size={22} color={colors.textSecondary} style={styles.inputIcon} />
-                <TextInput
-                  style={styles.input}
-                  placeholder="5xx xxx xx xx"
-                  placeholderTextColor={colors.textDisabled}
-                  value={telefon}
-                  onChangeText={(text) => setTelefon(formatPhoneNumber(text))}
-                  keyboardType="phone-pad"
-                  maxLength={10}
-                />
-              </View>
-            )}
-            <TouchableOpacity
-              style={[
-                styles.primaryBtn,
-                (loading ||
-                  (useEmailKayit ? !email.trim() || !isValidEmail(email) : telefon.length < 10)) &&
-                  styles.primaryBtnDisabled,
-              ]}
-              onPress={handleOtpRequest}
-              disabled={
-                loading ||
-                (useEmailKayit ? !email.trim() || !isValidEmail(email) : telefon.length < 10)
-              }
-            >
-              {loading ? (
-                <Text style={styles.primaryBtnText}>Gönderiliyor...</Text>
-              ) : (
-                <>
-                  <Ionicons name={useEmailKayit ? 'mail-outline' : 'chatbubble-outline'} size={22} color={colors.white} />
-                  <Text style={styles.primaryBtnText}>Doğrulama kodu gönder</Text>
-                </>
-              )}
-            </TouchableOpacity>
+        <View style={[styles.hero, { backgroundColor: colors.primary }]}>
+          <View style={[styles.logoWrap, { backgroundColor: colors.surface }]}>
+            <MaterialIcons name="hotel" size={36} color={colors.primary} />
           </View>
-        )}
+          <Text style={styles.heroTitle}>Kayıt Ol</Text>
+          <Text style={styles.heroSub}>Ad soyad, telefon, e-posta, şifre ve otel bilgilerinizi girin</Text>
+        </View>
 
-        {/* Adım 2: OTP */}
-        {step === 2 && (
-          <View style={styles.card}>
-            <View style={styles.iconWrap}>
-              <MaterialIcons name={useEmailKayit ? 'mark-email-unread' : 'sms'} size={40} color={colors.primary} />
-            </View>
-            <Text style={styles.cardTitle}>Doğrulama kodu</Text>
-            <Text style={styles.cardSubtitle}>
-              {useEmailKayit
-                ? `${email} adresine gönderilen 6 haneli kodu girin.`
-                : `${telefon} numarasına gönderilen 6 haneli kodu girin.`}
-            </Text>
-            <View style={styles.otpRow}>
-              {[0, 1, 2, 3, 4, 5].map((i) => (
-                <TextInput
-                  key={i}
-                  ref={(r) => (otpInputRefs.current[i] = r)}
-                  style={styles.otpBox}
-                  value={otp[i]}
-                  onChangeText={(t) => handleOtpChange(t, i)}
-                  onKeyPress={(e) => handleOtpKeyPress(e, i)}
-                  keyboardType="number-pad"
-                  maxLength={6}
-                  selectTextOnFocus
-                />
-              ))}
-            </View>
-            {countdown > 0 && (
-              <Text style={styles.countdownText}>
-                Yeni kod için {Math.floor(countdown / 60)}:{(countdown % 60).toString().padStart(2, '0')}
-              </Text>
-            )}
-            <TouchableOpacity
-              style={[styles.primaryBtn, (!canGoStep3 || loading) && styles.primaryBtnDisabled]}
-              onPress={goToStep3}
-              disabled={!canGoStep3 || loading}
-            >
-              <Text style={styles.primaryBtnText}>{loading ? 'Doğrulanıyor...' : 'Doğrula ve devam et'}</Text>
-            </TouchableOpacity>
-          </View>
-        )}
-
-        {/* Adım 3: Şifre + bilgiler */}
-        {step === 3 && (
-          <View style={styles.card}>
-            <View style={styles.iconWrap}>
-              <MaterialIcons name="lock" size={40} color={colors.primary} />
-            </View>
-            <Text style={styles.cardTitle}>Şifre ve bilgiler</Text>
-            <Text style={styles.cardSubtitle}>
-              Şifrenizi iki kez girin ve yetkili bilgilerini doldurun.
-            </Text>
-
-            <Text style={styles.fieldLabel}>Şifre *</Text>
-            <View style={styles.inputWrap}>
-              <Ionicons name="lock-closed-outline" size={22} color={colors.textSecondary} style={styles.inputIcon} />
-              <TextInput
-                style={styles.input}
-                placeholder="En az 6 karakter"
-                placeholderTextColor={colors.textDisabled}
-                value={sifre}
-                onChangeText={setSifre}
-                secureTextEntry={!showPassword}
-                autoCapitalize="none"
-              />
-              <TouchableOpacity onPress={() => setShowPassword(!showPassword)} style={styles.eyeBtn}>
+        <View style={[styles.formCard, { backgroundColor: colors.surface }]}>
+          <Input
+            label="Ad Soyad"
+            value={adSoyad}
+            onChangeText={setAdSoyad}
+            placeholder="Adınız ve soyadınız"
+            autoCapitalize="words"
+          />
+          <Input
+            label="Telefon"
+            value={telefon}
+            onChangeText={(t) => setTelefon(formatPhone(t))}
+            placeholder="5XX XXX XX XX"
+            keyboardType="phone-pad"
+          />
+          <Input
+            label="E-posta"
+            value={email}
+            onChangeText={(t) => setEmail(t.trim())}
+            placeholder="ornek@email.com"
+            keyboardType="email-address"
+            autoCapitalize="none"
+          />
+          <Input
+            label="Şifre (en az 6 karakter)"
+            value={sifre}
+            onChangeText={setSifre}
+            placeholder="Şifre"
+            secureTextEntry={!showPassword}
+            rightIcon={
+              <TouchableOpacity onPress={() => setShowPassword(!showPassword)}>
                 <Ionicons name={showPassword ? 'eye-off-outline' : 'eye-outline'} size={22} color={colors.textSecondary} />
               </TouchableOpacity>
-            </View>
-
-            <Text style={styles.fieldLabel}>Şifre tekrar *</Text>
-            <View style={styles.inputWrap}>
-              <Ionicons name="lock-closed-outline" size={22} color={colors.textSecondary} style={styles.inputIcon} />
-              <TextInput
-                style={styles.input}
-                placeholder="Şifrenizi tekrar girin"
-                placeholderTextColor={colors.textDisabled}
-                value={sifreTekrar}
-                onChangeText={setSifreTekrar}
-                secureTextEntry={!showPasswordRepeat}
-                autoCapitalize="none"
-              />
-              <TouchableOpacity onPress={() => setShowPasswordRepeat(!showPasswordRepeat)} style={styles.eyeBtn}>
+            }
+          />
+          <Input
+            label="Şifre tekrar"
+            value={sifreTekrar}
+            onChangeText={setSifreTekrar}
+            placeholder="Şifreyi tekrar girin"
+            secureTextEntry={!showPasswordRepeat}
+            rightIcon={
+              <TouchableOpacity onPress={() => setShowPasswordRepeat(!showPasswordRepeat)}>
                 <Ionicons name={showPasswordRepeat ? 'eye-off-outline' : 'eye-outline'} size={22} color={colors.textSecondary} />
               </TouchableOpacity>
-            </View>
+            }
+          />
+          <Input
+            label="Otel / Tesis adı"
+            value={tesisAdi}
+            onChangeText={setTesisAdi}
+            placeholder="Örn. Örnek Otel"
+          />
+          <Input
+            label="Oda sayısı"
+            value={odaSayisi}
+            onChangeText={(t) => setOdaSayisi(t.replace(/\D/g, '').slice(0, 5) || '')}
+            placeholder="Örn. 20"
+            keyboardType="number-pad"
+          />
+          <Input
+            label="Ortalama bildirim (aylık tahmini)"
+            value={ortalamaBildirim}
+            onChangeText={(t) => setOrtalamaBildirim(t.replace(/\D/g, '').slice(0, 5) || '')}
+            placeholder="Örn. 100"
+            keyboardType="number-pad"
+          />
 
-            <Text style={styles.fieldLabel}>Ad Soyad *</Text>
-            <View style={styles.inputWrap}>
-              <Ionicons name="person-outline" size={22} color={colors.textSecondary} style={styles.inputIcon} />
-              <TextInput
-                style={styles.input}
-                placeholder="Örn: Ahmet Yılmaz"
-                placeholderTextColor={colors.textDisabled}
-                value={adSoyad}
-                onChangeText={setAdSoyad}
-                autoCapitalize="words"
-              />
-            </View>
+          <Button
+            variant="primary"
+            onPress={handleKayit}
+            loading={loading}
+            disabled={loading || !valid}
+            style={styles.submitBtn}
+          >
+            Kayıt Ol
+          </Button>
 
-            {!useEmailKayit && (
-              <>
-                <Text style={styles.fieldLabel}>E-posta (opsiyonel)</Text>
-                <View style={styles.inputWrap}>
-                  <Ionicons name="mail-outline" size={22} color={colors.textSecondary} style={styles.inputIcon} />
-                  <TextInput
-                    style={styles.input}
-                    placeholder="ornek@email.com"
-                    placeholderTextColor={colors.textDisabled}
-                    value={email}
-                    onChangeText={setEmail}
-                    keyboardType="email-address"
-                    autoCapitalize="none"
-                  />
-                </View>
-              </>
-            )}
-            {useEmailKayit && (verifiedEmailRef.current || email) && (
-              <>
-                <Text style={styles.fieldLabel}>E-posta</Text>
-                <View style={[styles.inputWrap, styles.inputWrapDisabled]}>
-                  <Ionicons name="mail-outline" size={22} color={colors.textSecondary} style={styles.inputIcon} />
-                  <Text style={[styles.input, styles.inputReadOnly]}>{verifiedEmailRef.current || email}</Text>
-                </View>
-              </>
-            )}
+          <Text style={[styles.hint, { color: colors.textSecondary }]}>
+            Kayıt sonrası uygulamanın tüm özelliklerini kullanabilirsiniz. KBS (Kimlik Bildirim Sistemi) için Ayarlar bölümünden tesis kodu ve şifrenizi girip onaya göndermeniz yeterlidir.
+          </Text>
 
-            <Text style={styles.fieldLabel}>Tesis adı (opsiyonel)</Text>
-            <View style={styles.inputWrap}>
-              <Ionicons name="business-outline" size={22} color={colors.textSecondary} style={styles.inputIcon} />
-              <TextInput
-                style={styles.input}
-                placeholder="Örn: Grand Otel"
-                placeholderTextColor={colors.textDisabled}
-                value={tesisAdi}
-                onChangeText={setTesisAdi}
-              />
-            </View>
-
-            <TouchableOpacity
-              style={[
-                styles.primaryBtn,
-                (loading ||
-                  adSoyad.trim().length < 3 ||
-                  sifre.length < 6 ||
-                  sifre !== sifreTekrar) &&
-                  styles.primaryBtnDisabled,
-              ]}
-              onPress={handleKayit}
-              disabled={
-                loading ||
-                adSoyad.trim().length < 3 ||
-                sifre.length < 6 ||
-                sifre !== sifreTekrar
-              }
-            >
-              {loading ? (
-                <Text style={styles.primaryBtnText}>Kayıt yapılıyor...</Text>
-              ) : (
-                <>
-                  <Ionicons name="person-add-outline" size={22} color={colors.white} />
-                  <Text style={styles.primaryBtnText}>Kayıt ol</Text>
-                </>
-              )}
-            </TouchableOpacity>
-          </View>
-        )}
-
-        <TouchableOpacity style={styles.loginLink} onPress={() => navigation.navigate('Login')}>
-          <Text style={styles.loginLinkText}>Zaten hesabınız var mı? Giriş yap</Text>
-        </TouchableOpacity>
+          <TouchableOpacity style={styles.loginLink} onPress={() => navigation.navigate('Login')}>
+            <Text style={[styles.loginLinkText, { color: colors.primary }]}>Zaten hesabınız var mı? Giriş yapın</Text>
+          </TouchableOpacity>
+        </View>
       </ScrollView>
     </KeyboardAvoidingView>
   );
 }
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: colors.background,
+const styles = {
+  container: { flex: 1 },
+  scrollContent: { flexGrow: 1, paddingBottom: spacing['3xl'] },
+  hero: {
+    paddingTop: spacing['4xl'] + 8,
+    paddingBottom: spacing.xl,
+    alignItems: 'center',
+    borderBottomLeftRadius: 20,
+    borderBottomRightRadius: 20,
   },
-  scrollContent: {
-    padding: spacing.screenPadding,
-    paddingBottom: spacing['4xl'],
-  },
-  header: {
-    paddingTop: spacing.xl,
-    paddingHorizontal: spacing.screenPadding,
-    paddingBottom: spacing.base,
-    backgroundColor: colors.surface,
-    borderBottomLeftRadius: spacing.borderRadius.xl,
-    borderBottomRightRadius: spacing.borderRadius.xl,
-    ...spacing.shadow.base,
-  },
-  backBtn: {
-    alignSelf: 'flex-start',
-    padding: spacing.sm,
-    marginBottom: spacing.base,
-  },
-  progressWrap: {
-    height: 4,
-    backgroundColor: colors.gray200,
-    borderRadius: 2,
-    overflow: 'hidden',
-    marginBottom: spacing.sm,
-  },
-  progressBar: {
-    height: '100%',
-    backgroundColor: colors.primary,
-    borderRadius: 2,
-  },
-  stepLabel: {
-    fontSize: typography.fontSize.xs,
-    color: colors.textSecondary,
-    fontWeight: typography.fontWeight.medium,
-  },
-  card: {
-    backgroundColor: colors.surface,
-    borderRadius: spacing.borderRadius.xl,
-    padding: spacing.xl,
-    marginTop: spacing.xl,
-    ...spacing.shadow.lg,
-  },
-  iconWrap: {
+  logoWrap: {
     width: 72,
     height: 72,
     borderRadius: 36,
-    backgroundColor: colors.primary + '18',
     justifyContent: 'center',
     alignItems: 'center',
-    alignSelf: 'center',
-    marginBottom: spacing.lg,
+    marginBottom: spacing.md,
   },
-  cardTitle: {
-    fontSize: typography.fontSize.xl,
-    fontWeight: typography.fontWeight.bold,
-    color: colors.textPrimary,
-    textAlign: 'center',
-    marginBottom: spacing.xs,
-  },
-  cardSubtitle: {
-    fontSize: typography.fontSize.sm,
-    color: colors.textSecondary,
-    textAlign: 'center',
-    marginBottom: spacing.xl,
-  },
-  toggleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: spacing.sm,
-    marginBottom: spacing.lg,
-  },
-  toggleText: {
-    fontSize: typography.fontSize.sm,
-    color: colors.primary,
+  heroTitle: {
+    fontSize: typography.text.h1.fontSize,
     fontWeight: typography.fontWeight.semibold,
+    color: '#FFFFFF',
   },
-  fieldLabel: {
-    fontSize: typography.fontSize.sm,
-    fontWeight: typography.fontWeight.medium,
-    color: colors.textSecondary,
-    marginBottom: spacing.xs,
-    marginTop: spacing.base,
+  heroSub: {
+    fontSize: typography.text.caption.fontSize,
+    color: 'rgba(255,255,255,0.9)',
+    marginTop: spacing.xs,
+    paddingHorizontal: spacing.lg,
   },
-  inputWrap: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: colors.gray50,
-    borderRadius: spacing.borderRadius.base,
-    borderWidth: 1,
-    borderColor: colors.border,
-    paddingHorizontal: spacing.base,
-    minHeight: 48,
+  formCard: {
+    marginHorizontal: spacing.screenPadding,
+    marginTop: -16,
+    borderRadius: 16,
+    padding: spacing.xl,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    elevation: 4,
   },
-  inputIcon: {
-    marginRight: spacing.sm,
+  submitBtn: { marginTop: spacing.lg },
+  hint: {
+    fontSize: typography.text.caption.fontSize,
+    marginTop: spacing.lg,
+    lineHeight: 20,
   },
-  input: {
-    flex: 1,
-    fontSize: typography.fontSize.base,
-    color: colors.textPrimary,
-    paddingVertical: spacing.sm,
-  },
-  inputWrapDisabled: {
-    backgroundColor: colors.gray100,
-    opacity: 0.9,
-  },
-  inputReadOnly: {
-    color: colors.textSecondary,
-  },
-  eyeBtn: {
-    padding: spacing.sm,
-  },
-  otpRow: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    gap: spacing.sm,
-    marginBottom: spacing.lg,
-  },
-  otpBox: {
-    width: 44,
-    height: 52,
-    borderWidth: 2,
-    borderColor: colors.border,
-    borderRadius: spacing.borderRadius.base,
-    fontSize: typography.fontSize.xl,
-    fontWeight: typography.fontWeight.bold,
-    textAlign: 'center',
-    color: colors.textPrimary,
-  },
-  countdownText: {
-    fontSize: typography.fontSize.sm,
-    color: colors.textSecondary,
-    textAlign: 'center',
-    marginBottom: spacing.base,
-  },
-  primaryBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: colors.primary,
-    borderRadius: spacing.borderRadius.base,
-    paddingVertical: spacing.base,
-    gap: spacing.sm,
-    minHeight: 52,
-    marginTop: spacing.base,
-    ...spacing.shadow.base,
-  },
-  primaryBtnDisabled: {
-    opacity: 0.55,
-  },
-  primaryBtnText: {
-    fontSize: typography.fontSize.base,
-    fontWeight: typography.fontWeight.semibold,
-    color: colors.white,
-  },
-  loginLink: {
-    alignItems: 'center',
-    marginTop: spacing.xl,
-  },
-  loginLinkText: {
-    fontSize: typography.fontSize.sm,
-    color: colors.primary,
-    fontWeight: typography.fontWeight.medium,
-  },
-});
+  loginLink: { marginTop: spacing.xl, alignItems: 'center' },
+  loginLinkText: { fontSize: typography.text.body.fontSize, fontWeight: '600' },
+};

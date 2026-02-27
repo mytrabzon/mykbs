@@ -531,6 +531,103 @@ router.post('/users/:id/force-logout', async (req, res) => {
   }
 });
 
+// --- Tesis kullanıcıları (Prisma Kullanici: yetkiler, rol, giriş onayı) ---
+const bcrypt = require('bcryptjs');
+
+/**
+ * GET /app-admin/tesis/:tesisId/kullanicilar — Tesisin backend kullanıcıları (adSoyad, yetkiler, rol, girisOnaylandi)
+ */
+router.get('/tesis/:tesisId/kullanicilar', async (req, res) => {
+  try {
+    const { tesisId } = req.params;
+    const list = await prisma.kullanici.findMany({
+      where: { tesisId },
+      select: {
+        id: true,
+        adSoyad: true,
+        telefon: true,
+        email: true,
+        rol: true,
+        biyometriAktif: true,
+        checkInYetki: true,
+        odaDegistirmeYetki: true,
+        bilgiDuzenlemeYetki: true,
+        girisOnaylandi: true,
+        girisTalepAt: true,
+        createdAt: true,
+        updatedAt: true,
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+    res.json({ kullanicilar: list });
+  } catch (err) {
+    console.error('[appAdmin] tesis kullanicilar', err);
+    res.status(500).json({ message: 'Kullanıcılar alınamadı', error: err.message });
+  }
+});
+
+/**
+ * GET /app-admin/kullanicilar/:id — Tek Kullanıcı detay (PIN hash gösterilmez)
+ */
+router.get('/kullanicilar/:id', async (req, res) => {
+  try {
+    const k = await prisma.kullanici.findUnique({
+      where: { id: req.params.id },
+      include: { tesis: { select: { id: true, tesisAdi: true, tesisKodu: true } } },
+    });
+    if (!k) return res.status(404).json({ message: 'Kullanıcı bulunamadı' });
+    const { pin, sifre, ...rest } = k;
+    res.json({ kullanici: { ...rest, hasPin: !!pin, hasSifre: !!sifre } });
+  } catch (err) {
+    console.error('[appAdmin] kullanici detail', err);
+    res.status(500).json({ message: 'Kullanıcı alınamadı', error: err.message });
+  }
+});
+
+/**
+ * PATCH /app-admin/kullanicilar/:id — Yetkiler, rol, giriş onayı, adSoyad, telefon, email (PIN opsiyonel, hashlenir)
+ */
+router.patch('/kullanicilar/:id', async (req, res) => {
+  try {
+    const id = req.params.id;
+    const k = await prisma.kullanici.findUnique({ where: { id } });
+    if (!k) return res.status(404).json({ message: 'Kullanıcı bulunamadı' });
+
+    const {
+      adSoyad,
+      telefon,
+      email,
+      rol,
+      biyometriAktif,
+      checkInYetki,
+      odaDegistirmeYetki,
+      bilgiDuzenlemeYetki,
+      girisOnaylandi,
+      pin,
+    } = req.body;
+
+    const data = {};
+    if (adSoyad !== undefined) data.adSoyad = String(adSoyad).trim();
+    if (telefon !== undefined) data.telefon = String(telefon).trim();
+    if (email !== undefined) data.email = email === null || email === '' ? null : String(email).trim();
+    if (rol !== undefined) data.rol = ['sahip', 'yonetici', 'resepsiyon'].includes(rol) ? rol : k.rol;
+    if (typeof biyometriAktif === 'boolean') data.biyometriAktif = biyometriAktif;
+    if (typeof checkInYetki === 'boolean') data.checkInYetki = checkInYetki;
+    if (typeof odaDegistirmeYetki === 'boolean') data.odaDegistirmeYetki = odaDegistirmeYetki;
+    if (typeof bilgiDuzenlemeYetki === 'boolean') data.bilgiDuzenlemeYetki = bilgiDuzenlemeYetki;
+    if (typeof girisOnaylandi === 'boolean') data.girisOnaylandi = girisOnaylandi;
+    if (pin !== undefined && pin !== null && String(pin).trim() !== '') {
+      data.pin = await bcrypt.hash(String(pin).trim(), 10);
+    }
+
+    await prisma.kullanici.update({ where: { id }, data });
+    res.json({ message: 'Kullanıcı güncellendi' });
+  } catch (err) {
+    console.error('[appAdmin] kullanici patch', err);
+    res.status(500).json({ message: 'Güncelleme başarısız', error: err.message });
+  }
+});
+
 // --- Satışlar (Siparişler) ---
 const { getPackageCredits } = require('../config/packages');
 

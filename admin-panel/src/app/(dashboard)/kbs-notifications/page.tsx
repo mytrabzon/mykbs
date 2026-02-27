@@ -64,13 +64,13 @@ export default function KBSNotificationsPage() {
       <h1 className="kbs-page-title">Push / KBS Bildirim Kuyruğu</h1>
       <p className="kbs-page-sub">notification_outbox: queued / sent / failed.</p>
       {configRequired && (
-        <div className="kbs-card" style={{ marginBottom: '1.25rem', background: 'var(--kbs-surface-elevated)', border: '1px solid var(--kbs-border)' }}>
-          <p className="kbs-card-empty-text" style={{ padding: '1.25rem', margin: 0 }}>
+        <div className="kbs-card admin-kbs-config">
+          <p className="kbs-card-empty-text">
             Bu sayfa Supabase Edge Functions kullanır. Kullanmak için <code>NEXT_PUBLIC_SUPABASE_URL</code> ve <code>NEXT_PUBLIC_SUPABASE_ANON_KEY</code> değerlerini admin paneli <code>.env</code> dosyasına ekleyin.
           </p>
         </div>
       )}
-      <div style={{ marginBottom: '1.25rem' }}>
+      <div className="admin-kbs-filter-wrap">
         <select aria-label="Bildirim durumu filtresi" value={filter} onChange={(e) => onFilterChange(e.target.value)} className="kbs-select">
           <option value="">Tümü</option>
           <option value="queued">Queued</option>
@@ -97,13 +97,13 @@ export default function KBSNotificationsPage() {
                     <span className={`kbs-badge kbs-badge--${n.status === 'sent' ? 'sent' : n.status === 'failed' ? 'failed' : 'queued'}`}>{n.status}</span>
                   </td>
                   <td>{n.payload?.title || '-'}</td>
-                  <td style={{ color: 'var(--kbs-danger)', fontSize: '0.85rem', textAlign: 'left' }}>{n.last_error || '-'}</td>
+                  <td className="admin-kbs-error-cell">{n.last_error || '-'}</td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
-        {list.length === 0 && !loading && <p className="kbs-card-empty-text" style={{ padding: '1.25rem' }}>Kayıt yok.</p>}
+        {list.length === 0 && !loading && <p className="kbs-card-empty-text admin-kbs-empty">Kayıt yok.</p>}
       </div>
     </div>
   )
