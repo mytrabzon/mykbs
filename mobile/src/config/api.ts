@@ -9,13 +9,21 @@ export function getApiBaseUrl(): string {
   return ENV.BACKEND_URL.replace(/\/$/, '');
 }
 
-/** Health endpoint path – backend GET /health */
+/** Health endpoint path – backend GET /health (DB'siz) */
 export const HEALTH_PATH = '/health';
+
+/** DB ping – backend GET /health/db (teşhis: sunucu ayakta ama DB yok) */
+export const HEALTH_DB_PATH = '/health/db';
 
 /** Test edilen tam URL (tek otorite) */
 export function getHealthUrl(): string {
   const base = getApiBaseUrl();
   return base ? `${base}${HEALTH_PATH}` : '';
+}
+
+export function getHealthDbUrl(): string {
+  const base = getApiBaseUrl();
+  return base ? `${base}${HEALTH_DB_PATH}` : '';
 }
 
 /** API base + health (debug / test ekranında gösterim) */

@@ -54,10 +54,29 @@ app.use('/mock', require('./routes/mockKbs'));
 // Internal: KBS worker (Railway cron: POST /internal/kbs/worker, header x-worker-secret)
 app.use('/internal', require('./routes/internal/kbsWorker'));
 
-// Health check — mobil "Bağlantıyı Test Et" burayı çağıracak
+// Health check (DB'siz) — mobil önce bunu çağırır
 const pkg = require('../package.json');
 app.get('/health', (req, res) => {
-  res.json({ ok: true, status: 'ok', version: pkg.version || '1.0.0', time: new Date().toISOString() });
+  res.json({ ok: true, service: 'mykbs-backend', ts: new Date().toISOString(), version: pkg.version || '1.0.0' });
+});
+
+// DB ping — DATABASE_URL ve bağlantı teşhisi (mobil: /health ok ama /health/db fail → "Veritabanına bağlanamıyor")
+app.get('/health/db', async (req, res) => {
+  const dbUrl = process.env.DATABASE_URL;
+  if (!dbUrl || dbUrl === 'file:./dev.db') {
+    return res.status(500).json({ ok: false, error: { code: 'MISSING_DATABASE_URL', message: 'DATABASE_URL missing' } });
+  }
+  try {
+    const { PrismaClient } = require('@prisma/client');
+    const prisma = new PrismaClient();
+    await prisma.$queryRaw`SELECT 1`;
+    await prisma.$disconnect();
+    return res.json({ ok: true, db: true });
+  } catch (err) {
+    const code = err.code || err.meta?.code || 'UNKNOWN';
+    const message = err.message || String(err);
+    return res.status(500).json({ ok: false, error: { code, message } });
+  }
 });
 
 // Error handling
@@ -75,10 +94,28 @@ const HOST = process.env.HOST || '0.0.0.0';
 // KBS outbox worker (Supabase + POLIS/JANDARMA veya mock)
 const kbsWorker = require('./worker/kbsOutboxWorker');
 
+// Startup: DATABASE_URL var mı / host+db (şifre loglanmaz)
+function logDatabaseUrlStatus() {
+  const u = process.env.DATABASE_URL;
+  if (!u || u === 'file:./dev.db') {
+    console.warn('[Startup] DATABASE_URL: (missing or file) — /health/db 500 döner');
+    return;
+  }
+  try {
+    const match = u.match(/@([^/]+)\/([^?]+)/);
+    const host = match ? match[1] : '(unknown)';
+    const db = match ? match[2] : 'postgres';
+    console.log('[Startup] DATABASE_URL: host=' + host + ' db=' + db + ' (set)');
+  } catch (_) {
+    console.log('[Startup] DATABASE_URL: (set, parse skip)');
+  }
+}
+logDatabaseUrlStatus();
+
 app.listen(PORT, HOST, () => {
   console.log(`Server running on http://${HOST}:${PORT}`);
   console.log(`Local: http://localhost:${PORT}`);
-  console.log(`Health: GET http://localhost:${PORT}/health`);
+  console.log(`Health: GET http://localhost:${PORT}/health  |  DB: GET http://localhost:${PORT}/health/db`);
   if (process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY) {
     if (process.env.WORKER_SECRET) {
       console.log('KBS worker: Railway cron kullan (POST /internal/kbs/worker + x-worker-secret)');

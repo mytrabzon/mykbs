@@ -632,7 +632,10 @@ router.post('/giris/yeni', async (req, res) => {
       return res.status(401).json({ message: 'Geçersiz şifre' });
     }
 
-    // Tesis kontrolü
+    // Tesis kontrolü (telefon/e-posta + şifre girişi için tesis zorunlu)
+    if (!kullanici.tesis) {
+      return res.status(403).json({ message: 'Hesabınız bir tesise bağlı değil. Yöneticinize başvurun.' });
+    }
     if (kullanici.tesis.durum !== 'aktif') {
       return res.status(403).json({ message: 'Tesis aktif değil' });
     }

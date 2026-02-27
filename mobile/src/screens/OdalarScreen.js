@@ -187,7 +187,7 @@ export default function OdalarScreen() {
   const [filterLoading, setFilterLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [liveUpdates, setLiveUpdates] = useState([]);
-  const [backendStatus, setBackendStatus] = useState({ isOnline: null, lastChecked: null, error: null });
+  const [backendStatus, setBackendStatus] = useState({ isOnline: null, lastChecked: null, error: null, dbOnline: undefined });
   const [supabaseStatus, setSupabaseStatus] = useState({ configured: false, isOnline: null, lastChecked: null, error: null });
   const [lastLoadErrorType, setLastLoadErrorType] = useState(null); // 'auth' | 'network' | 'path' | null
   const [showDebugUrls, setShowDebugUrls] = useState(__DEV__);
@@ -199,11 +199,17 @@ export default function OdalarScreen() {
   // Backend health dinle: test başarılı olunca state resetlensin (sticky overlay kalkar)
   useEffect(() => {
     const unsub = backendHealth.onStatusChange((status) => {
-      if (status.isOnline) {
-        setBackendStatus((p) => ({ ...p, isOnline: true, lastChecked: status.lastChecked, error: null }));
+      setBackendStatus((p) => ({
+        ...p,
+        isOnline: status.isOnline,
+        lastChecked: status.lastChecked,
+        error: status.error,
+        dbOnline: status.dbOnline,
+      }));
+      if (status.isOnline && status.dbOnline === false) {
+        setLastLoadErrorType('db');
+      } else if (status.isOnline) {
         setLastLoadErrorType(null);
-      } else {
-        setBackendStatus((p) => ({ ...p, isOnline: false, lastChecked: status.lastChecked, error: status.error }));
       }
     });
     return unsub;
@@ -226,7 +232,15 @@ export default function OdalarScreen() {
     const run = async () => {
       if (getBackendUrl()) {
         const status = await backendHealth.checkHealth();
-        setBackendStatus((p) => ({ ...p, isOnline: status.isOnline, lastChecked: status.lastChecked, error: status.error }));
+        setBackendStatus((p) => ({
+          ...p,
+          isOnline: status.isOnline,
+          lastChecked: status.lastChecked,
+          error: status.error,
+          dbOnline: status.dbOnline,
+        }));
+        if (status.isOnline && status.dbOnline === false) setLastLoadErrorType('db');
+        else if (status.isOnline) setLastLoadErrorType(null);
       }
     };
     run();
@@ -836,13 +850,18 @@ export default function OdalarScreen() {
         showsVerticalScrollIndicator={false}
         ListEmptyComponent={
           !initialLoading && !filterLoading ? (
-            (backendStatus.isOnline === false || lastLoadErrorType !== null) ? (
+            (backendStatus.isOnline === false || lastLoadErrorType !== null || backendStatus.dbOnline === false) ? (
               <BackendErrorScreen
                 onRetry={() => loadData(true)}
                 onTestConnection={async () => {
                   const status = await backendHealth.checkHealth();
-                  if (status.isOnline) {
-                    setBackendStatus({ isOnline: true, lastChecked: status.lastChecked || new Date(), error: null });
+                  setBackendStatus({
+                    isOnline: status.isOnline,
+                    lastChecked: status.lastChecked || new Date(),
+                    error: status.error,
+                    dbOnline: status.dbOnline,
+                  });
+                  if (status.isOnline && status.dbOnline !== false) {
                     setLastLoadErrorType(null);
                     Toast.show({
                       type: 'success',
@@ -851,15 +870,23 @@ export default function OdalarScreen() {
                       visibilityTime: 2000,
                     });
                     loadData(true);
+                  } else if (status.isOnline && status.dbOnline === false) {
+                    setLastLoadErrorType('db');
+                    Toast.show({
+                      type: 'error',
+                      text1: 'Veritabanı bağlantısı yok',
+                      text2: 'Sunucu çalışıyor ama veritabanına ulaşılamıyor.',
+                      visibilityTime: 4000,
+                    });
                   } else {
-                    setBackendStatus({ isOnline: false, lastChecked: status.lastChecked, error: status.error });
+                    setLastLoadErrorType(null);
                     Toast.show({ type: 'error', text1: 'Bağlantı başarısız', text2: status.error || 'Sunucuya erişilemiyor' });
                   }
                 }}
                 onOpenSettings={() => navigation.navigate('Ayarlar')}
                 lastError={backendStatus.error}
                 lastChecked={backendStatus.lastChecked}
-                errorType={lastLoadErrorType}
+                errorType={lastLoadErrorType || (backendStatus.isOnline && backendStatus.dbOnline === false ? 'db' : null)}
                 testedUrl={getHealthUrl()}
                 apiBaseUrl={getBackendUrl()}
                 showDebug={showDebugUrls}

@@ -20,7 +20,7 @@ Supabase projesi **Healthy** ama Railway backend hâlâ `Can't reach database se
 1. [Railway Dashboard](https://railway.app) → **marvelous-generosity** projesi → **mykbs** servisi.
 2. **Variables** sekmesine gir.
 3. **DATABASE_URL** satırını bul, **Edit** (veya değişkeni silip yeniden ekle).
-4. Yapıştır: Supabase’ten kopyaladığın **Session mode** URI’si (şifre dahil, tek satır).
+4. Yapıştır: Supabase’ten kopyaladığın **Session mode** URI’si (şifre dahil, tek satır). **Sonda mutlaka** `&pgbouncer=true` olsun (Prisma + pooler uyumu; yoksa "insufficient data left in message" / 08P01 alabilirsin). Örnek: `...postgres?sslmode=require&pgbouncer=true`
 5. Kaydet. Gerekirse servisi **Redeploy** et veya bir kez **Restart** et.
 
 ### 3. Test

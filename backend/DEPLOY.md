@@ -100,8 +100,9 @@ Mobil uygulama `EXPO_PUBLIC_BACKEND_URL` ile `/health` adresine istek atar. Ceva
 3. **Railway ayarları:**  
    - **Root Directory:** `backend` (repo kökü değil).  
    - **Build Command:** (boş bırakılabilir; Nixpacks varsayılanı `npm install` + `npm run build` veya sadece `npm install`).  
-   - **Start Command:** `npm start` veya `node src/server.js` (package.json’daki `start` script’i).  
-   - **PORT:** Sabit yazmayın; Railway `PORT` env ile verir. Backend zaten `process.env.PORT || 8080` kullanıyor.
+   - **Start Command:** `npm start` veya `node src/server.js`. Migration’ı her deploy’da çalıştırmak istersen: `npm run migrate:deploy && npm start` (Prisma tabloları güncel kalır).  
+   - **PORT:** Sabit yazmayın; Railway `PORT` env ile verir. Backend zaten `process.env.PORT || 8080` kullanıyor.  
+   - **Teşhis:** `GET /health` → backend ayakta; `GET /health/db` → veritabanı bağlantısı. Log’da `[Startup] DATABASE_URL: host=... db=...` ile env kontrol edilir.
 
 4. **Mobil env:**  
    - `mobile/.env` ve EAS build env’de `EXPO_PUBLIC_BACKEND_URL=https://mykbs-production.up.railway.app` (sonda **slash yok**).  

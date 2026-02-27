@@ -33,7 +33,7 @@ export default function LoginScreen({ route }) {
   const navigation = useNavigation();
   const { colors } = useTheme();
   const { login, loginWithPassword, loginWithPhoneAndPassword } = useAuth();
-  const [tab, setTab] = useState('tesis'); // 'tesis' | 'hesap'
+  const [tab, setTab] = useState('hesap'); // 'hesap' = telefon/e-posta + şifre (varsayılan), 'tesis' = tesis kodu + PIN
   const [tesisKodu, setTesisKodu] = useState('');
   const [pin, setPin] = useState('');
   const [telefon, setTelefon] = useState('');
@@ -158,8 +158,8 @@ export default function LoginScreen({ route }) {
         <View style={[styles.formCard, { backgroundColor: colors.surface }]}>
           <SegmentedControl
             options={[
-              { key: 'tesis', label: 'Tesis ile Giriş' },
-              { key: 'hesap', label: 'Hesap ile Giriş' },
+              { key: 'hesap', label: 'Telefon / E-posta + Şifre' },
+              { key: 'tesis', label: 'Tesis Kodu + PIN' },
             ]}
             value={tab}
             onChange={setTab}
@@ -208,10 +208,10 @@ export default function LoginScreen({ route }) {
           ) : (
             <>
               <Input
-                label="E-posta veya Telefon"
+                label="Telefon veya E-posta"
                 value={telefon}
                 onChangeText={(t) => setTelefon(t.includes('@') ? t : formatPhone(t))}
-                placeholder=""
+                placeholder="05XX XXX XX XX veya e-posta"
                 keyboardType={telefon?.includes('@') ? 'email-address' : 'phone-pad'}
                 autoCapitalize="none"
               />

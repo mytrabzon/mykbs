@@ -19,7 +19,7 @@ export default function BackendErrorScreen({
   lastChecked,
   showDebug = false,
   onToggleDebug,
-  errorType = null, // 'auth' | 'network' | 'path' | null
+  errorType = null, // 'auth' | 'network' | 'path' | 'db' | null
   testedUrl = '',
   apiBaseUrl = '',
 }) {
@@ -28,19 +28,24 @@ export default function BackendErrorScreen({
 
   const isAuth = errorType === 'auth';
   const isPath = errorType === 'path';
+  const isDb = errorType === 'db';
 
   const title = isAuth
     ? 'Oturum doğrulanamadı'
     : isPath
       ? 'Endpoint bulunamadı'
-      : 'Backend Bağlantı Hatası';
+      : isDb
+        ? 'Veritabanı bağlantısı yok'
+        : 'Backend Bağlantı Hatası';
   const message = isAuth
     ? 'Oturum süreniz dolmuş veya yetkiniz yok. Lütfen tekrar giriş yapın.'
     : isPath
       ? 'İstek yapılan adres sunucuda bulunamadı. Test ve API adresleri aynı base\'i kullanıyor mu kontrol edin.'
-      : apiBaseUrl
-        ? 'Sunucu adresi doğrulanamadı. İnternet bağlantınızı ve sunucu adresini kontrol edin.'
-        : 'EXPO_PUBLIC_BACKEND_URL tanımlı değil. mobile/.env içinde backend adresi gerekli.';
+      : isDb
+        ? 'Sunucu çalışıyor ama veritabanına bağlanamıyor. Railway\'de DATABASE_URL ve migration kontrol edin.'
+        : apiBaseUrl
+          ? 'Sunucu adresi doğrulanamadı. İnternet bağlantınızı ve sunucu adresini kontrol edin.'
+          : 'EXPO_PUBLIC_BACKEND_URL tanımlı değil. mobile/.env içinde backend adresi gerekli.';
 
   const debugLines = [
     testedUrl ? `Test edilen adres: ${testedUrl}` : null,
@@ -58,16 +63,16 @@ export default function BackendErrorScreen({
 
   return (
     <View style={styles.container}>
-      <View style={[styles.pill, { backgroundColor: isAuth ? colors.warningSoft : colors.errorSoft }]}>
-        <Text style={[styles.pillText, { color: isAuth ? colors.warning : colors.error }]}>
-          {isAuth ? 'Oturum' : 'Offline'}
+      <View style={[styles.pill, { backgroundColor: isAuth ? colors.warningSoft : isDb ? colors.warningSoft : colors.errorSoft }]}>
+        <Text style={[styles.pillText, { color: isAuth ? colors.warning : isDb ? colors.warning : colors.error }]}>
+          {isAuth ? 'Oturum' : isDb ? 'Veritabanı' : 'Offline'}
         </Text>
       </View>
-      <View style={[styles.iconWrap, { backgroundColor: isAuth ? colors.warningSoft : colors.errorSoft }]}>
+      <View style={[styles.iconWrap, { backgroundColor: isAuth ? colors.warningSoft : isDb ? colors.warningSoft : colors.errorSoft }]}>
         <Ionicons
-          name={isAuth ? 'person-outline' : 'cloud-offline-outline'}
+          name={isAuth ? 'person-outline' : isDb ? 'server-outline' : 'cloud-offline-outline'}
           size={56}
-          color={isAuth ? colors.warning : colors.error}
+          color={isAuth ? colors.warning : isDb ? colors.warning : colors.error}
         />
       </View>
       <Text style={[styles.title, { color: colors.textPrimary }]}>{title}</Text>

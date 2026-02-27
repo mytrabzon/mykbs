@@ -1,5 +1,5 @@
 import { logger } from '../utils/logger';
-import { getApiBaseUrl, getHealthUrl, isSupabaseConfigured } from '../config/api';
+import { getApiBaseUrl, getHealthUrl, getHealthDbUrl, isSupabaseConfigured } from '../config/api';
 import { callFn } from '../lib/supabase/functions';
 
 export interface BackendStatus {
@@ -10,6 +10,8 @@ export interface BackendStatus {
   testedUrl?: string;
   /** Son HTTP status (debug) */
   lastStatusCode?: number;
+  /** /health ok ama /health/db fail ise false — "Sunucu çalışıyor ama veritabanına bağlanamıyor" */
+  dbOnline?: boolean;
 }
 
 export interface SupabaseStatus {
@@ -52,12 +54,26 @@ class BackendHealthService {
         if (!res.ok || (data.ok !== true && data.status !== 'ok')) {
           throw new Error((data as { message?: string })?.message || `HTTP ${res.status}`);
         }
+        let dbOnline: boolean | undefined = true;
+        const healthDbUrl = getHealthDbUrl();
+        if (healthDbUrl) {
+          try {
+            const dbController = new AbortController();
+            setTimeout(() => dbController.abort(), 10000);
+            const dbRes = await fetch(healthDbUrl, { method: 'GET', signal: dbController.signal });
+            const dbData = (await dbRes.json().catch(() => ({}))) as { ok?: boolean; db?: boolean };
+            dbOnline = dbRes.ok && dbData.ok === true && dbData.db === true;
+          } catch (_) {
+            dbOnline = false;
+          }
+        }
         this.status = {
           isOnline: true,
           lastChecked: new Date(),
           error: undefined,
           testedUrl: healthUrl,
           lastStatusCode: res.status,
+          dbOnline,
         };
       } else {
         logger.log('Checking backend health (Supabase Edge Functions)...');
@@ -68,6 +84,7 @@ class BackendHealthService {
           error: undefined,
           testedUrl: 'Supabase Edge Functions',
           lastStatusCode: 200,
+          dbOnline: undefined,
         };
       }
       if (__DEV__) {

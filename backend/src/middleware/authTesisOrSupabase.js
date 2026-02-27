@@ -86,6 +86,32 @@ async function authenticateTesisOrSupabase(req, res, next) {
             return next();
           }
         }
+        // Şube atanmamış kullanıcı: admin ise ilk şubeyi kullan (anasayfa/tesis/oda çalışsın)
+        const noBranch = !profile || !profile?.branch_id;
+        if (noBranch) {
+          let isAdmin = false;
+          const { data: profileRow } = await supabaseAdmin.from('profiles').select('is_admin').eq('id', user.id).maybeSingle();
+          if (profileRow?.is_admin === true) isAdmin = true;
+          if (!isAdmin) {
+            const { data: appRole } = await supabaseAdmin.from('app_roles').select('role').eq('user_id', user.id).maybeSingle();
+            if (appRole?.role === 'admin') isAdmin = true;
+          }
+          if (isAdmin) {
+            const fullSelect = 'id, name, kbs_turu, kbs_tesis_kodu, kbs_web_servis_sifre, kbs_configured, kbs_endpoint_url';
+            const branchRes = await supabaseAdmin.from('branches').select(fullSelect).limit(1);
+            const firstBranch = Array.isArray(branchRes.data) && branchRes.data.length > 0 ? branchRes.data[0] : null;
+            if (firstBranch) {
+              req.authSource = 'supabase';
+              req.user = user;
+              req.branchId = firstBranch.id;
+              req.branch = firstBranch;
+              req.profileRole = profile?.role || 'admin';
+              req.tesis = null;
+              console.warn('[authTesisOrSupabase] Admin kullanıcı şube atanmamış; ilk şube kullanılıyor:', user.id, firstBranch.id);
+              return next();
+            }
+          }
+        }
         if (!profile && !profileError) {
           console.warn('[authTesisOrSupabase] Supabase user geçerli ama user_profiles kaydı yok:', user.id);
           return res.status(401).json({
