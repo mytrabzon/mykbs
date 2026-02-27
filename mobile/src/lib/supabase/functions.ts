@@ -37,13 +37,16 @@ export async function callFn<T = unknown>(
   const baseUrl = ENV.SUPABASE_URL.replace(/\/$/, '');
   const fnUrl = `${baseUrl}/functions/v1/${name}`;
 
-  let accessToken: string | null = opts.tokenOverride ?? null;
-  if (typeof accessToken === 'string' && accessToken.startsWith('stub_token_')) {
-    accessToken = null;
-  }
-  if (!accessToken) {
+  let accessToken: string | null = null;
+  if (requireAuth) {
     const { data: { session } } = await supabase.auth.getSession();
     accessToken = session?.access_token ?? null;
+  }
+  if (!accessToken) {
+    accessToken = opts.tokenOverride ?? null;
+  }
+  if (typeof accessToken === 'string' && accessToken.startsWith('stub_token_')) {
+    accessToken = null;
   }
 
   if (requireAuth && !accessToken) {
@@ -68,18 +71,37 @@ export async function callFn<T = unknown>(
     url: fnUrl,
   });
 
-  const res = await fetch(fnUrl, {
+  let res = await fetch(fnUrl, {
     method: 'POST',
     headers,
     body: body ? JSON.stringify(body) : undefined,
   });
 
-  const text = await res.text();
+  let text = await res.text();
   let data: unknown;
   try {
     data = text ? JSON.parse(text) : null;
   } catch {
     data = { message: text || res.statusText };
+  }
+
+  if (res.status === 401 && requireAuth && (name === 'me' || name === 'facilities_list' || name === 'rooms_list')) {
+    const { data: { session: refreshed } } = await supabase.auth.refreshSession();
+    const newToken = refreshed?.access_token;
+    if (newToken) {
+      logger.log('[callFn] 401 sonrası session yenilendi, tekrar deniyor', { name });
+      res = await fetch(fnUrl, {
+        method: 'POST',
+        headers: { ...headers, Authorization: `Bearer ${newToken}` },
+        body: body ? JSON.stringify(body) : undefined,
+      });
+      text = await res.text();
+      try {
+        data = text ? JSON.parse(text) : null;
+      } catch {
+        data = { message: text || res.statusText };
+      }
+    }
   }
 
   logger.log('[callFn response]', {
@@ -88,14 +110,14 @@ export async function callFn<T = unknown>(
     ok: res.ok,
     bodyPreview: typeof (data as { message?: string })?.message === 'string'
       ? (data as { message?: string }).message
-      : res.ok ? 'ok' : text?.slice(0, 120),
+      : res.ok ? 'ok' : (typeof text === 'string' ? text?.slice(0, 120) : ''),
   });
 
   if (!res.ok) {
     const message = (data as { message?: string })?.message || res.statusText || 'Edge Function error';
     if (res.status === 401) {
-      logger.error('[callFn] 401 Unauthorized', { name, backendMessage: (data as { message?: string })?.message, fullBody: data });
-      throw new EdgeFunctionError('Giriş gerekli', 401, 'UNAUTHORIZED', data);
+      logger.error('[callFn] 401 Unauthorized', { name, backendMessage: (data as { message?: string })?.message, code: (data as { code?: string })?.code });
+      throw new EdgeFunctionError('Giriş gerekli', 401, (data as { code?: string })?.code || 'UNAUTHORIZED', data);
     }
     if (res.status === 404) {
       throw new EdgeFunctionError('Endpoint bulunamadı', 404, 'NOT_FOUND', data);
