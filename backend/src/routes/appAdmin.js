@@ -315,6 +315,47 @@ router.get('/audit', async (req, res) => {
 });
 
 /**
+ * Bekleyen kullanıcılar (user_profiles.approval_status = 'pending')
+ */
+router.get('/pending-users', async (req, res) => {
+  try {
+    if (!supabaseAdmin) return res.status(503).json({ message: 'Supabase yapılandırılmamış' });
+    const { data: profiles, error: profErr } = await supabaseAdmin
+      .from('user_profiles')
+      .select('user_id, branch_id, role, display_name, approval_status, approved_at, created_at')
+      .eq('approval_status', 'pending')
+      .order('created_at', { ascending: false });
+    if (profErr) return res.status(500).json({ message: 'Liste alınamadı', error: profErr.message });
+    const userIds = (profiles || []).map((p) => p.user_id);
+    const usersMap = {};
+    if (userIds.length > 0) {
+      const { data: { users }, error: usersErr } = await supabaseAdmin.auth.admin.listUsers({ perPage: 1000 });
+      if (!usersErr && users) {
+        users.forEach((u) => { usersMap[u.id] = u; });
+      }
+    }
+    const list = (profiles || []).map((p) => {
+      const u = usersMap[p.user_id];
+      return {
+        user_id: p.user_id,
+        branch_id: p.branch_id,
+        role: p.role,
+        display_name: p.display_name,
+        approval_status: p.approval_status,
+        created_at: p.created_at,
+        email: u?.email ?? null,
+        phone: u?.phone ?? null,
+        last_sign_in_at: u?.last_sign_in_at ?? null,
+      };
+    });
+    res.json({ users: list });
+  } catch (err) {
+    console.error('[appAdmin] pending-users', err);
+    res.status(500).json({ message: 'Bekleyen kullanıcılar alınamadı', error: err.message });
+  }
+});
+
+/**
  * Kullanıcı listesi (Supabase auth.users + profiles; service role ile)
  */
 router.get('/users', async (req, res) => {
@@ -337,23 +378,77 @@ router.get('/users', async (req, res) => {
 });
 
 /**
- * Kullanıcı detay (MVP: temel bilgi)
+ * Kullanıcı detay (auth + user_profiles)
  */
 router.get('/users/:id', async (req, res) => {
   try {
     if (!supabaseAdmin) return res.status(503).json({ message: 'Supabase yapılandırılmamış' });
     const { data: { user }, error } = await supabaseAdmin.auth.admin.getUserById(req.params.id);
     if (error || !user) return res.status(404).json({ message: 'Kullanıcı bulunamadı' });
+    const { data: profile } = await supabaseAdmin
+      .from('user_profiles')
+      .select('branch_id, role, display_name, approval_status, approved_at, approved_by, is_disabled, rejected_reason')
+      .eq('user_id', req.params.id)
+      .single();
     res.json({
       id: user.id,
       email: user.email,
       phone: user.phone,
       created_at: user.created_at,
       last_sign_in_at: user.last_sign_in_at,
+      profile: profile || null,
     });
   } catch (err) {
     console.error('[appAdmin] user detail', err);
     res.status(500).json({ message: 'Kullanıcı bilgisi alınamadı', error: err.message });
+  }
+});
+
+/**
+ * Kullanıcıyı onayla (approval_status = approved)
+ */
+router.post('/users/:id/approve', async (req, res) => {
+  try {
+    const userId = req.params.id;
+    const adminId = req.user?.id || req.adminUserId;
+    if (!supabaseAdmin) return res.status(503).json({ message: 'Supabase yapılandırılmamış' });
+    const { error } = await supabaseAdmin
+      .from('user_profiles')
+      .update({
+        approval_status: 'approved',
+        approved_at: new Date().toISOString(),
+        approved_by: adminId || null,
+        rejected_reason: null,
+      })
+      .eq('user_id', userId);
+    if (error) return res.status(500).json({ message: 'Onay kaydedilemedi', error: error.message });
+    res.json({ message: 'Kullanıcı onaylandı' });
+  } catch (err) {
+    console.error('[appAdmin] approve', err);
+    res.status(500).json({ message: 'Onay işlemi başarısız', error: err.message });
+  }
+});
+
+/**
+ * Kullanıcıyı reddet (approval_status = rejected)
+ */
+router.post('/users/:id/reject', async (req, res) => {
+  try {
+    const userId = req.params.id;
+    const reason = req.body?.reason || null;
+    if (!supabaseAdmin) return res.status(503).json({ message: 'Supabase yapılandırılmamış' });
+    const { error } = await supabaseAdmin
+      .from('user_profiles')
+      .update({
+        approval_status: 'rejected',
+        rejected_reason: reason,
+      })
+      .eq('user_id', userId);
+    if (error) return res.status(500).json({ message: 'Red kaydedilemedi', error: error.message });
+    res.json({ message: 'Kullanıcı reddedildi' });
+  } catch (err) {
+    console.error('[appAdmin] reject', err);
+    res.status(500).json({ message: 'Red işlemi başarısız', error: err.message });
   }
 });
 
@@ -375,7 +470,7 @@ router.post('/users/:id/freeze', async (req, res) => {
 });
 
 /**
- * Kullanıcıyı devre dışı bırak (ban)
+ * Kullanıcıyı devre dışı bırak (ban + user_profiles.is_disabled)
  */
 router.post('/users/:id/disable', async (req, res) => {
   try {
@@ -383,13 +478,39 @@ router.post('/users/:id/disable', async (req, res) => {
     const reason = req.body?.reason || null;
     const adminId = req.user?.id || req.adminUserId;
     if (supabaseAdmin) {
-      const { error } = await supabaseAdmin.auth.admin.updateUserById(userId, { ban_duration: '876000h' });
-      if (error) return res.status(500).json({ message: 'Kullanıcı banlanamadı', error: error.message });
+      const { error: authErr } = await supabaseAdmin.auth.admin.updateUserById(userId, { ban_duration: '876000h' });
+      if (authErr) return res.status(500).json({ message: 'Kullanıcı banlanamadı', error: authErr.message });
+      const { error: profErr } = await supabaseAdmin
+        .from('user_profiles')
+        .update({ is_disabled: true })
+        .eq('user_id', userId);
+      if (profErr) console.warn('[appAdmin] user_profiles.is_disabled güncellenemedi:', profErr.message);
     }
     console.log('[appAdmin] disable', { userId, adminId, reason });
     res.json({ message: 'Kullanıcı devre dışı bırakıldı' });
   } catch (err) {
     console.error('[appAdmin] disable', err);
+    res.status(500).json({ message: 'İşlem başarısız', error: err.message });
+  }
+});
+
+/**
+ * Kullanıcı devre dışı bırakma kaldır (unban + user_profiles.is_disabled = false)
+ */
+router.post('/users/:id/enable', async (req, res) => {
+  try {
+    const userId = req.params.id;
+    if (supabaseAdmin) {
+      const { error: authErr } = await supabaseAdmin.auth.admin.updateUserById(userId, { ban_duration: 'none' });
+      if (authErr) return res.status(500).json({ message: 'Ban kaldırılamadı', error: authErr.message });
+      await supabaseAdmin
+        .from('user_profiles')
+        .update({ is_disabled: false })
+        .eq('user_id', userId);
+    }
+    res.json({ message: 'Kullanıcı tekrar etkinleştirildi' });
+  } catch (err) {
+    console.error('[appAdmin] enable', err);
     res.status(500).json({ message: 'İşlem başarısız', error: err.message });
   }
 });

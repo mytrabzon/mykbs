@@ -48,13 +48,30 @@ async function authenticateTesisOrSupabase(req, res, next) {
         // Supabase dışı token (örn. backend JWT) olabilir; legacy JWT denenir
       }
       if (!userError && user) {
-        const { data: profileRows, error: profileError } = await supabaseAdmin
+        let profileRows, profileError;
+        const profileSelect = 'branch_id, role, is_disabled, approval_status';
+        const resProfile = await supabaseAdmin
           .from('user_profiles')
-          .select('branch_id, role')
+          .select(profileSelect)
           .eq('user_id', user.id)
           .limit(1);
+        profileRows = resProfile.data;
+        profileError = resProfile.error;
+        if (profileError && (profileError.code === '42703' || String(profileError.message || '').includes('42703'))) {
+          const fallback = await supabaseAdmin.from('user_profiles').select('branch_id, role, is_disabled').eq('user_id', user.id).limit(1);
+          profileRows = fallback.data;
+          profileError = fallback.error;
+          if (Array.isArray(profileRows) && profileRows.length > 0) profileRows[0].approval_status = 'approved';
+        }
         const profile = Array.isArray(profileRows) && profileRows.length > 0 ? profileRows[0] : null;
         if (!profileError && profile && profile.branch_id) {
+          if (profile.is_disabled) {
+            return errorResponse(req, res, 403, 'DISABLED', 'Hesabınız devre dışı bırakıldı.');
+          }
+          const approvalStatus = profile.approval_status;
+          if (approvalStatus && approvalStatus !== 'approved') {
+            return errorResponse(req, res, 403, 'APPROVAL_REQUIRED', approvalStatus === 'rejected' ? 'Hesabınız onaylanmadı. Yöneticinize başvurun.' : 'Hesabınız henüz onaylanmadı. Yönetici onayından sonra devam edebilirsiniz.');
+          }
           let branch = null;
           let branchError = null;
           const fullSelect = 'id, name, kbs_turu, kbs_tesis_kodu, kbs_web_servis_sifre, kbs_configured, kbs_endpoint_url, kbs_approved, kbs_approved_at';
@@ -86,6 +103,12 @@ async function authenticateTesisOrSupabase(req, res, next) {
             req.tesis = null;
             return next();
           }
+        }
+        if (profile && (profile.is_disabled || (profile.approval_status && profile.approval_status !== 'approved'))) {
+          if (profile.is_disabled) {
+            return errorResponse(req, res, 403, 'DISABLED', 'Hesabınız devre dışı bırakıldı.');
+          }
+          return errorResponse(req, res, 403, 'APPROVAL_REQUIRED', profile.approval_status === 'rejected' ? 'Hesabınız onaylanmadı. Yöneticinize başvurun.' : 'Hesabınız henüz onaylanmadı. Yönetici onayından sonra devam edebilirsiniz.');
         }
         // Şube atanmamış kullanıcı: admin ise ilk şubeyi kullan (anasayfa/tesis/oda çalışsın)
         const noBranch = !profile || !profile?.branch_id;

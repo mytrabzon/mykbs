@@ -126,16 +126,30 @@ router.get('/', async (req, res) => {
       }
     });
   } catch (error) {
+    const requestId = req.requestId || '-';
+    const step = 'tesis';
+    if (requestId !== '-') {
+      console.error(`[REQ ${requestId}] GET /api/tesis UNHANDLED -> stack:`, error?.stack || error);
+    }
     const msg = error?.message || '';
+    const code = error?.code || error?.meta?.code;
     const isSchema = /column|relation|does not exist|no such column/i.test(msg);
     const isDb = /prisma|ECONNREFUSED|connect|migrate|relation|column|table/i.test(msg);
+    const is08P01 = code === '08P01' || /08P01|insufficient data left in message|Tesis kaydı oluşturulamadı/i.test(msg);
+    const isP2025 = code === 'P2025' || (error?.meta?.code === 'P2025');
+    if (isP2025) {
+      return errorResponse(req, res, 404, 'NOT_FOUND', 'Kayıt bulunamadı.', { step });
+    }
+    if (is08P01) {
+      return errorResponse(req, res, 503, 'DB_CONNECT_ERROR', 'Veritabanı bağlantısı geçici olarak kullanılamıyor. Lütfen kısa süre sonra tekrar deneyin.', { step });
+    }
     if (isSchema) {
-      return errorResponse(req, res, 500, 'SCHEMA_ERROR', 'Veritabanı şeması güncel değil. Lütfen yöneticiye bildirin.');
+      return errorResponse(req, res, 500, 'SCHEMA_ERROR', 'Veritabanı şeması güncel değil. Lütfen yöneticiye bildirin.', { step });
     }
     if (isDb) {
-      return errorResponse(req, res, 500, 'DB_CONNECT_ERROR', 'Sunucuda geçici bir sorun var. Daha sonra tekrar deneyin.');
+      return errorResponse(req, res, 500, 'DB_CONNECT_ERROR', 'Sunucuda geçici bir sorun var. Daha sonra tekrar deneyin.', { step });
     }
-    return errorResponse(req, res, 500, 'UNHANDLED_ERROR', 'Bilgi alınamadı.');
+    return errorResponse(req, res, 500, 'UNHANDLED_ERROR', 'Bilgi alınamadı.', { step });
   }
 });
 

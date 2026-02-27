@@ -1601,8 +1601,20 @@ router.get('/me', authenticateTesisOrSupabase, async (req, res) => {
       tesis: kullanici.tesis
     });
   } catch (error) {
-    console.error('Kullanıcı bilgisi hatası:', error);
-    res.status(500).json({ message: 'Bilgi alınamadı', error: error.message });
+    const requestId = req.requestId || '-';
+    if (requestId !== '-') console.error(`[REQ ${requestId}] GET /api/auth/me -> stack:`, error?.stack || error);
+    const { errorResponse: errRes } = require('../lib/errorResponse');
+    const msg = error?.message || '';
+    const code = error?.code || error?.meta?.code;
+    const isP2025 = code === 'P2025' || (error?.meta?.code === 'P2025');
+    const isDb = /prisma|ECONNREFUSED|08P01|connect|relation|column/i.test(msg);
+    if (isP2025 || /Cannot read propert|kullanici\.|findUnique.*null/i.test(msg)) {
+      return errRes(req, res, 404, 'NOT_FOUND', 'Kullanıcı bilgisi bulunamadı.');
+    }
+    if (isDb) {
+      return errRes(req, res, 500, 'DB_CONNECT_ERROR', 'Veritabanı geçici olarak kullanılamıyor. Lütfen tekrar deneyin.');
+    }
+    return errRes(req, res, 500, 'UNHANDLED_ERROR', 'Bilgi alınamadı.');
   }
 });
 

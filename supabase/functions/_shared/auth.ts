@@ -1,5 +1,7 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
+export type ApprovalStatus = "pending" | "approved" | "rejected";
+
 export interface UserProfile {
   user_id: string;
   branch_id: string;
@@ -8,6 +10,7 @@ export interface UserProfile {
   title: string | null;
   avatar_url: string | null;
   is_disabled: boolean;
+  approval_status: ApprovalStatus;
 }
 
 export interface AuthResult {
@@ -42,7 +45,7 @@ export function errorResponse(
   status = 400,
   code?: string
 ) {
-  return jsonResponse({ error: message, code: code || "ERROR" }, status);
+  return jsonResponse({ error: message, message, code: code || "ERROR" }, status);
 }
 
 /**
@@ -86,7 +89,7 @@ export async function requireAuth(req: Request): Promise<AuthResult | Response> 
 
   const { data: profile, error: profileError } = await supabase
     .from("user_profiles")
-    .select("user_id, branch_id, role, display_name, title, avatar_url, is_disabled")
+    .select("user_id, branch_id, role, display_name, title, avatar_url, is_disabled, approval_status")
     .eq("user_id", user.id)
     .single();
 
@@ -96,6 +99,17 @@ export async function requireAuth(req: Request): Promise<AuthResult | Response> 
 
   if (profile.is_disabled) {
     return errorResponse("Hesabiniz devre disi birakildi", 403, "DISABLED");
+  }
+
+  const status = (profile as { approval_status?: string }).approval_status;
+  if (status !== "approved") {
+    return errorResponse(
+      status === "rejected"
+        ? "Hesabiniz onaylanmadi. Yoneticinize basvurun."
+        : "Hesabiniz henuz onaylanmadi. Yonetici onayindan sonra islem yapabileceksiniz.",
+      403,
+      "APPROVAL_REQUIRED"
+    );
   }
 
   return {

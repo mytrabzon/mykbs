@@ -517,7 +517,7 @@ export default function OdalarScreen() {
       if ((odalar || []).length > 0) setBackendStatus((p) => ({ ...p, isOnline: true }));
       logger.log('[OdalarScreen] loadData tamamlandı', { step: lastLoadStep, odaCount: (odalar || []).length });
     } catch (error) {
-      const loadStep = error?.loadStep ?? error?.step ?? lastLoadStep;
+      const loadStep = error?.loadStep ?? error?.step ?? error?.response?.data?.step ?? lastLoadStep;
       logger.error('[OdalarScreen] loadData hatası', {
         loadStep,
         message: error?.message,
@@ -535,7 +535,7 @@ export default function OdalarScreen() {
 
       const isAuth = status === 401;
       const isPath = status === 404;
-      const isApproval = status === 409;
+      const isApproval = status === 409 || (status === 403 && code === 'APPROVAL_REQUIRED');
       const isForbidden = status === 403;
       const isNetwork =
         error.message === 'Network Error' ||

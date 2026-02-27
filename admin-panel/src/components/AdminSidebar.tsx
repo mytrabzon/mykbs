@@ -6,6 +6,7 @@ import { usePathname } from 'next/navigation'
 const navItems = [
   { href: '/', label: 'Dashboard', icon: '📊' },
   { href: '/live', label: 'Canlı Akış', icon: '🔴' },
+  { href: '/pending-users', label: 'Onay Bekleyenler', icon: '⏳' },
   { href: '/users', label: 'Kullanıcılar', icon: '👥' },
   { href: '/identity', label: 'Kimlik & Pasaport', icon: '🪪' },
   { href: '/payments', label: 'Paketler & Ödemeler', icon: '💳' },
