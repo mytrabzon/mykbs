@@ -27,6 +27,7 @@ import CheckInScreen from './src/screens/CheckInScreen';
 import AyarlarScreen from './src/screens/AyarlarScreen';
 import OdaDetayScreen from './src/screens/OdaDetayScreen';
 import AdminPanelScreen from './src/screens/AdminPanelScreen';
+import TesisListScreen from './src/screens/TesisListScreen';
 import ToplulukScreen from './src/screens/ToplulukScreen';
 import BildirimlerScreen from './src/screens/BildirimlerScreen';
 import PostDetayScreen from './src/screens/PostDetayScreen';
@@ -354,6 +355,7 @@ function AppNavigator() {
             <Stack.Screen name="PaylasimEkle" component={PaylasimEkleScreen} />
             <Stack.Screen name="ProfilDuzenle" component={ProfilDuzenleScreen} />
             <Stack.Screen name="AdminPanel" component={AdminPanelScreen} />
+            <Stack.Screen name="TesisList" component={TesisListScreen} />
             <Stack.Screen name="MrzScan" component={MrzScanScreen} />
             <Stack.Screen name="MrzResult" component={MrzResultScreen} />
             <Stack.Screen name="KycSubmit" component={KycSubmitScreen} />

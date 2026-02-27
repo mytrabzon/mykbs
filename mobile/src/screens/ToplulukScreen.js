@@ -10,6 +10,7 @@ import {
   Modal,
   Pressable,
   Image,
+  Dimensions,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../context/AuthContext';
@@ -20,6 +21,10 @@ import { Chip } from '../components/ui';
 import EmptyState from '../components/EmptyState';
 import AppHeader from '../components/AppHeader';
 import { typography, spacing } from '../theme';
+
+const { width: SCREEN_WIDTH } = Dimensions.get('window');
+const POST_IMAGE_SIZE = SCREEN_WIDTH;
+const AVATAR_SIZE = 36;
 
 const CATEGORIES = [
   { key: '', label: 'Tümü' },
@@ -32,10 +37,77 @@ const CATEGORIES = [
   { key: 'general', label: 'Genel' },
 ];
 
+function PostCard({ item, colors, onPress, onCommentPress, categoryLabel }) {
+  const imageUri = item.media?.images?.[0];
+  const authorName = item.author?.display_name || 'Kullanıcı';
+  const authorAvatar = item.author?.avatar_url || null;
+
+  return (
+    <View style={[styles.postCard, { backgroundColor: colors.surface }]}>
+      {/* Üst: avatar + isim + pin */}
+      <TouchableOpacity
+        style={styles.postHeader}
+        onPress={onPress}
+        activeOpacity={0.8}
+      >
+        <View style={[styles.avatarWrap, { backgroundColor: colors.border }]}>
+          {authorAvatar ? (
+            <Image source={{ uri: authorAvatar }} style={styles.avatar} />
+          ) : (
+            <Ionicons name="person" size={20} color={colors.textSecondary} />
+          )}
+        </View>
+        <View style={styles.postHeaderText}>
+          <Text style={[styles.postAuthor, { color: colors.textPrimary }]} numberOfLines={1}>
+            {authorName}
+          </Text>
+          <Text style={[styles.postMeta, { color: colors.textSecondary }]}>
+            {categoryLabel} · {new Date(item.created_at).toLocaleDateString('tr-TR')}
+          </Text>
+        </View>
+        {item.is_pinned && (
+          <View style={styles.pinIcon}>
+            <Ionicons name="pin" size={16} color={colors.primary} />
+          </View>
+        )}
+      </TouchableOpacity>
+
+      {/* Görsel - tam genişlik, Instagram oranı */}
+      {imageUri ? (
+        <TouchableOpacity onPress={onPress} activeOpacity={1}>
+          <Image
+            source={{ uri: imageUri }}
+            style={styles.postImage}
+            resizeMode="cover"
+          />
+        </TouchableOpacity>
+      ) : null}
+
+      {/* Alt: aksiyonlar + caption */}
+      <View style={styles.postFooter}>
+        <View style={styles.actionRow}>
+          <TouchableOpacity style={styles.actionBtn} onPress={onPress}>
+            <Ionicons name="heart-outline" size={24} color={colors.textPrimary} />
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.actionBtn} onPress={onCommentPress}>
+            <Ionicons name="chatbubble-outline" size={22} color={colors.textPrimary} />
+          </TouchableOpacity>
+        </View>
+        {(item.body || item.title) ? (
+          <Text style={[styles.postCaption, { color: colors.textPrimary }]} numberOfLines={3}>
+            {item.title ? <Text style={styles.captionBold}>{item.title} </Text> : null}
+            {item.body}
+          </Text>
+        ) : null}
+      </View>
+    </View>
+  );
+}
+
 export default function ToplulukScreen({ navigation }) {
   const { tesis, getSupabaseToken } = useAuth();
   const { colors } = useTheme();
-  const [tab, setTab] = useState('announcement'); // announcement | post
+  const [tab, setTab] = useState('announcement');
   const [posts, setPosts] = useState([]);
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
@@ -130,35 +202,66 @@ export default function ToplulukScreen({ navigation }) {
         tesis={tesis}
         onNotification={() => navigation.navigate('Bildirimler')}
         onProfile={() => navigation.navigate('ProfilDuzenle')}
+        rightComponent={
+          <View style={styles.headerRight}>
+            <TouchableOpacity
+              style={[styles.headerAddBtn, { backgroundColor: colors.primary }]}
+              onPress={() => navigation.navigate('PaylasimEkle')}
+            >
+              <Ionicons name="add" size={22} color="#fff" />
+            </TouchableOpacity>
+            <TouchableOpacity onPress={() => navigation.navigate('Bildirimler')} style={styles.headerIconBtn}>
+              <Ionicons name="notifications-outline" size={22} color={colors.textSecondary} />
+            </TouchableOpacity>
+            <TouchableOpacity onPress={() => navigation.navigate('ProfilDuzenle')} style={styles.headerIconBtn}>
+              <Ionicons name="person-circle-outline" size={24} color={colors.textSecondary} />
+            </TouchableOpacity>
+          </View>
+        }
       />
-      <View style={styles.tabsRow}>
-      <View style={styles.tabs}>
+
+      {/* Tab bar - Instagram style */}
+      <View style={[styles.tabBar, { borderBottomColor: colors.border }]}>
         <TouchableOpacity
-          style={[styles.tab, tab === 'announcement' && { backgroundColor: colors.primary }]}
+          style={[styles.tabItem, tab === 'announcement' && styles.tabItemActive]}
           onPress={() => setTab('announcement')}
         >
-          <Text style={[styles.tabText, { color: tab === 'announcement' ? colors.textInverse : colors.textSecondary }, tab === 'announcement' && styles.tabTextActive]}>Duyurular</Text>
+          <Text
+            style={[
+              styles.tabLabel,
+              { color: tab === 'announcement' ? colors.primary : colors.textSecondary },
+              tab === 'announcement' && styles.tabLabelActive,
+            ]}
+          >
+            Duyurular
+          </Text>
+          {tab === 'announcement' && <View style={[styles.tabIndicator, { backgroundColor: colors.primary }]} />}
         </TouchableOpacity>
         <TouchableOpacity
-          style={[styles.tab, tab === 'post' && { backgroundColor: colors.primary }]}
+          style={[styles.tabItem, tab === 'post' && styles.tabItemActive]}
           onPress={() => setTab('post')}
         >
-          <Text style={[styles.tabText, { color: tab === 'post' ? colors.textInverse : colors.textSecondary }, tab === 'post' && styles.tabTextActive]}>Paylaşımlar</Text>
+          <Text
+            style={[
+              styles.tabLabel,
+              { color: tab === 'post' ? colors.primary : colors.textSecondary },
+              tab === 'post' && styles.tabLabelActive,
+            ]}
+          >
+            Paylaşımlar
+          </Text>
+          {tab === 'post' && <View style={[styles.tabIndicator, { backgroundColor: colors.primary }]} />}
         </TouchableOpacity>
       </View>
-      <TouchableOpacity
-        style={[styles.addTabBtn, { backgroundColor: colors.primary }]}
-        onPress={() => navigation.navigate('PaylasimEkle')}
-      >
-        <Ionicons name="add" size={22} color="#fff" />
-        <Text style={styles.addTabBtnText}>Paylaşım Ekle</Text>
-      </TouchableOpacity>
-      </View>
+
+      {/* Kategori chips */}
       <View style={styles.filterRow}>
         <FlatList
           horizontal
           data={CATEGORIES}
           keyExtractor={(item) => item.key}
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.chipsContent}
           renderItem={({ item }) => (
             <Chip
               label={item.label}
@@ -166,20 +269,29 @@ export default function ToplulukScreen({ navigation }) {
               onPress={() => setCategory(item.key)}
             />
           )}
-          showsHorizontalScrollIndicator={false}
         />
       </View>
+
       {loading && !refreshing ? (
-        <View style={styles.centered}><ActivityIndicator size="large" color={colors.primary} /></View>
+        <View style={styles.centered}>
+          <ActivityIndicator size="large" color={colors.primary} />
+        </View>
       ) : (
         <FlatList
           data={posts}
           keyExtractor={(item) => item.id}
-          contentContainerStyle={{ paddingBottom: 120 }}
-          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[colors.primary]} tintColor={colors.primary} />}
+          contentContainerStyle={styles.listContent}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={onRefresh}
+              colors={[colors.primary]}
+              tintColor={colors.primary}
+            />
+          }
           ListEmptyComponent={
             <EmptyState
-              icon="chatbubbles-outline"
+              icon="images-outline"
               title="Henüz paylaşım yok"
               message="İlk duyuruyu veya paylaşımı siz ekleyin."
               primaryCta={{ label: 'Paylaşım Ekle', onPress: () => navigation.navigate('PaylasimEkle') }}
@@ -187,29 +299,25 @@ export default function ToplulukScreen({ navigation }) {
             />
           }
           renderItem={({ item }) => (
-            <TouchableOpacity
-              style={[styles.card, { backgroundColor: colors.surface }]}
+            <PostCard
+              item={item}
+              colors={colors}
+              categoryLabel={CATEGORIES.find((c) => c.key === item.category)?.label || item.category || ''}
               onPress={() => navigation.navigate('PostDetay', { postId: item.id, post: item })}
-              activeOpacity={0.7}
-            >
-              {item.is_pinned && (
-                <View style={[styles.pinnedBadge, { backgroundColor: colors.primary }]}>
-                  <Ionicons name="pin" size={12} color="#fff" />
-                </View>
-              )}
-              {item.title ? <Text style={[styles.cardTitle, { color: colors.textPrimary }]}>{item.title}</Text> : null}
-              <Text style={[styles.cardBody, { color: colors.textSecondary }]} numberOfLines={3}>{item.body}</Text>
-              {item.media?.images?.[0] ? (
-                <Image source={{ uri: item.media.images[0] }} style={styles.cardThumb} resizeMode="cover" />
-              ) : null}
-              <View style={styles.cardMeta}>
-                <Text style={[styles.cardCategory, { color: colors.primary }]}>{CATEGORIES.find(c => c.key === item.category)?.label || item.category}</Text>
-                <Text style={[styles.cardDate, { color: colors.textSecondary }]}>{new Date(item.created_at).toLocaleDateString('tr-TR')}</Text>
-              </View>
-            </TouchableOpacity>
+              onCommentPress={() => navigation.navigate('PostDetay', { postId: item.id, post: item })}
+            />
           )}
         />
       )}
+
+      {/* FAB - Paylaşım Ekle */}
+      <TouchableOpacity
+        style={[styles.fab, { backgroundColor: colors.primary }]}
+        onPress={() => navigation.navigate('PaylasimEkle')}
+        activeOpacity={0.9}
+      >
+        <Ionicons name="add" size={28} color="#fff" />
+      </TouchableOpacity>
 
       <Modal visible={categoryModalVisible} transparent animationType="fade">
         <Pressable style={styles.modalOverlay} onPress={closeCategoryModal}>
@@ -224,7 +332,9 @@ export default function ToplulukScreen({ navigation }) {
                   closeCategoryModal();
                 }}
               >
-                <Text style={[styles.modalItemText, { color: category === item.key ? colors.primary : colors.textPrimary }]}>
+                <Text
+                  style={[styles.modalItemText, { color: category === item.key ? colors.primary : colors.textPrimary }]}
+                >
                   {item.label}
                 </Text>
               </TouchableOpacity>
@@ -242,33 +352,114 @@ export default function ToplulukScreen({ navigation }) {
 const styles = StyleSheet.create({
   screenContainer: { flex: 1 },
   emptyWrap: { flex: 1 },
-  tabsRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: spacing.screenPadding, paddingTop: 12, marginBottom: 16 },
-  tabs: { flexDirection: 'row', marginRight: 12 },
-  tab: { paddingVertical: 10, paddingHorizontal: 20, marginRight: 10, borderRadius: 16 },
-  addTabBtn: { flexDirection: 'row', alignItems: 'center', paddingVertical: 10, paddingHorizontal: 14, borderRadius: 16, gap: 6 },
-  addTabBtnText: { color: '#fff', fontSize: 13, fontWeight: '600' },
-  tabText: { fontSize: typography.text.body.fontSize },
-  tabTextActive: { fontWeight: '600' },
-  filterRow: { marginBottom: 12, maxHeight: 44 },
-  centered: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  card: {
-    marginHorizontal: spacing.screenPadding,
-    marginBottom: 14,
-    padding: spacing.cardPadding,
-    borderRadius: 20,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
-    shadowRadius: 8,
-    elevation: 4,
+  headerRight: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  headerAddBtn: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  pinnedBadge: { position: 'absolute', top: 12, right: 12, borderRadius: 10, padding: 4 },
-  cardTitle: { fontSize: typography.text.bodyLarge.fontSize, fontWeight: '600', marginBottom: 6 },
-  cardBody: { fontSize: typography.text.body.fontSize, lineHeight: 22, marginBottom: 8 },
-  cardThumb: { width: '100%', height: 120, borderRadius: 10, marginBottom: 8 },
-  cardMeta: { flexDirection: 'row', justifyContent: 'space-between' },
-  cardCategory: { fontSize: typography.text.caption.fontSize },
-  cardDate: { fontSize: typography.text.caption.fontSize },
+  headerIconBtn: { padding: 8, minWidth: 44, minHeight: 44, justifyContent: 'center', alignItems: 'center' },
+  tabBar: {
+    flexDirection: 'row',
+    borderBottomWidth: 1,
+    paddingHorizontal: spacing.screenPadding,
+  },
+  tabItem: {
+    flex: 1,
+    paddingVertical: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  tabItemActive: {},
+  tabLabel: {
+    fontSize: typography.text.body.fontSize,
+    fontWeight: '500',
+  },
+  tabLabelActive: {
+    fontWeight: '600',
+  },
+  tabIndicator: {
+    position: 'absolute',
+    bottom: -1,
+    left: '20%',
+    right: '20%',
+    height: 2,
+    borderRadius: 1,
+  },
+  filterRow: { marginBottom: 8, maxHeight: 44 },
+  chipsContent: { paddingHorizontal: spacing.screenPadding, gap: 8, paddingVertical: 8 },
+  listContent: { paddingBottom: 100 },
+  centered: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+
+  postCard: {
+    marginBottom: 12,
+    paddingBottom: 0,
+  },
+  postHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: spacing.screenPadding,
+    paddingVertical: 12,
+  },
+  avatarWrap: {
+    width: AVATAR_SIZE,
+    height: AVATAR_SIZE,
+    borderRadius: AVATAR_SIZE / 2,
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'hidden',
+    marginRight: 12,
+  },
+  avatar: {
+    width: AVATAR_SIZE,
+    height: AVATAR_SIZE,
+  },
+  postHeaderText: { flex: 1, minWidth: 0 },
+  postAuthor: {
+    fontSize: typography.text.body.fontSize,
+    fontWeight: '600',
+  },
+  postMeta: {
+    fontSize: typography.text.caption.fontSize,
+    marginTop: 2,
+  },
+  pinIcon: { marginLeft: 8 },
+  postImage: {
+    width: SCREEN_WIDTH,
+    height: SCREEN_WIDTH,
+    backgroundColor: '#E2E8F0',
+  },
+  postFooter: {
+    paddingHorizontal: spacing.screenPadding,
+    paddingTop: 10,
+    paddingBottom: 14,
+  },
+  actionRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 8 },
+  actionBtn: { marginRight: 16, padding: 4 },
+  postCaption: {
+    fontSize: typography.text.body.fontSize,
+    lineHeight: 20,
+  },
+  captionBold: { fontWeight: '600' },
+
+  fab: {
+    position: 'absolute',
+    right: spacing.screenPadding,
+    bottom: 90,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    elevation: 8,
+  },
+
   modalOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.5)',

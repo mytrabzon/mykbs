@@ -37,6 +37,15 @@ async function authenticateTesisOrSupabase(req, res, next) {
   } else if (supabaseAdmin) {
     try {
       const { data: { user }, error: userError } = await supabaseAdmin.auth.getUser(token);
+      if (userError) {
+        const msg = userError.message || '';
+        const isExpired = msg.includes('expired') || msg.includes('invalid') || msg.includes('jwt');
+        console.warn('[authTesisOrSupabase] Supabase getUser failed:', msg);
+        if (isExpired) {
+          return res.status(401).json({ message: 'Oturum süresi doldu. Lütfen tekrar giriş yapın.', code: 'TOKEN_EXPIRED' });
+        }
+        // Supabase dışı token (örn. backend JWT) olabilir; legacy JWT denenir
+      }
       if (!userError && user) {
         const { data: profileRows, error: profileError } = await supabaseAdmin
           .from('user_profiles')
@@ -79,6 +88,24 @@ async function authenticateTesisOrSupabase(req, res, next) {
         }
         if (!profile && !profileError) {
           console.warn('[authTesisOrSupabase] Supabase user geçerli ama user_profiles kaydı yok:', user.id);
+          return res.status(401).json({
+            message: 'Hesabınız henüz bir şubeye bağlı değil. Yöneticinize başvurun.',
+            code: 'PROFILE_MISSING',
+          });
+        }
+        if (profile && !profile.branch_id) {
+          console.warn('[authTesisOrSupabase] Supabase profile var ama branch_id yok:', user.id);
+          return res.status(401).json({
+            message: 'Hesabınıza şube atanmamış. Yöneticinize başvurun.',
+            code: 'BRANCH_NOT_ASSIGNED',
+          });
+        }
+        if (profile && profile.branch_id && (branchError || !branch)) {
+          console.warn('[authTesisOrSupabase] Supabase branch yüklenemedi:', profile.branch_id, branchError?.message);
+          return res.status(401).json({
+            message: 'Şube bilgisi yüklenemedi. Yöneticinize başvurun.',
+            code: 'BRANCH_LOAD_FAILED',
+          });
         }
       }
     } catch (e) {
@@ -100,6 +127,10 @@ async function authenticateTesisOrSupabase(req, res, next) {
       req.branch = null;
       req.branchId = null;
       return next();
+    }
+    if (kullanici && !kullanici.tesis) {
+      console.warn('[authTesisOrSupabase] Legacy JWT: kullanici var ama tesis yok, userId=', kullanici.id);
+      return res.status(401).json({ message: 'Tesis bilgisi bulunamadı. Yöneticinize başvurun.', code: 'TESIS_MISSING' });
     }
   } catch (e) {
     const msg = e?.message || '';
@@ -138,7 +169,7 @@ async function authenticateTesisOrSupabase(req, res, next) {
     }
   }
 
-  return res.status(401).json({ message: 'Geçersiz token' });
+  return res.status(401).json({ message: 'Geçersiz token', code: 'INVALID_TOKEN' });
 }
 
 module.exports = { authenticateTesisOrSupabase };

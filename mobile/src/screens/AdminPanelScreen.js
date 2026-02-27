@@ -349,7 +349,7 @@ export default function AdminPanelScreen() {
               hitSlop={HIT_SLOP}
               activeOpacity={0.7}
               style={[styles.menuRow, { borderBottomWidth: 0 }]}
-              onPress={() => Toast.show({ type: 'info', text1: 'Yakında', text2: 'Tesis listesi bu sürümde eklenecek.' })}
+              onPress={() => navigation.navigate('TesisList')}
             >
               <Ionicons name="list" size={22} color={colors.primary} />
               <Text style={[styles.menuRowText, { color: colors.textPrimary }]}>Tesis listesi</Text>

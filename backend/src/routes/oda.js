@@ -1,12 +1,17 @@
 const express = require('express');
 const { PrismaClient } = require('@prisma/client');
-const { authenticate } = require('../middleware/auth');
+const { authenticateTesisOrSupabase } = require('../middleware/authTesisOrSupabase');
 const { maskAdSoyad } = require('../utils/mask');
 const prisma = new PrismaClient();
 
 const router = express.Router();
 
-router.use(authenticate);
+router.use(authenticateTesisOrSupabase);
+
+/** Supabase: branchId; legacy: req.tesis.id — Prisma Oda.tesisId ile eşleşir. */
+function getTesisId(req) {
+  return req.authSource === 'supabase' ? req.branchId : req.tesis.id;
+}
 
 /**
  * Tüm odaları listele (filtreli)
@@ -14,8 +19,8 @@ router.use(authenticate);
 router.get('/', async (req, res) => {
   try {
     const { filtre } = req.query; // tumu, bos, dolu, hatali
-
-    const where = { tesisId: req.tesis.id };
+    const tesisId = getTesisId(req);
+    const where = { tesisId };
 
     if (filtre === 'bos') {
       where.durum = 'bos';
@@ -86,10 +91,11 @@ router.get('/', async (req, res) => {
  */
 router.get('/:odaId', async (req, res) => {
   try {
+    const tesisId = getTesisId(req);
     const oda = await prisma.oda.findFirst({
       where: {
         id: req.params.odaId,
-        tesisId: req.tesis.id
+        tesisId
       },
       include: {
         misafirler: {
@@ -135,7 +141,7 @@ router.post('/', async (req, res) => {
     const existing = await prisma.oda.findUnique({
       where: {
         tesisId_odaNumarasi: {
-          tesisId: req.tesis.id,
+          tesisId: getTesisId(req),
           odaNumarasi
         }
       }
@@ -147,7 +153,7 @@ router.post('/', async (req, res) => {
 
     const oda = await prisma.oda.create({
       data: {
-        tesisId: req.tesis.id,
+        tesisId: getTesisId(req),
         odaNumarasi,
         odaTipi: odaTipi || '',
         kapasite: parseInt(kapasite),
@@ -159,7 +165,7 @@ router.post('/', async (req, res) => {
     // Log
     await prisma.log.create({
       data: {
-        tesisId: req.tesis.id,
+        tesisId: getTesisId(req),
         kullaniciId: req.user.id,
         islem: 'oda-ekle',
         detay: { odaNumarasi, kapasite }
@@ -188,7 +194,7 @@ router.put('/:odaId', async (req, res) => {
     const oda = await prisma.oda.update({
       where: {
         id: req.params.odaId,
-        tesisId: req.tesis.id
+        tesisId: getTesisId(req)
       },
       data: {
         odaTipi,
@@ -201,7 +207,7 @@ router.put('/:odaId', async (req, res) => {
     // Log
     await prisma.log.create({
       data: {
-        tesisId: req.tesis.id,
+        tesisId: getTesisId(req),
         kullaniciId: req.user.id,
         islem: 'oda-guncelle',
         detay: { odaId: oda.id }
@@ -229,7 +235,7 @@ router.delete('/:odaId', async (req, res) => {
     const oda = await prisma.oda.findFirst({
       where: {
         id: req.params.odaId,
-        tesisId: req.tesis.id
+        tesisId: getTesisId(req)
       },
       include: {
         misafirler: {
@@ -253,7 +259,7 @@ router.delete('/:odaId', async (req, res) => {
     // Log
     await prisma.log.create({
       data: {
-        tesisId: req.tesis.id,
+        tesisId: getTesisId(req),
         kullaniciId: req.user.id,
         islem: 'oda-sil',
         detay: { odaNumarasi: oda.odaNumarasi }

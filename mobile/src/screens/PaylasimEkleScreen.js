@@ -8,9 +8,9 @@ import {
   ScrollView,
   ActivityIndicator,
   Image,
-  Alert,
   KeyboardAvoidingView,
   Platform,
+  Dimensions,
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import * as FileSystem from 'expo-file-system';
@@ -22,6 +22,10 @@ import Toast from 'react-native-toast-message';
 import { Ionicons } from '@expo/vector-icons';
 import AppHeader from '../components/AppHeader';
 import { typography, spacing } from '../theme';
+
+const { width: SCREEN_WIDTH } = Dimensions.get('window');
+const PREVIEW_SIZE = SCREEN_WIDTH * 0.92;
+const THUMB_SIZE = 72;
 
 const CATEGORIES = [
   { key: 'general', label: 'Genel' },
@@ -41,6 +45,7 @@ export default function PaylasimEkleScreen() {
   const [category, setCategory] = useState('general');
   const [images, setImages] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [showTitleField, setShowTitleField] = useState(false);
 
   const pickImage = async () => {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -51,7 +56,7 @@ export default function PaylasimEkleScreen() {
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
       allowsMultipleSelection: true,
-      quality: 0.8,
+      quality: 0.85,
       base64: true,
     });
     if (!result.canceled && result.assets) {
@@ -135,39 +140,135 @@ export default function PaylasimEkleScreen() {
     }
   };
 
+  const mainImageUri = images[0]?.uri;
+
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       <AppHeader
-        title="Paylaşım Ekle"
+        title="Yeni Paylaşım"
         tesis={tesis}
         onBack={() => navigation.goBack()}
+        rightComponent={
+          <TouchableOpacity
+            onPress={handlePublish}
+            disabled={loading || !body.trim()}
+            style={[styles.headerShareBtn, (loading || !body.trim()) && styles.headerShareBtnDisabled]}
+          >
+            {loading ? (
+              <ActivityIndicator size="small" color={colors.primary} />
+            ) : (
+              <Text style={[styles.headerShareText, { color: colors.primary }]}>Paylaş</Text>
+            )}
+          </TouchableOpacity>
+        }
       />
+
       <KeyboardAvoidingView
         style={styles.keyboard}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         keyboardVerticalOffset={80}
       >
-        <ScrollView style={styles.scroll} contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
-          <View style={[styles.card, { backgroundColor: colors.surface }]}>
-            <Text style={[styles.label, { color: colors.textSecondary }]}>Başlık (isteğe bağlı)</Text>
+        <ScrollView
+          style={styles.scroll}
+          contentContainerStyle={styles.scrollContent}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+        >
+          {/* Instagram tarzı: önce büyük fotoğraf alanı */}
+          <View style={[styles.photoSection, { backgroundColor: colors.surface }]}>
+            {mainImageUri ? (
+              <View style={styles.mainPreviewWrap}>
+                <Image source={{ uri: mainImageUri }} style={styles.mainPreview} resizeMode="cover" />
+                <TouchableOpacity
+                  style={[styles.changePhotoBtn, { backgroundColor: 'rgba(0,0,0,0.5)' }]}
+                  onPress={pickImage}
+                >
+                  <Ionicons name="camera" size={20} color="#fff" />
+                  <Text style={styles.changePhotoText}>Değiştir</Text>
+                </TouchableOpacity>
+              </View>
+            ) : (
+              <TouchableOpacity
+                style={[styles.photoPlaceholder, { borderColor: colors.border, backgroundColor: colors.background }]}
+                onPress={pickImage}
+              >
+                <View style={[styles.photoPlaceholderIcon, { backgroundColor: colors.border }]}>
+                  <Ionicons name="images-outline" size={48} color={colors.textSecondary} />
+                </View>
+                <Text style={[styles.photoPlaceholderText, { color: colors.textSecondary }]}>
+                  Fotoğraf ekle
+                </Text>
+                <Text style={[styles.photoPlaceholderHint, { color: colors.textDisabled }]}>
+                  Galeriden seç (en fazla 5)
+                </Text>
+              </TouchableOpacity>
+            )}
+
+            {/* Ek resimler küçük thumbnails */}
+            {images.length > 1 && (
+              <ScrollView
+                horizontal
+                style={styles.thumbsScroll}
+                contentContainerStyle={styles.thumbsContent}
+                showsHorizontalScrollIndicator={false}
+              >
+                {images.map((img, i) => (
+                  <View key={i} style={styles.thumbWrap}>
+                    <Image source={{ uri: img.uri }} style={styles.thumb} />
+                    <TouchableOpacity
+                      style={[styles.removeThumb, { backgroundColor: colors.error }]}
+                      onPress={() => removeImage(i)}
+                    >
+                      <Ionicons name="close" size={14} color="#fff" />
+                    </TouchableOpacity>
+                  </View>
+                ))}
+                {images.length < 5 && (
+                  <TouchableOpacity
+                    style={[styles.addThumb, { borderColor: colors.border }]}
+                    onPress={pickImage}
+                  >
+                    <Ionicons name="add" size={24} color={colors.textSecondary} />
+                  </TouchableOpacity>
+                )}
+              </ScrollView>
+            )}
+          </View>
+
+          {/* Caption - Instagram tarzı metin alanı */}
+          <View style={[styles.captionSection, { backgroundColor: colors.surface }]}>
             <TextInput
-              style={[styles.input, { backgroundColor: colors.background, color: colors.textPrimary, borderColor: colors.border }]}
-              value={title}
-              onChangeText={setTitle}
-              placeholder="Başlık"
-              placeholderTextColor={colors.textSecondary}
-            />
-            <Text style={[styles.label, { color: colors.textSecondary }]}>Metin *</Text>
-            <TextInput
-              style={[styles.input, styles.inputMultiline, { backgroundColor: colors.background, color: colors.textPrimary, borderColor: colors.border }]}
+              style={[styles.captionInput, { color: colors.textPrimary }]}
               value={body}
               onChangeText={setBody}
-              placeholder="Paylaşımınızı yazın..."
+              placeholder="Ne düşünüyorsun?"
               placeholderTextColor={colors.textSecondary}
               multiline
               numberOfLines={4}
+              maxLength={2000}
             />
-            <Text style={[styles.label, { color: colors.textSecondary }]}>Kategori</Text>
+            {(showTitleField || title.trim()) && (
+              <>
+                <Text style={[styles.optionalLabel, { color: colors.textSecondary }]}>Başlık (isteğe bağlı)</Text>
+                <TextInput
+                  style={[styles.titleInput, { backgroundColor: colors.background, color: colors.textPrimary, borderColor: colors.border }]}
+                  value={title}
+                  onChangeText={setTitle}
+                  placeholder="Başlık"
+                  placeholderTextColor={colors.textSecondary}
+                />
+              </>
+            )}
+            {!showTitleField && !title.trim() && (
+              <TouchableOpacity onPress={() => setShowTitleField(true)} style={styles.addTitleLink}>
+                <Text style={[styles.addTitleText, { color: colors.primary }]}>+ Başlık ekle</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+
+          {/* Kategori */}
+          <View style={[styles.categorySection, { backgroundColor: colors.surface }]}>
+            <Text style={[styles.sectionLabel, { color: colors.textSecondary }]}>Kategori</Text>
             <View style={styles.chipRow}>
               {CATEGORIES.map((c) => (
                 <TouchableOpacity
@@ -175,41 +276,15 @@ export default function PaylasimEkleScreen() {
                   style={[styles.chip, category === c.key && { backgroundColor: colors.primary }]}
                   onPress={() => setCategory(c.key)}
                 >
-                  <Text style={[styles.chipText, { color: category === c.key ? '#fff' : colors.textSecondary }]}>{c.label}</Text>
+                  <Text style={[styles.chipText, { color: category === c.key ? '#fff' : colors.textSecondary }]}>
+                    {c.label}
+                  </Text>
                 </TouchableOpacity>
               ))}
-            </View>
-            <Text style={[styles.label, { color: colors.textSecondary }]}>Resimler (en fazla 5)</Text>
-            <View style={styles.imageRow}>
-              {images.map((img, i) => (
-                <View key={i} style={styles.imageWrap}>
-                  <Image source={{ uri: img.uri }} style={styles.thumb} />
-                  <TouchableOpacity style={styles.removeImage} onPress={() => removeImage(i)}>
-                    <Ionicons name="close-circle" size={24} color={colors.error} />
-                  </TouchableOpacity>
-                </View>
-              ))}
-              {images.length < 5 && (
-                <TouchableOpacity style={[styles.addImage, { borderColor: colors.border }]} onPress={pickImage}>
-                  <Ionicons name="add" size={32} color={colors.textSecondary} />
-                </TouchableOpacity>
-              )}
             </View>
           </View>
-          <TouchableOpacity
-            style={[styles.btn, { backgroundColor: colors.primary }]}
-            onPress={handlePublish}
-            disabled={loading}
-          >
-            {loading ? (
-              <ActivityIndicator size="small" color="#fff" />
-            ) : (
-              <>
-                <Ionicons name="send" size={20} color="#fff" />
-                <Text style={styles.btnText}>Paylaş</Text>
-              </>
-            )}
-          </TouchableOpacity>
+
+          <View style={styles.bottomPad} />
         </ScrollView>
       </KeyboardAvoidingView>
     </View>
@@ -220,19 +295,127 @@ const styles = StyleSheet.create({
   container: { flex: 1 },
   keyboard: { flex: 1 },
   scroll: { flex: 1 },
-  scrollContent: { padding: spacing.screenPadding, paddingBottom: 40 },
-  card: { borderRadius: 16, padding: spacing.cardPadding, marginBottom: 24 },
-  label: { fontSize: typography.text.caption.fontSize, marginBottom: 6 },
-  input: { borderWidth: 1, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12, fontSize: typography.text.body.fontSize, marginBottom: 16 },
-  inputMultiline: { minHeight: 100 },
-  chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 16 },
-  chip: { paddingVertical: 6, paddingHorizontal: 12, borderRadius: 20 },
-  chipText: { fontSize: 13 },
-  imageRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  imageWrap: { position: 'relative' },
-  thumb: { width: 72, height: 72, borderRadius: 8 },
-  removeImage: { position: 'absolute', top: -4, right: -4 },
-  addImage: { width: 72, height: 72, borderRadius: 8, borderWidth: 2, borderStyle: 'dashed', alignItems: 'center', justifyContent: 'center' },
-  btn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingVertical: 14, borderRadius: 14 },
-  btnText: { color: '#fff', fontSize: 16, fontWeight: '600' },
+  scrollContent: { paddingBottom: 40 },
+  headerShareBtn: { paddingVertical: 8, paddingHorizontal: 12, minWidth: 60, alignItems: 'flex-end' },
+  headerShareBtnDisabled: { opacity: 0.5 },
+  headerShareText: { fontSize: typography.text.body.fontSize, fontWeight: '600' },
+
+  photoSection: {
+    padding: spacing.screenPadding,
+    paddingBottom: spacing.md,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(0,0,0,0.06)',
+  },
+  mainPreviewWrap: {
+    width: PREVIEW_SIZE,
+    alignSelf: 'center',
+    borderRadius: 12,
+    overflow: 'hidden',
+    position: 'relative',
+  },
+  mainPreview: {
+    width: '100%',
+    height: PREVIEW_SIZE,
+    borderRadius: 12,
+  },
+  changePhotoBtn: {
+    position: 'absolute',
+    bottom: 12,
+    right: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 20,
+    gap: 6,
+  },
+  changePhotoText: { color: '#fff', fontSize: 13, fontWeight: '500' },
+  photoPlaceholder: {
+    width: PREVIEW_SIZE,
+    height: PREVIEW_SIZE * 0.85,
+    alignSelf: 'center',
+    borderRadius: 12,
+    borderWidth: 2,
+    borderStyle: 'dashed',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  photoPlaceholderIcon: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 12,
+  },
+  photoPlaceholderText: {
+    fontSize: typography.text.body.fontSize,
+    fontWeight: '500',
+  },
+  photoPlaceholderHint: {
+    fontSize: typography.text.caption.fontSize,
+    marginTop: 4,
+  },
+  thumbsScroll: { marginTop: 12 },
+  thumbsContent: { flexDirection: 'row', gap: 8, paddingVertical: 4 },
+  thumbWrap: { position: 'relative' },
+  thumb: { width: THUMB_SIZE, height: THUMB_SIZE, borderRadius: 8 },
+  removeThumb: {
+    position: 'absolute',
+    top: -6,
+    right: -6,
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  addThumb: {
+    width: THUMB_SIZE,
+    height: THUMB_SIZE,
+    borderRadius: 8,
+    borderWidth: 2,
+    borderStyle: 'dashed',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+
+  captionSection: {
+    padding: spacing.screenPadding,
+    paddingTop: spacing.lg,
+  },
+  captionInput: {
+    fontSize: typography.text.bodyLarge.fontSize,
+    lineHeight: 24,
+    minHeight: 100,
+    padding: 0,
+  },
+  optionalLabel: { fontSize: typography.text.caption.fontSize, marginTop: 16, marginBottom: 6 },
+  titleInput: {
+    borderWidth: 1,
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    fontSize: typography.text.body.fontSize,
+  },
+  addTitleLink: { marginTop: 12 },
+  addTitleText: { fontSize: typography.text.body.fontSize },
+
+  categorySection: {
+    padding: spacing.screenPadding,
+    paddingTop: spacing.xl,
+  },
+  sectionLabel: {
+    fontSize: typography.text.caption.fontSize,
+    marginBottom: 10,
+  },
+  chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  chip: {
+    paddingVertical: 8,
+    paddingHorizontal: 14,
+    borderRadius: 20,
+  },
+  chipText: { fontSize: 13, fontWeight: '500' },
+
+  bottomPad: { height: 24 },
 });
