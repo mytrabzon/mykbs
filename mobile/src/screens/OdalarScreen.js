@@ -29,11 +29,11 @@ import { theme, spacing } from '../theme';
 import AppHeader from '../components/AppHeader';
 import BackendErrorScreen from '../components/BackendErrorScreen';
 
-// Oda kartı için memoized component
+// Oda kartı — modern tasarım
 const OdaCard = React.memo(({ item, onPress, getStatusColor, getStatusIcon, getKBSDurumIcon, getKBSDurumText }) => (
   <View style={styles.odaCard}>
     <TouchableOpacity
-      style={styles.odaCardInner}
+      style={[styles.odaCardInner, { borderLeftWidth: 4, borderLeftColor: getStatusColor(item.durum) }]}
       activeOpacity={0.9}
       onPress={onPress}
     >
@@ -659,14 +659,7 @@ export default function OdalarScreen() {
 
   const handleAddRoom = () => {
     setShowFabMenu(false);
-    Toast.show({
-      type: 'info',
-      text1: 'Yeni Oda Ekle',
-      text2: 'Bu özellik yakında eklenecek',
-      visibilityTime: 2000,
-    });
-    // TODO: Implement add room functionality
-    // navigation.navigate('AddRoom');
+    navigation.navigate('AddRoom');
   };
 
   const handleQuickCheckIn = () => {
@@ -686,7 +679,7 @@ export default function OdalarScreen() {
   if (initialLoading) {
     return (
       <View style={[styles.loadingContainer, { backgroundColor: colors.background }]}>
-        <StatusBar barStyle={colors.background === '#0B1220' ? 'light-content' : 'dark-content'} backgroundColor={colors.primary} />
+        <StatusBar barStyle={colors.background === '#0F172A' ? 'light-content' : 'dark-content'} backgroundColor={colors.primary} />
         <View style={styles.loadingContent}>
           <ActivityIndicator size="large" color={colors.primary} />
           <Text style={[styles.loadingText, { color: colors.textSecondary }]}>Odalar yükleniyor...</Text>
@@ -695,12 +688,15 @@ export default function OdalarScreen() {
     );
   }
 
+  const dolulukYuzde = ozet && ozet.toplamOda > 0 ? Math.round((ozet.doluOda / ozet.toplamOda) * 100) : 0;
+
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
-      <StatusBar barStyle={colors.background === '#0B1220' ? 'light-content' : 'dark-content'} backgroundColor={colors.surface} />
+      <StatusBar barStyle={colors.background === '#0F172A' ? 'light-content' : 'dark-content'} backgroundColor={colors.primary} />
       <AppHeader
         title="Odalar"
         tesis={tesis}
+        variant="primary"
         backendConfigured={!!getBackendUrl()}
         backendOnline={odalar.length > 0 ? true : backendStatus.isOnline}
         backendError={backendStatus.error}
@@ -712,36 +708,48 @@ export default function OdalarScreen() {
         onProfile={() => navigation.navigate('Ayarlar')}
       />
 
+      {/* HERO — Karşılama + doluluk */}
+      <View style={[styles.hero, { backgroundColor: colors.primary }]}>
+        <Text style={styles.heroGreeting}>Hoş geldiniz</Text>
+        <Text style={styles.heroTesis} numberOfLines={1}>{tesis?.tesisAdi || tesis?.adi || 'Tesis'}</Text>
+        {ozet && ozet.toplamOda > 0 && (
+          <View style={styles.heroStats}>
+            <Text style={styles.heroDoluluk}>{dolulukYuzde}%</Text>
+            <Text style={styles.heroLabel}>Doluluk · {ozet.doluOda}/{ozet.toplamOda} Oda</Text>
+          </View>
+        )}
+      </View>
+
       {ozet && (
-        <View style={styles.lobbyOzetContainer}>
+        <View style={[styles.ozetWrapper, { marginTop: -24 }]}>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.ozetScroll}>
-            <View style={[styles.lobbyOzetCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-              <View style={[styles.lobbyOzetIcon, { backgroundColor: colors.primarySoft }]}>
-                <Ionicons name="bed" size={20} color={colors.primary} />
+            <View style={[styles.ozetCard, { backgroundColor: colors.surface }]}>
+              <View style={[styles.ozetIcon, { backgroundColor: colors.primarySoft }]}>
+                <Ionicons name="bed" size={24} color={colors.primary} />
               </View>
-              <Text style={[styles.lobbyOzetValue, { color: colors.textPrimary }]}>{ozet.doluOda} / {ozet.toplamOda}</Text>
-              <Text style={[styles.lobbyOzetLabel, { color: colors.textSecondary }]}>Dolu Odalar</Text>
+              <Text style={[styles.ozetValue, { color: colors.textPrimary }]}>{ozet.doluOda}/{ozet.toplamOda}</Text>
+              <Text style={[styles.ozetLabel, { color: colors.textSecondary }]}>Dolu</Text>
             </View>
-            <View style={[styles.lobbyOzetCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-              <View style={[styles.lobbyOzetIcon, { backgroundColor: colors.successSoft }]}>
-                <Ionicons name="log-in" size={20} color={colors.success} />
+            <View style={[styles.ozetCard, { backgroundColor: colors.surface }]}>
+              <View style={[styles.ozetIcon, { backgroundColor: colors.successSoft }]}>
+                <Ionicons name="log-in" size={24} color={colors.success} />
               </View>
-              <Text style={[styles.lobbyOzetValue, { color: colors.textPrimary }]}>{ozet.bugunGiris}</Text>
-              <Text style={[styles.lobbyOzetLabel, { color: colors.textSecondary }]}>Bugün Giriş</Text>
+              <Text style={[styles.ozetValue, { color: colors.textPrimary }]}>{ozet.bugunGiris}</Text>
+              <Text style={[styles.ozetLabel, { color: colors.textSecondary }]}>Giriş</Text>
             </View>
-            <View style={[styles.lobbyOzetCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-              <View style={[styles.lobbyOzetIcon, { backgroundColor: colors.warningSoft }]}>
-                <Ionicons name="log-out" size={20} color={colors.warning} />
+            <View style={[styles.ozetCard, { backgroundColor: colors.surface }]}>
+              <View style={[styles.ozetIcon, { backgroundColor: colors.warningSoft }]}>
+                <Ionicons name="log-out" size={24} color={colors.warning} />
               </View>
-              <Text style={[styles.lobbyOzetValue, { color: colors.textPrimary }]}>{ozet.bugunCikis}</Text>
-              <Text style={[styles.lobbyOzetLabel, { color: colors.textSecondary }]}>Bugün Çıkış</Text>
+              <Text style={[styles.ozetValue, { color: colors.textPrimary }]}>{ozet.bugunCikis}</Text>
+              <Text style={[styles.ozetLabel, { color: colors.textSecondary }]}>Çıkış</Text>
             </View>
-            <View style={[styles.lobbyOzetCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-              <View style={[styles.lobbyOzetIcon, { backgroundColor: colors.errorSoft }]}>
-                <Ionicons name="warning" size={20} color={colors.error} />
+            <View style={[styles.ozetCard, { backgroundColor: colors.surface }]}>
+              <View style={[styles.ozetIcon, { backgroundColor: colors.errorSoft }]}>
+                <Ionicons name="warning" size={24} color={colors.error} />
               </View>
-              <Text style={[styles.lobbyOzetValue, { color: colors.textPrimary }]}>{ozet.hataliBildirim}</Text>
-              <Text style={[styles.lobbyOzetLabel, { color: colors.textSecondary }]}>Hatalı Bildirim</Text>
+              <Text style={[styles.ozetValue, { color: colors.textPrimary }]}>{ozet.hataliBildirim}</Text>
+              <Text style={[styles.ozetLabel, { color: colors.textSecondary }]}>Hatalı</Text>
             </View>
           </ScrollView>
         </View>
@@ -878,21 +886,8 @@ export default function OdalarScreen() {
         }
       />
 
-      {/* FAB Butonları — zIndex ile overlay ve liste üstünde kalır */}
+      {/* FAB — artı butonu (yenile kaldırıldı, tek FAB yukarıda) */}
       <View style={[styles.fabContainer, { zIndex: 20 }]}>
-        <TouchableOpacity
-          style={[styles.fab, styles.fabSecondary, { backgroundColor: colors.textSecondary }]}
-          onPress={() => {
-            try {
-              logger.button('Refresh FAB', 'clicked');
-              onRefresh();
-            } catch (error) {
-              logger.error('Refresh error', error);
-            }
-          }}
-        >
-          <Ionicons name="refresh" size={24} color={colors.textInverse} />
-        </TouchableOpacity>
         <TouchableOpacity style={[styles.fab, { backgroundColor: colors.primary }]} onPress={() => setShowFabMenu(!showFabMenu)}>
           <Ionicons name="add" size={28} color={colors.textInverse} />
         </TouchableOpacity>
@@ -933,35 +928,53 @@ const styles = StyleSheet.create({
   loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   loadingContent: { alignItems: 'center' },
   loadingText: { marginTop: theme.spacing.base, fontSize: theme.typography.fontSize.base },
-  lobbyOzetContainer: { paddingVertical: theme.spacing.base },
-  ozetScroll: { paddingHorizontal: theme.spacing.screenPadding },
-  lobbyOzetCard: {
-    width: 112,
-    borderRadius: theme.spacing.borderRadius.card,
-    padding: theme.spacing.base,
-    marginRight: theme.spacing.sm,
-    borderWidth: 1,
+  hero: {
+    paddingHorizontal: theme.spacing.screenPadding,
+    paddingTop: 20,
+    paddingBottom: 28,
+    borderBottomLeftRadius: 28,
+    borderBottomRightRadius: 28,
+    marginBottom: 0,
   },
-  lobbyOzetIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: 12,
+  heroGreeting: { fontSize: 14, fontWeight: '500', color: 'rgba(255,255,255,0.9)', marginBottom: 4 },
+  heroTesis: { fontSize: 22, fontWeight: '700', color: '#FFFFFF', marginBottom: 12 },
+  heroStats: { flexDirection: 'row', alignItems: 'baseline', gap: 8 },
+  heroDoluluk: { fontSize: 36, fontWeight: '800', color: '#FFFFFF' },
+  heroLabel: { fontSize: 14, color: 'rgba(255,255,255,0.9)' },
+  ozetWrapper: { paddingHorizontal: theme.spacing.screenPadding, marginBottom: 20 },
+  ozetScroll: { paddingRight: theme.spacing.screenPadding },
+  ozetCard: {
+    width: 90,
+    borderRadius: 20,
+    padding: 14,
+    marginRight: 12,
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 12,
+    elevation: 6,
+  },
+  ozetIcon: {
+    width: 44,
+    height: 44,
+    borderRadius: 14,
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: theme.spacing.xs,
+    marginBottom: 8,
   },
-  lobbyOzetValue: { fontSize: theme.typography.fontSize.lg, fontWeight: '600', marginBottom: 2 },
-  lobbyOzetLabel: { fontSize: theme.typography.fontSize.xs },
+  ozetValue: { fontSize: 18, fontWeight: '700', marginBottom: 2 },
+  ozetLabel: { fontSize: 11, fontWeight: '500' },
   lobbyFiltreContainer: { paddingBottom: theme.spacing.base },
   filtreScroll: { paddingHorizontal: theme.spacing.screenPadding },
   lobbyFiltreButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    borderRadius: theme.spacing.borderRadius.pill,
-    paddingHorizontal: theme.spacing.base,
-    paddingVertical: 8,
-    marginRight: theme.spacing.sm,
-    borderWidth: 1,
+    borderRadius: 20,
+    paddingHorizontal: 18,
+    paddingVertical: 12,
+    marginRight: 10,
+    borderWidth: 0,
   },
   filtreIcon: { marginRight: theme.spacing.xs },
   lobbyFiltreText: { fontSize: theme.typography.fontSize.xs, fontWeight: '500' },
@@ -1001,7 +1014,7 @@ const styles = StyleSheet.create({
   },
   list: {
     paddingHorizontal: theme.spacing.screenPadding,
-    paddingBottom: theme.spacing['4xl'],
+    paddingBottom: 120,
   },
   emptyContainer: {
     alignItems: 'center',
@@ -1053,11 +1066,12 @@ const styles = StyleSheet.create({
   },
   odaCardInner: {
     backgroundColor: theme.colors.surface,
-    borderRadius: theme.spacing.borderRadius.lg,
+    borderRadius: 20,
     overflow: 'hidden',
+    borderWidth: 0,
   },
   odaImageContainer: {
-    height: 140,
+    height: 160,
     position: 'relative',
   },
   odaFoto: {
@@ -1079,11 +1093,11 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: theme.spacing.base,
     left: theme.spacing.base,
-    backgroundColor: theme.colors.white,
-    borderRadius: theme.spacing.borderRadius.full,
+    backgroundColor: 'rgba(255,255,255,0.95)',
+    borderRadius: 12,
     paddingHorizontal: theme.spacing.sm,
-    paddingVertical: 4,
-    ...theme.spacing.shadow.sm,
+    paddingVertical: 6,
+    ...theme.spacing.shadow.base,
   },
   odaNumberText: {
     fontSize: theme.typography.fontSize.xs,
@@ -1096,12 +1110,11 @@ const styles = StyleSheet.create({
     right: theme.spacing.base,
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: theme.colors.white,
-    borderRadius: theme.spacing.borderRadius.full,
+    borderRadius: 12,
     paddingHorizontal: theme.spacing.sm,
-    paddingVertical: 4,
+    paddingVertical: 6,
     gap: 4,
-    ...theme.spacing.shadow.sm,
+    ...theme.spacing.shadow.base,
   },
   odaStatusText: {
     fontSize: theme.typography.fontSize.xs,
@@ -1252,33 +1265,25 @@ const styles = StyleSheet.create({
   fabContainer: {
     position: 'absolute',
     right: theme.spacing.screenPadding,
-    bottom: theme.spacing.screenPadding,
+    bottom: 130,
     alignItems: 'center',
-    gap: theme.spacing.base,
   },
   fab: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
     backgroundColor: theme.colors.primary,
     justifyContent: 'center',
     alignItems: 'center',
     ...theme.spacing.shadow.lg,
   },
-  fabSecondary: {
-    backgroundColor: theme.colors.secondary,
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-  },
   fabMenu: {
     position: 'absolute',
-    bottom: 70,
+    bottom: 64,
     right: 0,
-    backgroundColor: theme.colors.white,
-    borderRadius: theme.spacing.borderRadius.lg,
+    borderRadius: 20,
     padding: theme.spacing.base,
-    minWidth: 180,
+    minWidth: 200,
     ...theme.spacing.shadow.lg,
   },
   fabMenuItem: {

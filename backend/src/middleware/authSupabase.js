@@ -19,7 +19,7 @@ async function authenticateSupabase(req, res, next) {
 
     const { data: { user }, error: userError } = await supabaseAdmin.auth.getUser(token);
     if (userError || !user) {
-      return res.status(401).json({ message: 'Oturum geçersiz veya süresi dolmuş' });
+      return res.status(401).json({ message: 'Yetkisiz' });
     }
 
     const { data: profile, error: profileError } = await supabaseAdmin

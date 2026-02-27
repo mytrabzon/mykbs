@@ -28,7 +28,7 @@ Deno.serve(async (req: Request) => {
     const { data: { user }, error: userError } = await userClient.auth.getUser(accessToken);
     if (userError || !user) {
       return new Response(
-        JSON.stringify({ message: "Geçersiz veya süresi dolmuş oturum" }),
+        JSON.stringify({ message: "Yetkisiz" }),
         { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }

@@ -13,7 +13,7 @@ export function getBackendUrl(): string {
 export function getApiErrorMessage(err: unknown): string {
   const status = (err as { response?: { status?: number } })?.response?.status;
   const message = (err as Error)?.message || '';
-  if (status === 401 || status === 403) return 'Oturum geçersiz veya süresi doldu. Tekrar giriş yapın.';
+  if (status === 401 || status === 403) return 'Giriş gerekli.';
   if (status === 404) return 'İstek yapılan adres bulunamadı.';
   if (message.includes('Network') || message.includes('fetch') || message.includes('Bağlantı')) return 'Bağlantı hatası. İnterneti kontrol edin.';
   return message || 'Bir hata oluştu.';
@@ -28,7 +28,7 @@ export function setApiTokenProvider(provider: ApiTokenProvider | null) {
   tokenProvider = provider;
 }
 
-/** 401 alındığında çağrılır (oturum geçersiz / süresi dolmuş). AuthContext logout kaydeder. */
+/** 401 alındığında çağrılır; AuthContext logout yapar. */
 export function setOnUnauthorized(callback: (() => void) | null) {
   onUnauthorized = callback;
 }
@@ -304,6 +304,24 @@ export const api = {
         const res = await callFn('nfc_read', payload, token);
         return toResponse(res);
       }
+      if (pathname === '/ocr/mrz' || pathname === 'ocr/mrz') {
+        const backendUrl = getBackendUrl();
+        if (backendUrl && token && body instanceof FormData) {
+          const r = await fetch(`${backendUrl}/api/ocr/mrz`, {
+            method: 'POST',
+            headers: { Authorization: `Bearer ${token}` },
+            body: body as FormData,
+          });
+          const data = await r.json().catch(() => ({}));
+          if (!r.ok) {
+            throw Object.assign(new Error((data as { message?: string })?.message || 'MRZ okunamadı'), {
+              response: { status: r.status, data },
+            });
+          }
+          return toResponse(data as { success: boolean; raw: string });
+        }
+        throw new Error('MRZ için sunucu adresi ve giriş gerekli.');
+      }
       if (pathname === '/ocr/okut' || pathname === 'ocr/okut') {
         if (body instanceof FormData) {
           const imagePart = body.get('image') as { uri?: string } | null;
@@ -365,9 +383,39 @@ export const api = {
         const res = await callFn('settings_kbs_test', {}, token);
         return toResponse(res);
       }
+      if (pathname === '/tesis/kbs/talebi' || pathname === 'tesis/kbs/talebi') {
+        const backendUrl = getBackendUrl();
+        if (backendUrl && token) {
+          const r = await fetch(`${backendUrl}/api/tesis/kbs/talebi`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+            body: JSON.stringify(payload || {}),
+          });
+          const data = await r.json().catch(() => ({}));
+          if (!r.ok) throw Object.assign(new Error((data as { message?: string })?.message || 'Talep gönderilemedi'), { response: { status: r.status, data } });
+          return toResponse(data);
+        }
+        throw new Error('Sunucu adresi tanımlı değil');
+      }
       if (pathname === '/notification_submit' || pathname === 'notification_submit') {
         const res = await callFn('notification_submit', payload, token);
         return toResponse(res);
+      }
+      if (pathname === '/oda' || pathname === 'oda') {
+        const backendUrl = getBackendUrl();
+        if (backendUrl && token) {
+          const r = await fetch(`${backendUrl}/api/oda`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+            body: JSON.stringify(payload || {}),
+          });
+          const data = await r.json().catch(() => ({}));
+          if (!r.ok) {
+            throw Object.assign(new Error((data as { message?: string })?.message || 'Oda eklenemedi'), { response: { status: r.status, data } });
+          }
+          return toResponse(data);
+        }
+        throw new Error('Oda eklemek için sunucu adresi ve giriş gerekli. EXPO_PUBLIC_BACKEND_URL tanımlayın.');
       }
       const checkoutMatch = pathname.match(/^\/?misafir\/checkout\/([^/]+)$/);
       if (checkoutMatch) {
@@ -402,6 +450,20 @@ export const api = {
     const token = await getToken();
     try {
       if (pathname === '/tesis/kbs' || pathname === 'tesis/kbs') {
+        const backendUrl = getBackendUrl();
+        if (backendUrl) {
+          const r = await fetch(`${backendUrl}/api/tesis/kbs`, {
+            method: 'PUT',
+            headers: {
+              'Content-Type': 'application/json',
+              ...(token ? { Authorization: `Bearer ${token}` } : {}),
+            },
+            body: JSON.stringify(body || {}),
+          });
+          const data = await r.json().catch(() => ({}));
+          if (!r.ok) throw Object.assign(new Error((data as { message?: string }).message || 'Ayarlar kaydedilemedi'), { response: { status: r.status, data } });
+          return toResponse(data);
+        }
         const res = await callFn('settings_update', (body || {}) as Record<string, unknown>, token);
         return toResponse(res);
       }

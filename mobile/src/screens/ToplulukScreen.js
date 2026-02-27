@@ -9,6 +9,7 @@ import {
   ActivityIndicator,
   Modal,
   Pressable,
+  Image,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../context/AuthContext';
@@ -130,6 +131,7 @@ export default function ToplulukScreen({ navigation }) {
         onNotification={() => navigation.navigate('Bildirimler')}
         onProfile={() => navigation.navigate('Ayarlar')}
       />
+      <View style={styles.tabsRow}>
       <View style={styles.tabs}>
         <TouchableOpacity
           style={[styles.tab, tab === 'announcement' && { backgroundColor: colors.primary }]}
@@ -143,6 +145,14 @@ export default function ToplulukScreen({ navigation }) {
         >
           <Text style={[styles.tabText, { color: tab === 'post' ? colors.textInverse : colors.textSecondary }, tab === 'post' && styles.tabTextActive]}>Paylaşımlar</Text>
         </TouchableOpacity>
+      </View>
+      <TouchableOpacity
+        style={[styles.addTabBtn, { backgroundColor: colors.primary }]}
+        onPress={() => navigation.navigate('PaylasimEkle')}
+      >
+        <Ionicons name="add" size={22} color="#fff" />
+        <Text style={styles.addTabBtnText}>Paylaşım Ekle</Text>
+      </TouchableOpacity>
       </View>
       <View style={styles.filterRow}>
         <FlatList
@@ -165,13 +175,14 @@ export default function ToplulukScreen({ navigation }) {
         <FlatList
           data={posts}
           keyExtractor={(item) => item.id}
+          contentContainerStyle={{ paddingBottom: 120 }}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[colors.primary]} tintColor={colors.primary} />}
           ListEmptyComponent={
             <EmptyState
               icon="chatbubbles-outline"
               title="Henüz paylaşım yok"
               message="İlk duyuruyu veya paylaşımı siz ekleyin."
-              primaryCta={{ label: 'İlk Duyuruyu Paylaş', onPress: () => Toast.show({ type: 'info', text1: 'Yakında', text2: 'Paylaşım ekranı yakında' }) }}
+              primaryCta={{ label: 'Paylaşım Ekle', onPress: () => navigation.navigate('PaylasimEkle') }}
               secondaryCta={{ label: 'Kategori Seç', onPress: openCategoryModal }}
             />
           }
@@ -188,6 +199,9 @@ export default function ToplulukScreen({ navigation }) {
               )}
               {item.title ? <Text style={[styles.cardTitle, { color: colors.textPrimary }]}>{item.title}</Text> : null}
               <Text style={[styles.cardBody, { color: colors.textSecondary }]} numberOfLines={3}>{item.body}</Text>
+              {item.media?.images?.[0] ? (
+                <Image source={{ uri: item.media.images[0] }} style={styles.cardThumb} resizeMode="cover" />
+              ) : null}
               <View style={styles.cardMeta}>
                 <Text style={[styles.cardCategory, { color: colors.primary }]}>{CATEGORIES.find(c => c.key === item.category)?.label || item.category}</Text>
                 <Text style={[styles.cardDate, { color: colors.textSecondary }]}>{new Date(item.created_at).toLocaleDateString('tr-TR')}</Text>
@@ -228,26 +242,30 @@ export default function ToplulukScreen({ navigation }) {
 const styles = StyleSheet.create({
   screenContainer: { flex: 1 },
   emptyWrap: { flex: 1 },
-  tabs: { flexDirection: 'row', paddingHorizontal: spacing.screenPadding, marginBottom: 12 },
-  tab: { paddingVertical: 8, paddingHorizontal: 16, marginRight: 8, borderRadius: spacing.borderRadius.input },
+  tabsRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: spacing.screenPadding, paddingTop: 12, marginBottom: 16 },
+  tabs: { flexDirection: 'row', marginRight: 12 },
+  tab: { paddingVertical: 10, paddingHorizontal: 20, marginRight: 10, borderRadius: 16 },
+  addTabBtn: { flexDirection: 'row', alignItems: 'center', paddingVertical: 10, paddingHorizontal: 14, borderRadius: 16, gap: 6 },
+  addTabBtnText: { color: '#fff', fontSize: 13, fontWeight: '600' },
   tabText: { fontSize: typography.text.body.fontSize },
   tabTextActive: { fontWeight: '600' },
   filterRow: { marginBottom: 12, maxHeight: 44 },
   centered: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   card: {
     marginHorizontal: spacing.screenPadding,
-    marginBottom: 12,
+    marginBottom: 14,
     padding: spacing.cardPadding,
-    borderRadius: spacing.borderRadius.card,
+    borderRadius: 20,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.06,
-    shadowRadius: 2,
-    elevation: 2,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    elevation: 4,
   },
   pinnedBadge: { position: 'absolute', top: 12, right: 12, borderRadius: 10, padding: 4 },
   cardTitle: { fontSize: typography.text.bodyLarge.fontSize, fontWeight: '600', marginBottom: 6 },
   cardBody: { fontSize: typography.text.body.fontSize, lineHeight: 22, marginBottom: 8 },
+  cardThumb: { width: '100%', height: 120, borderRadius: 10, marginBottom: 8 },
   cardMeta: { flexDirection: 'row', justifyContent: 'space-between' },
   cardCategory: { fontSize: typography.text.caption.fontSize },
   cardDate: { fontSize: typography.text.caption.fontSize },

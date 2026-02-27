@@ -291,8 +291,8 @@ export default function CheckInScreen({ navigation, route }) {
       const msg = error.response?.data?.message || error.message || 'Check-in başarısız';
       Toast.show({
         type: 'error',
-        text1: status === 401 ? 'Oturum süresi doldu' : 'Hata',
-        text2: status === 401 ? 'Lütfen tekrar giriş yapın.' : msg
+        text1: status === 401 ? 'Giriş gerekli' : 'Hata',
+        text2: status === 401 ? 'Tekrar giriş yapın.' : msg
       });
       // Hata durumunda lobiye/geri gitmiyoruz; kullanıcı ekranda kalır.
     } finally {

@@ -24,90 +24,81 @@ function formatPhoneForSupabase(telefon) {
   return '+' + p.slice(0, 12);
 }
 
+const formatPhoneDisplay = (t) => {
+  if (!t) return '';
+  const d = String(t).replace(/\D/g, '');
+  if (d.length <= 3) return d;
+  if (d.length <= 6) return d.slice(0, 3) + ' ' + d.slice(3);
+  return d.slice(0, 3) + ' ' + d.slice(3, 6) + ' ' + d.slice(6, 10);
+};
+
 export default function OTPVerifyScreen() {
   const navigation = useNavigation();
   const route = useRoute();
   const { loginWithToken } = useAuth();
-  const { telefon, islemTipi, onSuccess } = route.params || {};
+  const { telefon: paramTelefon, islemTipi, onSuccess } = route.params || {};
+  const [phoneInput, setPhoneInput] = useState(paramTelefon || '');
+  const [otpSent, setOtpSent] = useState(false);
+  const [sentToPhone, setSentToPhone] = useState('');
   const [otp, setOtp] = useState(['', '', '', '', '', '']);
   const [loading, setLoading] = useState(false);
-  const [countdown, setCountdown] = useState(300); // 5 dakika
+  const [countdown, setCountdown] = useState(0);
   const inputRefs = useRef([]);
   const usedSupabaseForOtp = useRef(false);
 
+  const telefon = otpSent ? sentToPhone : (phoneInput.trim().replace(/\D/g, '').length >= 10 ? phoneInput.trim() : paramTelefon || '');
+
   useEffect(() => {
-    logger.log('OTPVerifyScreen mounted', { telefon, islemTipi });
-
-    // SMS ile girişte: Önce Supabase ile gönder. Sadece Supabase başarılı olursa doğrulamayı da Supabase ile yap; yoksa API.
-    if (telefon && telefon.length >= 10 && islemTipi === 'giris') {
-      if (supabase) {
-        const phone = formatPhoneForSupabase(telefon);
-        supabase.auth.signInWithOtp({ phone })
-          .then(({ error }) => {
-            if (error) {
-              usedSupabaseForOtp.current = false;
-              logger.log('Supabase OTP failed, falling back to API', { message: error.message });
-              return api.post('/auth/giris/otp-iste', { telefon }).then((res) => {
-                Toast.show({ type: 'success', text1: 'SMS gönderildi', text2: 'Doğrulama kodunu girin.' });
-                if (__DEV__ && res?.data?.otpForDev) {
-                  setOtp(res.data.otpForDev.split(''));
-                  Toast.show({ type: 'info', text1: 'Test modu', text2: `Kod otomatik dolduruldu: ${res.data.otpForDev}` });
-                }
-              }).catch((e) => {
-                logger.error('API OTP request failed', e);
-                Toast.show({ type: 'error', text1: 'SMS gönderilemedi', text2: e?.response?.data?.message || e?.message || 'Tekrar deneyin.' });
-              });
-            }
-            usedSupabaseForOtp.current = true;
-            Toast.show({ type: 'success', text1: 'SMS gönderildi', text2: 'Doğrulama kodunu girin.' });
-          })
-          .catch((e) => {
-            logger.error('Supabase signInWithOtp failed, trying API', e);
-            usedSupabaseForOtp.current = false;
-            api.post('/auth/giris/otp-iste', { telefon })
-              .then((res) => {
-                Toast.show({ type: 'success', text1: 'SMS gönderildi', text2: 'Doğrulama kodunu girin.' });
-                if (__DEV__ && res?.data?.otpForDev) {
-                  setOtp(res.data.otpForDev.split(''));
-                  Toast.show({ type: 'info', text1: 'Test modu', text2: `Kod otomatik dolduruldu: ${res.data.otpForDev}` });
-                }
-              })
-              .catch((err) => {
-                Toast.show({ type: 'error', text1: 'SMS gönderilemedi', text2: err?.response?.data?.message || err?.message || 'Tekrar deneyin.' });
-              });
-          });
-      } else {
-        usedSupabaseForOtp.current = false;
-        api.post('/auth/giris/otp-iste', { telefon })
-          .then((res) => {
-            Toast.show({ type: 'success', text1: 'SMS gönderildi', text2: 'Doğrulama kodunu girin.' });
-            if (__DEV__ && res?.data?.otpForDev) {
-              setOtp(res.data.otpForDev.split(''));
-              Toast.show({ type: 'info', text1: 'Test modu', text2: `Kod otomatik dolduruldu: ${res.data.otpForDev}` });
-            }
-          })
-          .catch((e) => {
-            Toast.show({ type: 'error', text1: 'SMS gönderilemedi', text2: e?.response?.data?.message || e?.message || 'Tekrar deneyin.' });
-          });
-      }
-    }
-
-    // Countdown başlat
-    const timer = setInterval(() => {
-      setCountdown((prev) => {
-        if (prev <= 0) {
-          clearInterval(timer);
-          return 0;
-        }
-        return prev - 1;
-      });
-    }, 1000);
-
-    return () => {
-      clearInterval(timer);
-      logger.log('OTPVerifyScreen unmounted');
-    };
+    logger.log('OTPVerifyScreen mounted', { paramTelefon, islemTipi });
   }, []);
+
+  const handleSendOtp = async () => {
+    const raw = phoneInput.replace(/\D/g, '');
+    if (raw.length < 10) {
+      Toast.show({ type: 'error', text1: 'Geçersiz numara', text2: '10 haneli telefon numaranızı girin' });
+      return;
+    }
+    setLoading(true);
+    try {
+      const num = raw.length >= 10 ? raw : phoneInput.trim();
+      if (islemTipi === 'kayit') {
+        if (supabase) {
+          const phone = formatPhoneForSupabase(num);
+          const { error } = await supabase.auth.signInWithOtp({ phone });
+          if (error) throw error;
+          usedSupabaseForOtp.current = true;
+        } else {
+          await api.post('/auth/kayit/otp-iste', { telefon: num });
+        }
+      } else {
+        if (supabase) {
+          const phone = formatPhoneForSupabase(num);
+          const { error } = await supabase.auth.signInWithOtp({ phone });
+          if (error) {
+            usedSupabaseForOtp.current = false;
+            await api.post('/auth/giris/otp-iste', { telefon: num });
+          } else {
+            usedSupabaseForOtp.current = true;
+          }
+        } else {
+          await api.post('/auth/giris/otp-iste', { telefon: num });
+        }
+      }
+      setOtpSent(true);
+      setSentToPhone(phoneInput.trim());
+      setCountdown(300);
+      Toast.show({ type: 'success', text1: 'SMS gönderildi', text2: `${formatPhoneDisplay(num)} numarasına kod gönderildi` });
+    } catch (e) {
+      Toast.show({ type: 'error', text1: 'SMS gönderilemedi', text2: e?.response?.data?.message || e?.message || 'Tekrar deneyin.' });
+    }
+    setLoading(false);
+  };
+
+  useEffect(() => {
+    if (countdown <= 0) return;
+    const timer = setInterval(() => setCountdown((prev) => Math.max(0, prev - 1)), 1000);
+    return () => clearInterval(timer);
+  }, [countdown]);
 
   const handleOtpChange = (text, index) => {
     logger.log('OTP input changed', { index, text });
@@ -189,26 +180,10 @@ export default function OTPVerifyScreen() {
           const { data, error } = await supabase.auth.verifyOtp({ phone, token: code, type: 'sms' });
           if (!error && data?.session?.access_token) {
             const accessToken = data.session.access_token;
-            try {
-              const response = await api.post('/auth/supabase-phone-session', { access_token: accessToken });
-              const { token, kullanici, tesis, supabaseAccessToken } = response.data;
-              setLoading(false);
-              if (onSuccess) onSuccess({ token, kullanici, tesis });
-              else {
-                await loginWithToken(token, kullanici, tesis, supabaseAccessToken);
-              }
-              return;
-            } catch (sessionErr) {
-              setLoading(false);
-              try {
-                const response = await api.post('/auth/giris/otp-dogrula', { telefon, otp: code });
-                const { token, kullanici, tesis } = response.data;
-                await loginWithToken(token, kullanici, tesis);
-                return;
-              } catch (_) {
-                throw sessionErr;
-              }
-            }
+            setLoading(false);
+            if (onSuccess) onSuccess({ token: accessToken, kullanici: null, tesis: null });
+            else await loginWithToken(accessToken, null, null, accessToken);
+            return;
           }
           if (error) {
             const isExpired = error?.message?.toLowerCase?.().includes('expired') ||
@@ -260,69 +235,39 @@ export default function OTPVerifyScreen() {
   };
 
   const handleResend = async () => {
+    const num = telefon || phoneInput.trim().replace(/\D/g, '');
+    if (!num || num.replace(/\D/g, '').length < 10) {
+      Toast.show({ type: 'error', text1: 'Numara gerekli', text2: 'Önce telefon numaranızı girin' });
+      return;
+    }
     try {
-      logger.button('Resend OTP Button', 'clicked');
       setLoading(true);
-      let devOtpFilled = false;
-
       if (islemTipi === 'kayit') {
-        logger.api('POST', '/auth/kayit/otp-iste', { telefon });
-        const response = await api.post('/auth/kayit/otp-iste', {
-          telefon,
-          islemTipi: 'kayit'
-        });
-        Toast.show({
-          type: 'success',
-          text1: 'SMS Gönderildi',
-          text2: 'Yeni doğrulama kodu telefonunuza gönderildi'
-        });
-        setCountdown(300);
-        if (__DEV__ && response?.data?.otpForDev) {
-          setOtp(response.data.otpForDev.split(''));
-          Toast.show({ type: 'info', text1: 'Test modu', text2: `Kod otomatik dolduruldu: ${response.data.otpForDev}` });
-          devOtpFilled = true;
+        if (supabase) {
+          const { error } = await supabase.auth.signInWithOtp({ phone: formatPhoneForSupabase(num) });
+          if (error) throw error;
+        } else {
+          await api.post('/auth/kayit/otp-iste', { telefon: num });
         }
       } else {
-        if (supabase && usedSupabaseForOtp.current) {
-          const phone = formatPhoneForSupabase(telefon);
-          const { error } = await supabase.auth.signInWithOtp({ phone });
+        if (supabase) {
+          const { error } = await supabase.auth.signInWithOtp({ phone: formatPhoneForSupabase(num) });
           if (error) {
             usedSupabaseForOtp.current = false;
-            const res = await api.post('/auth/giris/otp-iste', { telefon });
-            if (__DEV__ && res?.data?.otpForDev) {
-              setOtp(res.data.otpForDev.split(''));
-              Toast.show({ type: 'info', text1: 'Test modu', text2: `Kod otomatik dolduruldu: ${res.data.otpForDev}` });
-              devOtpFilled = true;
-            }
+            await api.post('/auth/giris/otp-iste', { telefon: num });
           }
-          Toast.show({ type: 'success', text1: 'SMS Gönderildi', text2: 'Yeni doğrulama kodu telefonunuza gönderildi' });
-          setCountdown(300);
         } else {
-          const res = await api.post('/auth/giris/otp-iste', { telefon });
-          Toast.show({ type: 'success', text1: 'SMS Gönderildi', text2: 'Yeni doğrulama kodu telefonunuza gönderildi' });
-          setCountdown(300);
-          if (__DEV__ && res?.data?.otpForDev) {
-            setOtp(res.data.otpForDev.split(''));
-            Toast.show({ type: 'info', text1: 'Test modu', text2: `Kod otomatik dolduruldu: ${res.data.otpForDev}` });
-            devOtpFilled = true;
-          }
+          await api.post('/auth/giris/otp-iste', { telefon: num });
         }
       }
-
-      setLoading(false);
-      if (!devOtpFilled) {
-        setOtp(['', '', '', '', '', '']);
-        inputRefs.current[0]?.focus();
-      }
+      setCountdown(300);
+      Toast.show({ type: 'success', text1: 'SMS Gönderildi', text2: `${formatPhoneDisplay(num)} numarasına yeni kod gönderildi` });
+      setOtp(['', '', '', '', '', '']);
+      inputRefs.current[0]?.focus();
     } catch (error) {
-      logger.error('Resend OTP error', error);
-      setLoading(false);
-      Toast.show({
-        type: 'error',
-        text1: 'Hata',
-        text2: error.response?.data?.message || 'SMS gönderilemedi'
-      });
+      Toast.show({ type: 'error', text1: 'Hata', text2: error?.response?.data?.message || error?.message || 'SMS gönderilemedi' });
     }
+    setLoading(false);
   };
 
   const formatCountdown = (seconds) => {
@@ -337,12 +282,39 @@ export default function OTPVerifyScreen() {
       style={styles.container}
     >
       <View style={styles.content}>
-        <Text style={styles.title}>Doğrulama Kodu</Text>
-        <Text style={styles.subtitle}>
-          {telefon} numaralı telefona gönderilen 6 haneli kodu giriniz
+        <Text style={styles.title}>
+          {otpSent ? 'Doğrulama Kodu' : 'Telefon Numaranız'}
         </Text>
+        {!otpSent ? (
+          <>
+            <Text style={styles.subtitle}>
+              Kod alacağınız 10 haneli telefon numaranızı girin
+            </Text>
+            <TextInput
+              style={styles.phoneInput}
+              value={phoneInput}
+              onChangeText={(t) => setPhoneInput(t.replace(/[^\d\s]/g, '').slice(0, 14))}
+              placeholder="5xx xxx xx xx"
+              keyboardType="phone-pad"
+              autoFocus
+            />
+            <TouchableOpacity
+              style={[styles.button, (loading || phoneInput.replace(/\D/g, '').length < 10) && styles.buttonDisabled]}
+              onPress={handleSendOtp}
+              disabled={loading || phoneInput.replace(/\D/g, '').length < 10}
+            >
+              <Text style={styles.buttonText}>
+                {loading ? 'Gönderiliyor...' : 'Kod Gönder'}
+              </Text>
+            </TouchableOpacity>
+          </>
+        ) : (
+          <>
+            <Text style={styles.subtitle}>
+              {formatPhoneDisplay(sentToPhone)} numarasına gönderilen 6 haneli kodu giriniz
+            </Text>
 
-        <View style={styles.otpContainer}>
+            <View style={styles.otpContainer}>
           {otp.map((digit, index) => (
             <TextInput
               key={index}
@@ -389,6 +361,8 @@ export default function OTPVerifyScreen() {
             Yeni Kod Gönder {countdown > 0 && `(${formatCountdown(countdown)})`}
           </Text>
         </TouchableOpacity>
+          </>
+        )}
       </View>
     </KeyboardAvoidingView>
   );
@@ -435,6 +409,16 @@ const styles = StyleSheet.create({
   },
   otpInputFilled: {
     borderColor: '#007AFF'
+  },
+  phoneInput: {
+    height: 50,
+    borderWidth: 2,
+    borderColor: '#ddd',
+    borderRadius: 8,
+    paddingHorizontal: 16,
+    fontSize: 18,
+    marginBottom: 20,
+    textAlign: 'center'
   },
   countdown: {
     textAlign: 'center',

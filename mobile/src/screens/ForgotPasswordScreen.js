@@ -13,8 +13,8 @@ import { useNavigation } from '@react-navigation/native';
 import Toast from 'react-native-toast-message';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../context/ThemeContext';
-import { api } from '../services/api';
 import { supabase } from '../lib/supabase/supabase';
+import { getApiBaseUrl } from '../config/api';
 import { Button, Input } from '../components/ui';
 import { typography, spacing } from '../theme';
 
@@ -51,45 +51,45 @@ export default function ForgotPasswordScreen() {
     setLoading(true);
     setUseBackendOtp(false);
     try {
-      const phone = formatPhoneForSupabase(telefon);
+      const backendUrl = getApiBaseUrl();
+
+      // Önce Supabase dene
       if (supabase) {
+        const phone = formatPhoneForSupabase(telefon);
         const { error } = await supabase.auth.signInWithOtp({ phone });
-        if (error) {
-          Toast.show({ type: 'error', text1: 'Kod gönderilemedi', text2: error.message });
+        if (!error) {
+          Toast.show({ type: 'success', text1: 'Kod gönderildi', text2: 'Telefonunuza gelen 6 haneli kodu girin.' });
+          setStep('otp');
           setLoading(false);
           return;
         }
-      } else {
-        Toast.show({ type: 'error', text1: 'Hata', text2: 'Kod servisi kullanılamıyor' });
-        setLoading(false);
-        return;
       }
-      Toast.show({ type: 'success', text1: 'Kod gönderildi', text2: 'Telefonunuza gelen 6 haneli kodu girin.' });
-      setStep('otp');
+
+      // Supabase yoksa veya hata verirse backend dene
+      if (backendUrl) {
+        const res = await fetch(`${backendUrl}/api/auth/sifre-sifirla/otp-iste`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ telefon: raw }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (res.ok) {
+          setUseBackendOtp(true);
+          Toast.show({
+            type: 'success',
+            text1: 'Kod gönderildi',
+            text2: data.otpForDev ? `Test kodu: ${data.otpForDev}` : 'Telefonunuza gelen 6 haneli kodu girin.',
+          });
+          setStep('otp');
+          setLoading(false);
+          return;
+        }
+        throw new Error(data.message || 'Kod gönderilemedi');
+      }
+
+      Toast.show({ type: 'error', text1: 'Hata', text2: supabase ? 'Kod gönderilemedi' : 'Kod servisi kullanılamıyor' });
     } catch (e) {
       Toast.show({ type: 'error', text1: 'Hata', text2: e?.message || 'Kod gönderilemedi' });
-    }
-    setLoading(false);
-  };
-
-  const handleSendBackendOtp = async () => {
-    const raw = telefon.trim().replace(/\D/g, '');
-    if (raw.length < 10) {
-      Toast.show({ type: 'error', text1: 'Geçersiz telefon', text2: '10 haneli telefon giriniz' });
-      return;
-    }
-    setLoading(true);
-    try {
-      await api.post('/auth/sifre-sifirla/otp-iste', { telefon: telefon.trim() });
-      setUseBackendOtp(true);
-      setStep('otp');
-      Toast.show({ type: 'success', text1: 'Kod gönderildi', text2: 'Telefonunuza gelen 6 haneli kodu girin.' });
-    } catch (e) {
-      Toast.show({
-        type: 'error',
-        text1: 'Kod gönderilemedi',
-        text2: e?.response?.data?.message || e?.message || 'Tekrar deneyin',
-      });
     }
     setLoading(false);
   };
@@ -126,23 +126,25 @@ export default function ForgotPasswordScreen() {
       Toast.show({ type: 'error', text1: 'Kod', text2: '6 haneli kodu girin' });
       return;
     }
-    if (useBackendOtp) {
-      setStep('sifre');
-      Toast.show({ type: 'success', text1: 'Doğrulandı', text2: 'Yeni şifrenizi belirleyin' });
-      return;
-    }
     setLoading(true);
     try {
-      const phone = formatPhoneForSupabase(telefon);
-      const { data, error } = await supabase.auth.verifyOtp({ phone, token: code, type: 'sms' });
-      if (error) {
-        Toast.show({ type: 'error', text1: 'Doğrulama başarısız', text2: error.message });
-        setLoading(false);
-        return;
+      if (useBackendOtp) {
+        // Backend akışı: OTP'yi sifre adımında göndereceğiz
+        setSupabaseSession({ otp: code });
+        setStep('sifre');
+        Toast.show({ type: 'success', text1: 'Doğrulandı', text2: 'Yeni şifrenizi belirleyin' });
+      } else {
+        const phone = formatPhoneForSupabase(telefon);
+        const { data, error } = await supabase.auth.verifyOtp({ phone, token: code, type: 'sms' });
+        if (error) {
+          Toast.show({ type: 'error', text1: 'Doğrulama başarısız', text2: error.message });
+          setLoading(false);
+          return;
+        }
+        setSupabaseSession(data?.session);
+        setStep('sifre');
+        Toast.show({ type: 'success', text1: 'Doğrulandı', text2: 'Yeni şifrenizi belirleyin' });
       }
-      setSupabaseSession(data?.session);
-      setStep('sifre');
-      Toast.show({ type: 'success', text1: 'Doğrulandı', text2: 'Yeni şifrenizi belirleyin' });
     } catch (e) {
       Toast.show({ type: 'error', text1: 'Hata', text2: e?.message || 'Kod doğrulanamadı' });
     }
@@ -158,42 +160,55 @@ export default function ForgotPasswordScreen() {
       Toast.show({ type: 'error', text1: 'Şifreler eşleşmiyor', text2: 'Aynı şifreyi iki kez girin' });
       return;
     }
-    if (!useBackendOtp) {
-      const accessToken = supabaseSession?.access_token;
-      if (!accessToken) {
-        Toast.show({ type: 'error', text1: 'Oturum sonlandı', text2: 'Baştan başlayıp "Sunucu ile kod iste" deneyin' });
-        setStep('telefon');
-        setSupabaseSession(null);
+    if (useBackendOtp && supabaseSession?.otp) {
+      const backendUrl = getApiBaseUrl();
+      if (!backendUrl) {
+        Toast.show({ type: 'error', text1: 'Hata', text2: 'Sunucu adresi bulunamadı' });
         return;
       }
+      setLoading(true);
+      try {
+        const raw = telefon.trim().replace(/\D/g, '');
+        const res = await fetch(`${backendUrl}/api/auth/sifre-sifirla`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            telefon: raw,
+            otp: supabaseSession.otp,
+            yeniSifre,
+            yeniSifreTekrar,
+          }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (res.ok) {
+          Toast.show({ type: 'success', text1: 'Şifre güncellendi', text2: 'Yeni şifrenizle giriş yapabilirsiniz.' });
+          navigation.replace('Login');
+        } else {
+          throw new Error(data.message || 'Şifre güncellenemedi');
+        }
+      } catch (e) {
+        Toast.show({ type: 'error', text1: 'Güncellenemedi', text2: e?.message || 'Tekrar deneyin' });
+      }
+      setLoading(false);
+      return;
+    }
+
+    if (!supabaseSession?.access_token) {
+      Toast.show({ type: 'error', text1: 'Oturum sonlandı', text2: 'Baştan başlayıp tekrar kod isteyin' });
+      setStep('telefon');
+      setSupabaseSession(null);
+      return;
     }
     setLoading(true);
     try {
-      if (useBackendOtp) {
-        await api.post('/auth/sifre-sifirla', {
-          telefon: telefon.trim(),
-          otp: otp.join(''),
-          yeniSifre,
-          yeniSifreTekrar,
-        });
-      } else {
-        await api.post('/auth/sifre-sifirla', {
-          access_token: supabaseSession?.access_token,
-          yeniSifre,
-          yeniSifreTekrar,
-        });
-        if (supabase) await supabase.auth.signOut();
-      }
+      const { error } = await supabase.auth.updateUser({ password: yeniSifre });
+      if (error) throw error;
+      await supabase.auth.signOut();
       Toast.show({ type: 'success', text1: 'Şifre güncellendi', text2: 'Yeni şifrenizle giriş yapabilirsiniz.' });
       navigation.replace('Login');
     } catch (e) {
-      const msg = e?.response?.data?.message || e?.message || 'Tekrar deneyin';
-      const is503 = e?.response?.status === 503;
-      Toast.show({
-        type: 'error',
-        text1: 'Güncellenemedi',
-        text2: is503 ? 'Sunucu ayarları nedeniyle şu an kullanılamıyor. Geri dönüp "Sunucu ile kod iste" ile tekrar deneyin.' : msg,
-      });
+      const msg = e?.message || e?.response?.data?.message || 'Tekrar deneyin';
+      Toast.show({ type: 'error', text1: 'Güncellenemedi', text2: msg });
     }
     setLoading(false);
   };
@@ -226,23 +241,13 @@ export default function ForgotPasswordScreen() {
               label="Telefon"
               value={telefon}
               onChangeText={(t) => setTelefon(formatPhone(t))}
-              placeholder="5xx xxx xx xx"
+              placeholder=""
               keyboardType="phone-pad"
               autoFocus
             />
             <Button variant="primary" onPress={handleSendOtp} loading={loading} disabled={loading || telefon.replace(/\D/g, '').length < 10}>
               Kod Gönder
             </Button>
-            <TouchableOpacity
-              style={styles.altLink}
-              onPress={handleSendBackendOtp}
-              disabled={loading || telefon.replace(/\D/g, '').length < 10}
-            >
-              <Text style={[styles.altLinkText, { color: colors.primary }]}>Sunucu ile kod iste</Text>
-            </TouchableOpacity>
-            <Text style={[styles.altHint, { color: colors.textSecondary }]}>
-              Supabase yapılandırılmamışsa veya kod gelmezse bu seçeneği kullanın.
-            </Text>
           </>
         )}
 
@@ -277,7 +282,7 @@ export default function ForgotPasswordScreen() {
               label="Yeni şifre"
               value={yeniSifre}
               onChangeText={setYeniSifre}
-              placeholder="En az 6 karakter"
+              placeholder=""
               secureTextEntry={!showPassword}
               rightIcon={
                 <TouchableOpacity onPress={() => setShowPassword(!showPassword)}>
@@ -289,7 +294,7 @@ export default function ForgotPasswordScreen() {
               label="Yeni şifre (tekrar)"
               value={yeniSifreTekrar}
               onChangeText={setYeniSifreTekrar}
-              placeholder="Aynı şifreyi girin"
+              placeholder=""
               secureTextEntry={!showPassword}
             />
             <Button
@@ -327,19 +332,5 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     fontSize: 22,
     fontWeight: '600',
-  },
-  altLink: {
-    marginTop: spacing.md,
-    alignItems: 'center',
-  },
-  altLinkText: {
-    fontSize: typography.text.body.fontSize,
-    fontWeight: '600',
-  },
-  altHint: {
-    fontSize: typography.text.caption.fontSize,
-    textAlign: 'center',
-    marginTop: spacing.xs,
-    paddingHorizontal: spacing.md,
   },
 });

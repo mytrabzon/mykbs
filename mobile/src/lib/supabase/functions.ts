@@ -113,7 +113,7 @@ export async function callFn<T = unknown>(
     const message = (data as { message?: string })?.message || res.statusText || 'Edge Function error';
     if (res.status === 401) {
       logger.error('[callFn] 401 Unauthorized', { name, backendMessage: (data as { message?: string })?.message, fullBody: data });
-      throw new EdgeFunctionError('Oturum süresi doldu veya geçersiz', 401, 'UNAUTHORIZED', data);
+      throw new EdgeFunctionError('Giriş gerekli', 401, 'UNAUTHORIZED', data);
     }
     if (res.status === 404) {
       throw new EdgeFunctionError('Endpoint bulunamadı', 404, 'NOT_FOUND', data);

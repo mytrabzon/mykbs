@@ -18,8 +18,8 @@ Deno.serve(async (req: Request) => {
     const { data: { user }, error: getUserError } = await supabase.auth.getUser();
     console.log('[rooms_list] getUser', { hasUser: !!user, userId: user?.id ?? null, getUserError: getUserError?.message ?? null });
     if (!user) {
-      console.log('[rooms_list] hata: Oturum geçersiz');
-      return new Response(JSON.stringify({ message: 'Oturum geçersiz' }), { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      console.log('[rooms_list] hata: Yetkisiz');
+      return new Response(JSON.stringify({ message: 'Yetkisiz' }), { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
     const body = await req.json().catch(() => ({}));
     const filtre = (body && (body as any).filtre) || 'tumu';

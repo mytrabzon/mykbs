@@ -29,6 +29,7 @@ function StatusDot({ configured, isOnline, error, label, onPress }) {
 export default function AppHeader({
   title,
   tesis,
+  variant = 'default',
   backendConfigured = false,
   backendOnline = null,
   backendError = null,
@@ -38,6 +39,7 @@ export default function AppHeader({
   kbsConfigured = null,
   onNotification,
   onProfile,
+  onBack,
   rightComponent,
 }) {
   const insets = useSafeAreaInsets();
@@ -66,21 +68,28 @@ export default function AppHeader({
     setModalVisible(true);
   };
 
+  const isPrimary = variant === 'primary';
   return (
-    <View style={[styles.wrap, { backgroundColor: colors.surface, borderBottomColor: colors.border, paddingTop: insets.top }]}>
+    <View style={[styles.wrap, { backgroundColor: isPrimary ? colors.primary : colors.surface, borderBottomWidth: 0, paddingTop: insets.top }]}>
       <View style={[styles.row, { minHeight: spacing.headerHeight }]}>
         <View style={styles.left}>
-          <Text style={[styles.tesisName, { color: colors.textPrimary }]} numberOfLines={1}>
-            {tesis?.tesisAdi || tesis?.adi || 'Tesis'}
-          </Text>
-          {(tesis?.paket || tesis?.kota) && (
-            <Text style={[styles.package, { color: colors.textSecondary }]} numberOfLines={1}>
+          {onBack ? (
+            <TouchableOpacity onPress={onBack} style={styles.iconBtn} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
+              <Ionicons name="arrow-back" size={24} color={isPrimary ? '#FFF' : colors.textPrimary} />
+            </TouchableOpacity>
+          ) : (
+            <Text style={[styles.tesisName, { color: isPrimary ? '#FFF' : colors.textPrimary }]} numberOfLines={1}>
+              {tesis?.tesisAdi || tesis?.adi || 'Tesis'}
+            </Text>
+          )}
+          {(tesis?.paket || tesis?.kota) && !onBack && (
+            <Text style={[styles.package, { color: isPrimary ? 'rgba(255,255,255,0.8)' : colors.textSecondary }]} numberOfLines={1}>
               {[tesis?.paket, tesis?.kota ? `Kota: ${tesis.kullanilanKota ?? 0}/${tesis.kota}` : null].filter(Boolean).join(' · ')}
             </Text>
           )}
         </View>
         {title ? (
-          <Text style={[styles.title, { color: colors.textPrimary }]} numberOfLines={1}>
+          <Text style={[styles.title, { color: isPrimary ? '#FFF' : colors.textPrimary }]} numberOfLines={1}>
             {title}
           </Text>
         ) : null}
@@ -105,10 +114,10 @@ export default function AppHeader({
           {rightComponent ?? (
             <>
               <TouchableOpacity onPress={onNotification} style={styles.iconBtn} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
-                <Ionicons name="notifications-outline" size={22} color={colors.textSecondary} />
+                <Ionicons name="notifications-outline" size={22} color={isPrimary ? '#FFF' : colors.textSecondary} />
               </TouchableOpacity>
               <TouchableOpacity onPress={onProfile} style={styles.iconBtn} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
-                <Ionicons name="person-circle-outline" size={24} color={colors.textSecondary} />
+                <Ionicons name="person-circle-outline" size={24} color={isPrimary ? '#FFF' : colors.textSecondary} />
               </TouchableOpacity>
             </>
           )}
@@ -140,15 +149,14 @@ export default function AppHeader({
 
 const styles = StyleSheet.create({
   wrap: {
-    borderBottomWidth: 1,
-    borderBottomColor: undefined,
+    borderBottomWidth: 0,
   },
   row: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: spacing.screenPadding,
-    paddingVertical: spacing.xs,
+    paddingVertical: spacing.sm,
   },
   left: { flex: 1, minWidth: 0 },
   tesisName: {

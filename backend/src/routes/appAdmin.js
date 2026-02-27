@@ -1,5 +1,6 @@
 /**
- * Uygulama içi admin paneli: Sadece belirli Supabase UID ile erişilir.
+ * Uygulama içi admin paneli: user_profiles.role = 'admin' olan hesaplar erişebilir.
+ * Normal kullanıcı girişiyle giriş yapıp admin paneline erişir (ayrı giriş yok).
  * Authorization: Bearer <supabase_access_token>
  */
 const express = require('express');
@@ -8,8 +9,6 @@ const { supabaseAdmin } = require('../lib/supabaseAdmin');
 
 const router = express.Router();
 const prisma = new PrismaClient();
-
-const ADMIN_PANEL_USER_UID = process.env.ADMIN_PANEL_USER_UID || 'f7cfe2ef-00bd-4c70-b40d-c5b55e1c52d7';
 
 async function requireAdminPanelUser(req, res, next) {
   try {
@@ -23,10 +22,20 @@ async function requireAdminPanelUser(req, res, next) {
     }
     const { data: { user }, error } = await supabaseAdmin.auth.getUser(token);
     if (error || !user) {
-      return res.status(401).json({ message: 'Oturum geçersiz veya süresi dolmuş' });
+      return res.status(401).json({ message: 'Yetkisiz' });
     }
-    if (user.id !== ADMIN_PANEL_USER_UID) {
-      return res.status(403).json({ message: 'Bu alan sadece yetkili hesap için kullanılabilir' });
+    const SUPER_ADMIN_UID = process.env.ADMIN_PANEL_USER_UID || 'f7cfe2ef-00bd-4c70-b40d-c5b55e1c52d7';
+    if (user.id === SUPER_ADMIN_UID) {
+      req.user = user;
+      return next();
+    }
+    const { data: profile, error: profileError } = await supabaseAdmin
+      .from('user_profiles')
+      .select('role')
+      .eq('user_id', user.id)
+      .single();
+    if (profileError || !profile || profile.role !== 'admin') {
+      return res.status(403).json({ message: 'Bu alan sadece admin yetkili hesaplar için kullanılabilir' });
     }
     req.user = user;
     next();

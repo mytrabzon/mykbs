@@ -15,8 +15,10 @@ import { useNavigation } from '@react-navigation/native';
 import { useTheme } from '../context/ThemeContext';
 import { useAuth } from '../context/AuthContext';
 import { api } from '../services/api';
+import { supabase } from '../lib/supabase/supabase';
 import { dataService } from '../services/dataService';
 import Toast from 'react-native-toast-message';
+import { Ionicons } from '@expo/vector-icons';
 import { Button, Banner, SegmentedControl, Input } from '../components/ui';
 import { typography, spacing } from '../theme';
 import AppHeader from '../components/AppHeader';
@@ -56,8 +58,8 @@ export default function AyarlarScreen() {
       if (status === 401) {
         Toast.show({
           type: 'error',
-          text1: 'Oturum geçersiz',
-          text2: 'KBS ayarları için oturum süreniz dolmuş olabilir. Çıkış yapıp tekrar giriş yapın.',
+          text1: 'Giriş gerekli',
+          text2: 'Tekrar giriş yapın.',
           visibilityTime: 5000,
         });
       } else if (msg) {
@@ -95,8 +97,18 @@ export default function AyarlarScreen() {
       Toast.show({ type: 'success', text1: 'Başarılı', text2: 'Ayarlar kaydedildi' });
     } catch (e) {
       Toast.show({ type: 'error', text1: 'Hata', text2: e?.response?.data?.message || 'Ayarlar kaydedilemedi' });
+      // Hata olsa bile tesis kodu ve şifre sıfırlanmaz (kbsSettings state değiştirilmez)
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleKbsTalep = async (type) => {
+    try {
+      await api.post('/tesis/kbs/talebi', { type });
+      Toast.show({ type: 'success', text1: 'Talep iletildi', text2: 'Admin onayından sonra işlem yapılacaktır.', visibilityTime: 4000 });
+    } catch (e) {
+      Toast.show({ type: 'error', text1: 'Hata', text2: e?.response?.data?.message || 'Talep gönderilemedi' });
     }
   };
 
@@ -132,12 +144,17 @@ export default function AyarlarScreen() {
     }
     setSifreLoading(true);
     try {
-      await api.post('/auth/sifre', { sifre: sifreValue, sifreTekrar });
+      if (supabase) {
+        const { error } = await supabase.auth.updateUser({ password: sifreValue });
+        if (error) throw error;
+      } else {
+        await api.post('/auth/sifre', { sifre: sifreValue, sifreTekrar });
+      }
       Toast.show({ type: 'success', text1: 'Başarılı', text2: 'Şifre kaydedildi.' });
       setSifreValue('');
       setSifreTekrar('');
     } catch (e) {
-      Toast.show({ type: 'error', text1: 'Hata', text2: e?.response?.data?.message || 'Şifre kaydedilemedi' });
+      Toast.show({ type: 'error', text1: 'Hata', text2: e?.message || e?.response?.data?.message || 'Şifre kaydedilemedi' });
     } finally {
       setSifreLoading(false);
     }
@@ -169,6 +186,31 @@ export default function AyarlarScreen() {
         onProfile={() => navigation.navigate('Ayarlar')}
       />
       <ScrollView style={styles.scroll} contentContainerStyle={styles.content}>
+        <View style={[styles.section, { backgroundColor: colors.surface }]}>
+          <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>Profil</Text>
+          <TouchableOpacity
+            style={[styles.menuRow, { borderBottomWidth: 0 }]}
+            onPress={() => navigation.navigate('ProfilDuzenle')}
+          >
+            <Text style={[styles.menuRowText, { color: colors.textPrimary }]}>Profil düzenle & avatar</Text>
+            <Ionicons name="chevron-forward" size={20} color={colors.textSecondary} />
+          </TouchableOpacity>
+        </View>
+
+        <View style={[styles.section, { backgroundColor: colors.surface }]}>
+          <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>Kimlik / Pasaport</Text>
+          <Text style={[styles.infoText, { color: colors.textSecondary }]}>
+            Check-in ekranında kimlik veya pasaportu kamerayla okutabilir veya numarayı manuel girebilirsiniz.
+          </Text>
+          <TouchableOpacity
+            style={[styles.menuRow, { borderBottomWidth: 0 }]}
+            onPress={() => navigation.navigate('MrzScan')}
+          >
+            <Text style={[styles.menuRowText, { color: colors.textPrimary }]}>Kimlik doğrula (MRZ tara)</Text>
+            <Ionicons name="chevron-forward" size={20} color={colors.textSecondary} />
+          </TouchableOpacity>
+        </View>
+
         <View style={[styles.section, { backgroundColor: colors.surface }]}>
           <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>Tesis Bilgileri</Text>
           <Text style={[styles.infoText, { color: colors.textSecondary }]}>Tesis: {tesis?.tesisAdi}</Text>
@@ -270,6 +312,18 @@ export default function AyarlarScreen() {
           <Button variant="primary" onPress={handleSave} loading={loading} disabled={loading} style={styles.saveBtn}>
             Kaydet
           </Button>
+
+          <Text style={[styles.infoText, { color: colors.textSecondary, marginTop: spacing.lg }]}>
+            KBS tesis kodu ve şifresi kaydedildikten sonra yalnızca admin onayı ile değiştirilebilir veya kaldırılabilir.
+          </Text>
+          <View style={styles.kbsTalepRow}>
+            <Button variant="secondary" onPress={() => handleKbsTalep('change')} style={styles.kbsTalepBtn}>
+              Değişiklik talebi
+            </Button>
+            <Button variant="secondary" onPress={() => handleKbsTalep('remove')} style={[styles.kbsTalepBtn, { borderColor: colors.error }]}>
+              Kaldırma talebi
+            </Button>
+          </View>
         </View>
 
         <View style={[styles.section, { backgroundColor: colors.surface }]}>
@@ -297,7 +351,7 @@ export default function AyarlarScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1 },
   scroll: { flex: 1 },
-  content: { padding: spacing.screenPadding, paddingBottom: spacing['4xl'] },
+  content: { padding: spacing.screenPadding, paddingBottom: 120 },
   section: {
     borderRadius: 16,
     padding: spacing.lg,
@@ -329,6 +383,16 @@ const styles = StyleSheet.create({
   },
   testResultText: { fontSize: typography.text.body.fontSize },
   saveBtn: { marginTop: spacing.xs },
+  kbsTalepRow: { flexDirection: 'row', gap: spacing.md, marginTop: spacing.lg },
+  kbsTalepBtn: { flex: 1 },
   contactLabel: { fontSize: typography.text.body.fontSize, marginBottom: 4 },
   contactLink: { fontSize: typography.text.body.fontSize },
+  menuRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: spacing.md,
+    borderBottomWidth: 1,
+  },
+  menuRowText: { fontSize: typography.text.body.fontSize },
 });

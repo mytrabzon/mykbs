@@ -7,7 +7,7 @@ const path = require('path');
 
 // Environment variables (fallbacks for development)
 process.env.JWT_SECRET = process.env.JWT_SECRET || "mykbs-super-secret-jwt-key-2024-change-this";
-process.env.JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || "7d";
+process.env.JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || "365d";
 process.env.DATABASE_URL = process.env.DATABASE_URL || "file:./dev.db";
 
 const app = express();

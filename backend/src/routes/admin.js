@@ -84,6 +84,53 @@ router.get('/dashboard', async (req, res) => {
 });
 
 /**
+ * Tesis kodu + PIN giriş talepleri (admin onayı bekleyenler)
+ */
+router.get('/giris-talepleri', async (req, res) => {
+  try {
+    const talepler = await prisma.kullanici.findMany({
+      where: {
+        girisOnaylandi: false,
+        girisTalepAt: { not: null }
+      },
+      include: {
+        tesis: {
+          select: {
+            id: true,
+            tesisAdi: true,
+            tesisKodu: true,
+            telefon: true,
+            email: true
+          }
+        }
+      },
+      orderBy: { girisTalepAt: 'desc' }
+    });
+    res.json({ talepler });
+  } catch (error) {
+    console.error('Giriş talepleri hatası:', error);
+    res.status(500).json({ message: 'Talepler alınamadı', error: error.message });
+  }
+});
+
+/**
+ * Tesis kodu + PIN giriş onayı ver (onaylandığı an kullanıcı giriş yapabilir)
+ */
+router.post('/giris-onay/:kullaniciId', async (req, res) => {
+  try {
+    const { kullaniciId } = req.params;
+    await prisma.kullanici.update({
+      where: { id: kullaniciId },
+      data: { girisOnaylandi: true }
+    });
+    res.json({ message: 'Giriş onaylandı. Kullanıcı artık tesis kodu ve PIN ile giriş yapabilir.' });
+  } catch (error) {
+    console.error('Giriş onay hatası:', error);
+    res.status(500).json({ message: 'Onay verilemedi', error: error.message });
+  }
+});
+
+/**
  * Tesis listesi
  */
 router.get('/tesisler', async (req, res) => {

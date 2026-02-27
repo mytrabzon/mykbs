@@ -136,7 +136,7 @@ Deno.serve(async (req: Request) => {
           });
         }
       }
-      const errMsg = (verifyData as { error_description?: string }).error_description || (verifyData as { msg?: string }).msg || "Kod geçersiz veya süresi doldu";
+      const errMsg = (verifyData as { error_description?: string }).error_description || (verifyData as { msg?: string }).msg || "Kod geçersiz";
       return new Response(
         JSON.stringify({ message: errMsg }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }

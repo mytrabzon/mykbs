@@ -3,6 +3,7 @@ const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const { PrismaClient } = require('@prisma/client');
 const { authenticate } = require('../middleware/auth');
+const { authenticateTesisOrSupabase } = require('../middleware/authTesisOrSupabase');
 const smsService = require('../services/sms');
 const emailService = require('../services/email');
 const { ensureSupabaseBranchAndProfile } = require('../services/supabaseSync');
@@ -119,7 +120,7 @@ router.post('/aktivasyon', async (req, res) => {
     }
 
     if (tesis.aktivasyonSifreExpiresAt && new Date() > tesis.aktivasyonSifreExpiresAt) {
-      return res.status(401).json({ message: 'Aktivasyon şifresi süresi dolmuş' });
+      return res.status(401).json({ message: 'Aktivasyon şifresi geçersiz' });
     }
 
     // İlk kullanıcıyı oluştur (sahip rolü ile)
@@ -469,7 +470,7 @@ router.post('/kayit/dogrula', async (req, res) => {
         data: { denemeSayisi: { increment: 1 } }
       });
 
-      return res.status(401).json({ message: 'Geçersiz veya süresi dolmuş OTP' });
+      return res.status(401).json({ message: 'Geçersiz OTP' });
     }
 
     // OTP'yi işaretle
@@ -773,7 +774,7 @@ router.post('/giris/otp-dogrula', async (req, res) => {
         data: { denemeSayisi: { increment: 1 } }
       });
 
-      return res.status(401).json({ message: 'Geçersiz veya süresi dolmuş OTP' });
+      return res.status(401).json({ message: 'Geçersiz OTP' });
     }
 
     const kullanici = otpRecord.kullanici;
@@ -879,6 +880,19 @@ router.post('/giris', async (req, res) => {
     if (!kullanici) {
       console.log('PIN eşleşmedi veya kullanıcı bulunamadı');
       return res.status(401).json({ message: 'Geçersiz PIN' });
+    }
+
+    // Tesis kodu + PIN girişi admin onayına tabidir; onaylanana kadar token verilmez
+    if (!kullanici.girisOnaylandi) {
+      await prisma.kullanici.update({
+        where: { id: kullanici.id },
+        data: { girisTalepAt: new Date() }
+      });
+      return res.status(200).json({
+        success: false,
+        pendingApproval: true,
+        message: 'Admin onayına sunuldu. Onaylandığı an bildirim yapabileceksin. Çok kısa sürecek.'
+      });
     }
 
     console.log('Giriş başarılı:', { kullaniciId: kullanici.id, rol: kullanici.rol });
@@ -1006,7 +1020,7 @@ router.post('/sifre-sifirla', async (req, res) => {
         },
       });
       if (!userRes.ok) {
-        return res.status(401).json({ message: 'Doğrulama süresi doldu. Lütfen tekrar kod isteyip deneyin.' });
+        return res.status(401).json({ message: 'Doğrulama geçersiz. Tekrar kod isteyip deneyin.' });
       }
       const supabaseUser = await userRes.json();
       const phone = supabaseUser?.phone || supabaseUser?.user_metadata?.phone;
@@ -1036,7 +1050,7 @@ router.post('/sifre-sifirla', async (req, res) => {
         orderBy: { createdAt: 'desc' },
       });
       if (!otpRecord) {
-        return res.status(401).json({ message: 'Kod geçersiz veya süresi doldu. Yeni kod isteyip tekrar deneyin.' });
+        return res.status(401).json({ message: 'Kod geçersiz. Yeni kod isteyip tekrar deneyin.' });
       }
       await prisma.otp.update({ where: { id: otpRecord.id }, data: { durum: 'dogrulandi' } });
     } else if (accessToken && (!supabaseUrl || !apiKey)) {
@@ -1129,7 +1143,7 @@ router.post('/supabase-phone-session', async (req, res) => {
     });
 
     if (!userRes.ok) {
-      return res.status(401).json({ message: 'Geçersiz veya süresi dolmuş oturum' });
+      return res.status(401).json({ message: 'Yetkisiz' });
     }
 
     const supabaseUser = await userRes.json();
@@ -1221,7 +1235,7 @@ router.post('/kayit/supabase-verify-otp', async (req, res) => {
     if (verifyRes.ok && data.access_token) {
       return res.json({ access_token: data.access_token });
     }
-    const errMsg = data.error_description || data.msg || data.message || (verifyRes.status === 403 ? 'Kod geçersiz veya süresi doldu. Yeni kod isteyip tekrar deneyin.' : 'Doğrulama başarısız.');
+    const errMsg = data.error_description || data.msg || data.message || (verifyRes.status === 403 ? 'Kod geçersiz. Yeni kod isteyip tekrar deneyin.' : 'Doğrulama başarısız.');
     return res.status(verifyRes.status >= 400 ? verifyRes.status : 400).json({ message: errMsg });
   } catch (error) {
     console.error('Kayıt supabase-verify-otp hatası:', error);
@@ -1261,7 +1275,7 @@ router.post('/kayit/supabase-create', async (req, res) => {
       headers: { Authorization: `Bearer ${accessToken}`, apikey: apiKey },
     });
     if (!userRes.ok) {
-      return res.status(401).json({ message: 'Doğrulama süresi doldu. Lütfen kodu tekrar isteyip yeniden deneyin.' });
+      return res.status(401).json({ message: 'Doğrulama geçersiz. Kodu tekrar isteyip deneyin.' });
     }
     const supabaseUser = await userRes.json();
     const phone = supabaseUser?.phone || supabaseUser?.user_metadata?.phone;
@@ -1356,10 +1370,37 @@ router.post('/kayit/supabase-create', async (req, res) => {
 });
 
 /**
- * Mevcut kullanıcı bilgilerini getir
+ * Mevcut kullanıcı bilgilerini getir (Supabase token veya legacy JWT)
  */
-router.get('/me', authenticate, async (req, res) => {
+router.get('/me', authenticateTesisOrSupabase, async (req, res) => {
   try {
+    if (req.authSource === 'supabase') {
+      const u = req.user;
+      const b = req.branch;
+      const profileRole = req.profileRole || 'staff';
+      return res.json({
+        kullanici: {
+          id: u.id,
+          uid: u.id,
+          adSoyad: u.user_metadata?.full_name || u.user_metadata?.ad_soyad || u.email || u.phone || 'Kullanıcı',
+          telefon: u.phone || null,
+          email: u.email || null,
+          rol: profileRole,
+          biyometriAktif: false,
+          yetkiler: { checkIn: true, odaDegistirme: true, bilgiDuzenleme: true }
+        },
+        tesis: {
+          id: b.id,
+          tesisAdi: b.name,
+          tesisKodu: b.id,
+          paket: 'standart',
+          kota: 1000,
+          kullanilanKota: 0,
+          kbsTuru: b.kbs_turu || null
+        }
+      });
+    }
+
     const kullanici = await prisma.kullanici.findUnique({
       where: { id: req.user.id },
       include: {

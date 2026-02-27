@@ -35,8 +35,8 @@ Deno.serve(async (req) => {
       getUserError: getUserError?.message ?? null,
     });
     if (!user) {
-      console.log('[facilities_list] hata: Oturum geçersiz (user yok veya token geçersiz)');
-      return new Response(JSON.stringify({ message: 'Oturum geçersiz' }), {
+      console.log('[facilities_list] hata: Yetkisiz (user yok veya token geçersiz)');
+      return new Response(JSON.stringify({ message: 'Yetkisiz' }), {
         status: 401,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });

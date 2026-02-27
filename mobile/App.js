@@ -8,10 +8,12 @@ import { Ionicons } from '@expo/vector-icons';
 import Toast from 'react-native-toast-message';
 import ErrorBoundary from './src/components/ErrorBoundary';
 import EmptyState from './src/components/EmptyState';
+import AppHeader from './src/components/AppHeader';
 import { logger } from './src/utils/logger';
 import { backendHealth } from './src/services/backendHealth';
 import { registerPushToken } from './src/services/pushNotifications';
 import { BackHandler, Alert, Platform, View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 // Screens
 import LoginScreen from './src/screens/LoginScreen';
@@ -27,21 +29,22 @@ import AdminPanelScreen from './src/screens/AdminPanelScreen';
 import ToplulukScreen from './src/screens/ToplulukScreen';
 import BildirimlerScreen from './src/screens/BildirimlerScreen';
 import PostDetayScreen from './src/screens/PostDetayScreen';
+import AddRoomScreen from './src/screens/AddRoomScreen';
+import PaylasimEkleScreen from './src/screens/PaylasimEkleScreen';
+import ProfilDuzenleScreen from './src/screens/ProfilDuzenleScreen';
 import MrzScanScreen from './src/features/kyc/MrzScanScreen';
 import MrzResultScreen from './src/features/kyc/MrzResultScreen';
 import KycSubmitScreen from './src/features/kyc/KycSubmitScreen';
 import KycManualEntryScreen from './src/features/kyc/KycManualEntryScreen';
 import NfcIntroScreen from './src/features/kyc/NfcIntroScreen';
 
-// Placeholder screens for tabs (theme-aware)
+// Placeholder screens for tabs (theme-aware, modern design)
 function MisafirlerScreen({ navigation }) {
   const { colors } = useTheme();
+  const { tesis } = useAuth();
   return (
     <View style={[styles.screenContainer, { backgroundColor: colors.background }]}>
-      <View style={[styles.screenHeader, { backgroundColor: colors.surface }]}>
-        <Text style={[styles.screenTitle, { color: colors.textPrimary }]}>Misafirler</Text>
-        <Text style={[styles.screenSubtitle, { color: colors.textSecondary }]}>Aktif ve geçmiş misafirleriniz</Text>
-      </View>
+      <AppHeader title="Misafirler" tesis={tesis} onNotification={() => navigation.navigate('Bildirimler')} onProfile={() => navigation.navigate('Ayarlar')} />
       <View style={styles.contentContainer}>
         <EmptyState
           icon="people-outline"
@@ -57,6 +60,7 @@ function MisafirlerScreen({ navigation }) {
 
 function RaporlarScreen({ navigation }) {
   const { colors } = useTheme();
+  const { tesis } = useAuth();
   const reportCards = [
     { key: 'doluluk', icon: 'calendar', iconBg: colors.primarySoft, iconColor: colors.primary, label: 'Günlük Doluluk', value: '%75' },
     { key: 'gelir', icon: 'cash', iconBg: colors.successSoft, iconColor: colors.success, label: 'Aylık Gelir', value: '₺45,250' },
@@ -65,24 +69,21 @@ function RaporlarScreen({ navigation }) {
   ];
   return (
     <View style={[styles.screenContainer, { backgroundColor: colors.background }]}>
-      <View style={[styles.screenHeader, { backgroundColor: colors.surface }]}>
-        <Text style={[styles.screenTitle, { color: colors.textPrimary }]}>Raporlar</Text>
-        <Text style={[styles.screenSubtitle, { color: colors.textSecondary }]}>Tesis performans analizleri</Text>
-      </View>
+      <AppHeader title="Raporlar" tesis={tesis} onNotification={() => navigation.navigate('Bildirimler')} onProfile={() => navigation.navigate('Ayarlar')} />
       <View style={styles.reportsGrid}>
         {reportCards.map((r) => (
-          <TouchableOpacity key={r.key} style={[styles.reportCard, { backgroundColor: colors.surface }]}>
-            <View style={[styles.reportIcon, { backgroundColor: r.iconBg }]}>
+          <TouchableOpacity key={r.key} style={[styles.reportCardModern, { backgroundColor: colors.surface }]}>
+            <View style={[styles.reportIconModern, { backgroundColor: r.iconBg }]}>
               <Ionicons name={r.icon} size={24} color={r.iconColor} />
             </View>
-            <Text style={[styles.reportValue, { color: colors.textPrimary }]}>{r.value}</Text>
-            <Text style={[styles.reportTitle, { color: colors.textSecondary }]}>{r.label}</Text>
+            <Text style={[styles.reportValueModern, { color: colors.textPrimary }]}>{r.value}</Text>
+            <Text style={[styles.reportTitleModern, { color: colors.textSecondary }]}>{r.label}</Text>
           </TouchableOpacity>
         ))}
       </View>
-      <View style={[styles.chartContainer, { backgroundColor: colors.surface }]}>
-        <Text style={[styles.chartTitle, { color: colors.textPrimary }]}>Doluluk Oranı (Son 7 Gün)</Text>
-        <View style={[styles.chartPlaceholder, { backgroundColor: colors.background }]}>
+      <View style={[styles.chartContainerModern, { backgroundColor: colors.surface }]}>
+        <Text style={[styles.chartTitleModern, { color: colors.textPrimary }]}>Doluluk Oranı (Son 7 Gün)</Text>
+        <View style={[styles.chartPlaceholderModern, { backgroundColor: colors.background }]}>
           <Text style={[styles.chartPlaceholderText, { color: colors.textSecondary }]}>Veri bekleniyor</Text>
           <Text style={[styles.chartPlaceholderSub, { color: colors.textSecondary }]}>Son 7 gün yakında</Text>
         </View>
@@ -129,85 +130,60 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
   },
   screenContainer: { flex: 1 },
-  screenHeader: {
-    paddingTop: 56,
-    paddingBottom: 16,
-    paddingHorizontal: 20,
-    borderBottomLeftRadius: 16,
-    borderBottomRightRadius: 16,
-    marginBottom: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
-    elevation: 3,
-  },
-  screenTitle: {
-    fontSize: 28,
-    fontWeight: '600',
-    marginBottom: 4,
-  },
-  screenSubtitle: { fontSize: 14 },
-  contentContainer: { flex: 1, paddingHorizontal: 20 },
+  contentContainer: { flex: 1, paddingHorizontal: 20, paddingBottom: 120 },
   reportsGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     justifyContent: 'space-between',
     paddingHorizontal: 20,
+    paddingTop: 16,
     marginBottom: 20,
+    gap: 12,
   },
-  reportCard: {
+  reportCardModern: {
     width: '48%',
-    borderRadius: 16,
-    padding: 16,
-    marginBottom: 16,
+    borderRadius: 20,
+    padding: 18,
+    marginBottom: 0,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.06,
-    shadowRadius: 4,
-    elevation: 2,
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    elevation: 4,
   },
-  reportIcon: {
+  reportIconModern: {
     width: 48,
     height: 48,
-    borderRadius: 12,
+    borderRadius: 14,
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 12,
   },
-  reportTitle: {
-    fontSize: 13,
-    marginTop: 4,
-  },
-  reportValue: {
-    fontSize: 24,
-    fontWeight: '700',
-  },
-  chartPlaceholderSub: {
-    fontSize: 12,
-    marginTop: 4,
-  },
-  chartContainer: {
-    borderRadius: 16,
+  reportTitleModern: { fontSize: 13, marginTop: 4 },
+  reportValueModern: { fontSize: 24, fontWeight: '700' },
+  chartPlaceholderSub: { fontSize: 12, marginTop: 4 },
+  chartContainerModern: {
+    borderRadius: 20,
     padding: 20,
     marginHorizontal: 20,
+    marginBottom: 120,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.06,
-    shadowRadius: 4,
-    elevation: 2,
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    elevation: 4,
   },
-  chartTitle: { fontSize: 18, fontWeight: '600', marginBottom: 16 },
-  chartPlaceholder: {
+  chartTitleModern: { fontSize: 18, fontWeight: '600', marginBottom: 16 },
+  chartPlaceholderModern: {
     height: 200,
-    borderRadius: 12,
+    borderRadius: 16,
     justifyContent: 'center',
     alignItems: 'center',
   },
   chartPlaceholderText: { fontSize: 14 },
 });
 
-// Context
+// Context (useAuth used in MisafirlerScreen, RaporlarScreen)
 import { AuthProvider, useAuth } from './src/context/AuthContext';
 import { ThemeProvider, useTheme } from './src/context/ThemeContext';
 
@@ -216,14 +192,19 @@ const Stack = createStackNavigator();
 
 const TAB_NAMES = ['Odalar', 'Misafirler', 'Topluluk', 'Bildirimler', 'Raporlar', 'Ayarlar'];
 
-const ADMIN_PANEL_USER_UID = 'f7cfe2ef-00bd-4c70-b40d-c5b55e1c52d7';
+const SUPER_ADMIN_UID = 'f7cfe2ef-00bd-4c70-b40d-c5b55e1c52d7';
 
 function MainTabs() {
+  const insets = useSafeAreaInsets();
   const { user, lastTab, setLastTab } = useAuth();
   const { colors } = useTheme();
-  const isAdminPanelUser = !!user && (user.id === ADMIN_PANEL_USER_UID || user.uid === ADMIN_PANEL_USER_UID);
+  const isAdminPanelUser = !!user && (
+    user.rol === 'admin' || user.role === 'admin' ||
+    user.id === SUPER_ADMIN_UID || user.uid === SUPER_ADMIN_UID
+  );
   const tabNames = isAdminPanelUser ? [...TAB_NAMES, 'AdminPanel'] : TAB_NAMES;
   const initialTab = lastTab && tabNames.includes(lastTab) ? lastTab : 'Odalar';
+  const tabBarBottom = Math.max(insets.bottom, 16);
 
   return (
     <Tab.Navigator
@@ -239,25 +220,28 @@ function MainTabs() {
           else if (route.name === 'Bildirimler') iconName = focused ? 'notifications' : 'notifications-outline';
           else if (route.name === 'AdminPanel') iconName = focused ? 'shield' : 'shield-outline';
           else iconName = 'ellipse-outline';
-          return <Ionicons name={iconName} size={size} color={color} />;
+          return <Ionicons name={iconName} size={focused ? 24 : 22} color={color} />;
         },
         tabBarActiveTintColor: colors.primary,
         tabBarInactiveTintColor: colors.textSecondary,
         tabBarStyle: {
+          position: 'absolute',
           backgroundColor: colors.surface,
-          borderTopWidth: 1,
-          borderTopColor: colors.border,
-          height: 80,
-          paddingBottom: 12,
-          paddingTop: 8,
-          elevation: 4,
+          borderTopWidth: 0,
+          height: 68,
+          paddingBottom: 8,
+          paddingTop: 10,
+          marginHorizontal: 20,
+          marginBottom: tabBarBottom,
+          borderRadius: 28,
+          elevation: 12,
           shadowColor: '#000',
-          shadowOffset: { width: 0, height: -2 },
-          shadowOpacity: 0.06,
-          shadowRadius: 4,
+          shadowOffset: { width: 0, height: 4 },
+          shadowOpacity: 0.15,
+          shadowRadius: 16,
         },
         tabBarLabelStyle: {
-          fontSize: 12,
+          fontSize: 11,
           fontWeight: '600',
           marginTop: 2,
         },
@@ -337,7 +321,10 @@ function AppNavigator() {
             <Stack.Screen name="Main" component={MainTabs} />
             <Stack.Screen name="CheckIn" component={CheckInScreen} />
             <Stack.Screen name="OdaDetay" component={OdaDetayScreen} />
+            <Stack.Screen name="AddRoom" component={AddRoomScreen} />
             <Stack.Screen name="PostDetay" component={PostDetayScreen} />
+            <Stack.Screen name="PaylasimEkle" component={PaylasimEkleScreen} />
+            <Stack.Screen name="ProfilDuzenle" component={ProfilDuzenleScreen} />
             <Stack.Screen name="AdminPanel" component={AdminPanelScreen} />
             <Stack.Screen name="MrzScan" component={MrzScanScreen} />
             <Stack.Screen name="MrzResult" component={MrzResultScreen} />

@@ -38,6 +38,32 @@ export async function deletePost(postId, supabaseToken) {
   return callFn('community_post_delete', { post_id: postId }, supabaseToken);
 }
 
+export async function getPostComments(postId, supabaseToken) {
+  return callFn('community_post_comments_list', { post_id: postId }, supabaseToken);
+}
+
+export async function deleteComment(commentId, supabaseToken) {
+  return callFn('community_comment_delete', { comment_id: commentId }, supabaseToken);
+}
+
+export async function uploadCommunityImage(base64, branchId, supabaseToken) {
+  const res = await callFn('upload_community_image', {
+    branch_id: branchId,
+    image_base64: base64,
+    mime: 'image/jpeg',
+  }, supabaseToken);
+  return res.url;
+}
+
+export async function updateProfile(body, supabaseToken) {
+  return callFn('profile_update', body, supabaseToken);
+}
+
+export async function uploadAvatar(base64, supabaseToken) {
+  const res = await callFn('upload_avatar', { image_base64: base64, mime: 'image/jpeg' }, supabaseToken);
+  return res.url;
+}
+
 export async function createAnnouncement(body, supabaseToken) {
   return callFn('community_announcement_create', body, supabaseToken);
 }

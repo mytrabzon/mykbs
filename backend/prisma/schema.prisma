@@ -77,6 +77,10 @@ model Kullanici {
   odaDegistirmeYetki Boolean @default(true)
   bilgiDuzenlemeYetki Boolean @default(true)
   
+  // Tesis kodu + PIN ile giriş: admin onayı gerekir (onaydan sonra yeşil, önce gri)
+  girisOnaylandi    Boolean  @default(false)
+  girisTalepAt      DateTime? // Son giriş talebi zamanı (admin listesinde göstermek için)
+  
   tesis             Tesis    @relation(fields: [tesisId], references: [id], onDelete: Cascade)
   
   createdAt         DateTime  @default(now())

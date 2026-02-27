@@ -1,8 +1,9 @@
 /**
- * MRZ ham string parse - TD3 (pasaport) ve TD1 (kimlik). Check digit: ICAO 9303.
+ * MRZ ham string parse - TD3 (pasaport), TD2 (ehliyet/ikamet), TD1 (kimlik). Check digit: ICAO 9303.
  */
 
 const TD3_LINE_LEN = 44;
+const TD2_LINE_LEN = 36;
 const TD1_LINE_LEN = 30;
 
 function checkDigit(s) {
@@ -31,6 +32,43 @@ function parseTD3(lines) {
   const docType = l1[0] === 'P' ? 'P' : 'OTHER';
   const issuingCountry = l1.substring(2, 5).replace(/</g, '').trim();
   const nameBlock = l1.substring(5, 44);
+  const nameParts = nameBlock.split('<<').filter(Boolean);
+  const surname = (nameParts[0] || '').replace(/</g, ' ').trim();
+  const givenNames = (nameParts[1] || '').replace(/</g, ' ').trim();
+  const passportNumber = l2.substring(0, 9).replace(/</g, '').trim();
+  const passportNumberCheck = l2[9];
+  const nationality = l2.substring(10, 13).replace(/</g, '').trim();
+  const birthDateRaw = l2.substring(13, 19);
+  const birthDateCheck = l2[19];
+  const sex = l2[20];
+  const expiryDateRaw = l2.substring(21, 27);
+  const expiryDateCheck = l2[27];
+  const docNoCheckOk = passportNumberCheck === '<' || parseInt(passportNumberCheck, 10) === checkDigit(passportNumber);
+  const birthCheckOk = birthDateCheck === '<' || parseInt(birthDateCheck, 10) === checkDigit(birthDateRaw);
+  const expiryCheckOk = expiryDateCheck === '<' || parseInt(expiryDateCheck, 10) === checkDigit(expiryDateRaw);
+  const checksOk = docNoCheckOk && birthCheckOk && expiryCheckOk;
+  let reason = !docNoCheckOk ? 'document_number_check' : !birthCheckOk ? 'birth_date_check' : !expiryCheckOk ? 'expiry_date_check' : '';
+  return {
+    docType,
+    issuingCountry,
+    surname,
+    givenNames,
+    passportNumber,
+    nationality,
+    birthDate: normalizeYYMMDD(birthDateRaw),
+    sex: sex === 'M' || sex === 'F' ? sex : sex === '<' ? 'U' : 'X',
+    expiryDate: normalizeYYMMDD(expiryDateRaw),
+    raw: lines.join('\n'),
+    checks: { ok: checksOk, reason: reason || undefined },
+  };
+}
+
+function parseTD2(lines) {
+  const l1 = (lines[0] || '').padEnd(TD2_LINE_LEN, '<');
+  const l2 = (lines[1] || '').padEnd(TD2_LINE_LEN, '<');
+  const docType = l1[0] === 'P' ? 'P' : (l1[0] === 'I' || l1[0] === 'A' ? 'ID' : 'OTHER');
+  const issuingCountry = l1.substring(2, 5).replace(/</g, '').trim();
+  const nameBlock = l1.substring(5, 36);
   const nameParts = nameBlock.split('<<').filter(Boolean);
   const surname = (nameParts[0] || '').replace(/</g, ' ').trim();
   const givenNames = (nameParts[1] || '').replace(/</g, ' ').trim();
@@ -106,6 +144,7 @@ export function parseMrz(raw) {
   }
   const lines = raw.replace(/\r\n/g, '\n').replace(/\r/g, '\n').split('\n').map((l) => l.trim().toUpperCase().replace(/\s/g, '')).filter(Boolean);
   if (lines.length >= 2 && lines[0].length >= 40) return parseTD3(lines);
+  if (lines.length >= 2 && lines[0].length >= 34 && lines[0].length <= 36) return parseTD2(lines);
   if (lines.length >= 3 && lines[0].length >= 28) return parseTD1(lines);
   return { docType: 'OTHER', issuingCountry: '', surname: '', givenNames: '', passportNumber: '', nationality: '', birthDate: '', sex: 'U', expiryDate: '', raw, checks: { ok: false, reason: 'invalid_format' } };
 }

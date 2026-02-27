@@ -24,7 +24,7 @@ Deno.serve(async (req) => {
     );
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) {
-      return new Response(JSON.stringify({ message: 'Oturum geçersiz' }), {
+      return new Response(JSON.stringify({ message: 'Yetkisiz' }), {
         status: 401,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
