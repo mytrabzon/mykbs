@@ -2,7 +2,6 @@ import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
-  TextInput,
   TouchableOpacity,
   StyleSheet,
   ScrollView,
@@ -17,6 +16,8 @@ import { useAuth } from '../context/AuthContext';
 import { api } from '../services/api';
 import { supabase } from '../lib/supabase/supabase';
 import { dataService } from '../services/dataService';
+import { backendHealth } from '../services/backendHealth';
+import { getApiBaseUrl, isSupabaseConfigured } from '../config/api';
 import Toast from 'react-native-toast-message';
 import { Ionicons } from '@expo/vector-icons';
 import { Button, Banner, SegmentedControl, Input } from '../components/ui';
@@ -26,8 +27,11 @@ import AppHeader from '../components/AppHeader';
 export default function AyarlarScreen() {
   const navigation = useNavigation();
   const { colors } = useTheme();
-  const { logout, tesis, user, setPin } = useAuth();
+  const { logout, tesis, user, setPin, setTesis } = useAuth();
   const [tesisDetail, setTesisDetail] = useState(null);
+  const [tesisAdiEdit, setTesisAdiEdit] = useState('');
+  const [tesisAdiSaving, setTesisAdiSaving] = useState(false);
+  const canEditTesis = user?.yetkiler?.bilgiDuzenleme === true;
   const [kbsSettings, setKbsSettings] = useState({
     kbsTuru: '',
     kbsTesisKodu: '',
@@ -46,6 +50,30 @@ export default function AyarlarScreen() {
     loadKBSSettings();
     dataService.getTesis(true).then((t) => setTesisDetail(t)).catch(() => {});
   }, []);
+
+  useEffect(() => {
+    if (tesis?.tesisAdi != null && tesisAdiEdit === '') setTesisAdiEdit(tesis.tesisAdi);
+  }, [tesis?.tesisAdi]);
+
+  const handleTesisAdiSave = async () => {
+    const name = (tesisAdiEdit && String(tesisAdiEdit).trim()) || '';
+    if (!name) {
+      Toast.show({ type: 'error', text1: 'Hata', text2: 'Tesis adı boş olamaz' });
+      return;
+    }
+    setTesisAdiSaving(true);
+    try {
+      const res = await api.put('/tesis/bilgi', { tesisAdi: name });
+      if (res.data?.tesis && setTesis) {
+        setTesis({ ...tesis, tesisAdi: res.data.tesis.tesisAdi });
+      }
+      Toast.show({ type: 'success', text1: 'Kaydedildi', text2: 'Tesis adı güncellendi' });
+    } catch (e) {
+      Toast.show({ type: 'error', text1: 'Hata', text2: e?.response?.data?.message || 'Tesis adı güncellenemedi' });
+    } finally {
+      setTesisAdiSaving(false);
+    }
+  };
 
   const loadKBSSettings = async () => {
     try {
@@ -180,10 +208,14 @@ export default function AyarlarScreen() {
       <AppHeader
         title="Ayarlar"
         tesis={tesis}
-        backendOnline={true}
-        kbsConfigured={tesisDetail?.kbsConnected}
+        backendConfigured={backendStatus.configured}
+        backendOnline={backendStatus.isOnline}
+        backendError={backendStatus.error}
+        supabaseConfigured={supabaseStatus.configured}
+        supabaseOnline={supabaseStatus.isOnline}
+        supabaseError={supabaseStatus.error}
         onNotification={() => navigation.navigate('Bildirimler')}
-        onProfile={() => navigation.navigate('Ayarlar')}
+        onProfile={() => navigation.navigate('ProfilDuzenle')}
       />
       <ScrollView style={styles.scroll} contentContainerStyle={styles.content}>
         <View style={[styles.section, { backgroundColor: colors.surface }]}>
@@ -213,7 +245,26 @@ export default function AyarlarScreen() {
 
         <View style={[styles.section, { backgroundColor: colors.surface }]}>
           <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>Tesis Bilgileri</Text>
-          <Text style={[styles.infoText, { color: colors.textSecondary }]}>Tesis: {tesis?.tesisAdi}</Text>
+          {canEditTesis ? (
+            <>
+              <Input
+                label="Tesis / Otel adı"
+                value={tesisAdiEdit}
+                onChangeText={setTesisAdiEdit}
+                placeholder="Örn. Örnek Otel"
+              />
+              <Button
+                variant="secondary"
+                onPress={handleTesisAdiSave}
+                loading={tesisAdiSaving}
+                disabled={tesisAdiSaving || (tesisAdiEdit || '').trim() === '' || (tesisAdiEdit || '').trim() === (tesis?.tesisAdi || '')}
+              >
+                Tesis adını kaydet
+              </Button>
+            </>
+          ) : (
+            <Text style={[styles.infoText, { color: colors.textSecondary }]}>Tesis: {tesis?.tesisAdi}</Text>
+          )}
           <Text style={[styles.infoText, { color: colors.textSecondary }]}>Paket: {tesis?.paket}</Text>
           <Text style={[styles.infoText, { color: colors.textSecondary }]}>
             Kota: {tesis?.kullanilanKota} / {tesis?.kota}

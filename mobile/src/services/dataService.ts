@@ -262,6 +262,7 @@ class DataService {
             kota: data.tesis.kota,
             kullanilanKota: data.tesis.kullanilanKota ?? 0,
             kbsTuru: data.tesis.kbsTuru,
+            kbsConnected: data.tesis.kbsConnected ?? !!data.tesis.kbsTuru,
             ozet: data.ozet,
           };
           this.tesisCache = tesisData;

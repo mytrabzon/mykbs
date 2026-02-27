@@ -93,6 +93,52 @@ router.get('/', async (req, res) => {
 });
 
 /**
+ * Tesis bilgilerini güncelle (otel adı vb.) – bilgiDuzenlemeYetki gerekli (Prisma) veya branch üyesi (Supabase)
+ */
+router.put('/bilgi', async (req, res) => {
+  try {
+    const { tesisAdi } = req.body;
+
+    if (req.authSource === 'supabase') {
+      if (!supabaseAdmin) return res.status(503).json({ message: 'Supabase yapılandırılmamış' });
+      const name = (tesisAdi && String(tesisAdi).trim()) || null;
+      if (!name) return res.status(400).json({ message: 'Tesis adı boş olamaz' });
+      const { data, error } = await supabaseAdmin.from('branches').update({ name }).eq('id', req.branchId).select('id, name').single();
+      if (error) return res.status(500).json({ message: 'Tesis adı güncellenemedi', error: error.message });
+      return res.json({ message: 'Tesis bilgileri güncellendi', tesis: { id: data.id, tesisAdi: data.name } });
+    }
+
+    if (!req.user.bilgiDuzenlemeYetki) {
+      return res.status(403).json({ message: 'Tesis bilgilerini değiştirme yetkiniz yok' });
+    }
+    const name = (tesisAdi && String(tesisAdi).trim()) || null;
+    if (!name) return res.status(400).json({ message: 'Tesis adı boş olamaz' });
+
+    const tesis = await prisma.tesis.update({
+      where: { id: req.tesis.id },
+      data: { tesisAdi: name }
+    });
+
+    await prisma.auditLog.create({
+      data: {
+        tesisId: tesis.id,
+        kullaniciId: req.user.id,
+        islem: 'tesis-bilgi-guncelle',
+        yeniDeger: JSON.stringify({ tesisAdi: name })
+      }
+    });
+
+    return res.json({
+      message: 'Tesis bilgileri güncellendi',
+      tesis: { id: tesis.id, tesisAdi: tesis.tesisAdi }
+    });
+  } catch (error) {
+    console.error('Tesis bilgi güncelleme hatası:', error);
+    res.status(500).json({ message: 'Tesis bilgileri güncellenemedi', error: error.message });
+  }
+});
+
+/**
  * KBS ayarlarını getir (Supabase: branch; Prisma: tesis)
  */
 router.get('/kbs', async (req, res) => {

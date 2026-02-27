@@ -269,6 +269,7 @@ export const AuthProvider = ({ children }) => {
       value={{
         user,
         tesis,
+        setTesis,
         token,
         supabaseToken: token,
         lastTab,

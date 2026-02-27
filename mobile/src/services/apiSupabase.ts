@@ -95,6 +95,32 @@ export const api = {
         const res = await callFn<{ status?: string }>('health', {}, null);
         return toResponse(res || { status: 'ok' });
       }
+      if (pathname === '/auth/me' || pathname === 'auth/me') {
+        const backendUrl = getBackendUrl();
+        if (backendUrl && token) {
+          const r = await fetch(`${backendUrl}/api/auth/me`, {
+            method: 'GET',
+            headers: { Authorization: `Bearer ${token}` },
+          });
+          const data = await r.json().catch(() => ({}));
+          if (!r.ok) throw Object.assign(new Error((data as { message?: string })?.message || 'Bilgi alınamadı'), { response: { status: r.status, data } });
+          return toResponse(data);
+        }
+        const [meData, facilitiesData] = await Promise.all([
+          callFn<{ user_id: string; branch_id: string; role: string; display_name: string | null; title?: string | null; avatar_url?: string | null }>('me', {}, token),
+          callFn<{ tesis: Record<string, unknown>; ozet?: unknown }>('facilities_list', {}, token),
+        ]);
+        const kullanici = {
+          id: meData?.user_id,
+          uid: meData?.user_id,
+          adSoyad: meData?.display_name || 'Kullanıcı',
+          rol: meData?.role || 'staff',
+          biyometriAktif: false,
+          yetkiler: { checkIn: true, odaDegistirme: true, bilgiDuzenleme: true },
+        };
+        const tesis = facilitiesData?.tesis || {};
+        return toResponse({ kullanici, tesis });
+      }
       if (pathname === '/tesis' || pathname === 'tesis') {
         const backendUrl = getBackendUrl();
         if (backendUrl) {

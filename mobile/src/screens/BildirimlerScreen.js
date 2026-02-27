@@ -84,7 +84,7 @@ export default function BildirimlerScreen({ navigation }) {
           title="Bildirimler"
           tesis={tesis}
           onNotification={() => navigation.navigate('Bildirimler')}
-          onProfile={() => navigation.navigate('Ayarlar')}
+          onProfile={() => navigation.navigate('ProfilDuzenle')}
         />
         <View style={styles.emptyState}>
           <View style={[styles.emptyIconWrap, { backgroundColor: colors.primarySoft }]}>
@@ -105,7 +105,7 @@ export default function BildirimlerScreen({ navigation }) {
         title="Bildirimler"
         tesis={tesis}
         onNotification={() => navigation.navigate('Bildirimler')}
-        onProfile={() => navigation.navigate('Ayarlar')}
+        onProfile={() => navigation.navigate('ProfilDuzenle')}
       />
       {loading && !refreshing ? (
         <View style={styles.centered}><ActivityIndicator size="large" color={colors.primary} /></View>

@@ -44,7 +44,7 @@ function MisafirlerScreen({ navigation }) {
   const { tesis } = useAuth();
   return (
     <View style={[styles.screenContainer, { backgroundColor: colors.background }]}>
-      <AppHeader title="Misafirler" tesis={tesis} onNotification={() => navigation.navigate('Bildirimler')} onProfile={() => navigation.navigate('Ayarlar')} />
+      <AppHeader title="Misafirler" tesis={tesis} onNotification={() => navigation.navigate('Bildirimler')} onProfile={() => navigation.navigate('ProfilDuzenle')} />
       <View style={styles.contentContainer}>
         <EmptyState
           icon="people-outline"
@@ -69,7 +69,7 @@ function RaporlarScreen({ navigation }) {
   ];
   return (
     <View style={[styles.screenContainer, { backgroundColor: colors.background }]}>
-      <AppHeader title="Raporlar" tesis={tesis} onNotification={() => navigation.navigate('Bildirimler')} onProfile={() => navigation.navigate('Ayarlar')} />
+      <AppHeader title="Raporlar" tesis={tesis} onNotification={() => navigation.navigate('Bildirimler')} onProfile={() => navigation.navigate('ProfilDuzenle')} />
       <View style={styles.reportsGrid}>
         {reportCards.map((r) => (
           <TouchableOpacity key={r.key} style={[styles.reportCardModern, { backgroundColor: colors.surface }]}>

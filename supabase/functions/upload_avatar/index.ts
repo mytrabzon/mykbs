@@ -27,7 +27,24 @@ serve(async (req) => {
     return errorResponse("image_base64 gerekli", 400);
   }
 
-  const buf = Uint8Array.from(atob(body.image_base64), (c) => c.charCodeAt(0));
+  // Data URL öneki veya boşluk/satır sonu atob'u bozabilir; temizle
+  let raw = String(body.image_base64).trim();
+  const base64Prefix = /^data:image\/[^;]+;base64,/i;
+  if (base64Prefix.test(raw)) {
+    raw = raw.replace(base64Prefix, "");
+  }
+  raw = raw.replace(/\s/g, "");
+
+  let buf: Uint8Array;
+  try {
+    buf = Uint8Array.from(atob(raw), (c) => c.charCodeAt(0));
+  } catch (e) {
+    console.error("upload_avatar base64 decode error:", e);
+    return errorResponse("Gecersiz resim verisi (base64 decode hatasi)", 400);
+  }
+  if (buf.length === 0) {
+    return errorResponse("Bos resim verisi", 400);
+  }
   const ext = (body.mime || "image/jpeg").split("/")[1] || "jpg";
   const path = `${auth.userId}.${ext}`;
 

@@ -77,9 +77,18 @@ export default function ProfilDuzenleScreen() {
     try {
       let finalAvatarUrl = avatarUrl;
       if (localAvatarUri) {
-        const base64 = await FileSystem.readAsStringAsync(localAvatarUri, {
+        let base64 = await FileSystem.readAsStringAsync(localAvatarUri, {
           encoding: FileSystem.EncodingType.Base64,
         });
+        // Data URL öneki veya boşluk atob'u bozabilir; sadece ham base64 gönder
+        if (typeof base64 === 'string') {
+          base64 = base64.replace(/^data:image\/[^;]+;base64,/i, '').replace(/\s/g, '');
+        }
+        if (!base64 || base64.length === 0) {
+          Toast.show({ type: 'error', text1: 'Resim okunamadı' });
+          setSaving(false);
+          return;
+        }
         finalAvatarUrl = await communityApi.uploadAvatar(base64, token);
       }
       await communityApi.updateProfile(
@@ -107,7 +116,13 @@ export default function ProfilDuzenleScreen() {
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
-      <AppHeader title="Profil Düzenle" tesis={tesis} onBack={() => navigation.goBack()} />
+      <AppHeader
+        title="Profil Düzenle"
+        tesis={tesis}
+        onBack={() => navigation.goBack()}
+        onNotification={() => navigation.navigate('Bildirimler')}
+        onProfile={() => navigation.navigate('Ayarlar')}
+      />
       <ScrollView style={styles.scroll} contentContainerStyle={styles.scrollContent}>
         <View style={[styles.card, { backgroundColor: colors.surface }]}>
           <Text style={[styles.label, { color: colors.textSecondary }]}>Avatar</Text>

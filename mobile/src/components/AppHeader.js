@@ -93,8 +93,8 @@ export default function AppHeader({
             {title}
           </Text>
         ) : null}
-        <View style={styles.right}>
-          <View style={styles.dotsRow}>
+        <View style={styles.right} pointerEvents="box-none">
+          <View style={styles.dotsRow} pointerEvents="box-none">
             <StatusDot
               configured={backendConfigured}
               isOnline={backendOnline}
@@ -113,12 +113,30 @@ export default function AppHeader({
           </View>
           {rightComponent ?? (
             <>
-              <TouchableOpacity onPress={onNotification} style={styles.iconBtn} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
-                <Ionicons name="notifications-outline" size={22} color={isPrimary ? '#FFF' : colors.textSecondary} />
-              </TouchableOpacity>
-              <TouchableOpacity onPress={onProfile} style={styles.iconBtn} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
-                <Ionicons name="person-circle-outline" size={24} color={isPrimary ? '#FFF' : colors.textSecondary} />
-              </TouchableOpacity>
+              {onNotification != null && (
+                <TouchableOpacity
+                  onPress={() => onNotification()}
+                  style={styles.iconBtn}
+                  activeOpacity={0.6}
+                  hitSlop={{ top: 16, bottom: 16, left: 16, right: 16 }}
+                  accessibilityLabel="Bildirimler"
+                  accessibilityRole="button"
+                >
+                  <Ionicons name="notifications-outline" size={22} color={isPrimary ? '#FFF' : colors.textSecondary} />
+                </TouchableOpacity>
+              )}
+              {onProfile != null && (
+                <TouchableOpacity
+                  onPress={() => onProfile()}
+                  style={styles.iconBtn}
+                  activeOpacity={0.6}
+                  hitSlop={{ top: 16, bottom: 16, left: 16, right: 16 }}
+                  accessibilityLabel="Profil"
+                  accessibilityRole="button"
+                >
+                  <Ionicons name="person-circle-outline" size={24} color={isPrimary ? '#FFF' : colors.textSecondary} />
+                </TouchableOpacity>
+              )}
             </>
           )}
         </View>
@@ -180,8 +198,15 @@ const styles = StyleSheet.create({
     gap: spacing.xs,
     flex: 1,
     justifyContent: 'flex-end',
+    zIndex: 10,
   },
-  iconBtn: { padding: spacing.xs },
+  iconBtn: {
+    minWidth: 44,
+    minHeight: 44,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: spacing.xs,
+  },
   dotsRow: {
     flexDirection: 'row',
     alignItems: 'center',

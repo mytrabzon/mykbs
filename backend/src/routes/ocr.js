@@ -4,6 +4,7 @@ const Tesseract = require('tesseract.js');
 const fs = require('fs');
 const path = require('path');
 const { authenticate, requireRole } = require('../middleware/auth');
+const { authenticateTesisOrSupabase } = require('../middleware/authTesisOrSupabase');
 
 const router = express.Router();
 const KIMLIK_UPLOAD_DIR = path.join(__dirname, '../../uploads/kimlikler');
@@ -18,8 +19,8 @@ const storage = multer.diskStorage({
   },
   filename: (req, file, cb) => {
     const timestamp = Date.now();
-    const tesisId = req.tesis?.id || 'unknown';
-    const filename = `${tesisId}_${timestamp}.jpg`;
+    const tesisId = req.tesis?.id || req.branchId || req.user?.id || 'unknown';
+    const filename = `${String(tesisId).slice(0, 20)}_${timestamp}.jpg`;
     cb(null, filename);
   }
 });
@@ -33,6 +34,36 @@ const upload = multer({
     } else {
       cb(new Error('Sadece resim dosyaları kabul edilir'));
     }
+  }
+});
+
+/** OCR çıktısından MRZ benzeri satırları bul (sadece A-Z, 0-9, < ; uzunluk 30, 36 veya 44) */
+function extractMrzFromOcr(text) {
+  if (!text || typeof text !== 'string') return '';
+  const lines = text.split(/\r\n|\r|\n/).map((l) => l.trim().toUpperCase().replace(/\s/g, ''));
+  const mrzLike = lines.filter((l) => /^[A-Z0-9<]+$/.test(l) && (l.length === 30 || l.length === 36 || l.length === 44));
+  if (mrzLike.length >= 2) return mrzLike.join('\n');
+  if (mrzLike.length === 1 && mrzLike[0].length >= 30) return mrzLike[0];
+  return '';
+}
+
+/** MRZ: JWT veya Supabase token ile erişilebilir (check-in KYC için) */
+router.post('/mrz', authenticateTesisOrSupabase, upload.single('image'), async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ message: 'Görüntü yüklenmedi' });
+    }
+    const { data: { text } } = await Tesseract.recognize(req.file.path, 'eng', {
+      logger: () => {},
+    });
+    const raw = extractMrzFromOcr(text);
+    if (!raw) {
+      return res.status(400).json({ message: 'Görüntüde MRZ bulunamadı. MRZ alanını net ve çerçeve içine alın.' });
+    }
+    res.json({ success: true, raw });
+  } catch (error) {
+    console.error('OCR MRZ hatası:', error);
+    res.status(500).json({ message: 'MRZ okunamadı', error: error.message });
   }
 });
 
@@ -52,40 +83,6 @@ router.get('/kimlik/:filename', requireRole('sahip', 'yonetici'), (req, res) => 
   }
   res.sendFile(filePath);
 });
-
-/**
- * MRZ (pasaport/ehliyet/kimlik) bölgesinden metin çıkar. Mobil parseMrz ile aynı ham metin kullanılır.
- * Görsel: sadece MRZ çizgileri veya belge fotoğrafı. Tesseract eng, hızlı PSM.
- */
-router.post('/mrz', upload.single('image'), async (req, res) => {
-  try {
-    if (!req.file) {
-      return res.status(400).json({ message: 'Görüntü yüklenmedi' });
-    }
-    const { data: { text } } = await Tesseract.recognize(req.file.path, 'eng', {
-      logger: () => {},
-      // PSM 6 = tek blok, MRZ için daha hızlı
-    });
-    const raw = extractMrzFromOcr(text);
-    if (!raw) {
-      return res.status(400).json({ message: 'Görüntüde MRZ bulunamadı. MRZ alanını net ve çerçeve içine alın.' });
-    }
-    res.json({ success: true, raw });
-  } catch (error) {
-    console.error('OCR MRZ hatası:', error);
-    res.status(500).json({ message: 'MRZ okunamadı', error: error.message });
-  }
-});
-
-/** OCR çıktısından MRZ benzeri satırları bul (sadece A-Z, 0-9, < ; uzunluk 30, 36 veya 44) */
-function extractMrzFromOcr(text) {
-  if (!text || typeof text !== 'string') return '';
-  const lines = text.split(/\r\n|\r|\n/).map((l) => l.trim().toUpperCase().replace(/\s/g, ''));
-  const mrzLike = lines.filter((l) => /^[A-Z0-9<]+$/.test(l) && (l.length === 30 || l.length === 36 || l.length === 44));
-  if (mrzLike.length >= 2) return mrzLike.join('\n');
-  if (mrzLike.length === 1 && mrzLike[0].length >= 30) return mrzLike[0];
-  return '';
-}
 
 /**
  * OCR ile kimlik/pasaport okuma

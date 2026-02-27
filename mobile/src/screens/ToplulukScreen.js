@@ -107,7 +107,7 @@ export default function ToplulukScreen({ navigation }) {
           title="Topluluk"
           tesis={tesis}
           onNotification={() => navigation.navigate('Bildirimler')}
-          onProfile={() => navigation.navigate('Ayarlar')}
+          onProfile={() => navigation.navigate('ProfilDuzenle')}
         />
         <View style={styles.emptyWrap}>
           <EmptyState
@@ -129,7 +129,7 @@ export default function ToplulukScreen({ navigation }) {
         title="Topluluk"
         tesis={tesis}
         onNotification={() => navigation.navigate('Bildirimler')}
-        onProfile={() => navigation.navigate('Ayarlar')}
+        onProfile={() => navigation.navigate('ProfilDuzenle')}
       />
       <View style={styles.tabsRow}>
       <View style={styles.tabs}>

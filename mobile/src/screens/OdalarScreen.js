@@ -705,7 +705,7 @@ export default function OdalarScreen() {
         supabaseError={supabaseStatus.error}
         kbsConfigured={tesis?.kbsConnected}
         onNotification={() => navigation.navigate('Bildirimler')}
-        onProfile={() => navigation.navigate('Ayarlar')}
+        onProfile={() => navigation.navigate('ProfilDuzenle')}
       />
 
       {/* HERO — Karşılama + doluluk */}
