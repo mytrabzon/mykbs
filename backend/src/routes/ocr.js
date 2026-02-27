@@ -3,7 +3,6 @@ const multer = require('multer');
 const Tesseract = require('tesseract.js');
 const fs = require('fs');
 const path = require('path');
-const { authenticate, requireRole } = require('../middleware/auth');
 const { authenticateTesisOrSupabase } = require('../middleware/authTesisOrSupabase');
 
 const router = express.Router();
@@ -161,12 +160,12 @@ router.post('/documents-batch', authenticateTesisOrSupabase, (req, res) => {
   });
 });
 
-router.use(authenticate);
+router.use(authenticateTesisOrSupabase);
 
 /**
- * Kimlik/pasaport görüntüsü — sadece sahip/yonetici
+ * Kimlik/pasaport görüntüsü — tüm yetkili kullanıcılar (Supabase veya legacy)
  */
-router.get('/kimlik/:filename', requireRole('sahip', 'yonetici'), (req, res) => {
+router.get('/kimlik/:filename', (req, res) => {
   const filename = path.basename(req.params.filename);
   if (!/^[a-zA-Z0-9_\-]+\.(jpg|jpeg|png|webp)$/i.test(filename)) {
     return res.status(400).json({ message: 'Geçersiz dosya adı' });

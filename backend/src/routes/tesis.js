@@ -3,6 +3,7 @@ const { PrismaClient } = require('@prisma/client');
 const { authenticateTesisOrSupabase } = require('../middleware/authTesisOrSupabase');
 const { createKBSService } = require('../services/kbs');
 const { supabaseAdmin } = require('../lib/supabaseAdmin');
+const { ensureTesisForBranch } = require('../lib/ensureTesisForBranch');
 const prisma = new PrismaClient();
 
 const router = express.Router();
@@ -17,9 +18,46 @@ router.get('/', async (req, res) => {
   try {
     if (req.authSource === 'supabase') {
       const branch = req.branch;
+      await ensureTesisForBranch(prisma, req.branchId, branch.name);
+      const tesis = await prisma.tesis.findUnique({
+        where: { id: req.branchId },
+        include: {
+          _count: { select: { odalar: true, bildirimler: true } }
+        }
+      });
+      const doluOda = tesis ? await prisma.oda.count({ where: { tesisId: req.branchId, durum: 'dolu' } }) : 0;
+      const bugunGiris = tesis ? await prisma.misafir.count({
+        where: {
+          tesisId: req.branchId,
+          girisTarihi: { gte: new Date(new Date().setHours(0, 0, 0, 0)) }
+        }
+      }) : 0;
+      const bugunCikis = tesis ? await prisma.misafir.count({
+        where: {
+          tesisId: req.branchId,
+          cikisTarihi: { gte: new Date(new Date().setHours(0, 0, 0, 0)) }
+        }
+      }) : 0;
+      const hataliBildirim = tesis ? await prisma.bildirim.count({
+        where: { tesisId: req.branchId, durum: 'hatali' }
+      }) : 0;
       return res.json({
-        tesis: { id: branch.id, tesisAdi: branch.name, kbsTuru: branch.kbs_turu },
-        ozet: { toplamOda: 0, doluOda: 0, bugunGiris: 0, bugunCikis: 0, hataliBildirim: 0 }
+        tesis: {
+          id: branch.id,
+          tesisAdi: branch.name,
+          kbsTuru: branch.kbs_turu,
+          kbsConnected: !!(branch.kbs_configured && branch.kbs_turu && branch.kbs_tesis_kodu),
+          paket: tesis?.paket || 'deneme',
+          kota: tesis?.kota ?? 100,
+          kullanilanKota: tesis?.kullanilanKota ?? 0
+        },
+        ozet: {
+          toplamOda: tesis?._count?.odalar ?? 0,
+          doluOda,
+          bugunGiris,
+          bugunCikis,
+          hataliBildirim
+        }
       });
     }
     const tesis = await prisma.tesis.findUnique({

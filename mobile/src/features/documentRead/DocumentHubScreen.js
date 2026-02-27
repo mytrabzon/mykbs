@@ -8,6 +8,12 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../context/ThemeContext';
 import { theme } from '../../theme';
+import { getSampleMrzPayload } from '../../lib/mrz/sampleMrz';
+
+function handleDemoMode(navigation) {
+  const payload = getSampleMrzPayload();
+  navigation.navigate('MrzResult', { payload });
+}
 
 const DOC_TYPES = [
   { key: 'kimlik', label: 'Kimlik', icon: 'card-outline' },
@@ -16,10 +22,10 @@ const DOC_TYPES = [
 ];
 
 const ACTIONS = [
-  { key: 'mrz', label: 'Kamera ile MRZ (arka)', desc: 'Arka yüz MRZ çizgisi – sürekli tarama', icon: 'camera', route: 'MrzScan' },
-  { key: 'front', label: 'Kamera ile ön yüz', desc: 'Ön yüz fotoğrafı – ad, soyad, TC, tarih', icon: 'document-text', route: 'FrontDocumentScan' },
-  { key: 'gallery', label: 'Galeriden tek belge', desc: 'Tek fotoğraf seçip okut', icon: 'image', route: 'GallerySingleDocument' },
-  { key: 'batch', label: 'Galeriden toplu (5–10)', desc: '5–10 fotoğraf seçip toplu okut', icon: 'images', route: 'GalleryBatchDocument' },
+  { key: 'mrz', label: 'Kamera ile MRZ (arka)', desc: 'Arka yüz MRZ çizgisi – sürekli tarama', icon: 'camera', route: 'MrzScan', tip: 'Belgeyi düz zemine koyun, MRZ çizgileri net görünsün.' },
+  { key: 'front', label: 'Kamera ile ön yüz', desc: 'Ön yüz fotoğrafı – ad, soyad, TC, tarih', icon: 'document-text', route: 'FrontDocumentScan', tip: 'Ön yüzü çerçeve içine alıp net çekin; ışık yeterli olsun.' },
+  { key: 'gallery', label: 'Galeriden tek belge', desc: 'Tek fotoğraf seçip okut', icon: 'image', route: 'GallerySingleDocument', tip: 'MRZ veya metin alanı görünür, keskin bir fotoğraf seçin.' },
+  { key: 'batch', label: 'Galeriden toplu (5–10)', desc: '5–10 fotoğraf seçip toplu okut', icon: 'images', route: 'GalleryBatchDocument', tip: 'Toplu okutma için her belge ayrı, net fotoğraf olmalı.' },
 ];
 
 export default function DocumentHubScreen({ navigation }) {
@@ -88,10 +94,24 @@ export default function DocumentHubScreen({ navigation }) {
             <View style={styles.cardBody}>
               <Text style={[styles.cardTitle, { color: colors.textPrimary }]}>{action.label}</Text>
               <Text style={[styles.cardDesc, { color: colors.textSecondary }]}>{action.desc}</Text>
+              {action.tip ? (
+                <Text style={[styles.cardTip, { color: colors.textDisabled }]}>💡 {action.tip}</Text>
+              ) : null}
             </View>
             <Ionicons name="chevron-forward" size={24} color={colors.primary} />
           </TouchableOpacity>
         ))}
+        <View style={[styles.helpRow, { backgroundColor: colors.surface }]}>
+          <Text style={[styles.helpTitle, { color: colors.textPrimary }]}>Hiç okumuyor mu?</Text>
+          <TouchableOpacity style={[styles.helpBtn, { borderColor: colors.border }]} onPress={() => handleDemoMode(navigation)}>
+            <Ionicons name="play-outline" size={20} color={colors.primary} />
+            <Text style={[styles.helpBtnText, { color: colors.primary }]}>Demo mod: örnek MRZ ile dene</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={[styles.helpBtn, { borderColor: colors.border }]} onPress={() => navigation.navigate('CameraTest')}>
+            <Ionicons name="camera-outline" size={20} color={colors.primary} />
+            <Text style={[styles.helpBtnText, { color: colors.primary }]}>Kamera test: netlik / ışık</Text>
+          </TouchableOpacity>
+        </View>
       </ScrollView>
     </SafeAreaView>
   );
@@ -124,4 +144,9 @@ const styles = StyleSheet.create({
   cardBody: { flex: 1 },
   cardTitle: { fontSize: theme.typography.fontSize.base, fontWeight: '600', marginBottom: 2 },
   cardDesc: { fontSize: theme.typography.fontSize.sm, opacity: 0.85 },
+  cardTip: { fontSize: 11, marginTop: 6, fontStyle: 'italic' },
+  helpRow: { marginTop: theme.spacing.base, padding: theme.spacing.base, borderRadius: 16 },
+  helpTitle: { fontSize: theme.typography.fontSize.sm, fontWeight: '600', marginBottom: 10 },
+  helpBtn: { flexDirection: 'row', alignItems: 'center', paddingVertical: 10, paddingHorizontal: 12, borderRadius: 10, borderWidth: 1, marginBottom: 8 },
+  helpBtnText: { marginLeft: 8, fontSize: theme.typography.fontSize.sm, fontWeight: '500' },
 });

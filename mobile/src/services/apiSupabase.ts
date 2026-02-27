@@ -225,6 +225,21 @@ export const api = {
         const res = await callFn('room_get', { id: odaMatch[1] }, token);
         return toResponse(res);
       }
+      if (pathname === '/rapor' || pathname === 'rapor') {
+        const backendUrl = getBackendUrl();
+        if (!backendUrl) {
+          const err = new Error('Sunucu adresi tanımlı değil') as Error & { response?: { status: number; data: unknown } };
+          err.response = { status: 503, data: { message: 'EXPO_PUBLIC_BACKEND_URL tanımlayın.' } };
+          throw err;
+        }
+        const r = await fetch(`${backendUrl}/api/rapor`, {
+          method: 'GET',
+          headers: token ? { Authorization: `Bearer ${token}` } : {},
+        });
+        const data = await r.json().catch(() => ({}));
+        if (!r.ok) throw Object.assign(new Error((data as { message?: string }).message || 'Rapor alınamadı'), { response: { status: r.status, data } });
+        return toResponse(data);
+      }
       logger.warn('[apiSupabase] Unmapped GET', path);
       const res = await callFn('facilities_list', {}, token);
       return toResponse(res);

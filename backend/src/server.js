@@ -33,6 +33,7 @@ app.use('/api/auth', require('./routes/auth'));
 app.use('/api/tesis', require('./routes/tesis'));
 app.use('/api/oda', require('./routes/oda'));
 app.use('/api/misafir', require('./routes/misafir'));
+app.use('/api/rapor', require('./routes/rapor'));
 app.use('/api/bildirim', require('./routes/bildirim'));
 app.use('/api/admin', require('./routes/admin'));
 app.use('/api/ocr', require('./routes/ocr'));

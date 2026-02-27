@@ -1,6 +1,6 @@
 const express = require('express');
 const { PrismaClient } = require('@prisma/client');
-const { authenticate } = require('../middleware/auth');
+const { authenticateTesisOrSupabase } = require('../middleware/authTesisOrSupabase');
 const { createKBSService } = require('../services/kbs');
 const { canSendBildirim } = require('../config/packages');
 const PDFDocument = require('pdfkit');
@@ -10,7 +10,28 @@ const prisma = new PrismaClient();
 
 const router = express.Router();
 
-router.use(authenticate);
+router.use(authenticateTesisOrSupabase);
+
+function getTesisId(req) {
+  return req.authSource === 'supabase' ? req.branchId : req.tesis.id;
+}
+
+function getTesisOrBranch(req) {
+  if (req.authSource === 'supabase' && req.branch) {
+    return {
+      id: req.branch.id,
+      kbsTuru: req.branch.kbs_turu || null,
+      kbsTesisKodu: req.branch.kbs_tesis_kodu || null,
+      kbsWebServisSifre: req.branch.kbs_web_servis_sifre || null,
+      ipAdresleri: req.branch.ipAdresleri || [],
+      paket: 'deneme',
+      kota: 1000,
+      kullanilanKota: 0,
+      trialEndsAt: null
+    };
+  }
+  return req.tesis;
+}
 
 /**
  * Bildirimleri listele
@@ -18,8 +39,8 @@ router.use(authenticate);
 router.get('/', async (req, res) => {
   try {
     const { durum, limit = 50, offset = 0 } = req.query;
-
-    const where = { tesisId: req.tesis.id };
+    const tesisId = getTesisId(req);
+    const where = { tesisId };
     if (durum) {
       where.durum = durum;
     }
@@ -60,11 +81,12 @@ router.post('/toplu-gonder', async (req, res) => {
       return res.status(400).json({ message: 'Misafir ID\'leri gerekli' });
     }
 
-    if (!req.tesis.kbsTuru || !req.tesis.kbsTesisKodu || !req.tesis.kbsWebServisSifre) {
+    const tesisKbs = getTesisOrBranch(req);
+    if (!tesisKbs.kbsTuru || !tesisKbs.kbsTesisKodu || !tesisKbs.kbsWebServisSifre) {
       return res.status(400).json({ message: 'KBS ayarları eksik' });
     }
 
-    const sendCheck = canSendBildirim(req.tesis);
+    const sendCheck = canSendBildirim(tesisKbs);
     if (!sendCheck.allowed) {
       const message = sendCheck.reason === 'trial_ended'
         ? 'Deneme süren tamamlandı. Bildirimlerine kesintisiz devam etmek için paket seç.'
@@ -76,7 +98,7 @@ router.post('/toplu-gonder', async (req, res) => {
     const misafirler = await prisma.misafir.findMany({
       where: {
         id: { in: misafirIds },
-        tesisId: req.tesis.id,
+        tesisId: getTesisId(req),
         cikisTarihi: null // Sadece aktif misafirler
       },
       include: {
@@ -92,7 +114,7 @@ router.post('/toplu-gonder', async (req, res) => {
       return res.status(404).json({ message: 'Aktif misafir bulunamadı' });
     }
 
-    const kbsService = createKBSService(req.tesis);
+    const kbsService = createKBSService(getTesisOrBranch(req));
     const sonuclar = [];
 
     // Her misafir için bildirim gönder
@@ -125,20 +147,21 @@ router.post('/toplu-gonder', async (req, res) => {
         } else {
           await prisma.bildirim.create({
             data: {
-              tesisId: req.tesis.id,
+              tesisId: getTesisId(req),
               misafirId: misafir.id,
               durum: kbsResult.durum,
               hataMesaji: kbsResult.hataMesaji || null,
-              kbsTuru: req.tesis.kbsTuru,
+              kbsTuru: getTesisOrBranch(req).kbsTuru,
               kbsYanit: kbsResult.yanit || null
             }
           });
         }
 
-        // Kota kontrolü
-        if (kbsResult.success && req.tesis.kullanilanKota < req.tesis.kota) {
+        // Kota kontrolü (sadece Prisma tesis; Supabase’de kota ayrı yönetilir)
+        const t = getTesisOrBranch(req);
+        if (kbsResult.success && req.authSource !== 'supabase' && t.kullanilanKota < t.kota) {
           await prisma.tesis.update({
-            where: { id: req.tesis.id },
+            where: { id: t.id },
             data: { kullanilanKota: { increment: 1 } }
           });
         }
@@ -191,7 +214,7 @@ router.post('/:bildirimId/tekrar-dene', async (req, res) => {
     const bildirim = await prisma.bildirim.findFirst({
       where: {
         id: bildirimId,
-        tesisId: req.tesis.id
+        tesisId: getTesisId(req)
       },
       include: {
         misafir: {
@@ -206,9 +229,10 @@ router.post('/:bildirimId/tekrar-dene', async (req, res) => {
       return res.status(404).json({ message: 'Bildirim bulunamadı' });
     }
 
-    if (req.tesis.kbsTuru && req.tesis.kbsTesisKodu && req.tesis.kbsWebServisSifre) {
+    const tesisForRetry = getTesisOrBranch(req);
+    if (tesisForRetry.kbsTuru && tesisForRetry.kbsTesisKodu && tesisForRetry.kbsWebServisSifre) {
       try {
-        const kbsService = createKBSService(req.tesis);
+        const kbsService = createKBSService(tesisForRetry);
         const kbsResult = await kbsService.bildirimGonder({
           ad: bildirim.misafir.ad,
           soyad: bildirim.misafir.soyad,
@@ -270,7 +294,7 @@ router.get('/:bildirimId/pdf', async (req, res) => {
     const bildirim = await prisma.bildirim.findFirst({
       where: {
         id: bildirimId,
-        tesisId: req.tesis.id
+        tesisId: getTesisId(req)
       },
       include: {
         misafir: {
@@ -306,11 +330,12 @@ router.get('/:bildirimId/pdf', async (req, res) => {
     // PDF'i response'a pipe et
     doc.pipe(res);
 
-    // Tesis bilgileri
-    doc.fontSize(16).font('Helvetica-Bold').text(bildirim.tesis.tesisAdi, { align: 'center' });
+    // Tesis bilgileri (Prisma tesis veya Supabase branch)
+    const tesisBilgi = bildirim.tesis || (req.branch ? { tesisAdi: req.branch.name, adres: '', telefon: '', email: '' } : { tesisAdi: 'Tesis', adres: '', telefon: '', email: '' });
+    doc.fontSize(16).font('Helvetica-Bold').text(tesisBilgi.tesisAdi, { align: 'center' });
     doc.moveDown(0.5);
-    doc.fontSize(10).font('Helvetica').text(bildirim.tesis.adres || '', { align: 'center' });
-    doc.text(`Tel: ${bildirim.tesis.telefon || ''} | Email: ${bildirim.tesis.email || ''}`, { align: 'center' });
+    doc.fontSize(10).font('Helvetica').text(tesisBilgi.adres || '', { align: 'center' });
+    doc.text(`Tel: ${tesisBilgi.telefon || ''} | Email: ${tesisBilgi.email || ''}`, { align: 'center' });
     doc.moveDown(1);
 
     // Başlık

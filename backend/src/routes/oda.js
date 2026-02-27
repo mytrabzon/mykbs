@@ -2,6 +2,7 @@ const express = require('express');
 const { PrismaClient } = require('@prisma/client');
 const { authenticateTesisOrSupabase } = require('../middleware/authTesisOrSupabase');
 const { maskAdSoyad } = require('../utils/mask');
+const { ensureTesisForBranch } = require('../lib/ensureTesisForBranch');
 const prisma = new PrismaClient();
 
 const router = express.Router();
@@ -18,6 +19,9 @@ function getTesisId(req) {
  */
 router.get('/', async (req, res) => {
   try {
+    if (req.authSource === 'supabase' && req.branch) {
+      await ensureTesisForBranch(prisma, req.branchId, req.branch.name);
+    }
     const { filtre } = req.query; // tumu, bos, dolu, hatali
     const tesisId = getTesisId(req);
     const where = { tesisId };
@@ -126,9 +130,8 @@ router.get('/:odaId', async (req, res) => {
  */
 router.post('/', async (req, res) => {
   try {
-    // Rol kontrolü
-    if (!['sahip', 'yonetici'].includes(req.user.rol)) {
-      return res.status(403).json({ message: 'Bu işlem için yetkiniz yok' });
+    if (req.authSource === 'supabase' && req.branch) {
+      await ensureTesisForBranch(prisma, req.branchId, req.branch.name);
     }
 
     const { odaNumarasi, odaTipi, kapasite, fotograf, not } = req.body;
@@ -184,11 +187,6 @@ router.post('/', async (req, res) => {
  */
 router.put('/:odaId', async (req, res) => {
   try {
-    // Rol kontrolü
-    if (!['sahip', 'yonetici'].includes(req.user.rol)) {
-      return res.status(403).json({ message: 'Bu işlem için yetkiniz yok' });
-    }
-
     const { odaTipi, kapasite, fotograf, not } = req.body;
 
     const oda = await prisma.oda.update({
@@ -226,11 +224,6 @@ router.put('/:odaId', async (req, res) => {
  */
 router.delete('/:odaId', async (req, res) => {
   try {
-    // Rol kontrolü
-    if (!['sahip', 'yonetici'].includes(req.user.rol)) {
-      return res.status(403).json({ message: 'Bu işlem için yetkiniz yok' });
-    }
-
     // Dolu oda kontrolü
     const oda = await prisma.oda.findFirst({
       where: {

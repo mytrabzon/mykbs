@@ -25,6 +25,20 @@ try {
 
 const TIMEOUT_MS = 15000;
 const MAX_FAILS = 6;
+const STABLE_READ_COUNT = 3; // Aynı MRZ 3 kez üst üste okununca auto-capture
+
+function getFailureReasonMessage(checksReason, failCount) {
+  if (checksReason === 'document_number_check' || checksReason === 'birth_date_check' || checksReason === 'expiry_date_check') {
+    return 'MRZ check digit hatası. Belgeyi net tutun veya flaş kullanın. Manuel giriş ile devam edebilirsiniz.';
+  }
+  if (checksReason === 'invalid_format') {
+    return 'MRZ formatı tanınmadı. MRZ çizgileri tam ve net görünsün (alt 2 satır).';
+  }
+  if (failCount >= MAX_FAILS) {
+    return 'Işık yetersiz, bulanık veya MRZ görünmüyor. İpucu için ? tuşuna basın veya manuel giriş ile devam edin.';
+  }
+  return 'Işık ve hizayı kontrol edin veya manuel giriş ile devam edin.';
+}
 
 // iOS'ta sadece pasaport desteklenir (ID_CARD "Only passport document type is supported on iOS" hatası verir)
 const DOC_TYPES = Platform.OS === 'ios'
@@ -41,8 +55,16 @@ export default function MrzScanScreen({ navigation }) {
   const [docTypeKey, setDocTypeKey] = useState(Platform.OS === 'ios' ? 'passport' : 'passport');
   const [ocrLoading, setOcrLoading] = useState(false);
   const [showCameraFallback, setShowCameraFallback] = useState(false);
+  const [lastMrzRaw, setLastMrzRaw] = useState('');
+  const [stableReadCount, setStableReadCount] = useState(0);
+  const [lastMrzChecksReason, setLastMrzChecksReason] = useState('');
+  const [cameraReady, setCameraReady] = useState(false);
+  const [ocrLatencyMs, setOcrLatencyMs] = useState(null);
+  const [showDebug, setShowDebug] = useState(false);
   const timeoutRef = useRef(null);
   const mounted = useRef(true);
+  const lastStableRawRef = useRef('');
+  const stableCountRef = useRef(0);
   const [permission, requestPermission] = useCameraPermissions();
 
 
@@ -50,21 +72,23 @@ export default function MrzScanScreen({ navigation }) {
     (data) => {
       const raw = typeof data === 'string' ? data : (data?.nativeEvent?.mrz ?? data?.mrz ?? '');
       if (!raw || !mounted.current) return;
+      setLastMrzRaw(raw.slice(0, 30) + '…');
       let payload = parseMrz(raw);
       if (!payload.checks?.ok && raw) {
         const fixed = fixMrzOcrErrors(raw);
         if (fixed !== raw) payload = parseMrz(fixed);
       }
-      if (payload.checks?.ok) {
-        if (timeoutRef.current) clearTimeout(timeoutRef.current);
-        navigation.replace('MrzResult', { payload });
-      } else {
+      if (!payload.checks?.ok) {
+        setLastMrzChecksReason(payload.checks?.reason || 'invalid_format');
+        setStableReadCount(0);
+        lastStableRawRef.current = '';
         setFailCount((c) => {
           const next = c + 1;
           if (next >= MAX_FAILS) {
+            const reasonMsg = getFailureReasonMessage(payload.checks?.reason, next);
             Alert.alert(
               'Okunamadı',
-              'Işık ve hizayı kontrol edin veya manuel giriş ile devam edin.',
+              reasonMsg,
               [
                 { text: 'Tekrar dene', onPress: () => setFailCount(0) },
                 { text: 'Manuel giriş', onPress: () => navigation.replace('KycManualEntry') },
@@ -73,6 +97,20 @@ export default function MrzScanScreen({ navigation }) {
           }
           return next;
         });
+        return;
+      }
+      setLastMrzChecksReason('');
+      if (lastStableRawRef.current === raw) {
+        stableCountRef.current += 1;
+        setStableReadCount(stableCountRef.current);
+        if (stableCountRef.current >= STABLE_READ_COUNT) {
+          if (timeoutRef.current) clearTimeout(timeoutRef.current);
+          navigation.replace('MrzResult', { payload });
+        }
+      } else {
+        lastStableRawRef.current = raw;
+        stableCountRef.current = 1;
+        setStableReadCount(1);
       }
     },
     [navigation]
@@ -81,15 +119,19 @@ export default function MrzScanScreen({ navigation }) {
   const processMrzRaw = useCallback(
     (raw) => {
       if (!raw || !mounted.current) return;
+      const t0 = Date.now();
       let payload = parseMrz(raw);
       if (!payload.checks?.ok && raw) {
         const fixed = fixMrzOcrErrors(raw);
         if (fixed !== raw) payload = parseMrz(fixed);
       }
+      setOcrLatencyMs(Date.now() - t0);
+      setLastMrzRaw(raw.slice(0, 30) + '…');
       if (payload.checks?.ok) {
         navigation.replace('MrzResult', { payload });
       } else {
-        Toast.show({ type: 'error', text1: 'MRZ okunamadı', text2: 'Belgeyi net tutun, flaş kullanın veya manuel girin.' });
+        setLastMrzChecksReason(payload.checks?.reason || 'invalid_format');
+        Toast.show({ type: 'error', text1: 'MRZ okunamadı', text2: getFailureReasonMessage(payload.checks?.reason) });
       }
     },
     [navigation]
@@ -202,11 +244,28 @@ export default function MrzScanScreen({ navigation }) {
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.iconBtn}>
           <Ionicons name="arrow-back" size={24} color={theme.colors.textPrimary} />
         </TouchableOpacity>
-        <Text style={styles.title}>MRZ Tara</Text>
+        <TouchableOpacity style={styles.titleWrap} onLongPress={() => setShowDebug((d) => !d)}>
+          <Text style={styles.title}>MRZ Tara</Text>
+          {stableReadCount > 0 && (
+            <Text style={styles.stableBadge}>{stableReadCount}/{STABLE_READ_COUNT}</Text>
+          )}
+        </TouchableOpacity>
         <TouchableOpacity onPress={() => setHelpVisible(true)} style={styles.iconBtn}>
           <Ionicons name="help-circle-outline" size={24} color={theme.colors.primary} />
         </TouchableOpacity>
       </View>
+      {showDebug && (
+        <View style={styles.debugPanel}>
+          <Text style={styles.debugTitle}>Debug</Text>
+          <Text style={styles.debugLine}>permission: {permission?.granted ? 'ok' : 'yok'}</Text>
+          <Text style={styles.debugLine}>cameraReady: {cameraReady ? 'ok' : 'N/A (native reader)'}</Text>
+          <Text style={styles.debugLine}>lastMrz: {lastMrzRaw || '—'}</Text>
+          <Text style={styles.debugLine}>checksReason: {lastMrzChecksReason || '—'}</Text>
+          <Text style={styles.debugLine}>failCount: {failCount}</Text>
+          <Text style={styles.debugLine}>stableReadCount: {stableReadCount}</Text>
+          {ocrLatencyMs != null && <Text style={styles.debugLine}>ocrLatencyMs: {ocrLatencyMs}</Text>}
+        </View>
+      )}
       <View style={styles.docTypeRow}>
         {DOC_TYPES.map(({ key, label }) => (
           <TouchableOpacity
@@ -239,10 +298,14 @@ export default function MrzScanScreen({ navigation }) {
           <Text style={styles.photoFallbackBtnText}>Fotoğraf ile tara</Text>
         </TouchableOpacity>
       </View>
-      {timeoutWarning && (
+      {(timeoutWarning || (failCount > 0 && lastMrzChecksReason)) && (
         <View style={styles.banner}>
           <Ionicons name="warning-outline" size={20} color={theme.colors.warning} />
-          <Text style={styles.bannerText}>Işık, odak veya hiza kontrol edin. İpucu için ? tuşuna basın.</Text>
+          <Text style={styles.bannerText}>
+            {lastMrzChecksReason
+              ? (lastMrzChecksReason === 'invalid_format' ? 'MRZ görünmüyor veya format tanınmadı. Çizgileri net gösterin.' : 'Check digit hatası; belgeyi net tutun veya flaş kullanın.')
+              : 'Işık, odak veya hiza kontrol edin. İpucu için ? tuşuna basın.'}
+          </Text>
         </View>
       )}
       <ScanHelpSheet visible={helpVisible} onClose={() => setHelpVisible(false)} />
@@ -311,8 +374,13 @@ function CameraFallbackView({ onCapture, onBack, loading, permission, requestPer
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#000' },
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: theme.spacing.base, paddingVertical: theme.spacing.sm, backgroundColor: 'rgba(0,0,0,0.6)' },
+  titleWrap: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   title: { fontSize: theme.typography.fontSize.lg, fontWeight: theme.typography.fontWeight.semibold, color: theme.colors.white },
+  stableBadge: { fontSize: 11, color: 'rgba(255,255,255,0.8)', backgroundColor: 'rgba(255,255,255,0.2)', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 10 },
   iconBtn: { padding: theme.spacing.sm },
+  debugPanel: { backgroundColor: 'rgba(0,0,0,0.85)', padding: theme.spacing.sm, marginHorizontal: theme.spacing.sm, marginBottom: 4, borderRadius: 8 },
+  debugTitle: { color: theme.colors.warning, fontWeight: '600', marginBottom: 4 },
+  debugLine: { color: 'rgba(255,255,255,0.9)', fontSize: 11 },
   docTypeRow: { flexDirection: 'row', paddingHorizontal: theme.spacing.base, paddingVertical: theme.spacing.sm, gap: theme.spacing.sm },
   docTypeBtn: { flex: 1, paddingVertical: theme.spacing.sm, alignItems: 'center', borderRadius: 8, backgroundColor: 'rgba(255,255,255,0.2)' },
   docTypeBtnActive: { backgroundColor: theme.colors.primary },
@@ -327,7 +395,7 @@ const styles = StyleSheet.create({
   photoFallbackRow: { flexDirection: 'row', justifyContent: 'center', paddingVertical: theme.spacing.sm, backgroundColor: 'rgba(0,0,0,0.5)' },
   photoFallbackBtn: { flexDirection: 'row', alignItems: 'center', paddingVertical: 8, paddingHorizontal: 16, borderRadius: 8, backgroundColor: 'rgba(255,255,255,0.15)' },
   photoFallbackBtnText: { color: 'rgba(255,255,255,0.9)', marginLeft: 8, fontSize: theme.typography.fontSize.sm, fontWeight: '600' },
-  banner: { flexDirection: 'row', alignItems: 'center', backgroundColor: theme.colors.warningLight, padding: theme.spacing.sm, margin: theme.spacing.sm, borderRadius: 8 },
+  banner: { flexDirection: 'row', alignItems: 'center', backgroundColor: theme.colors.warningSoft, padding: theme.spacing.sm, margin: theme.spacing.sm, borderRadius: 8 },
   bannerText: { marginLeft: theme.spacing.sm, color: theme.colors.textPrimary, fontSize: theme.typography.fontSize.sm, flex: 1 },
   placeholder: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: theme.spacing.xl },
   placeholderTitle: { fontSize: theme.typography.fontSize.xl, fontWeight: theme.typography.fontWeight.semibold, color: theme.colors.textPrimary, marginBottom: theme.spacing.sm },

@@ -35,6 +35,7 @@ import AddRoomScreen from './src/screens/AddRoomScreen';
 import PaylasimEkleScreen from './src/screens/PaylasimEkleScreen';
 import ProfilDuzenleScreen from './src/screens/ProfilDuzenleScreen';
 import OkumaScreen from './src/screens/OkumaScreen';
+import RaporlarScreen from './src/screens/RaporlarScreen';
 import MrzScanScreen from './src/features/kyc/MrzScanScreen';
 import MrzResultScreen from './src/features/kyc/MrzResultScreen';
 import KycSubmitScreen from './src/features/kyc/KycSubmitScreen';
@@ -46,6 +47,7 @@ import GallerySingleDocumentScreen from './src/features/documentRead/GallerySing
 import GalleryBatchDocumentScreen from './src/features/documentRead/GalleryBatchDocumentScreen';
 import DocumentResultScreen from './src/features/documentRead/DocumentResultScreen';
 import DocumentBatchResultScreen from './src/features/documentRead/DocumentBatchResultScreen';
+import CameraTestScreen from './src/features/documentRead/CameraTestScreen';
 
 // Placeholder screens for tabs (theme-aware, modern design)
 function MisafirlerScreen({ navigation }) {
@@ -62,40 +64,6 @@ function MisafirlerScreen({ navigation }) {
           primaryCta={{ label: 'Hızlı Check-in', onPress: () => navigation.navigate('CheckIn') }}
           secondaryCta={{ label: 'Oda Ekle', onPress: () => navigation.navigate('Odalar') }}
         />
-      </View>
-    </View>
-  );
-}
-
-function RaporlarScreen({ navigation }) {
-  const { colors } = useTheme();
-  const { tesis } = useAuth();
-  const reportCards = [
-    { key: 'doluluk', icon: 'calendar', iconBg: colors.primarySoft, iconColor: colors.primary, label: 'Günlük Doluluk', value: '%75' },
-    { key: 'gelir', icon: 'cash', iconBg: colors.successSoft, iconColor: colors.success, label: 'Aylık Gelir', value: '₺45,250' },
-    { key: 'misafir', icon: 'person-add', iconBg: colors.warningSoft, iconColor: colors.warning, label: 'Yeni Misafir', value: '12' },
-    { key: 'kalış', icon: 'time', iconBg: colors.errorSoft, iconColor: colors.error, label: 'Ort. Kalış', value: '3.2 gün' },
-  ];
-  return (
-    <View style={[styles.screenContainer, { backgroundColor: colors.background }]}>
-      <AppHeader title="Raporlar" tesis={tesis} onNotification={() => navigation.navigate('Bildirimler')} onProfile={() => navigation.navigate('ProfilDuzenle')} />
-      <View style={styles.reportsGrid}>
-        {reportCards.map((r) => (
-          <TouchableOpacity key={r.key} style={[styles.reportCardModern, { backgroundColor: colors.surface }]}>
-            <View style={[styles.reportIconModern, { backgroundColor: r.iconBg }]}>
-              <Ionicons name={r.icon} size={24} color={r.iconColor} />
-            </View>
-            <Text style={[styles.reportValueModern, { color: colors.textPrimary }]}>{r.value}</Text>
-            <Text style={[styles.reportTitleModern, { color: colors.textSecondary }]}>{r.label}</Text>
-          </TouchableOpacity>
-        ))}
-      </View>
-      <View style={[styles.chartContainerModern, { backgroundColor: colors.surface }]}>
-        <Text style={[styles.chartTitleModern, { color: colors.textPrimary }]}>Doluluk Oranı (Son 7 Gün)</Text>
-        <View style={[styles.chartPlaceholderModern, { backgroundColor: colors.background }]}>
-          <Text style={[styles.chartPlaceholderText, { color: colors.textSecondary }]}>Veri bekleniyor</Text>
-          <Text style={[styles.chartPlaceholderSub, { color: colors.textSecondary }]}>Son 7 gün yakında</Text>
-        </View>
       </View>
     </View>
   );
@@ -141,56 +109,6 @@ const styles = StyleSheet.create({
   screenContainer: { flex: 1 },
   mainTabsWrap: { flex: 1 },
   contentContainer: { flex: 1, paddingHorizontal: 20, paddingBottom: 120 },
-  reportsGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'space-between',
-    paddingHorizontal: 20,
-    paddingTop: 16,
-    marginBottom: 20,
-    gap: 12,
-  },
-  reportCardModern: {
-    width: '48%',
-    borderRadius: 20,
-    padding: 18,
-    marginBottom: 0,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
-    shadowRadius: 8,
-    elevation: 4,
-  },
-  reportIconModern: {
-    width: 48,
-    height: 48,
-    borderRadius: 14,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 12,
-  },
-  reportTitleModern: { fontSize: 13, marginTop: 4 },
-  reportValueModern: { fontSize: 24, fontWeight: '700' },
-  chartPlaceholderSub: { fontSize: 12, marginTop: 4 },
-  chartContainerModern: {
-    borderRadius: 20,
-    padding: 20,
-    marginHorizontal: 20,
-    marginBottom: 120,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
-    shadowRadius: 8,
-    elevation: 4,
-  },
-  chartTitleModern: { fontSize: 18, fontWeight: '600', marginBottom: 16 },
-  chartPlaceholderModern: {
-    height: 200,
-    borderRadius: 16,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  chartPlaceholderText: { fontSize: 14 },
 });
 
 // Context (useAuth used in MisafirlerScreen, RaporlarScreen)
@@ -367,6 +285,7 @@ function AppNavigator() {
             <Stack.Screen name="GalleryBatchDocument" component={GalleryBatchDocumentScreen} />
             <Stack.Screen name="DocumentResult" component={DocumentResultScreen} />
             <Stack.Screen name="DocumentBatchResult" component={DocumentBatchResultScreen} />
+            <Stack.Screen name="CameraTest" component={CameraTestScreen} />
           </>
         )}
       </Stack.Navigator>

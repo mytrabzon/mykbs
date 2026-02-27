@@ -1,6 +1,6 @@
 const express = require('express');
 const { PrismaClient } = require('@prisma/client');
-const { authenticate } = require('../middleware/auth');
+const { authenticateTesisOrSupabase } = require('../middleware/authTesisOrSupabase');
 const { createKBSService } = require('../services/kbs');
 const { maskKimlikNo, maskPasaportNo } = require('../utils/mask');
 const { canSendBildirim } = require('../config/packages');
@@ -8,7 +8,29 @@ const prisma = new PrismaClient();
 
 const router = express.Router();
 
-router.use(authenticate);
+router.use(authenticateTesisOrSupabase);
+
+function getTesisId(req) {
+  return req.authSource === 'supabase' ? req.branchId : req.tesis.id;
+}
+
+/** KBS / paket kontrolleri için tesis veya branch (Supabase’de tesis-benzeri nesne). */
+function getTesisOrBranch(req) {
+  if (req.authSource === 'supabase' && req.branch) {
+    return {
+      id: req.branch.id,
+      kbsTuru: req.branch.kbs_turu || null,
+      kbsTesisKodu: req.branch.kbs_tesis_kodu || null,
+      kbsWebServisSifre: req.branch.kbs_web_servis_sifre || null,
+      ipAdresleri: req.branch.ipAdresleri || [],
+      paket: 'deneme',
+      kota: 1000,
+      kullanilanKota: 0,
+      trialEndsAt: null
+    };
+  }
+  return req.tesis;
+}
 
 /**
  * Aktif misafirleri listele
@@ -16,11 +38,9 @@ router.use(authenticate);
 router.get('/', async (req, res) => {
   try {
     const { cikisYapmis, tam } = req.query;
-    const kimlikGorebilir = tam === '1' && ['sahip', 'yonetici'].includes(req.user.rol);
-
-    const where = {
-      tesisId: req.tesis.id
-    };
+    const kimlikGorebilir = tam === '1' && (req.authSource === 'supabase' || ['sahip', 'yonetici'].includes(req.user.rol));
+    const tesisId = getTesisId(req);
+    const where = { tesisId };
 
     if (cikisYapmis !== 'true') {
       where.cikisTarihi = null;
@@ -76,12 +96,12 @@ router.get('/', async (req, res) => {
  */
 router.post('/checkin', async (req, res) => {
   try {
-    // Yetki kontrolü
-    if (!req.user.checkInYetki) {
+    if (req.authSource !== 'supabase' && !req.user.checkInYetki) {
       return res.status(403).json({ message: 'Check-in yetkiniz yok' });
     }
 
     const { odaId, ad, soyad, kimlikNo, pasaportNo, dogumTarihi, uyruk } = req.body;
+    const tesisId = getTesisId(req);
 
     if (!odaId || !ad || !soyad || !dogumTarihi || !uyruk) {
       return res.status(400).json({ message: 'Zorunlu alanlar eksik' });
@@ -91,12 +111,8 @@ router.post('/checkin', async (req, res) => {
       return res.status(400).json({ message: 'Kimlik veya pasaport numarası gerekli' });
     }
 
-    // Oda kontrolü
     const oda = await prisma.oda.findFirst({
-      where: {
-        id: odaId,
-        tesisId: req.tesis.id
-      }
+      where: { id: odaId, tesisId }
     });
 
     if (!oda) {
@@ -107,7 +123,7 @@ router.post('/checkin', async (req, res) => {
       return res.status(400).json({ message: 'Oda dolu' });
     }
 
-    const sendCheck = canSendBildirim(req.tesis);
+    const sendCheck = canSendBildirim(getTesisOrBranch(req));
     if (!sendCheck.allowed) {
       const message = sendCheck.reason === 'trial_ended'
         ? 'Deneme süren tamamlandı. Bildirimlerine kesintisiz devam etmek için paket seç.'
@@ -118,10 +134,10 @@ router.post('/checkin', async (req, res) => {
     // Misafir oluştur
     const misafir = await prisma.misafir.create({
       data: {
-        tesisId: req.tesis.id,
-        odaId,
-        ad,
-        soyad,
+tesisId,
+      odaId,
+      ad,
+      soyad,
         kimlikNo: kimlikNo || null,
         pasaportNo: pasaportNo || null,
         dogumTarihi: new Date(dogumTarihi),
@@ -139,16 +155,16 @@ router.post('/checkin', async (req, res) => {
     // Bildirim kaydını hemen oluştur (beklemede). KBS arka planda gönderilir — gecikme yok.
     const bildirim = await prisma.bildirim.create({
       data: {
-        tesisId: req.tesis.id,
+        tesisId: getTesisId(req),
         misafirId: misafir.id,
         durum: 'beklemede',
         hataMesaji: null,
-        kbsTuru: req.tesis.kbsTuru || null,
+        kbsTuru: getTesisOrBranch(req).kbsTuru || null,
         kbsYanit: null
       }
     });
 
-    const tesisSnapshot = req.tesis;
+    const tesisSnapshot = getTesisOrBranch(req);
     if (tesisSnapshot.kbsTuru && tesisSnapshot.kbsTesisKodu && tesisSnapshot.kbsWebServisSifre) {
       setImmediate(async () => {
         try {
@@ -206,7 +222,7 @@ router.post('/checkin', async (req, res) => {
     // Log
     await prisma.log.create({
       data: {
-        tesisId: req.tesis.id,
+        tesisId,
         kullaniciId: req.user.id,
         islem: 'check-in',
         detay: {
@@ -226,7 +242,7 @@ router.post('/checkin', async (req, res) => {
       },
       kbsBildirimi: {
         durum: 'beklemede',
-        mesaj: req.tesis.kbsTuru ? 'Bildirim arka planda gönderiliyor' : 'KBS yapılandırılmamış'
+        mesaj: getTesisOrBranch(req).kbsTuru ? 'Bildirim arka planda gönderiliyor' : 'KBS yapılandırılmamış'
       }
     });
   } catch (error) {
@@ -245,7 +261,7 @@ router.post('/checkout/:misafirId', async (req, res) => {
     const misafir = await prisma.misafir.findFirst({
       where: {
         id: misafirId,
-        tesisId: req.tesis.id,
+        tesisId: getTesisId(req),
         cikisTarihi: null
       },
       include: {
@@ -270,7 +286,7 @@ router.post('/checkout/:misafirId', async (req, res) => {
       data: { durum: 'bos' }
     });
 
-    const tesisForCikis = req.tesis;
+    const tesisForCikis = getTesisOrBranch(req);
     if (tesisForCikis.kbsTuru && tesisForCikis.kbsTesisKodu && tesisForCikis.kbsWebServisSifre) {
       const misafirCopy = { kimlikNo: misafir.kimlikNo, pasaportNo: misafir.pasaportNo };
       setImmediate(async () => {
@@ -289,7 +305,7 @@ router.post('/checkout/:misafirId', async (req, res) => {
     // Log
     await prisma.log.create({
       data: {
-        tesisId: req.tesis.id,
+        tesisId: getTesisId(req),
         kullaniciId: req.user.id,
         islem: 'check-out',
         detay: {
@@ -313,7 +329,7 @@ router.post('/checkout/:misafirId', async (req, res) => {
 router.post('/oda-degistir/:misafirId', async (req, res) => {
   try {
     // Yetki kontrolü
-    if (!req.user.odaDegistirmeYetki) {
+    if (req.authSource !== 'supabase' && !req.user.odaDegistirmeYetki) {
       return res.status(403).json({ message: 'Oda değiştirme yetkiniz yok' });
     }
 
@@ -327,7 +343,7 @@ router.post('/oda-degistir/:misafirId', async (req, res) => {
     const misafir = await prisma.misafir.findFirst({
       where: {
         id: misafirId,
-        tesisId: req.tesis.id,
+        tesisId: getTesisId(req),
         cikisTarihi: null
       },
       include: {
@@ -342,7 +358,7 @@ router.post('/oda-degistir/:misafirId', async (req, res) => {
     const yeniOda = await prisma.oda.findFirst({
       where: {
         id: yeniOdaId,
-        tesisId: req.tesis.id
+        tesisId: getTesisId(req)
       }
     });
 
@@ -375,9 +391,10 @@ router.post('/oda-degistir/:misafirId', async (req, res) => {
     });
 
     // KBS oda değişikliği bildirimi
-    if (req.tesis.kbsTuru && req.tesis.kbsTesisKodu && req.tesis.kbsWebServisSifre) {
+    const tesisKbs = getTesisOrBranch(req);
+    if (tesisKbs.kbsTuru && tesisKbs.kbsTesisKodu && tesisKbs.kbsWebServisSifre) {
       try {
-        const kbsService = createKBSService(req.tesis);
+        const kbsService = createKBSService(tesisKbs);
         await kbsService.odaDegistir(
           {
             kimlikNo: misafir.kimlikNo,
@@ -394,7 +411,7 @@ router.post('/oda-degistir/:misafirId', async (req, res) => {
     // Log
     await prisma.log.create({
       data: {
-        tesisId: req.tesis.id,
+        tesisId: getTesisId(req),
         kullaniciId: req.user.id,
         islem: 'oda-degistir',
         detay: {
@@ -419,7 +436,7 @@ router.post('/oda-degistir/:misafirId', async (req, res) => {
 router.put('/:misafirId', async (req, res) => {
   try {
     // Yetki kontrolü
-    if (!req.user.bilgiDuzenlemeYetki) {
+    if (req.authSource !== 'supabase' && !req.user.bilgiDuzenlemeYetki) {
       return res.status(403).json({ message: 'Bilgi düzenleme yetkiniz yok' });
     }
 
@@ -429,7 +446,7 @@ router.put('/:misafirId', async (req, res) => {
     const misafir = await prisma.misafir.findFirst({
       where: {
         id: misafirId,
-        tesisId: req.tesis.id
+        tesisId: getTesisId(req)
       }
     });
 
@@ -451,7 +468,7 @@ router.put('/:misafirId', async (req, res) => {
     // Log
     await prisma.log.create({
       data: {
-        tesisId: req.tesis.id,
+        tesisId: getTesisId(req),
         kullaniciId: req.user.id,
         islem: 'misafir-guncelle',
         detay: { misafirId },

@@ -1,9 +1,9 @@
 const express = require('express');
-const { authenticate } = require('../middleware/auth');
+const { authenticateTesisOrSupabase } = require('../middleware/authTesisOrSupabase');
 
 const router = express.Router();
 
-router.use(authenticate);
+router.use(authenticateTesisOrSupabase);
 
 /**
  * NFC okuma endpoint'i
