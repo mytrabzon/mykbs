@@ -731,7 +731,11 @@ export default function MrzScanScreen({ navigation }) {
           <Ionicons name="arrow-back" size={28} color="#fff" />
         </TouchableOpacity>
         <View style={styles.titleWrap} pointerEvents="none">
-          <Text style={styles.overlayTitle}>MRZ Tara</Text>
+          <Text style={styles.overlayTitle} numberOfLines={2}>
+            {selectedDocType === DocType.ID
+              ? 'Lütfen kimliğin arka yüz fotoğrafını çekiniz'
+              : 'MRZ Tara'}
+          </Text>
         </View>
         <TouchableOpacity onPress={() => setHelpVisible(true)} style={styles.overlayIconBtn}>
           <Ionicons name="help-circle-outline" size={26} color="#fff" />
@@ -768,7 +772,7 @@ export default function MrzScanScreen({ navigation }) {
         <View style={styles.frame} />
         <Text style={styles.frameHint}>
           {selectedDocType === DocType.ID
-            ? 'Türk kimliği arka yüzündeki MRZ (3 satır) alanını çerçeveleyin · Karanlıkta fener kullanın'
+            ? 'Pasaport gibi: Çerçeve içine MRZ (3 satır) alanını alıp çekin · Karanlıkta fener kullanın'
             : 'Pasaport veya kimlik MRZ alanını hizalayın · Karanlıkta fener kullanın'}
         </Text>
       </View>
