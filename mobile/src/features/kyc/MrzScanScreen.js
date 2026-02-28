@@ -58,9 +58,11 @@ try {
 
 const TIMEOUT_MS = 15000;
 const MAX_FAILS = 6;
-const STABLE_READ_COUNT = 1; // 1 = hemen kabul et (tam otomatik)
+// MRZ göründüğü anda anlık çekim (en üst düzey) — kimlik/pasaport fark etmez
+const STABLE_READ_COUNT = 1;
 const SHOW_INSTANT_RESULT = true;
-const ACCEPT_ON_CHECK_FAIL = true; // Check digit hatası olsa da sonuç ekranında göster, kullanıcı düzeltsin
+const ACCEPT_ON_CHECK_FAIL = true;
+const ACCEPT_MINIMAL_DOC_NUMBER_ONLY = true; // Sadece belge no ile de hemen kabul (eksik alanlar sonuç ekranında düzeltilir)
 
 function Row({ label, value }) {
   const v = value != null && value !== '' ? String(value) : '—';
@@ -115,6 +117,7 @@ export default function MrzScanScreen({ navigation }) {
   const mounted = useRef(true);
   const lastStableRawRef = useRef('');
   const stableCountRef = useRef(0);
+  const acceptedRawRef = useRef(''); // Aynı MRZ ile çift tetiklemeyi engelle (anlık kabul)
   const frontCameraRef = useRef(null);
   const insets = useSafeAreaInsets();
   const [permission, requestPermission] = useCameraPermissions();
@@ -162,126 +165,107 @@ export default function MrzScanScreen({ navigation }) {
     (data) => {
       const raw = typeof data === 'string' ? data : (data?.nativeEvent?.mrz ?? data?.mrz ?? '');
       if (!raw || !mounted.current) return;
-      const t0 = Date.now();
+      if (acceptedRawRef.current === raw) return;
       setLastMrzRaw(raw.slice(0, 30) + '…');
       let payload = parseMrz(raw);
       if (!payload.checks?.ok && raw) {
         const fixed = fixMrzOcrErrors(raw);
         if (fixed !== raw) payload = parseMrz(fixed);
       }
-      if (!payload.checks?.ok) {
-        const hasMinimalData = (payload.passportNumber || '').trim() && (payload.birthDate || '').trim();
-        if (ACCEPT_ON_CHECK_FAIL && hasMinimalData) {
-          setLastMrzChecksReason('');
-          setMrzCheckFailed(true);
-          if (timeoutRef.current) clearTimeout(timeoutRef.current);
-          if (SHOW_INSTANT_RESULT && fromCheckIn) {
-            setInstantPayload(payload);
-          } else if (SHOW_INSTANT_RESULT && !fromCheckIn) {
-            navigation.replace('MrzResult', { payload });
-          } else {
-            lastStableRawRef.current = raw;
-            stableCountRef.current = STABLE_READ_COUNT;
-            if (fromCheckIn) {
-              const num = (payload.passportNumber || '').trim();
-              const isTc = /^\d{11}$/.test(num);
-              navigation.replace('CheckIn', { mrzPayload: payload, selectedOda: route.params?.selectedOda });
-              saveOkutulanBelgeAsync(
-                { ad: (payload.givenNames || '').trim(), soyad: (payload.surname || '').trim(), kimlikNo: isTc ? num : null, pasaportNo: !isTc ? num : null, belgeNo: num || null, dogumTarihi: payload.birthDate || null, uyruk: (payload.nationality || 'TÜRK').trim() },
-                null
-              );
-            } else {
-              navigation.replace('MrzResult', { payload });
-            }
-          }
-          return;
-        }
-        setLastMrzChecksReason(payload.checks?.reason || 'invalid_format');
-        setStableReadCount(0);
-        lastStableRawRef.current = '';
-        setFailCount((c) => {
-          const next = c + 1;
-          if (next >= MAX_FAILS) {
-            const reasonMsg = getFailureReasonMessage(payload.checks?.reason, next);
-            Alert.alert(
-              'Okunamadı',
-              reasonMsg,
-              [
-                { text: 'Tekrar dene', onPress: () => setFailCount(0) },
-                { text: 'Manuel giriş', onPress: () => navigation.replace(fromCheckIn ? 'CheckIn' : 'KycManualEntry') },
-              ]
-            );
-          }
-          return next;
-        });
-        return;
-      }
-      setMrzCheckFailed(false);
-      setLastMrzChecksReason('');
-      if (SHOW_INSTANT_RESULT && fromCheckIn) {
+      const docNum = (payload.passportNumber || '').trim();
+      const hasBirth = !!(payload.birthDate || '').trim();
+      const hasMinimalData =
+        (docNum && hasBirth) || (ACCEPT_MINIMAL_DOC_NUMBER_ONLY && docNum);
+
+      const acceptAndNavigate = (p) => {
+        acceptedRawRef.current = raw;
         if (timeoutRef.current) clearTimeout(timeoutRef.current);
-        setInstantPayload(payload);
-        return;
-      }
-      if (SHOW_INSTANT_RESULT && !fromCheckIn) {
-        navigation.replace('MrzResult', { payload });
-        return;
-      }
-      if (lastStableRawRef.current === raw) {
-        stableCountRef.current += 1;
-        setStableReadCount(stableCountRef.current);
-        if (stableCountRef.current >= STABLE_READ_COUNT) {
-          if (timeoutRef.current) clearTimeout(timeoutRef.current);
-          if (fromCheckIn) {
-            const num = (payload.passportNumber || '').trim();
-            const isTc = /^\d{11}$/.test(num);
-            navigation.replace('CheckIn', { mrzPayload: payload, selectedOda: route.params?.selectedOda });
-            saveOkutulanBelgeAsync(
-              {
-                ad: (payload.givenNames || '').trim(),
-                soyad: (payload.surname || '').trim(),
-                kimlikNo: isTc ? num : null,
-                pasaportNo: !isTc ? num : null,
-                belgeNo: num || null,
-                dogumTarihi: payload.birthDate || null,
-                uyruk: (payload.nationality || 'TÜRK').trim(),
-              },
-              null
-            );
-          } else {
-            navigation.replace('MrzResult', { payload });
-          }
+        if (fromCheckIn) {
+          const num = (p.passportNumber || '').trim();
+          const isTc = /^\d{11}$/.test(num);
+          navigation.replace('CheckIn', { mrzPayload: p, selectedOda: route.params?.selectedOda });
+          saveOkutulanBelgeAsync(
+            {
+              ad: (p.givenNames || '').trim(),
+              soyad: (p.surname || '').trim(),
+              kimlikNo: isTc ? num : null,
+              pasaportNo: !isTc ? num : null,
+              belgeNo: num || null,
+              dogumTarihi: p.birthDate || null,
+              uyruk: (p.nationality || 'TÜRK').trim(),
+            },
+            null
+          );
+        } else {
+          navigation.replace('MrzResult', { payload: p });
         }
-      } else {
-        lastStableRawRef.current = raw;
-        stableCountRef.current = 1;
-        setStableReadCount(1);
+      };
+
+      const acceptInstant = (p) => {
+        acceptedRawRef.current = raw;
+        if (timeoutRef.current) clearTimeout(timeoutRef.current);
+        setInstantPayload(p);
+      };
+
+      if (payload.checks?.ok) {
+        setMrzCheckFailed(false);
+        setLastMrzChecksReason('');
+        if (SHOW_INSTANT_RESULT && fromCheckIn) {
+          acceptInstant(payload);
+        } else if (SHOW_INSTANT_RESULT && !fromCheckIn) {
+          acceptAndNavigate(payload);
+        } else {
+          acceptAndNavigate(payload);
+        }
+        return;
       }
+      if (ACCEPT_ON_CHECK_FAIL && hasMinimalData) {
+        setLastMrzChecksReason('');
+        setMrzCheckFailed(true);
+        if (SHOW_INSTANT_RESULT && fromCheckIn) {
+          acceptInstant(payload);
+        } else {
+          acceptAndNavigate(payload);
+        }
+        return;
+      }
+      setLastMrzChecksReason(payload.checks?.reason || 'invalid_format');
+      setStableReadCount(0);
+      lastStableRawRef.current = '';
+      setFailCount((c) => {
+        const next = c + 1;
+        if (next >= MAX_FAILS) {
+          const reasonMsg = getFailureReasonMessage(payload.checks?.reason, next);
+          Alert.alert(
+            'Okunamadı',
+            reasonMsg,
+            [
+              { text: 'Tekrar dene', onPress: () => setFailCount(0) },
+              { text: 'Manuel giriş', onPress: () => navigation.replace(fromCheckIn ? 'CheckIn' : 'KycManualEntry') },
+            ]
+          );
+        }
+        return next;
+      });
     },
-    [navigation, fromCheckIn]
+    [navigation, fromCheckIn, route.params?.selectedOda]
   );
 
   const processMrzRaw = useCallback(
     (raw) => {
       if (!raw || !mounted.current) return;
-      const t0 = Date.now();
       let payload = parseMrz(raw);
       if (!payload.checks?.ok && raw) {
         const fixed = fixMrzOcrErrors(raw);
         if (fixed !== raw) payload = parseMrz(fixed);
       }
       setLastMrzRaw(raw.slice(0, 30) + '…');
-      if (payload.checks?.ok) {
-        setMrzCheckFailed(false);
-        if (SHOW_INSTANT_RESULT && fromCheckIn) {
-          setInstantPayload(payload);
-        } else if (fromCheckIn) {
-          navigation.replace('CheckIn', { mrzPayload: payload, selectedOda: route.params?.selectedOda });
-        } else {
-          navigation.replace('MrzResult', { payload });
-        }
-      } else if (ACCEPT_ON_CHECK_FAIL && (payload.passportNumber || '').trim() && (payload.birthDate || '').trim()) {
-        setMrzCheckFailed(true);
+      const docNum = (payload.passportNumber || '').trim();
+      const hasMinimal =
+        payload.checks?.ok ||
+        (ACCEPT_ON_CHECK_FAIL && ((docNum && (payload.birthDate || '').trim()) || (ACCEPT_MINIMAL_DOC_NUMBER_ONLY && docNum)));
+      if (hasMinimal) {
+        setMrzCheckFailed(!payload.checks?.ok);
         if (SHOW_INSTANT_RESULT && fromCheckIn) {
           setInstantPayload(payload);
         } else if (fromCheckIn) {
@@ -294,7 +278,7 @@ export default function MrzScanScreen({ navigation }) {
         Toast.show({ type: 'error', text1: 'MRZ okunamadı', text2: getFailureReasonMessage(payload.checks?.reason) });
       }
     },
-    [navigation, fromCheckIn]
+    [navigation, fromCheckIn, route.params?.selectedOda]
   );
 
   const uploadImageForMrz = useCallback(

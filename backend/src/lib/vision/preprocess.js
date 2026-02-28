@@ -68,8 +68,54 @@ async function preprocessFromBase64(imageBase64, tempDir) {
   return { filePath };
 }
 
+/**
+ * Crop image to bottom fraction (for MRZ: kimlik MRZ altta). Writes to outPath.
+ * @param {string} filePath - Source image path
+ * @param {number} fraction - 0..1, e.g. 0.35 = bottom 35%
+ * @param {string} outPath - Where to write cropped image (can equal filePath to overwrite)
+ * @returns {Promise<string>} outPath
+ */
+async function cropBottomFraction(filePath, fraction, outPath) {
+  if (!filePath || !fs.existsSync(filePath)) return outPath || filePath;
+  const out = outPath || filePath;
+  try {
+    const Jimp = (await import('jimp')).default;
+    const image = await Jimp.read(filePath);
+    const w = image.bitmap.width;
+    const h = image.bitmap.height;
+    const cropH = Math.max(1, Math.round(h * Math.min(1, Math.max(0, fraction))));
+    const y = Math.max(0, h - cropH);
+    image.crop(0, y, w, cropH);
+    await image.write(out);
+    return out;
+  } catch (e) {
+    return out;
+  }
+}
+
+/**
+ * Kimlik kartı MRZ için ön işleme: grayscale, normalize, yüksek kontrast (yansıma/güvenlik deseni azaltır).
+ */
+async function preprocessForKimlikMrz(filePath) {
+  if (!filePath || !fs.existsSync(filePath)) return filePath;
+  try {
+    const Jimp = (await import('jimp')).default;
+    const image = await Jimp.read(filePath);
+    await image
+      .greyscale()
+      .normalize()
+      .contrast(0.55)
+      .write(filePath);
+    return filePath;
+  } catch (e) {
+    return filePath;
+  }
+}
+
 module.exports = {
   preprocessForOcr,
   preprocessFromBase64,
   preprocessForPhotocopyMrz,
+  cropBottomFraction,
+  preprocessForKimlikMrz,
 };

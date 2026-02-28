@@ -4,6 +4,7 @@ const Tesseract = require('tesseract.js');
 const fs = require('fs');
 const path = require('path');
 const { authenticateTesisOrSupabase } = require('../middleware/authTesisOrSupabase');
+const { cropBottomFraction, preprocessForKimlikMrz } = require('../lib/vision/preprocess');
 
 const router = express.Router();
 const KIMLIK_UPLOAD_DIR = path.join(__dirname, '../../uploads/kimlikler');
@@ -36,50 +37,77 @@ const upload = multer({
   }
 });
 
+const DEBUG_MRZ = process.env.DEBUG_MRZ !== '0' && process.env.DEBUG_MRZ !== 'false';
+
 /** MRZ satırını standart uzunluğa tamamla (< ile). */
 function padMrzLine(line, targetLen) {
   if (!line || targetLen < 1) return line;
   return line.padEnd(targetLen, '<').slice(0, targetLen);
 }
 
+/** OCR çıktısını MRZ parse için normalize et: uppercase, boşluk sil, «‹→<, sadece A-Z0-9< bırak. */
+function normalizeOcrTextForMrz(text) {
+  if (!text || typeof text !== 'string') return '';
+  return text
+    .replace(/\r\n|\r|\n/g, '\n')
+    .replace(/[\u00AB\u2039\u203A\u00BB]/g, '<')
+    .replace(/\s/g, '')
+    .toUpperCase()
+    .replace(/[^A-Z0-9<]/g, '');
+}
+
+/** OCR çıktısından MRZ satır adayları: 30+ uzunluk, < içeren satırları önceliklendir; 3x30 → TD1, 2x44 → TD3. */
+function extractMrzLinesFromOcr(text) {
+  const normalized = normalizeOcrTextForMrz(text);
+  if (!normalized) return [];
+  const lines = text.split(/\r\n|\r|\n/)
+    .map((l) => l.trim().toUpperCase().replace(/\s/g, '').replace(/[\u00AB\u2039]/g, '<'))
+    .map((l) => l.replace(/[^A-Z0-9<]/g, ''))
+    .filter((l) => l.length >= 28);
+  const withAngle = lines.filter((l) => l.includes('<'));
+  const candidates = withAngle.length >= 2 ? withAngle : lines;
+  return candidates.filter((l) => l.length >= 26 && l.length <= 46);
+}
+
 /** OCR çıktısından MRZ benzeri satırları bul (TD1: 3x30 kimlik, TD2: 2x36, TD3: 2x44 pasaport). Esnek uzunluk kabul. */
 function extractMrzFromOcr(text) {
   if (!text || typeof text !== 'string') return '';
-  const one = text.replace(/\s/g, '').trim().toUpperCase();
-  if (/^[A-Z0-9<]+$/.test(one) && one.length >= 88 && one.length <= 92) {
-    if (one.length >= 89 && one.length <= 91) {
-      const s1 = padMrzLine(one.slice(0, 30), 30);
-      const s2 = padMrzLine(one.slice(30, 60), 30);
-      const s3 = padMrzLine(one.slice(60, 90), 30);
-      return s1 + '\n' + s2 + '\n' + s3;
-    }
+  const normalized = normalizeOcrTextForMrz(text);
+  const one = normalized.trim();
+  if (one.length >= 89 && one.length <= 91 && /^[A-Z0-9<]+$/.test(one)) {
+    const s1 = padMrzLine(one.slice(0, 30), 30);
+    const s2 = padMrzLine(one.slice(30, 60), 30);
+    const s3 = padMrzLine(one.slice(60, 90), 30);
+    return s1 + '\n' + s2 + '\n' + s3;
+  }
+  if (one.length >= 88 && one.length <= 92 && /^[A-Z0-9<]+$/.test(one)) {
     const s1 = padMrzLine(one.slice(0, 44), 44);
     const s2 = padMrzLine(one.slice(44, 88), 44);
     return s1 + '\n' + s2;
   }
-  if (/^[A-Z0-9<]+$/.test(one) && one.length >= 70 && one.length <= 74) {
+  if (one.length >= 70 && one.length <= 74 && /^[A-Z0-9<]+$/.test(one)) {
     const s1 = padMrzLine(one.slice(0, 36), 36);
     const s2 = padMrzLine(one.slice(36, 72), 36);
     return s1 + '\n' + s2;
   }
-  const lines = text.split(/\r\n|\r|\n/).map((l) => l.trim().toUpperCase().replace(/\s/g, ''));
-  const mrzLike = lines.filter((l) => /^[A-Z0-9<]+$/.test(l) && l.length >= 26 && l.length <= 46);
-  if (mrzLike.length >= 3 && mrzLike.every((l) => l.length >= 28 && l.length <= 32)) {
-    return mrzLike.slice(0, 3).map((l) => padMrzLine(l, 30)).join('\n');
+  const lines = extractMrzLinesFromOcr(text);
+  if (lines.length >= 3 && lines.every((l) => l.length >= 28 && l.length <= 32)) {
+    return lines.slice(0, 3).map((l) => padMrzLine(l, 30)).join('\n');
   }
-  if (mrzLike.length >= 2 && mrzLike.every((l) => l.length >= 34 && l.length <= 38)) {
-    return mrzLike.slice(0, 2).map((l) => padMrzLine(l, 36)).join('\n');
+  if (lines.length >= 2 && lines.every((l) => l.length >= 40 && l.length <= 46)) {
+    return lines.slice(0, 2).map((l) => padMrzLine(l, 44)).join('\n');
   }
-  if (mrzLike.length >= 2 && mrzLike.every((l) => l.length >= 40 && l.length <= 46)) {
-    return mrzLike.slice(0, 2).map((l) => padMrzLine(l, 44)).join('\n');
+  if (lines.length >= 2 && lines.every((l) => l.length >= 34 && l.length <= 38)) {
+    return lines.slice(0, 2).map((l) => padMrzLine(l, 36)).join('\n');
   }
-  if (mrzLike.length >= 2) {
-    const l0 = mrzLike[0].length, l1 = mrzLike[1].length;
-    if (l0 >= 40 && l1 >= 40) return padMrzLine(mrzLike[0], 44) + '\n' + padMrzLine(mrzLike[1], 44);
-    if (l0 >= 34 && l1 >= 34) return padMrzLine(mrzLike[0], 36) + '\n' + padMrzLine(mrzLike[1], 36);
-    if (l0 >= 28 && l1 >= 28) return padMrzLine(mrzLike[0], 30) + '\n' + padMrzLine(mrzLike[1], 30);
+  if (lines.length >= 2) {
+    const l0 = lines[0].length, l1 = lines[1].length;
+    if (l0 >= 40 && l1 >= 40) return padMrzLine(lines[0], 44) + '\n' + padMrzLine(lines[1], 44);
+    if (l0 >= 34 && l1 >= 34) return padMrzLine(lines[0], 36) + '\n' + padMrzLine(lines[1], 36);
+    if (l0 >= 28 && l1 >= 28) return padMrzLine(lines[0], 30) + '\n' + padMrzLine(lines[1], 30);
   }
-  if (mrzLike.length === 1 && mrzLike[0].length >= 30) return mrzLike[0];
+  if (lines.length >= 3) return lines.slice(0, 3).map((l) => padMrzLine(l, 30)).join('\n');
+  if (lines.length === 1 && lines[0].length >= 30) return padMrzLine(lines[0], 30);
   return '';
 }
 
@@ -99,19 +127,56 @@ async function preprocessImageForMrz(filePath) {
   }
 }
 
-/** MRZ: Fotokopi/kağıt için güçlü ön işleme + Tesseract. Kağıt üzerinde basılı MRZ da pasaport gibi okunur. */
+/** Tek crop + preprocess + OCR + parse dene; başarılıysa { raw, payload } döner. */
+async function tryMrzFromImage(imagePath, cropFraction, preprocessFn) {
+  let pathToOcr = imagePath;
+  let cropPath = null;
+  if (cropFraction < 1) {
+    cropPath = path.join(path.dirname(imagePath), `mrz_crop_${Date.now()}_${cropFraction}.jpg`);
+    await cropBottomFraction(imagePath, cropFraction, cropPath);
+    await preprocessFn(cropPath);
+    pathToOcr = cropPath;
+  } else {
+    await preprocessFn(imagePath);
+  }
+  const { data: { text } } = await Tesseract.recognize(pathToOcr, 'eng+tur', { logger: () => {} });
+  const raw = extractMrzFromOcr(text);
+  if (cropPath && fs.existsSync(cropPath)) fs.unlink(cropPath, () => {});
+  const payload = raw ? parseMrzToPayload(raw) : null;
+  if (DEBUG_MRZ && text) {
+    const lines = extractMrzLinesFromOcr(text);
+    console.log('[MRZ] crop=', cropFraction, 'lines=', lines.length, 'rawLen=', raw?.length || 0, 'payload=', payload ? 'ok' : 'fail');
+  }
+  return { raw, payload };
+}
+
+/** MRZ: Çoklu crop (alt %35 → %45 → full), TD1/TD3 otomatik; ilk başarılı parse'da dön. */
 router.post('/mrz', authenticateTesisOrSupabase, upload.single('image'), async (req, res) => {
   const filePath = req.file?.path;
   try {
     if (!req.file || !filePath) {
       return res.status(400).json({ message: 'Görüntü yüklenmedi' });
     }
-    const processedPath = await preprocessImageForMrz(filePath);
-    const { data: { text } } = await Tesseract.recognize(processedPath, 'eng+tur', { logger: () => {} });
-    const raw = extractMrzFromOcr(text);
+    const crops = [0.35, 0.45, 1.0];
+    let raw = '';
+    let payload = null;
+    for (const frac of crops) {
+      const preprocessFn = frac < 1 ? preprocessForKimlikMrz : preprocessImageForMrz;
+      const result = await tryMrzFromImage(filePath, frac, preprocessFn);
+      if (result.payload) {
+        raw = result.raw;
+        payload = result.payload;
+        if (DEBUG_MRZ) console.log('[MRZ] success crop=', frac, 'format=', raw.includes('\n') ? (raw.split('\n').length === 3 ? 'TD1' : 'TD3') : '?');
+        break;
+      }
+      if (result.raw && !payload) {
+        raw = result.raw;
+      }
+    }
     if (!raw) {
       return res.status(400).json({ message: 'Görüntüde MRZ bulunamadı. MRZ alanını net ve çerçeve içine alın.' });
     }
+    if (DEBUG_MRZ && !payload) console.log('[MRZ] raw found but parse failed (e.g. checkdigit)', raw.slice(0, 50) + '…');
     res.json({ success: true, raw });
   } catch (error) {
     console.error('OCR MRZ hatası:', error);
