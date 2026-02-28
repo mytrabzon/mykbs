@@ -20,6 +20,7 @@ function isoToDDMMYYYY(iso) {
 export default function MrzResultScreen({ route, navigation }) {
   const payload = route?.params?.payload ?? null;
   const raw = payload?.raw ?? '';
+  const scanDurationMs = route?.params?.scanDurationMs ?? 0;
   const [savingOkutulan, setSavingOkutulan] = useState(false);
   const [savedToOkutulan, setSavedToOkutulan] = useState(false);
 
@@ -85,6 +86,11 @@ export default function MrzResultScreen({ route, navigation }) {
           <Ionicons name={validation.valid ? 'checkmark-circle' : 'warning'} size={32} color={validation.valid ? theme.colors.success : theme.colors.warning} />
           <Text style={styles.title}>{validation.valid ? 'MRZ okundu' : 'Kontrol gerekli'}</Text>
         </View>
+        {scanDurationMs > 0 && (
+          <View style={styles.scanTimeWrap}>
+            <Text style={styles.scanTimeText}>Okuma süresi: {(scanDurationMs / 1000).toFixed(2)} sn</Text>
+          </View>
+        )}
         {!validation.valid && validation.reason && (
           <Text style={styles.warningText}>{validation.reason === 'document_expired' ? 'Belge süresi dolmuş.' : 'Check digit veya tarih hatası. Tekrar tarayın veya manuel girin.'}</Text>
         )}
@@ -137,6 +143,8 @@ const styles = StyleSheet.create({
   card: { ...theme.styles.card, marginBottom: theme.spacing.lg },
   row: { flexDirection: 'row', alignItems: 'center', marginBottom: theme.spacing.sm },
   title: { fontSize: theme.typography.fontSize.xl, fontWeight: theme.typography.fontWeight.bold, color: theme.colors.textPrimary, marginLeft: theme.spacing.sm },
+  scanTimeWrap: { alignSelf: 'flex-start', paddingVertical: 6, paddingHorizontal: 12, backgroundColor: theme.colors.successSoft || '#E8F5E9', borderRadius: 8, marginBottom: theme.spacing.sm },
+  scanTimeText: { fontSize: theme.typography.fontSize.sm, color: theme.colors.success || '#2E7D32', fontWeight: '600' },
   warningText: { color: theme.colors.warning, marginBottom: theme.spacing.base, fontSize: theme.typography.fontSize.sm },
   rowLine: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: theme.spacing.xs, borderBottomWidth: 1, borderBottomColor: theme.colors.border },
   label: { fontSize: theme.typography.fontSize.sm, color: theme.colors.textSecondary },

@@ -53,7 +53,7 @@ try {
   const T = require('react-native-torch');
   TorchModule = T.default || T;
 } catch (e) {
-  logger.warn('Torch not available', e?.message);
+  logger.debug('Torch not available', e?.message);
 }
 
 let ImageManipulator = null;
@@ -122,8 +122,10 @@ export default function MrzScanScreen({ navigation }) {
   const [frontLoading, setFrontLoading] = useState(false);
   const [torchOn, setTorchOn] = useState(false);
   const [mrzDocType, setMrzDocType] = useState(Platform.OS === 'android' ? DocType.ID : DocType.Passport);
-  const [scanMode, setScanMode] = useState(DocType.ID); // ID_CARD ↔ Passport 800ms döngü (lock öncesi)
+  const [scanMode, setScanMode] = useState(DocType.ID); // ID_CARD ↔ Passport döngü (lock öncesi)
   const [mrzLocked, setMrzLocked] = useState(false); // Sonuç gelince true, toggle durur
+  const [cameraKey, setCameraKey] = useState(0); // Ekrana her girişte artır → kamera yeniden mount (siyah ekran önlemi)
+  const [scanDurationMs, setScanDurationMs] = useState(0); // Milisaniye cinsinden tarama süresi
   const [isExiting, setIsExiting] = useState(false);
   const [isScreenFocused, setIsScreenFocused] = useState(true);
   const [savedToOkutulan, setSavedToOkutulan] = useState(false);
@@ -136,13 +138,20 @@ export default function MrzScanScreen({ navigation }) {
   const mrzLockedRef = useRef(false);
   const lockedDocTypeRef = useRef(DocType.ID);
   const selectedDocTypeRef = useRef(DocType.ID);
+  const hasLeftScreenRef = useRef(false);
+  const scanStartTimeRef = useRef(0);
   const frontCameraRef = useRef(null);
   const insets = useSafeAreaInsets();
   const [permission, requestPermission] = useCameraPermissions();
 
   useFocusEffect(
     useCallback(() => {
+      scanStartTimeRef.current = Date.now();
       setIsScreenFocused(true);
+      if (hasLeftScreenRef.current) {
+        setCameraKey((k) => k + 1);
+        hasLeftScreenRef.current = false;
+      }
       acceptedRawRef.current = '';
       mrzLockedRef.current = false;
       setMrzLocked(false);
@@ -150,6 +159,7 @@ export default function MrzScanScreen({ navigation }) {
       setFailCount(0);
       setLastMrzChecksReason('');
       return () => {
+        hasLeftScreenRef.current = true;
         setIsScreenFocused(false);
         if (TorchModule) {
           try {
@@ -172,7 +182,13 @@ export default function MrzScanScreen({ navigation }) {
 
   useEffect(() => {
     if (!isExiting) return;
-    const t = setTimeout(() => navigation.goBack(), 0);
+    const t = setTimeout(() => {
+      if (navigation.canGoBack()) {
+        navigation.goBack();
+      } else {
+        navigation.navigate('Main');
+      }
+    }, 0);
     return () => clearTimeout(t);
   }, [isExiting, navigation]);
 
@@ -190,7 +206,7 @@ export default function MrzScanScreen({ navigation }) {
       const raw = typeof data === 'string' ? data : (data?.nativeEvent?.mrz ?? data?.mrz ?? '');
       if (!raw || !mounted.current) return;
       if (acceptedRawRef.current === raw) return;
-      setLastMrzRaw(raw.slice(0, 30) + '…');
+      const scanDurationMs = Date.now() - scanStartTimeRef.current;
       let payload = parseMrz(raw);
       if (!payload.checks?.ok && raw) {
         const fixed = fixMrzOcrErrors(raw);
@@ -210,7 +226,7 @@ export default function MrzScanScreen({ navigation }) {
         if (fromCheckIn) {
           const num = (p.passportNumber || '').trim();
           const isTc = /^\d{11}$/.test(num);
-          navigation.replace('CheckIn', { mrzPayload: p, selectedOda: route.params?.selectedOda });
+          navigation.replace('CheckIn', { mrzPayload: p, selectedOda: route.params?.selectedOda, scanDurationMs });
           saveOkutulanBelgeAsync(
             {
               ad: (p.givenNames || '').trim(),
@@ -224,7 +240,7 @@ export default function MrzScanScreen({ navigation }) {
             null
           );
         } else {
-          navigation.replace('MrzResult', { payload: p });
+          navigation.replace('MrzResult', { payload: p, scanDurationMs });
         }
       };
 
@@ -235,6 +251,7 @@ export default function MrzScanScreen({ navigation }) {
         setMrzLocked(true);
         if (timeoutRef.current) clearTimeout(timeoutRef.current);
         setInstantPayload(p);
+        setScanDurationMs(scanDurationMs);
       };
 
       if (payload.checks?.ok) {
@@ -259,6 +276,7 @@ export default function MrzScanScreen({ navigation }) {
         }
         return;
       }
+      setLastMrzRaw(raw.slice(0, 30) + '…');
       setLastMrzChecksReason(payload.checks?.reason || 'invalid_format');
       setStableReadCount(0);
       lastStableRawRef.current = '';
@@ -296,12 +314,13 @@ export default function MrzScanScreen({ navigation }) {
         (ACCEPT_ON_CHECK_FAIL && ((docNum && (payload.birthDate || '').trim()) || (ACCEPT_MINIMAL_DOC_NUMBER_ONLY && docNum)));
       if (hasMinimal) {
         setMrzCheckFailed(!payload.checks?.ok);
+        const scanDurationMs = scanStartTimeRef.current ? Date.now() - scanStartTimeRef.current : 0;
         if (SHOW_INSTANT_RESULT && fromCheckIn) {
           setInstantPayload(payload);
         } else if (fromCheckIn) {
-          navigation.replace('CheckIn', { mrzPayload: payload, selectedOda: route.params?.selectedOda });
+          navigation.replace('CheckIn', { mrzPayload: payload, selectedOda: route.params?.selectedOda, scanDurationMs });
         } else {
-          navigation.replace('MrzResult', { payload });
+          navigation.replace('MrzResult', { payload, scanDurationMs });
         }
       } else {
         setLastMrzChecksReason(payload.checks?.reason || 'invalid_format');
@@ -693,6 +712,20 @@ export default function MrzScanScreen({ navigation }) {
     borderWidth: 2,
     borderColor: 'rgba(255,255,255,0.7)',
     borderRadius: frameBorderRadius,
+    overflow: 'hidden',
+  };
+  const mrzZoneHeight = frameHeight * 0.22;
+  const mrzZoneStyle = {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    height: mrzZoneHeight,
+    borderTopWidth: 2,
+    borderColor: 'rgba(0,255,120,0.9)',
+    borderBottomLeftRadius: frameBorderRadius,
+    borderBottomRightRadius: frameBorderRadius,
+    backgroundColor: 'rgba(0,255,120,0.08)',
   };
 
   const toggleTorch = useCallback(() => {
@@ -729,12 +762,17 @@ export default function MrzScanScreen({ navigation }) {
       <SafeAreaView style={whiteResultStyles.container} edges={['top']}>
         <ScrollView contentContainerStyle={whiteResultStyles.scroll}>
           <View style={whiteResultStyles.header}>
-            <TouchableOpacity onPress={() => { setInstantPayload(null); setMergedPayload(null); setFrontImageUri(null); setMrzCheckFailed(false); setSavedToOkutulan(false); }} style={whiteResultStyles.backBtn}>
+            <TouchableOpacity onPress={() => { acceptedRawRef.current = ''; mrzLockedRef.current = false; setMrzLocked(false); setScanMode(DocType.ID); setInstantPayload(null); setMergedPayload(null); setFrontImageUri(null); setMrzCheckFailed(false); setSavedToOkutulan(false); setScanDurationMs(0); }} style={whiteResultStyles.backBtn}>
               <Ionicons name="arrow-back" size={24} color="#111" />
             </TouchableOpacity>
             <Text style={whiteResultStyles.headerTitle}>{isKimlik ? 'Kimlik bilgileri (MRZ)' : 'Pasaport bilgileri (MRZ)'}</Text>
             <View style={whiteResultStyles.backBtn} />
           </View>
+          {scanDurationMs > 0 && (
+            <View style={whiteResultStyles.scanTimeBadge}>
+              <Text style={whiteResultStyles.scanTimeText}>Okuma süresi: {(scanDurationMs / 1000).toFixed(2)} sn</Text>
+            </View>
+          )}
           {frontImageUri ? (
             <View style={whiteResultStyles.photoWrap}>
               <Image source={{ uri: frontImageUri }} style={whiteResultStyles.photo} resizeMode="cover" />
@@ -888,7 +926,7 @@ export default function MrzScanScreen({ navigation }) {
   return (
     <View style={styles.container}>
       <MrzReaderView
-        key={selectedDocType}
+        key={`mrz-cam-${cameraKey}`}
         style={StyleSheet.absoluteFill}
         docType={selectedDocType}
         cameraSelector={CameraSelector.Back}
@@ -937,11 +975,11 @@ export default function MrzScanScreen({ navigation }) {
         </View>
       )}
       <View style={styles.overlayCenter} pointerEvents="none">
-        <View style={[styles.frame, id1FrameStyle]} />
+        <View style={[styles.frame, id1FrameStyle]}>
+          <View style={mrzZoneStyle} />
+        </View>
         <Text style={styles.frameHint}>
-          {selectedDocType === DocType.ID
-            ? 'Pasaport gibi: Çerçeve içine MRZ (3 satır) alanını alıp çekin · Karanlıkta fener kullanın'
-            : 'Pasaport veya kimlik MRZ alanını hizalayın · Karanlıkta fener kullanın'}
+          MRZ görünür görünmez otomatik okunur · Yeşil bant = MRZ alanı (kimlik/pasaport fark etmez)
         </Text>
       </View>
       <View style={[styles.overlayBottom, { paddingBottom: insets.bottom + 20 }]} pointerEvents="box-none">
@@ -1100,6 +1138,8 @@ const whiteResultStyles = StyleSheet.create({
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: theme.spacing.sm, marginBottom: 8 },
   backBtn: { padding: theme.spacing.sm, minWidth: 44 },
   headerTitle: { fontSize: theme.typography.fontSize.xl, fontWeight: '700', color: '#111' },
+  scanTimeBadge: { alignSelf: 'center', paddingVertical: 6, paddingHorizontal: 12, backgroundColor: '#E8F5E9', borderRadius: 8, marginBottom: theme.spacing.sm },
+  scanTimeText: { fontSize: theme.typography.fontSize.sm, color: '#2E7D32', fontWeight: '600' },
   photoWrap: { alignSelf: 'center', width: 120, height: 150, borderRadius: 8, overflow: 'hidden', backgroundColor: '#f0f0f0', marginBottom: theme.spacing.lg },
   photo: { width: '100%', height: '100%' },
   card: { backgroundColor: '#F8F9FA', borderRadius: 12, padding: theme.spacing.lg, marginBottom: theme.spacing.lg },
