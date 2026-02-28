@@ -79,14 +79,17 @@ function normalizeYYMMDD(yymmdd) {
 
 function normalizeMrzLines(raw) {
   const one = (raw || '').trim().toUpperCase().replace(/\s/g, '');
-  if (one.length === 90 && /^[A-Z0-9<]+$/.test(one)) {
-    return [one.slice(0, 30), one.slice(30, 60), one.slice(60, 90)];
+  if (one.length >= 86 && one.length <= 90 && one.length !== 90 && /^[A-Z0-9<]+$/.test(one)) {
+    const a = 44;
+    return [one.slice(0, a).padEnd(44, '<'), one.slice(a).padEnd(44, '<')];
   }
-  if (one.length === 88 && /^[A-Z0-9<]+$/.test(one)) {
-    return [one.slice(0, 44), one.slice(44, 88)];
+  if (one.length >= 86 && one.length <= 94 && /^[A-Z0-9<]+$/.test(one)) {
+    const a = 30;
+    const b = 60;
+    return [one.slice(0, a).padEnd(30, '<'), one.slice(a, b).padEnd(30, '<'), one.slice(b).padEnd(30, '<')];
   }
-  if (one.length === 72 && /^[A-Z0-9<]+$/.test(one)) {
-    return [one.slice(0, 36), one.slice(36, 72)];
+  if (one.length >= 70 && one.length <= 74 && /^[A-Z0-9<]+$/.test(one)) {
+    return [one.slice(0, 36).padEnd(36, '<'), one.slice(36, 72).padEnd(36, '<')];
   }
   return (raw || '').replace(/\r\n/g, '\n').replace(/\r/g, '\n').split('\n').map((l) => l.trim().toUpperCase().replace(/\s/g, '')).filter(Boolean);
 }

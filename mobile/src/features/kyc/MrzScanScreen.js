@@ -63,6 +63,12 @@ try {
 
 const TIMEOUT_MS = 15000;
 const MAX_FAILS = 6;
+
+/** ISO/IEC 7810 ID-1 (kimlik/pasaport kartı) ölçüleri – overlay çerçeve oranı */
+const ID1_WIDTH_MM = 85.6;
+const ID1_HEIGHT_MM = 53.98;
+const ID1_CORNER_RADIUS_MM = 3.18;
+const ID1_ASPECT_RATIO = ID1_WIDTH_MM / ID1_HEIGHT_MM;
 // MRZ göründüğü anda anlık çekim (en üst düzey) — kimlik/pasaport fark etmez
 const STABLE_READ_COUNT = 1;
 const SHOW_INSTANT_RESULT = true;
@@ -120,6 +126,8 @@ export default function MrzScanScreen({ navigation }) {
   const [mrzLocked, setMrzLocked] = useState(false); // Sonuç gelince true, toggle durur
   const [isExiting, setIsExiting] = useState(false);
   const [isScreenFocused, setIsScreenFocused] = useState(true);
+  const [savedToOkutulan, setSavedToOkutulan] = useState(false);
+  const [savingOkutulan, setSavingOkutulan] = useState(false);
   const timeoutRef = useRef(null);
   const mounted = useRef(true);
   const lastStableRawRef = useRef('');
@@ -135,6 +143,12 @@ export default function MrzScanScreen({ navigation }) {
   useFocusEffect(
     useCallback(() => {
       setIsScreenFocused(true);
+      acceptedRawRef.current = '';
+      mrzLockedRef.current = false;
+      setMrzLocked(false);
+      setScanMode(DocType.ID);
+      setFailCount(0);
+      setLastMrzChecksReason('');
       return () => {
         setIsScreenFocused(false);
         if (TorchModule) {
@@ -307,6 +321,7 @@ export default function MrzScanScreen({ navigation }) {
         const res = await api.post('/ocr/mrz', formData);
         const raw = res?.data?.raw;
         const qualityHints = res?.data?.qualityHints;
+        const failureReason = res?.data?.failureReason;
         if (raw) {
           processMrzRaw(raw);
         } else {
@@ -322,14 +337,16 @@ export default function MrzScanScreen({ navigation }) {
               setTorchOn(false);
             } catch (_) {}
           }
-          Toast.show({ type: 'error', text1: 'MRZ bulunamadı', text2: 'MRZ alanı net görünsün, tekrar deneyin.' });
+          const reasonText = failureReason || 'MRZ alanı net görünsün, tekrar deneyin.';
+          Toast.show({ type: 'error', text1: 'MRZ okunamadı', text2: reasonText });
         }
       } catch (e) {
         const msg = e?.message || '';
+        const backendReason = e?.response?.data?.failureReason || e?.response?.data?.message;
         Toast.show({
           type: 'error',
           text1: 'MRZ okunamadı',
-          text2: msg.includes('sunucu') || msg.includes('giriş') ? 'Backend bağlantısı ve giriş gerekli.' : msg || 'Tekrar deneyin.',
+          text2: backendReason || (msg.includes('sunucu') || msg.includes('giriş') ? 'Backend bağlantısı ve giriş gerekli.' : msg) || 'Tekrar deneyin.',
         });
       } finally {
         if (mounted.current) setOcrLoading(false);
@@ -345,8 +362,14 @@ export default function MrzScanScreen({ navigation }) {
       setOcrLoading(true);
       logger.info('[Galeri kimlik] Başlatılıyor', { uri: uri ? uri.slice(0, 80) + '…' : '' });
       try {
-        const FileSystem = require('expo-file-system').default;
-        const base64 = await FileSystem.readAsStringAsync(uri, { encoding: FileSystem.EncodingType.Base64 });
+        let base64;
+        try {
+          base64 = await FileSystem.readAsStringAsync(uri, { encoding: FileSystem.EncodingType.Base64 });
+        } catch (readErr) {
+          logger.error('[Galeri kimlik] Base64 okuma hatası: ' + (readErr?.message || String(readErr)));
+          if (__DEV__) console.warn(readErr);
+          throw readErr;
+        }
         logger.info('[Galeri kimlik] Base64 okundu', { base64Len: base64?.length ?? 0 });
         const res = await api.post('/ocr/document-base64', { imageBase64: base64 });
         const data = res?.data;
@@ -364,6 +387,11 @@ export default function MrzScanScreen({ navigation }) {
         if (mrzRaw) {
           logger.info('[Galeri kimlik] MRZ bulundu, processMrzRaw çağrılıyor');
           processMrzRaw(mrzRaw);
+          return;
+        }
+        const mrzFailureReason = data?.mrzFailureReason;
+        if (mrzFailureReason) {
+          Toast.show({ type: 'error', text1: 'MRZ okunamadı', text2: mrzFailureReason });
           return;
         }
         if (merged && (merged.ad || merged.soyad || merged.kimlikNo || merged.pasaportNo)) {
@@ -399,12 +427,16 @@ export default function MrzScanScreen({ navigation }) {
           return;
         }
         logger.warn('[Galeri kimlik] MRZ ve merged/front yok, belge okunamadı');
-        Toast.show({ type: 'error', text1: 'Belge okunamadı', text2: 'MRZ veya ön yüz net görünsün.' });
+        const fallbackReason = data?.mrzFailureReason || 'MRZ veya ön yüz net görünsün (pasaport/kimlik arka yüzündeki bant veya ön yüz bilgileri).';
+        Toast.show({ type: 'error', text1: 'Belge okunamadı', text2: fallbackReason });
       } catch (e) {
         const msg = e?.message || String(e);
         const resMsg = e?.response?.data?.message || e?.response?.data?.error;
-        logger.error('[Galeri kimlik] Hata', { message: msg, responseMessage: resMsg, status: e?.response?.status, stack: e?.stack?.slice(0, 300) });
-        Toast.show({ type: 'error', text1: 'Hata', text2: msg || resMsg || 'Belge okunamadı.' });
+        const failureReason = e?.response?.data?.failureReason;
+        const status = e?.response?.status;
+        logger.error(`[Galeri kimlik] Hata: ${msg || 'unknown'}` + (resMsg ? ` | backend: ${resMsg}` : '') + (status ? ` | status: ${status}` : ''));
+        if (__DEV__) console.warn('[Galeri kimlik] full error', e?.response?.data || e);
+        Toast.show({ type: 'error', text1: 'Hata', text2: failureReason || resMsg || msg || 'Belge okunamadı.' });
       } finally {
         if (mounted.current) setOcrLoading(false);
       }
@@ -466,6 +498,49 @@ export default function MrzScanScreen({ navigation }) {
     const [y, m, d] = iso.split('-');
     return [d, m, y].filter(Boolean).join('.');
   }, []);
+
+  /** Okutulan kimlik/pasaportu sadece "Okutulan kimlikler" listesine kaydet (Ayarlar'da görünür). */
+  const handleKaydetOkutulan = useCallback(async () => {
+    const p = mergedPayload || instantPayload;
+    if (!p) return;
+    const display = mergedPayload || {
+      ad: (instantPayload?.givenNames || '').trim(),
+      soyad: (instantPayload?.surname || '').trim(),
+      kimlikNo: /^\d{11}$/.test((instantPayload?.passportNumber || '').trim()) ? (instantPayload?.passportNumber || '').trim() : '',
+      pasaportNo: (instantPayload?.passportNumber || '').trim() || '',
+      dogumTarihi: isoToDDMMYYYY(instantPayload?.birthDate) || '',
+      uyruk: (instantPayload?.nationality || 'TÜRK').trim(),
+    };
+    const payloadToSave = {
+      ad: display.ad || '',
+      soyad: display.soyad || '',
+      kimlikNo: display.kimlikNo || null,
+      pasaportNo: display.pasaportNo || null,
+      belgeNo: display.kimlikNo || display.pasaportNo || null,
+      dogumTarihi: display.dogumTarihi || null,
+      uyruk: display.uyruk || 'TÜRK',
+      belgeTuru: display.kimlikNo ? 'kimlik' : 'pasaport',
+    };
+    if (!payloadToSave.ad || !payloadToSave.soyad) {
+      Toast.show({ type: 'error', text1: 'Eksik bilgi', text2: 'Ad ve soyad olmadan kaydedilemez.' });
+      return;
+    }
+    setSavingOkutulan(true);
+    try {
+      const body = { ...payloadToSave };
+      if (frontImageUri && typeof frontImageUri === 'string') {
+        const base64 = await FileSystem.readAsStringAsync(frontImageUri, { encoding: FileSystem.EncodingType.Base64 });
+        if (base64) body.photoBase64 = base64;
+      }
+      await api.post('/okutulan-belgeler', body);
+      setSavedToOkutulan(true);
+      Toast.show({ type: 'success', text1: 'Kaydedildi', text2: 'Ayarlar > Okutulan kimlikler bölümünde görüntüleyebilirsiniz.' });
+    } catch (e) {
+      Toast.show({ type: 'error', text1: 'Kayıt başarısız', text2: e?.response?.data?.message || 'Tekrar deneyin veya internet bağlantınızı kontrol edin.' });
+    } finally {
+      setSavingOkutulan(false);
+    }
+  }, [mergedPayload, instantPayload, frontImageUri, isoToDDMMYYYY]);
 
   const goToCheckIn = useCallback(
     (payload, photoUri) => {
@@ -592,7 +667,7 @@ export default function MrzScanScreen({ navigation }) {
   }, []);
 
   // DocType toggle: ID_CARD (600–900ms) → Passport (600–900ms) döngüsü; sonuç gelince lock
-  const SCAN_MODE_INTERVAL_MS = 800;
+  const SCAN_MODE_INTERVAL_MS = 1000;
   useEffect(() => {
     if (!MrzReaderView || Platform.OS !== 'android' || mrzLockedRef.current) return;
     const t = setInterval(() => {
@@ -607,6 +682,18 @@ export default function MrzScanScreen({ navigation }) {
     : (mrzLockedRef.current ? lockedDocTypeRef.current : scanMode);
   selectedDocTypeRef.current = selectedDocType;
   const useUnifiedFlow = USE_UNIFIED_MRZ_FLOW;
+
+  const { width: screenWidth } = Dimensions.get('window');
+  const frameWidth = screenWidth * 0.9;
+  const frameHeight = frameWidth * ID1_ASPECT_RATIO;
+  const frameBorderRadius = Math.max(6, (frameWidth * ID1_CORNER_RADIUS_MM) / ID1_HEIGHT_MM);
+  const id1FrameStyle = {
+    width: frameWidth,
+    height: frameHeight,
+    borderWidth: 2,
+    borderColor: 'rgba(255,255,255,0.7)',
+    borderRadius: frameBorderRadius,
+  };
 
   const toggleTorch = useCallback(() => {
     if (!TorchModule) return;
@@ -642,7 +729,7 @@ export default function MrzScanScreen({ navigation }) {
       <SafeAreaView style={whiteResultStyles.container} edges={['top']}>
         <ScrollView contentContainerStyle={whiteResultStyles.scroll}>
           <View style={whiteResultStyles.header}>
-            <TouchableOpacity onPress={() => { setInstantPayload(null); setMergedPayload(null); setFrontImageUri(null); setMrzCheckFailed(false); }} style={whiteResultStyles.backBtn}>
+            <TouchableOpacity onPress={() => { setInstantPayload(null); setMergedPayload(null); setFrontImageUri(null); setMrzCheckFailed(false); setSavedToOkutulan(false); }} style={whiteResultStyles.backBtn}>
               <Ionicons name="arrow-back" size={24} color="#111" />
             </TouchableOpacity>
             <Text style={whiteResultStyles.headerTitle}>{isKimlik ? 'Kimlik bilgileri (MRZ)' : 'Pasaport bilgileri (MRZ)'}</Text>
@@ -689,6 +776,20 @@ export default function MrzScanScreen({ navigation }) {
               <Text style={whiteResultStyles.loadingText}>Ön yüz okunuyor...</Text>
             </View>
           ) : null}
+          <TouchableOpacity
+            style={[whiteResultStyles.primaryBtn, whiteResultStyles.secondaryBtn]}
+            onPress={handleKaydetOkutulan}
+            disabled={savingOkutulan}
+          >
+            {savingOkutulan ? (
+              <ActivityIndicator size="small" color="#111" />
+            ) : (
+              <Ionicons name="save-outline" size={22} color="#111" />
+            )}
+            <Text style={whiteResultStyles.secondaryBtnText}>
+              {savedToOkutulan ? 'Kaydedildi' : 'Kaydet (Okutulan kimlikler)'}
+            </Text>
+          </TouchableOpacity>
           <TouchableOpacity
             style={[whiteResultStyles.primaryBtn, whiteResultStyles.secondaryBtn]}
             onPress={() => goToCheckIn()}
@@ -836,7 +937,7 @@ export default function MrzScanScreen({ navigation }) {
         </View>
       )}
       <View style={styles.overlayCenter} pointerEvents="none">
-        <View style={styles.frame} />
+        <View style={[styles.frame, id1FrameStyle]} />
         <Text style={styles.frameHint}>
           {selectedDocType === DocType.ID
             ? 'Pasaport gibi: Çerçeve içine MRZ (3 satır) alanını alıp çekin · Karanlıkta fener kullanın'
@@ -958,7 +1059,7 @@ const styles = StyleSheet.create({
   cameraWrap: { flex: 1, position: 'relative' },
   camera: { flex: 1, width: '100%' },
   overlayCenter: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center' },
-  frame: { width: '90%', height: 120, borderWidth: 2, borderColor: 'rgba(255,255,255,0.7)', borderRadius: 8 },
+  frame: {},
   frameHint: { marginTop: theme.spacing.sm, color: 'rgba(255,255,255,0.95)', fontSize: theme.typography.fontSize.sm, textAlign: 'center', paddingHorizontal: theme.spacing.base },
   frameHintSecondary: { marginTop: 4, color: 'rgba(255,255,255,0.7)', fontSize: 11, textAlign: 'center', paddingHorizontal: theme.spacing.base },
   overlayBottom: { position: 'absolute', bottom: 0, left: 0, right: 0, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 28 },

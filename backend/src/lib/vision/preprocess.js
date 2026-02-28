@@ -144,9 +144,9 @@ async function preprocessForKimlikMrz(filePath, options = {}) {
     const w = image.bitmap.width;
     const h = image.bitmap.height;
     image = image.greyscale().normalize().contrast(contrast);
-    if (upscale && (w < 800 || h < 300)) {
-      const scale = Math.min(2, 800 / Math.max(w, 1), 400 / Math.max(h, 1));
-      if (scale > 1.1) {
+    if (upscale && (w < 1000 || h < 400)) {
+      const scale = Math.min(2.2, 1000 / Math.max(w, 1), 500 / Math.max(h, 1));
+      if (scale > 1.05) {
         image = image.resize(Math.round(w * scale), Math.round(h * scale), Jimp.RESIZE_BICUBIC);
       }
     }

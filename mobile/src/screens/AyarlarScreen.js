@@ -394,9 +394,9 @@ export default function AyarlarScreen() {
         </View>
 
         <View style={[styles.section, { backgroundColor: colors.surface }]}>
-          <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>Okutulan kimlikler / pasaportlar</Text>
+          <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>Okutulan kimlikler</Text>
           <Text style={[styles.infoText, { color: colors.textSecondary, marginBottom: spacing.sm }]}>
-            MRZ ile okuttuğunuz belgeler otomatik kaydedilir; liste burada görünür.
+            Kimlik veya pasaport okuttuktan sonra "Kaydet" ile kaydettiğiniz belgeler burada listelenir.
           </Text>
           {okutulanBelgelerLoading ? (
             <Text style={[styles.infoText, { color: colors.textSecondary }]}>Yükleniyor...</Text>

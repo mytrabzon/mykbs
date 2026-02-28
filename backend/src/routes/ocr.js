@@ -90,7 +90,7 @@ function normalizeOcrTextForMrz(text) {
     .replace(/[^A-Z0-9<]/g, '');
 }
 
-/** OCR çıktısından MRZ satır adayları: kimlik/pasaport/fotokopi 22+ karakter kabul. */
+/** OCR çıktısından MRZ satır adayları: kimlik/pasaport/fotokopi 22+ karakter. TD3 (pasaport) 2x44 için 38-46 da kabul. */
 function extractMrzLinesFromOcr(text) {
   if (!text || typeof text !== 'string') return [];
   const lines = text.split(/\r\n|\r|\n/)
@@ -98,7 +98,10 @@ function extractMrzLinesFromOcr(text) {
     .map((l) => l.replace(/[^A-Z0-9<]/g, ''))
     .filter((l) => l.length >= 22);
   const withAngle = lines.filter((l) => l.includes('<'));
-  const candidates = withAngle.length >= 2 ? withAngle : lines;
+  const twoLine44 = lines.filter((l) => l.length >= 38 && l.length <= 46);
+  const threeLine30 = lines.filter((l) => l.length >= 24 && l.length <= 33);
+  const candidates = threeLine30.length >= 3 ? threeLine30.slice(0, 3)
+    : (withAngle.length >= 2 ? withAngle : (twoLine44.length >= 2 ? twoLine44 : lines));
   return candidates.filter((l) => l.length >= 22 && l.length <= 46);
 }
 
@@ -107,15 +110,24 @@ function extractMrzFromOcr(text) {
   if (!text || typeof text !== 'string') return '';
   const normalized = normalizeOcrTextForMrz(text);
   const one = normalized.trim();
-  if (one.length >= 85 && one.length <= 95 && /^[A-Z0-9<]+$/.test(one)) {
-    const a = one.length >= 90 ? 30 : Math.floor(one.length / 3);
-    const s1 = padMrzLine(one.slice(0, a), 30);
-    const s2 = padMrzLine(one.slice(a, a * 2), 30);
-    const s3 = padMrzLine(one.slice(a * 2, one.length), 30);
-    return s1 + '\n' + s2 + '\n' + s3;
+  if (one.length >= 82 && one.length <= 95 && /^[A-Z0-9<]+$/.test(one)) {
+    const n = one.length;
+    if (n >= 85 && n <= 95) {
+      const a = n >= 90 ? 30 : Math.floor(n / 3);
+      const s1 = padMrzLine(one.slice(0, a), 30);
+      const s2 = padMrzLine(one.slice(a, a * 2), 30);
+      const s3 = padMrzLine(one.slice(a * 2, n), 30);
+      return s1 + '\n' + s2 + '\n' + s3;
+    }
+    if (n >= 82 && n <= 84) {
+      const a = 42;
+      const s1 = padMrzLine(one.slice(0, a), 44);
+      const s2 = padMrzLine(one.slice(a, n), 44);
+      return s1 + '\n' + s2;
+    }
   }
-  if (one.length >= 82 && one.length <= 96 && /^[A-Z0-9<]+$/.test(one)) {
-    const a = one.length >= 88 ? 44 : Math.floor(one.length / 2);
+  if (one.length >= 80 && one.length <= 96 && /^[A-Z0-9<]+$/.test(one)) {
+    const a = 44;
     const s1 = padMrzLine(one.slice(0, a), 44);
     const s2 = padMrzLine(one.slice(a, one.length), 44);
     return s1 + '\n' + s2;
@@ -126,8 +138,12 @@ function extractMrzFromOcr(text) {
     return s1 + '\n' + s2;
   }
   const lines = extractMrzLinesFromOcr(text);
-  if (lines.length >= 3 && lines.every((l) => l.length >= 22 && l.length <= 33)) {
+  if (lines.length >= 3 && lines.every((l) => l.length >= 24 && l.length <= 33)) {
     return lines.slice(0, 3).map((l) => padMrzLine(l, 30)).join('\n');
+  }
+  if (lines.length >= 3 && lines.some((l) => l.length >= 26 && l.length <= 32)) {
+    const take = lines.filter((l) => l.length >= 26 && l.length <= 32).slice(0, 3);
+    if (take.length >= 3) return take.map((l) => padMrzLine(l, 30)).join('\n');
   }
   if (lines.length >= 2 && lines.every((l) => l.length >= 36 && l.length <= 46)) {
     return lines.slice(0, 2).map((l) => padMrzLine(l, 44)).join('\n');
@@ -267,14 +283,15 @@ async function runMrzPipeline(filePath) {
 
     const preprocessVariants = [
       { fn: (p) => preprocessForKimlikMrz(p, { contrast: 0.55 }), name: 'kimlik' },
+      { fn: (p) => preprocessForKimlikMrz(p, { contrast: 0.65 }), name: 'kimlikMid' },
       { fn: (p) => preprocessForKimlikMrz(p, { contrast: 0.8 }), name: 'kimlikHi' },
+      { fn: (p) => preprocessForKimlikMrz(p, { sharpen: true }), name: 'kimlikSharp' },
       { fn: preprocessForPhotocopyMrz, name: 'photocopy' },
       { fn: preprocessForPaperMrz, name: 'paper' },
-      { fn: (p) => preprocessForKimlikMrz(p, { sharpen: true }), name: 'kimlikSharp' },
     ];
 
-    const psms = [7, 6, 11];
-    const bottomFractions = [0.4, 0.35, 0.30, 0.25];
+    const psms = [7, 13, 6, 11];
+    const bottomFractions = [0.35, 0.30, 0.28, 0.25, 0.22, 0.20, 0.18, 0.15, 0.12, 0.40];
 
     async function tryImage(inputPath) {
       for (const variant of preprocessVariants) {
@@ -367,6 +384,21 @@ async function runMrzPipeline(filePath) {
   };
 }
 
+/** MRZ bulunamadığında kullanıcıya gösterilecek sebep metni (pasaport/kimlik fark etmez). */
+function buildMrzFailureReason(mrzResult, fallbackAlsoFailed) {
+  const attempts = (mrzResult && mrzResult.attemptsUsed) || 0;
+  const score = (mrzResult && mrzResult.score) || 0;
+  const parts = [];
+  if (attempts > 0) {
+    parts.push(`${attempts} farklı okuma denemesi yapıldı, MRZ satırı tespit edilemedi.`);
+  }
+  if (score > 0 && score < 50) {
+    parts.push('Okunan metin MRZ formatına uymuyor (kimlik/pasaport arka yüzündeki 2 veya 3 satırlık bant).');
+  }
+  parts.push('Lütfen: (1) Belgenin arka yüzündeki MRZ bandı tam ve net görünsün, (2) Işık yeterli olsun veya fener kullanın, (3) Görüntü bulanık veya kesik olmasın.');
+  return parts.join(' ');
+}
+
 /** mrz.js parsed.fields → ocr payload format (documentNumber, birthDate, ...). */
 function mrzFieldsToPayload(fields) {
   if (!fields) return null;
@@ -424,13 +456,16 @@ router.post('/mrz', authenticateTesisOrSupabase, upload.single('image'), async (
         qualityHints: result.qualityHints || {},
       });
     }
+    const failureReason = buildMrzFailureReason(result, true);
     return res.status(400).json({
-      message: 'Görüntüde MRZ bulunamadı. MRZ görünür olsun (pasaport, kimlik, kağıt fark etmez).',
+      message: 'Görüntüde MRZ bulunamadı.',
+      failureReason,
       qualityHints: result.qualityHints || {},
     });
   } catch (error) {
     console.error('OCR MRZ hatası:', error);
-    res.status(500).json({ message: 'MRZ okunamadı', error: error.message });
+    const failureReason = 'Sunucu hatası: ' + (error.message || 'MRZ işlenemedi.');
+    res.status(500).json({ message: 'MRZ okunamadı', error: error.message, failureReason });
   } finally {
     if (filePath && fs.existsSync(filePath)) {
       fs.unlink(filePath, () => {});
@@ -481,36 +516,47 @@ router.post('/document', authenticateTesisOrSupabase, upload.single('image'), as
 router.post('/document-base64', authenticateTesisOrSupabase, express.json({ limit: '8mb' }), async (req, res) => {
   const base64 = req.body?.imageBase64;
   let filePath = null;
+  const logPrefix = '[document-base64]';
   try {
     if (!base64 || typeof base64 !== 'string') {
+      console.warn(logPrefix, 'body.imageBase64 yok veya string değil');
       return res.status(400).json({ message: 'imageBase64 gerekli' });
     }
     const buf = Buffer.from(base64, 'base64');
     if (buf.length === 0) {
+      console.warn(logPrefix, 'base64 decode sonrası buffer boş');
       return res.status(400).json({ message: 'Geçersiz görüntü' });
     }
+    console.log(logPrefix, 'görsel kaydediliyor', { bufLen: buf.length });
     if (!fs.existsSync(KIMLIK_UPLOAD_DIR)) {
       fs.mkdirSync(KIMLIK_UPLOAD_DIR, { recursive: true });
     }
     filePath = path.join(KIMLIK_UPLOAD_DIR, `base64_${Date.now()}_${Math.random().toString(36).slice(2, 8)}.jpg`);
     fs.writeFileSync(filePath, buf);
+    console.log(logPrefix, 'runMrzPipeline başlıyor');
     const mrzResult = await runMrzPipeline(filePath);
+    console.log(logPrefix, 'runMrzPipeline bitti', { ok: mrzResult.ok, hasMrzRaw: !!mrzResult.mrzRaw, score: mrzResult.score, attemptsUsed: mrzResult.attemptsUsed });
     let mrzRaw = mrzResult.mrzRaw || null;
     let mrzPayload = mrzResult.payload || null;
     if (!mrzPayload && mrzRaw) mrzPayload = parseMrzToPayload(mrzRaw);
+    const mrzFailureReason = !mrzRaw ? buildMrzFailureReason(mrzResult, false) : null;
+    console.log(logPrefix, 'Tesseract ön yüz OCR başlıyor');
     const { data: { text } } = await Tesseract.recognize(filePath, 'eng+ara+tur', { logger: () => {} });
     const front = parseIdentityDocument(text);
     const merged = mergeMrzAndFront(mrzPayload, front);
+    console.log(logPrefix, 'tamamlandı', { mrzRawLen: mrzRaw?.length ?? 0, mergedKeys: Object.keys(merged || {}) });
     res.json({
       success: true,
       rawText: text,
       mrz: mrzRaw || null,
       mrzPayload: mrzPayload || null,
+      mrzFailureReason: mrzFailureReason || undefined,
       front,
       merged,
     });
   } catch (error) {
-    console.error('OCR document-base64 hatası:', error);
+    console.error(logPrefix, 'hata:', error.message);
+    console.error(logPrefix, 'stack:', error.stack);
     res.status(500).json({ message: 'Belge okunamadı', error: error.message });
   } finally {
     if (filePath && fs.existsSync(filePath)) {
@@ -745,14 +791,14 @@ function parseIdentityDocument(text) {
 /** MRZ ham string → belge no, tarihler, isim, ülke (TD1/TD2/TD3) */
 function normalizeMrzLinesBackend(raw) {
   const one = (raw || '').trim().toUpperCase().replace(/\s/g, '');
-  if (one.length === 90 && /^[A-Z0-9<]+$/.test(one)) {
-    return [one.slice(0, 30), one.slice(30, 60), one.slice(60, 90)];
+  if (one.length >= 86 && one.length <= 90 && one.length !== 90 && /^[A-Z0-9<]+$/.test(one)) {
+    return [one.slice(0, 44).padEnd(44, '<'), one.slice(44).padEnd(44, '<')];
   }
-  if (one.length === 88 && /^[A-Z0-9<]+$/.test(one)) {
-    return [one.slice(0, 44), one.slice(44, 88)];
+  if (one.length >= 86 && one.length <= 94 && /^[A-Z0-9<]+$/.test(one)) {
+    return [one.slice(0, 30).padEnd(30, '<'), one.slice(30, 60).padEnd(30, '<'), one.slice(60).padEnd(30, '<')];
   }
-  if (one.length === 72 && /^[A-Z0-9<]+$/.test(one)) {
-    return [one.slice(0, 36), one.slice(36, 72)];
+  if (one.length >= 70 && one.length <= 74 && /^[A-Z0-9<]+$/.test(one)) {
+    return [one.slice(0, 36).padEnd(36, '<'), one.slice(36, 72).padEnd(36, '<')];
   }
   return (raw || '').replace(/\r\n/g, '\n').replace(/\r/g, '\n').split('\n').map((l) => l.trim().toUpperCase().replace(/\s/g, '')).filter(Boolean);
 }

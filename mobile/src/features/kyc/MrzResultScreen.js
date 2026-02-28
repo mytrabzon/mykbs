@@ -1,16 +1,27 @@
-import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
+import React, { useState, useCallback } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, ActivityIndicator } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import Toast from 'react-native-toast-message';
 import { theme } from '../../theme';
 import { validateMrz, toMinimalPayload } from '../../lib/mrz';
 import { maskMrz } from '../../lib/security/maskMrz';
+import { api } from '../../services/apiSupabase';
+
+/** Doğum tarihini ISO (YYYY-MM-DD) → DD.MM.YYYY */
+function isoToDDMMYYYY(iso) {
+  if (!iso) return '';
+  const [y, m, d] = iso.split('-');
+  return [d, m, y].filter(Boolean).join('.');
+}
 
 /**
- * MRZ okuma sonucu – confirm ekranı. Sadece onay sonrası server'a gönderim (roadmap).
+ * MRZ okuma sonucu – confirm ekranı. Kaydet ile okutulan kimlikler listesine eklenir (Ayarlar'da görünür).
  */
 export default function MrzResultScreen({ route, navigation }) {
   const payload = route?.params?.payload ?? null;
   const raw = payload?.raw ?? '';
+  const [savingOkutulan, setSavingOkutulan] = useState(false);
+  const [savedToOkutulan, setSavedToOkutulan] = useState(false);
 
   const validation = payload ? validateMrz(payload) : { valid: false, reason: 'no_payload' };
   const minimal = payload ? toMinimalPayload(payload) : null;
@@ -23,6 +34,38 @@ export default function MrzResultScreen({ route, navigation }) {
   const handleRetry = () => {
     navigation.replace('MrzScan');
   };
+
+  const handleKaydetOkutulan = useCallback(async () => {
+    if (!payload) return;
+    const num = (payload.passportNumber || '').trim();
+    const ad = (payload.givenNames || '').trim();
+    const soyad = (payload.surname || '').trim();
+    if (!ad || !soyad) {
+      Toast.show({ type: 'error', text1: 'Eksik bilgi', text2: 'Ad ve soyad olmadan kaydedilemez.' });
+      return;
+    }
+    const isTc = /^\d{11}$/.test(num);
+    const body = {
+      belgeTuru: isTc ? 'kimlik' : 'pasaport',
+      ad,
+      soyad,
+      kimlikNo: isTc ? num : null,
+      pasaportNo: !isTc ? num : null,
+      belgeNo: num || null,
+      dogumTarihi: payload.birthDate ? isoToDDMMYYYY(payload.birthDate) : null,
+      uyruk: (payload.nationality || 'TÜRK').trim(),
+    };
+    setSavingOkutulan(true);
+    try {
+      await api.post('/okutulan-belgeler', body);
+      setSavedToOkutulan(true);
+      Toast.show({ type: 'success', text1: 'Kaydedildi', text2: 'Ayarlar > Okutulan kimlikler bölümünde görüntüleyebilirsiniz.' });
+    } catch (e) {
+      Toast.show({ type: 'error', text1: 'Kayıt başarısız', text2: e?.response?.data?.message || 'Tekrar deneyin.' });
+    } finally {
+      setSavingOkutulan(false);
+    }
+  }, [payload]);
 
   if (!payload) {
     return (
@@ -53,6 +96,20 @@ export default function MrzResultScreen({ route, navigation }) {
         <Row label="Ad" value={payload.givenNames} />
         <Text style={styles.masked}>MRZ (maske): {maskMrz(raw)}</Text>
       </View>
+      <TouchableOpacity
+        style={[styles.buttonSecondary, styles.buttonSave]}
+        onPress={handleKaydetOkutulan}
+        disabled={savingOkutulan}
+      >
+        {savingOkutulan ? (
+          <ActivityIndicator size="small" color={theme.colors.primary} />
+        ) : (
+          <Ionicons name={savedToOkutulan ? 'checkmark-circle' : 'save-outline'} size={20} color={theme.colors.primary} />
+        )}
+        <Text style={styles.buttonSecondaryText}>
+          {savedToOkutulan ? 'Kaydedildi' : 'Kaydet (Okutulan kimlikler)'}
+        </Text>
+      </TouchableOpacity>
       <TouchableOpacity style={[styles.button, styles.primary]} onPress={handleConfirm} disabled={!validation.valid}>
         <Text style={styles.buttonText}>Onayla ve devam et</Text>
       </TouchableOpacity>
@@ -91,4 +148,5 @@ const styles = StyleSheet.create({
   buttonText: { color: '#fff', fontSize: theme.typography.fontSize.base, fontWeight: theme.typography.fontWeight.semibold },
   buttonSecondary: { ...theme.styles.button.outline, marginTop: theme.spacing.xs },
   buttonSecondaryText: { color: theme.colors.primary, fontSize: theme.typography.fontSize.base },
+  buttonSave: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 },
 });
