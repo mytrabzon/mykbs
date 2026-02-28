@@ -234,8 +234,93 @@ class DataService {
     }
   }
 
+  /** Odalar listesinden misafirleri türet, cache + emit (sadece filtre=tumu sonrası çağrılır). */
+  private async deriveAndEmitMisafirlerFromOdalar(odalar: OdaData[]): Promise<void> {
+    const misafirler: MisafirData[] = odalar
+      .filter((oda) => oda.misafir)
+      .map((oda) => ({
+        id: oda.misafir!.id,
+        ad: oda.misafir!.ad,
+        soyad: oda.misafir!.soyad,
+        kimlikNo: '',
+        pasaportNo: undefined,
+        dogumTarihi: '',
+        uyruk: '',
+        girisTarihi: oda.misafir!.girisTarihi,
+        cikisTarihi: oda.misafir!.cikisTarihi,
+        odaId: oda.id,
+        odaNumarasi: oda.odaNumarasi,
+      }));
+    this.misafirlerCache = misafirler;
+    await this.saveCache();
+    this.emit('misafirler:updated', misafirler);
+  }
+
+  /**
+   * Cache'den misafir listesini al (hemen gösterim için)
+   */
+  getCachedMisafirler(): MisafirData[] | null {
+    return this.misafirlerCache;
+  }
+
+  /**
+   * Arka planda tesis verisini yenile; bittiğinde emit('tesis:updated')
+   */
+  private async refreshTesisInBackground(): Promise<void> {
+    try {
+      const accessToken = await getAccessToken();
+      const backendUrl = getApiBaseUrl();
+      if (backendUrl) {
+        const url = `${backendUrl}/api/tesis`;
+        const r = await fetch(url, {
+          method: 'GET',
+          headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : {},
+        });
+        const data = await r.json().catch(() => ({}));
+        if (r.ok) {
+          const tesisData: TesisData = {
+            id: data.tesis.id,
+            tesisAdi: data.tesis.tesisAdi,
+            paket: data.tesis.paket,
+            kota: data.tesis.kota,
+            kullanilanKota: data.tesis.kullanilanKota ?? 0,
+            kbsTuru: data.tesis.kbsTuru,
+            kbsConnected: data.tesis.kbsConnected ?? !!data.tesis.kbsTuru,
+            ozet: data.ozet,
+          };
+          this.tesisCache = tesisData;
+          await this.saveCache();
+          this.emit('tesis:updated', tesisData);
+          logger.log('Background tesis refresh done');
+        }
+        return;
+      }
+      const responseData = await callFn<{ tesis: any; ozet: any }>('facilities_list', {}, accessToken);
+      const tesisData: TesisData = {
+        id: responseData.tesis.id,
+        tesisAdi: responseData.tesis.tesisAdi,
+        paket: responseData.tesis.paket,
+        kota: responseData.tesis.kota,
+        kullanilanKota: responseData.tesis.kullanilanKota,
+        kbsTuru: responseData.tesis.kbsTuru,
+        kbsConnected: responseData.tesis.kbsConnected,
+        address: responseData.tesis.address,
+        latitude: responseData.tesis.latitude,
+        longitude: responseData.tesis.longitude,
+        ozet: responseData.ozet,
+      };
+      this.tesisCache = tesisData;
+      await this.saveCache();
+      this.emit('tesis:updated', tesisData);
+      logger.log('Background tesis refresh done');
+    } catch (e: any) {
+      logger.error('Background tesis refresh error', e);
+    }
+  }
+
   /**
    * Tesis bilgilerini getir (önce Node backend dene, yoksa Edge)
+   * forceRefresh=true ve cache varsa: hemen cache döner, arka planda yenilenir (stale-while-revalidate).
    */
   async getTesis(forceRefresh = false): Promise<TesisData | null> {
     try {
@@ -243,6 +328,12 @@ class DataService {
       if (!forceRefresh && this.isCacheValid() && this.tesisCache) {
         logger.log('Returning tesis from cache');
         return this.tesisCache;
+      }
+      // Stale-while-revalidate: cache varsa hemen dön, arka planda yenile
+      if (forceRefresh && this.tesisCache) {
+        const cached = this.tesisCache;
+        this.refreshTesisInBackground().catch(() => {});
+        return cached;
       }
 
       const accessToken = await getAccessToken();
@@ -315,7 +406,85 @@ class DataService {
   }
 
   /**
+   * Arka planda odaları yenile; bittiğinde emit('odalar:updated') ve filtre=tumu ise emit('misafirler:updated')
+   */
+  private async refreshOdalarInBackground(filtre: string): Promise<void> {
+    const cacheKey = `odalar:${filtre}`;
+    try {
+      const accessToken = await getAccessToken();
+      const backendUrl = getApiBaseUrl();
+      if (backendUrl) {
+        const url = `${backendUrl}/api/oda?filtre=${encodeURIComponent(filtre)}`;
+        const r = await fetch(url, {
+          method: 'GET',
+          headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : {},
+        });
+        const raw = await r.text();
+        const data: any = raw ? JSON.parse(raw) : {};
+        if (!r.ok) return;
+        const odalar: OdaData[] = (data.odalar || []).map((oda: any) => ({
+          id: oda.id,
+          odaNumarasi: oda.odaNumarasi,
+          odaTipi: oda.odaTipi || 'Standart Oda',
+          kapasite: oda.kapasite || 2,
+          fotograf: oda.fotograf,
+          durum: oda.durum || 'bos',
+          fiyat: oda.fiyat,
+          odadaMi: oda.odadaMi ?? (oda.durum === 'dolu' && !!oda.misafir),
+          misafir: oda.misafir
+            ? {
+                id: oda.misafir.id,
+                ad: oda.misafir.ad,
+                soyad: oda.misafir.soyad,
+                girisTarihi: oda.misafir.girisTarihi,
+                cikisTarihi: oda.misafir.cikisTarihi,
+              }
+            : undefined,
+          kbsDurumu: oda.kbsDurumu,
+          kbsHataMesaji: oda.kbsHataMesaji,
+        }));
+        this.odalarCache.set(cacheKey, odalar);
+        await this.saveCache();
+        this.emit('odalar:updated', { filtre, odalar });
+        if (filtre === 'tumu') await this.deriveAndEmitMisafirlerFromOdalar(odalar);
+        logger.log('[odalar] background refresh done', { filtre, count: odalar.length });
+        return;
+      }
+      const odalarResponse = await callFn<{ odalar?: any[] }>('rooms_list', { filtre }, accessToken);
+      const odalar: OdaData[] = (odalarResponse?.odalar || []).map((oda: any) => ({
+        id: oda.id,
+        odaNumarasi: oda.odaNumarasi,
+        odaTipi: oda.odaTipi || 'Standart Oda',
+        kapasite: oda.kapasite || 2,
+        fotograf: oda.fotograf,
+        durum: oda.durum || 'bos',
+        fiyat: oda.fiyat,
+        odadaMi: oda.odadaMi ?? (oda.durum === 'dolu' && !!oda.misafir),
+        misafir: oda.misafir
+          ? {
+              id: oda.misafir.id,
+              ad: oda.misafir.ad,
+              soyad: oda.misafir.soyad,
+              girisTarihi: oda.misafir.girisTarihi,
+              cikisTarihi: oda.misafir.cikisTarihi,
+            }
+          : undefined,
+        kbsDurumu: oda.kbsDurumu,
+        kbsHataMesaji: oda.kbsHataMesaji,
+      }));
+      this.odalarCache.set(cacheKey, odalar);
+      await this.saveCache();
+      this.emit('odalar:updated', { filtre, odalar });
+      if (filtre === 'tumu') await this.deriveAndEmitMisafirlerFromOdalar(odalar);
+      logger.log('[odalar] background refresh done', { filtre, count: odalar.length });
+    } catch (e: any) {
+      logger.error('Background odalar refresh error', e);
+    }
+  }
+
+  /**
    * Odaları getir (filtreli) – önce Node backend dene, yoksa Edge
+   * forceRefresh=true ve cache varsa: hemen cache döner, arka planda yenilenir (stale-while-revalidate).
    */
   async getOdalar(filtre: string = 'tumu', forceRefresh = false): Promise<OdaData[]> {
     const STEP = { CACHE: 'cache', TOKEN: 'token', NODE_REQUEST: 'node_request', NODE_PARSE: 'node_parse', SUPABASE_CALL: 'supabase_call', MAP: 'map' };
@@ -330,6 +499,12 @@ class DataService {
           logger.log('[odalar] cache hit', { filtre, count: cached.length, step: STEP.CACHE });
           return cached;
         }
+      }
+      // Stale-while-revalidate: cache varsa hemen dön, arka planda yenile
+      if (forceRefresh && this.odalarCache.has(cacheKey)) {
+        const cached = this.odalarCache.get(cacheKey)!;
+        this.refreshOdalarInBackground(filtre).catch(() => {});
+        return cached;
       }
 
       lastStep = STEP.TOKEN;
@@ -387,6 +562,8 @@ class DataService {
         }));
         this.odalarCache.set(cacheKey, odalar);
         await this.saveCache();
+        this.emit('odalar:updated', { filtre, odalar });
+        if (filtre === 'tumu') await this.deriveAndEmitMisafirlerFromOdalar(odalar);
         logger.log('[odalar] Node ile tamamlandı', { step: lastStep, count: odalar.length });
         return odalar;
       }
@@ -419,6 +596,7 @@ class DataService {
       this.odalarCache.set(cacheKey, odalar);
       await this.saveCache();
       this.emit('odalar:updated', { filtre, odalar });
+      if (filtre === 'tumu') await this.deriveAndEmitMisafirlerFromOdalar(odalar);
       logger.log('[odalar] Supabase ile tamamlandı', { step: lastStep, count: odalar.length });
       return odalar;
     } catch (error: any) {
@@ -449,6 +627,7 @@ class DataService {
 
   /**
    * Misafirleri getir
+   * forceRefresh=true ve cache varsa: hemen cache döner, arka planda odalar(tumu) yenilenir ve misafirler güncellenir.
    */
   async getMisafirler(forceRefresh = false): Promise<MisafirData[]> {
     try {
@@ -456,6 +635,12 @@ class DataService {
       if (!forceRefresh && this.isCacheValid() && this.misafirlerCache) {
         logger.log('Returning misafirler from cache', { count: this.misafirlerCache.length });
         return this.misafirlerCache;
+      }
+      // Stale-while-revalidate: cache varsa hemen dön, arka planda odalar(tumu) yenilenir → misafirler:updated emit edilir
+      if (forceRefresh && this.misafirlerCache) {
+        const cached = this.misafirlerCache;
+        this.refreshOdalarInBackground('tumu').catch(() => {});
+        return cached;
       }
 
       logger.log('Fetching misafirler from API');

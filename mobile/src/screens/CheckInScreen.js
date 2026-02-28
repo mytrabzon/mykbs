@@ -529,14 +529,6 @@ export default function CheckInScreen({ navigation, route }) {
             </TouchableOpacity>
 
             <TouchableOpacity
-              style={[styles.okutButton, styles.mrzButton]}
-              onPress={() => navigation.navigate('MrzScan', { fromCheckIn: true, selectedOda })}
-            >
-              <Ionicons name="document-text-outline" size={24} color={theme.colors.white} style={styles.okutButtonIcon} />
-              <Text style={styles.okutButtonText}>MRZ ile Tara (kimlik/pasaport arka yüz)</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
               style={styles.manualButton}
               onPress={() => {
                 try {
@@ -894,10 +886,6 @@ const styles = StyleSheet.create({
   },
   okutButtonCamera: {
     backgroundColor: theme.colors.secondary,
-  },
-  mrzButton: {
-    backgroundColor: theme.colors.primary,
-    marginTop: theme.spacing.md,
   },
   okutButtonIcon: {
     marginRight: theme.spacing.sm,

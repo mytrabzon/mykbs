@@ -100,31 +100,30 @@ export default function AppHeader({
             </>
           )}
         </View>
-        {title && (!hideTesisAndTitle || minimal) ? (
+        {title && !minimal ? (
           <Text style={[styles.title, { color: isPrimary ? '#FFF' : colors.textPrimary }]} numberOfLines={1}>
             {title}
           </Text>
         ) : null}
         <View style={styles.right} pointerEvents="box-none">
-          {!minimal && (
-            <View style={styles.dotsRow} pointerEvents="box-none">
-              <StatusDot
-                configured={backendConfigured}
-                isOnline={backendOnline}
-                error={backendError}
-                label="Backend"
-                onPress={() => showNote('backend')}
-              />
-              <View style={[styles.dotDivider, { backgroundColor: colors.border }]} />
-              <StatusDot
-                configured={supabaseConfigured}
-                isOnline={supabaseOnline}
-                error={supabaseError}
-                label="Supabase"
-                onPress={() => showNote('supabase')}
-              />
-            </View>
-          )}
+          {/* Bağlantı göstergesi: minimal modda da göster */}
+          <View style={styles.dotsRow} pointerEvents="box-none">
+            <StatusDot
+              configured={backendConfigured}
+              isOnline={backendOnline}
+              error={backendError}
+              label="Backend"
+              onPress={() => showNote('backend')}
+            />
+            <View style={[styles.dotDivider, { backgroundColor: colors.border }]} />
+            <StatusDot
+              configured={supabaseConfigured}
+              isOnline={supabaseOnline}
+              error={supabaseError}
+              label="Supabase"
+              onPress={() => showNote('supabase')}
+            />
+          </View>
           {rightComponent ?? (
             <>
               {onNotification != null && (

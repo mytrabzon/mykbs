@@ -12,7 +12,8 @@ import {
   Dimensions,
   AppState,
   ScrollView,
-  ActivityIndicator
+  ActivityIndicator,
+  Alert
 } from 'react-native';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { useAuth } from '../context/AuthContext';
@@ -29,8 +30,8 @@ import { theme, spacing } from '../theme';
 import AppHeader from '../components/AppHeader';
 import BackendErrorScreen from '../components/BackendErrorScreen';
 
-// Oda kartı — modern tasarım
-const OdaCard = React.memo(({ item, onPress, getStatusColor, getStatusIcon, getKBSDurumIcon, getKBSDurumText }) => (
+// Oda kartı — modern tasarım (onCheckout: listeden tek tıkla misafir çıkışı)
+const OdaCard = React.memo(({ item, onPress, onCheckout, getStatusColor, getStatusIcon, getKBSDurumIcon, getKBSDurumText }) => (
   <View style={styles.odaCard}>
     <TouchableOpacity
       style={[styles.odaCardInner, { borderLeftWidth: 4, borderLeftColor: getStatusColor(item.durum) }]}
@@ -47,7 +48,7 @@ const OdaCard = React.memo(({ item, onPress, getStatusColor, getStatusIcon, getK
           />
         ) : (
           <View style={styles.odaPlaceholder}>
-            <MaterialIcons name="hotel" size={32} color={theme.colors.gray400} />
+            <MaterialIcons name="hotel" size={22} color={theme.colors.gray400} />
           </View>
         )}
         <View style={styles.odaImageOverlay} />
@@ -75,7 +76,7 @@ const OdaCard = React.memo(({ item, onPress, getStatusColor, getStatusIcon, getK
           <View style={styles.odaHeaderLeft}>
             <Text style={styles.odaTipi} numberOfLines={1}>{item.odaTipi || 'Standart Oda'}</Text>
             <View style={styles.odaCapacity}>
-              <Ionicons name="people-outline" size={14} color={theme.colors.textSecondary} />
+              <Ionicons name="people-outline" size={10} color={theme.colors.textSecondary} />
               <Text style={styles.odaCapacityText}>{item.kapasite || 2} Kişi</Text>
             </View>
           </View>
@@ -133,25 +134,40 @@ const OdaCard = React.memo(({ item, onPress, getStatusColor, getStatusIcon, getK
           </View>
         )}
 
-        {/* Oda Aksiyonları */}
+        {/* Oda Aksiyonları — dolu odada: tek tıkla Çıkış + Düzenle */}
         <View style={styles.odaActions}>
-          {item.durum === 'dolu' ? (
+          {item.durum === 'dolu' && item.misafir && !item.misafir.cikisTarihi ? (
             <>
+              <TouchableOpacity
+                style={[styles.actionButton, styles.actionButtonCheckout]}
+                onPress={(e) => { e?.stopPropagation?.(); onCheckout?.(item); }}
+              >
+                <Ionicons name="log-out-outline" size={16} color={theme.colors.white} />
+                <Text style={styles.actionButtonText}>Çıkış</Text>
+              </TouchableOpacity>
               <TouchableOpacity
                 style={[styles.actionButton, styles.actionButtonPrimary]}
                 onPress={onPress}
               >
                 <Ionicons name="create-outline" size={16} color={theme.colors.white} />
-                <Text style={styles.actionButtonText}>Düzenle</Text>
+                <Text style={styles.actionButtonText}>Detay</Text>
               </TouchableOpacity>
             </>
-          ) : (
+          ) : item.durum !== 'dolu' ? (
             <TouchableOpacity
               style={[styles.actionButton, styles.actionButtonPrimary, styles.actionButtonFull]}
-              onPress={() => {}}
+              onPress={onPress}
             >
               <Ionicons name="log-in-outline" size={16} color={theme.colors.white} />
               <Text style={styles.actionButtonText}>Check-in</Text>
+            </TouchableOpacity>
+          ) : (
+            <TouchableOpacity
+              style={[styles.actionButton, styles.actionButtonPrimary, styles.actionButtonFull]}
+              onPress={onPress}
+            >
+              <Ionicons name="create-outline" size={16} color={theme.colors.white} />
+              <Text style={styles.actionButtonText}>Detay</Text>
             </TouchableOpacity>
           )}
         </View>
@@ -194,8 +210,27 @@ export default function OdalarScreen() {
   const [showDebugUrls, setShowDebugUrls] = useState(__DEV__);
   const appState = useRef(AppState.currentState);
   const flatListRef = useRef(null);
+  const loadTimeoutRef = useRef(null);
+  const filtreRef = useRef(filtre);
+  useEffect(() => {
+    filtreRef.current = filtre;
+  }, [filtre]);
 
   const loading = initialLoading || filterLoading;
+
+  // Arka planda tesis/odalar yenilendiğinde ekranı güncelle (stale-while-revalidate)
+  useEffect(() => {
+    const unsubTesis = dataService.subscribe('tesis:updated', (tesisData) => {
+      if (tesisData?.ozet) setOzet(tesisData.ozet);
+    });
+    const unsubOdalar = dataService.subscribe('odalar:updated', ({ filtre: updatedFiltre, odalar: freshOdalar }) => {
+      if (updatedFiltre === filtreRef.current && Array.isArray(freshOdalar)) setOdalar(freshOdalar);
+    });
+    return () => {
+      unsubTesis();
+      unsubOdalar();
+    };
+  }, []);
 
   // Backend health dinle: test başarılı olunca state resetlensin (sticky overlay kalkar)
   useEffect(() => {
@@ -457,6 +492,14 @@ export default function OdalarScreen() {
     try {
       if (isInitial) {
         setInitialLoading(true);
+        if (loadTimeoutRef.current) clearTimeout(loadTimeoutRef.current);
+        loadTimeoutRef.current = setTimeout(() => {
+          loadTimeoutRef.current = null;
+          setInitialLoading(false);
+          setFilterLoading(false);
+          setRefreshing(false);
+          logger.warn('[OdalarScreen] loadData timeout – showing screen so user is not stuck');
+        }, 15000);
       }
       logger.log('[OdalarScreen] loadData başladı', { filtre, isInitial });
 
@@ -592,6 +635,10 @@ export default function OdalarScreen() {
       setLastLoadErrorType('server');
       Toast.show({ type: 'error', text1: 'Hata', text2: serverMsg || getApiErrorMessage(error), visibilityTime: 3000 });
     } finally {
+      if (loadTimeoutRef.current) {
+        clearTimeout(loadTimeoutRef.current);
+        loadTimeoutRef.current = null;
+      }
       if (isInitial) {
         setInitialLoading(false);
       } else {
@@ -674,30 +721,55 @@ export default function OdalarScreen() {
   }, [navigation]);
 
   const renderOdaCard = useCallback(({ item }) => (
-    <OdaCard
-      item={item}
-      onPress={() => handleOdaPress(item)}
-      getStatusColor={getStatusColor}
-      getStatusIcon={getStatusIcon}
-      getKBSDurumIcon={getKBSDurumIcon}
-      getKBSDurumText={getKBSDurumText}
-    />
-  ), [handleOdaPress, getStatusColor, getStatusIcon, getKBSDurumIcon, getKBSDurumText]);
+    <View style={styles.odaCardWrapper}>
+      <OdaCard
+        item={item}
+        onPress={() => handleOdaPress(item)}
+        onCheckout={handleCheckout}
+        getStatusColor={getStatusColor}
+        getStatusIcon={getStatusIcon}
+        getKBSDurumIcon={getKBSDurumIcon}
+        getKBSDurumText={getKBSDurumText}
+      />
+    </View>
+  ), [handleOdaPress, handleCheckout, getStatusColor, getStatusIcon, getKBSDurumIcon, getKBSDurumText]);
 
   const keyExtractor = useCallback((item) => item.id.toString(), []);
-  
-  // FlatList için item layout hesaplama (optimizasyon için)
+
+  const CARD_ROW_HEIGHT = 220;
   const getItemLayout = useCallback((data, index) => ({
-    length: 320, // Yaklaşık kart yüksekliği
-    offset: 320 * index,
+    length: CARD_ROW_HEIGHT,
+    offset: CARD_ROW_HEIGHT * Math.floor(index / 2),
     index,
   }), []);
 
-  const handleCheckout = async (odaId) => {
-    // Check-out işlemi
-    // Bu OdaDetay ekranında yapılacak
-    navigation.navigate('OdaDetay', { odaId });
-  };
+  const handleCheckout = useCallback((item) => {
+    if (!item?.misafir?.id) return;
+    const adSoyad = [item.misafir.ad, item.misafir.soyad].filter(Boolean).join(' ') || 'Misafir';
+    Alert.alert(
+      'Çıkış yap',
+      `${adSoyad} için misafir çıkışı yapılsın mı? Oda boşaltılır.`,
+      [
+        { text: 'İptal', style: 'cancel' },
+        {
+          text: 'Çıkış yap',
+          onPress: async () => {
+            try {
+              await api.post(`/misafir/checkout/${item.misafir.id}`);
+              dataService.clearCache().catch(() => {});
+              setOdalar((prev) => prev.map((o) => (o.id === item.id && o.misafir?.id === item.misafir.id
+                ? { ...o, durum: 'bos', misafir: null, odadaMi: false }
+                : o)));
+              Toast.show({ type: 'success', text1: 'Çıkış yapıldı', text2: 'Misafir kaydı kapatıldı.' });
+            } catch (err) {
+              const msg = getApiErrorMessage(err) || err?.response?.data?.message || 'Çıkış yapılamadı';
+              Toast.show({ type: 'error', text1: 'Hata', text2: msg });
+            }
+          }
+        }
+      ]
+    );
+  }, []);
 
   const [showFabMenu, setShowFabMenu] = useState(false);
 
@@ -738,16 +810,15 @@ export default function OdalarScreen() {
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       <StatusBar barStyle={colors.background === '#0F172A' ? 'light-content' : 'dark-content'} backgroundColor={colors.primary} />
       <AppHeader
-        title="Odalar"
-        tesis={tesis}
+        minimal
         variant="primary"
+        tesis={tesis}
         backendConfigured={!!getBackendUrl()}
         backendOnline={odalar.length > 0 ? true : backendStatus.isOnline}
         backendError={backendStatus.error}
         supabaseConfigured={supabaseStatus.configured}
         supabaseOnline={supabaseStatus.isOnline}
         supabaseError={supabaseStatus.error}
-        kbsConfigured={tesis?.kbsConnected}
         onNotification={() => navigation.navigate('Bildirimler')}
         onProfile={() => navigation.navigate('ProfilDuzenle')}
       />
@@ -873,12 +944,15 @@ export default function OdalarScreen() {
         </View>
       )}
 
-      {/* Oda Listesi */}
+      {/* Oda Listesi — 2 sütunlu grid */}
       <FlatList
         ref={flatListRef}
         data={odalar}
         renderItem={renderOdaCard}
         keyExtractor={keyExtractor}
+        numColumns={2}
+        key="two-column"
+        columnWrapperStyle={styles.odaColumnWrapper}
         getItemLayout={getItemLayout}
         removeClippedSubviews={true}
         maxToRenderPerBatch={10}
@@ -1091,6 +1165,15 @@ const styles = StyleSheet.create({
     paddingHorizontal: theme.spacing.screenPadding,
     paddingBottom: 120,
   },
+  odaCardWrapper: {
+    flex: 1,
+    marginHorizontal: 4,
+    marginBottom: 8,
+    maxWidth: (Dimensions.get('window').width - theme.spacing.screenPadding * 2 - 16) / 2,
+  },
+  odaColumnWrapper: {
+    marginBottom: 4,
+  },
   emptyContainer: {
     alignItems: 'center',
     paddingVertical: theme.spacing['4xl'],
@@ -1136,17 +1219,16 @@ const styles = StyleSheet.create({
     color: theme.colors.white,
   },
   odaCard: {
-    marginBottom: theme.spacing.base,
     ...theme.spacing.shadow.lg,
   },
   odaCardInner: {
     backgroundColor: theme.colors.surface,
-    borderRadius: 20,
+    borderRadius: 14,
     overflow: 'hidden',
     borderWidth: 0,
   },
   odaImageContainer: {
-    height: 160,
+    height: 88,
     position: 'relative',
   },
   odaFoto: {
@@ -1301,21 +1383,24 @@ const styles = StyleSheet.create({
   },
   odaActions: {
     flexDirection: 'row',
-    gap: theme.spacing.base,
+    gap: theme.spacing.xs,
   },
   actionButton: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    borderRadius: theme.spacing.borderRadius.base,
-    paddingVertical: theme.spacing.sm,
-    paddingHorizontal: theme.spacing.base,
-    gap: theme.spacing.xs,
-    minHeight: 36,
+    borderRadius: theme.spacing.borderRadius.sm,
+    paddingVertical: 6,
+    paddingHorizontal: theme.spacing.xs,
+    gap: 2,
+    minHeight: 28,
   },
   actionButtonPrimary: {
     backgroundColor: theme.colors.primary,
+  },
+  actionButtonCheckout: {
+    backgroundColor: theme.colors.error || '#dc2626',
   },
   actionButtonSuccess: {
     backgroundColor: theme.colors.success,
@@ -1324,7 +1409,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   actionButtonText: {
-    fontSize: theme.typography.fontSize.xs,
+    fontSize: 9,
     fontWeight: theme.typography.fontWeight.semibold,
     color: theme.colors.white,
   },

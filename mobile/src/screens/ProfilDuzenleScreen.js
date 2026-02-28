@@ -9,12 +9,12 @@ import {
   ActivityIndicator,
   Image,
 } from 'react-native';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as ImagePicker from 'expo-image-picker';
 import * as FileSystem from 'expo-file-system';
 import { useNavigation } from '@react-navigation/native';
 import { useTheme } from '../context/ThemeContext';
 import { useAuth } from '../context/AuthContext';
+import { api } from '../services/api';
 import * as communityApi from '../services/communityApi';
 import Toast from 'react-native-toast-message';
 import { Ionicons } from '@expo/vector-icons';
@@ -40,18 +40,24 @@ export default function ProfilDuzenleScreen() {
     (async () => {
       try {
         const t = await getSupabaseToken();
-        if (!t) {
-          if (!cancelled) setLoading(false);
-          return;
-        }
-        const me = await communityApi.getMe(t);
-        if (!cancelled) {
-          setDisplayName(me?.display_name || '');
-          setTitle(me?.title || '');
-          setAvatarUrl(me?.avatar_url || null);
+        if (t) {
+          const me = await communityApi.getMe(t);
+          if (!cancelled) {
+            setDisplayName(me?.display_name || '');
+            setTitle(me?.title || '');
+            setAvatarUrl(me?.avatar_url || null);
+          }
+        } else {
+          const res = await api.get('/auth/profile');
+          const data = res?.data || {};
+          if (!cancelled) {
+            setDisplayName(data.display_name || user?.adSoyad || '');
+            setTitle(data.title || '');
+            setAvatarUrl(data.avatar_url || null);
+          }
         }
       } catch (_) {
-        // Hata olsa da formu göster
+        if (!cancelled && user?.adSoyad) setDisplayName(user.adSoyad);
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -60,14 +66,7 @@ export default function ProfilDuzenleScreen() {
       cancelled = true;
       clearTimeout(timeout);
     };
-  }, [getSupabaseToken]);
-
-  // E-posta/şifre ile girişte Supabase token yok; adı en azından backend'den göster
-  useEffect(() => {
-    if (!loading && user?.adSoyad && !displayName) {
-      setDisplayName(user.adSoyad);
-    }
-  }, [loading, user?.adSoyad, displayName]);
+  }, [getSupabaseToken, user?.adSoyad]);
 
   const pickAvatar = async () => {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -88,60 +87,50 @@ export default function ProfilDuzenleScreen() {
 
   const handleSave = async () => {
     const token = await getSupabaseToken();
-    if (!token) {
-      if (user) {
-        Toast.show({
-          type: 'info',
-          text1: 'Profil düzenleme bu giriş türünde yok',
-          text2: 'Ad/fotoğraf düzenlemek için uygulamada "Kod ile giriş" (OTP) kullanın. E-posta/şifre ile girişte bu özellik kapalıdır.',
-        });
-      } else {
-        Toast.show({ type: 'error', text1: 'Giriş gerekli', text2: 'Profil düzenlemek için giriş yapın.' });
-      }
+    if (!token && !user) {
+      Toast.show({ type: 'error', text1: 'Giriş gerekli', text2: 'Profil düzenlemek için giriş yapın.' });
       return;
     }
     setSaving(true);
     try {
-      let finalAvatarUrl = avatarUrl;
-      if (localAvatarUri) {
-        let base64 = await FileSystem.readAsStringAsync(localAvatarUri, {
-          encoding: FileSystem.EncodingType.Base64,
-        });
-        // Data URL öneki veya boşluk atob'u bozabilir; sadece ham base64 gönder
-        if (typeof base64 === 'string') {
-          base64 = base64.replace(/^data:image\/[^;]+;base64,/i, '');
-          base64 = base64.replace(/[^A-Za-z0-9+/=]/g, '');
+      if (token) {
+        let finalAvatarUrl = avatarUrl;
+        if (localAvatarUri) {
+          let base64 = await FileSystem.readAsStringAsync(localAvatarUri, { encoding: FileSystem.EncodingType.Base64 });
+          if (typeof base64 === 'string') {
+            base64 = base64.replace(/^data:image\/[^;]+;base64,/i, '').replace(/[^A-Za-z0-9+/=]/g, '');
+          }
+          if (!base64 || base64.length === 0) {
+            Toast.show({ type: 'error', text1: 'Resim okunamadı' });
+            setSaving(false);
+            return;
+          }
+          finalAvatarUrl = await communityApi.uploadAvatar(base64, token);
         }
-        if (!base64 || base64.length === 0) {
-          Toast.show({ type: 'error', text1: 'Resim okunamadı' });
-          setSaving(false);
-          return;
-        }
-        finalAvatarUrl = await communityApi.uploadAvatar(base64, token);
-      }
-      await communityApi.updateProfile(
-        {
+        await communityApi.updateProfile(
+          { display_name: displayName.trim() || null, avatar_url: finalAvatarUrl || null, title: title.trim() || null },
+          token
+        );
+      } else {
+        const body = {
           display_name: displayName.trim() || null,
-          avatar_url: finalAvatarUrl || null,
           title: title.trim() || null,
-        },
-        token
-      );
+          avatar_url: avatarUrl || null,
+        };
+        if (localAvatarUri) {
+          let base64 = await FileSystem.readAsStringAsync(localAvatarUri, { encoding: FileSystem.EncodingType.Base64 });
+          if (typeof base64 === 'string') {
+            base64 = base64.replace(/^data:image\/[^;]+;base64,/i, '').replace(/[^A-Za-z0-9+/=]/g, '');
+          }
+          if (base64 && base64.length > 0) body.avatar_base64 = base64;
+        }
+        await api.put('/auth/profile', body);
+      }
       Toast.show({ type: 'success', text1: 'Profil kaydedildi' });
       navigation.goBack();
     } catch (err) {
-      const msg = err?.message || (err?.data && typeof err.data === 'object' && err.data?.message) || 'Kaydedilemedi';
-      const isUnauth = err?.status === 401;
-      if (isUnauth) {
-        AsyncStorage.removeItem('@mykbs:auth:supabase_token');
-        Toast.show({
-          type: 'info',
-          text1: 'Profil bu giriş türünde yok',
-          text2: 'Ad/fotoğraf için "Kod ile giriş" (OTP) kullanın. E-posta/şifre ile girişte kapalı.',
-        });
-      } else {
-        Toast.show({ type: 'error', text1: 'Kaydedilemedi', text2: msg });
-      }
+      const msg = err?.message || (err?.response?.data?.message) || 'Kaydedilemedi';
+      Toast.show({ type: 'error', text1: 'Kaydedilemedi', text2: msg });
     } finally {
       setSaving(false);
     }

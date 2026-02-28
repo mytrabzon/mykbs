@@ -333,15 +333,8 @@ export default function AyarlarScreen() {
         <View style={[styles.section, { backgroundColor: colors.surface }]}>
           <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>Kimlik / Pasaport</Text>
           <Text style={[styles.infoText, { color: colors.textSecondary }]}>
-            Check-in ekranında kimlik veya pasaportu kamerayla okutabilir veya numarayı manuel girebilirsiniz.
+            Belge okuma için tab menüdeki "MRZ Tara" sekmesini kullanın. Check-in sırasında da MRZ sekmesinden tarayıp dönebilirsiniz; manuel giriş her zaman kullanılabilir.
           </Text>
-          <TouchableOpacity
-            style={[styles.menuRow, { borderBottomWidth: 0 }]}
-            onPress={() => navigation.navigate('MrzScan')}
-          >
-            <Text style={[styles.menuRowText, { color: colors.textPrimary }]}>Kimlik doğrula (MRZ tara)</Text>
-            <Ionicons name="chevron-forward" size={20} color={colors.textSecondary} />
-          </TouchableOpacity>
         </View>
 
         <View style={[styles.section, { backgroundColor: colors.surface }]}>

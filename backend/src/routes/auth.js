@@ -1605,7 +1605,10 @@ router.get('/me', authenticateTesisOrSupabase, async (req, res) => {
           checkIn: kullanici.checkInYetki,
           odaDegistirme: kullanici.odaDegistirmeYetki,
           bilgiDuzenleme: kullanici.bilgiDuzenlemeYetki
-        }
+        },
+        display_name: kullanici.displayName ?? kullanici.adSoyad,
+        title: kullanici.title ?? null,
+        avatar_url: kullanici.avatarUrl ?? null
       },
       tesis: kullanici.tesis
     });
@@ -1624,6 +1627,112 @@ router.get('/me', authenticateTesisOrSupabase, async (req, res) => {
       return errRes(req, res, 500, 'DB_CONNECT_ERROR', 'Veritabanı geçici olarak kullanılamıyor. Lütfen tekrar deneyin.');
     }
     return errRes(req, res, 500, 'UNHANDLED_ERROR', 'Bilgi alınamadı.');
+  }
+});
+
+/**
+ * Profil güncelle (ad, ünvan, avatar). E-posta, telefon, tesis kodu farketmez; tüm giriş türleri kullanabilir.
+ * Supabase token varsa Edge kullanılır; yoksa backend bu endpoint ile günceller.
+ */
+router.patch('/profile', authenticateTesisOrSupabase, async (req, res) => {
+  const { errorResponse: errRes } = require('../lib/errorResponse');
+  try {
+    const body = req.body || {};
+    const display_name = typeof body.display_name === 'string' ? body.display_name.trim() || null : undefined;
+    const title = typeof body.title === 'string' ? body.title.trim() || null : undefined;
+    const avatar_url = typeof body.avatar_url === 'string' ? body.avatar_url.trim() || null : undefined;
+    const avatar_base64 = typeof body.avatar_base64 === 'string' ? body.avatar_base64.replace(/^data:image\/[^;]+;base64,/i, '').replace(/\s/g, '') : null;
+
+    if (req.authSource === 'supabase') {
+      const userId = req.user.id;
+      const branchId = req.branchId;
+      if (!branchId) return errRes(req, res, 400, 'BRANCH_MISSING', 'Şube bilgisi yok.');
+      let finalAvatarUrl = avatar_url;
+      if (avatar_base64 && avatar_base64.length > 0 && supabaseAdmin) {
+        try {
+          const buf = Buffer.from(avatar_base64, 'base64');
+          const path = `supabase-${userId}.jpg`;
+          const { error: upErr } = await supabaseAdmin.storage.from('avatars').upload(path, buf, { contentType: 'image/jpeg', upsert: true });
+          if (!upErr) {
+            const { data: urlData } = supabaseAdmin.storage.from('avatars').getPublicUrl(path);
+            finalAvatarUrl = urlData.publicUrl;
+          }
+        } catch (e) {
+          console.warn('[auth] profile avatar upload (supabase)', e?.message);
+        }
+      }
+      const updates = {};
+      if (display_name !== undefined) updates.display_name = display_name;
+      if (title !== undefined) updates.title = title;
+      if (finalAvatarUrl !== undefined) updates.avatar_url = finalAvatarUrl;
+      if (Object.keys(updates).length === 0) return res.json({ success: true });
+      const { error } = await supabaseAdmin.from('user_profiles').update(updates).eq('user_id', userId).eq('branch_id', branchId);
+      if (error) {
+        console.error('[auth] profile update supabase', error);
+        return errRes(req, res, 500, 'UPDATE_FAILED', 'Profil güncellenemedi.');
+      }
+      return res.json({ success: true });
+    }
+
+    if (req.authSource === 'prisma') {
+      const kullaniciId = req.user.id;
+      let finalAvatarUrl = avatar_url;
+      if (avatar_base64 && avatar_base64.length > 0 && supabaseAdmin) {
+        try {
+          const buf = Buffer.from(avatar_base64, 'base64');
+          const path = `legacy-${kullaniciId}.jpg`;
+          const { error: upErr } = await supabaseAdmin.storage.from('avatars').upload(path, buf, { contentType: 'image/jpeg', upsert: true });
+          if (!upErr) {
+            const { data: urlData } = supabaseAdmin.storage.from('avatars').getPublicUrl(path);
+            finalAvatarUrl = urlData.publicUrl;
+          }
+        } catch (e) {
+          console.warn('[auth] profile avatar upload (legacy)', e?.message);
+        }
+      }
+      const updates = {};
+      if (display_name !== undefined) updates.displayName = display_name;
+      if (title !== undefined) updates.title = title;
+      if (finalAvatarUrl !== undefined) updates.avatarUrl = finalAvatarUrl;
+      if (Object.keys(updates).length === 0) return res.json({ success: true });
+      await prisma.kullanici.update({ where: { id: kullaniciId }, data: updates });
+      return res.json({ success: true });
+    }
+
+    return errRes(req, res, 400, 'AUTH_SOURCE', 'Profil güncellemesi desteklenmiyor.');
+  } catch (e) {
+    console.error('[auth] PATCH /profile', e);
+    return errRes(req, res, 500, 'UNHANDLED_ERROR', e?.message || 'Profil güncellenemedi.');
+  }
+});
+
+/**
+ * Profil bilgisi getir (backend JWT ile; Supabase token yokken profil ekranı bunu kullanır).
+ */
+router.get('/profile', authenticateTesisOrSupabase, async (req, res) => {
+  const { errorResponse: errRes } = require('../lib/errorResponse');
+  try {
+    if (req.authSource === 'supabase') {
+      const userId = req.user.id;
+      const branchId = req.branchId;
+      if (!branchId || !supabaseAdmin) return errRes(req, res, 400, 'BRANCH_MISSING', 'Şube bilgisi yok.');
+      const { data: row, error } = await supabaseAdmin.from('user_profiles').select('display_name, title, avatar_url').eq('user_id', userId).eq('branch_id', branchId).maybeSingle();
+      if (error) return errRes(req, res, 500, 'DB_ERROR', 'Profil okunamadı.');
+      return res.json({ display_name: row?.display_name ?? null, title: row?.title ?? null, avatar_url: row?.avatar_url ?? null });
+    }
+    if (req.authSource === 'prisma') {
+      const k = await prisma.kullanici.findUnique({ where: { id: req.user.id }, select: { displayName: true, title: true, avatarUrl: true, adSoyad: true } });
+      if (!k) return errRes(req, res, 404, 'NOT_FOUND', 'Kullanıcı bulunamadı.');
+      return res.json({
+        display_name: k.displayName ?? k.adSoyad,
+        title: k.title ?? null,
+        avatar_url: k.avatarUrl ?? null
+      });
+    }
+    return errRes(req, res, 400, 'AUTH_SOURCE', 'Profil okunamıyor.');
+  } catch (e) {
+    console.error('[auth] GET /profile', e);
+    return errRes(req, res, 500, 'UNHANDLED_ERROR', e?.message || 'Profil okunamadı.');
   }
 });
 

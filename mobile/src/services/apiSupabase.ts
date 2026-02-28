@@ -173,6 +173,21 @@ export const api = {
         if (!r.ok) throw Object.assign(new Error((data as { message?: string })?.message || 'Bilgi alınamadı'), { response: { status: r.status, data } });
         return toResponse(data);
       }
+      if (pathname === '/auth/profile' || pathname === 'auth/profile') {
+        const backendUrl = getBackendUrl();
+        if (!backendUrl || !token) {
+          const err = new Error('Giriş gerekli') as Error & { response?: { status: number; data: unknown } };
+          err.response = { status: 401, data: { message: 'Token bulunamadı' } };
+          throw err;
+        }
+        const r = await fetchWithLog(`${backendUrl}/api/auth/profile`, {
+          method: 'GET',
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        const data = await r.json().catch(() => ({}));
+        if (!r.ok) throw Object.assign(new Error((data as { message?: string })?.message || 'Profil alınamadı'), { response: { status: r.status, data } });
+        return toResponse(data);
+      }
       if (pathname === '/tesis' || pathname === 'tesis') {
         const backendUrl = getBackendUrl();
         if (backendUrl) {
@@ -698,6 +713,18 @@ export const api = {
         }
         const res = await callFn<{ tesis: { id: string; tesisAdi: string } }>('branch_update', (body || {}) as Record<string, unknown>, token);
         return toResponse(res);
+      }
+      if (pathname === '/auth/profile' || pathname === 'auth/profile') {
+        const backendUrl = getBackendUrl();
+        if (!backendUrl || !token) throw Object.assign(new Error('Giriş gerekli'), { response: { status: 401, data: {} } });
+        const r = await fetchWithLog(`${backendUrl}/api/auth/profile`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+          body: JSON.stringify(body || {}),
+        });
+        const data = await r.json().catch(() => ({}));
+        if (!r.ok) throw Object.assign(new Error((data as { message?: string })?.message || 'Profil güncellenemedi'), { response: { status: r.status, data } });
+        return toResponse(data);
       }
       if (pathname === '/tesis/kbs' || pathname === 'tesis/kbs') {
         const backendUrl = getBackendUrl();

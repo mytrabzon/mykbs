@@ -8,12 +8,6 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../context/ThemeContext';
 import { theme } from '../../theme';
-import { getSampleMrzPayload } from '../../lib/mrz/sampleMrz';
-
-function handleDemoMode(navigation) {
-  const payload = getSampleMrzPayload();
-  navigation.navigate('MrzResult', { payload });
-}
 
 const DOC_TYPES = [
   { key: 'kimlik', label: 'Kimlik', icon: 'card-outline' },
@@ -22,7 +16,6 @@ const DOC_TYPES = [
 ];
 
 const ACTIONS = [
-  { key: 'mrz', label: 'Kamera ile MRZ (arka)', desc: 'Arka yüz MRZ çizgisi – sürekli tarama', icon: 'camera', route: 'MrzScan', tip: 'Belgeyi düz zemine koyun, MRZ çizgileri net görünsün.' },
   { key: 'front', label: 'Kamera ile ön yüz', desc: 'Ön yüz fotoğrafı – ad, soyad, TC, tarih', icon: 'document-text', route: 'FrontDocumentScan', tip: 'Ön yüzü çerçeve içine alıp net çekin; ışık yeterli olsun.' },
   { key: 'gallery', label: 'Galeriden tek belge', desc: 'Tek fotoğraf seçip okut', icon: 'image', route: 'GallerySingleDocument', tip: 'MRZ veya metin alanı görünür, keskin bir fotoğraf seçin.' },
   { key: 'batch', label: 'Galeriden toplu (5–10)', desc: '5–10 fotoğraf seçip toplu okut', icon: 'images', route: 'GalleryBatchDocument', tip: 'Toplu okutma için her belge ayrı, net fotoğraf olmalı.' },
@@ -34,10 +27,6 @@ export default function DocumentHubScreen({ navigation }) {
 
   const handleAction = useCallback(
     (action) => {
-      if (action.route === 'MrzScan') {
-        navigation.navigate('MrzScan');
-        return;
-      }
       if (action.route === 'FrontDocumentScan') {
         navigation.navigate('FrontDocumentScan', { docType });
         return;
@@ -103,10 +92,6 @@ export default function DocumentHubScreen({ navigation }) {
         ))}
         <View style={[styles.helpRow, { backgroundColor: colors.surface }]}>
           <Text style={[styles.helpTitle, { color: colors.textPrimary }]}>Hiç okumuyor mu?</Text>
-          <TouchableOpacity style={[styles.helpBtn, { borderColor: colors.border }]} onPress={() => handleDemoMode(navigation)}>
-            <Ionicons name="play-outline" size={20} color={colors.primary} />
-            <Text style={[styles.helpBtnText, { color: colors.primary }]}>Demo mod: örnek MRZ ile dene</Text>
-          </TouchableOpacity>
           <TouchableOpacity style={[styles.helpBtn, { borderColor: colors.border }]} onPress={() => navigation.navigate('CameraTest')}>
             <Ionicons name="camera-outline" size={20} color={colors.primary} />
             <Text style={[styles.helpBtnText, { color: colors.primary }]}>Kamera test: netlik / ışık</Text>

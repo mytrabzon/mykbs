@@ -435,14 +435,18 @@ router.post('/kbs/import', async (req, res) => {
         });
       }
 
+      const orConditions = [];
+      if (g.kimlikNo && String(g.kimlikNo).trim()) orConditions.push({ kimlikNo: String(g.kimlikNo).trim() });
+      if (g.pasaportNo && String(g.pasaportNo).trim()) orConditions.push({ pasaportNo: String(g.pasaportNo).trim() });
+      if (orConditions.length === 0) {
+        skipped++;
+        continue;
+      }
       const existing = await prisma.misafir.findFirst({
         where: {
           tesisId,
           cikisTarihi: null,
-          OR: [
-            ...(g.kimlikNo ? [{ kimlikNo: g.kimlikNo }] : []),
-            ...(g.pasaportNo ? [{ pasaportNo: g.pasaportNo }] : [])
-          ].filter(Boolean)
+          OR: orConditions
         }
       });
       if (existing) {

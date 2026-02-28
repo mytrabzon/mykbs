@@ -31,24 +31,7 @@ export default function OkumaScreen({ navigation }) {
           </View>
           <Text style={[styles.cardTitle, { color: colors.textPrimary }]}>Tam belge okuma</Text>
           <Text style={[styles.cardDesc, { color: colors.textSecondary }]}>
-            Kimlik, ehliyet, pasaport – kamera MRZ, ön yüz, galeriden tek veya 5–10’lu toplu okutma.
-          </Text>
-          <View style={styles.cardArrow}>
-            <Ionicons name="chevron-forward" size={24} color={colors.primary} />
-          </View>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={[styles.card, { backgroundColor: colors.surface }]}
-          onPress={() => navigation.navigate('MrzScan')}
-          activeOpacity={0.8}
-        >
-          <View style={[styles.cardIconWrap, { backgroundColor: colors.primarySoft || '#E8F0FE' }]}>
-            <Ionicons name="camera" size={40} color={colors.primary} />
-          </View>
-          <Text style={[styles.cardTitle, { color: colors.textPrimary }]}>Hızlı MRZ (arka)</Text>
-          <Text style={[styles.cardDesc, { color: colors.textSecondary }]}>
-            Sadece MRZ alanını kamerayla tara. Karanlıkta flaş, aydınlıkta net okuma.
+            Ön yüz kamera, galeriden tek veya 5–10’lu toplu okutma. MRZ tarama için tab menüdeki "MRZ Tara" sekmesini kullanın.
           </Text>
           <View style={styles.cardArrow}>
             <Ionicons name="chevron-forward" size={24} color={colors.primary} />

@@ -111,6 +111,8 @@ export const AuthProvider = ({ children }) => {
   useEffect(() => {
     mounted.current = true;
     let sub;
+    const LOAD_TIMEOUT_MS = 10000; // Takılırsa 10 sn sonra ana sayfa açılsın
+    let timeoutId;
 
     async function init() {
       try {
@@ -181,13 +183,22 @@ export const AuthProvider = ({ children }) => {
       } catch (error) {
         logger.error('Auth init error', error);
       } finally {
+        if (timeoutId) clearTimeout(timeoutId);
         if (mounted.current) setIsLoading(false);
       }
     }
 
+    timeoutId = setTimeout(() => {
+      if (mounted.current) {
+        setIsLoading(false);
+        logger.warn('Auth init timeout – loading ended so app can open');
+      }
+    }, LOAD_TIMEOUT_MS);
+
     init();
     return () => {
       mounted.current = false;
+      if (timeoutId) clearTimeout(timeoutId);
       if (sub?.unsubscribe) sub.unsubscribe();
     };
   }, []);

@@ -63,6 +63,14 @@ function MisafirlerScreen({ navigation }) {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
+  // Arka planda yenileme bittiğinde listeyi güncelle (stale-while-revalidate)
+  useEffect(() => {
+    const unsub = dataService.subscribe('misafirler:updated', (list) => {
+      setMisafirler(list || []);
+    });
+    return unsub;
+  }, []);
+
   const loadMisafirler = useCallback(async (forceRefresh = true) => {
     try {
       const list = await dataService.getMisafirler(forceRefresh);
@@ -77,7 +85,16 @@ function MisafirlerScreen({ navigation }) {
 
   useFocusEffect(
     useCallback(() => {
-      setLoading(true);
+      const cached = dataService.getCachedMisafirler();
+      if (cached && cached.length > 0) {
+        setMisafirler(cached);
+        setLoading(false);
+      } else if (cached && cached.length === 0) {
+        setMisafirler([]);
+        setLoading(false);
+      } else {
+        setLoading(true);
+      }
       loadMisafirler(true);
     }, [loadMisafirler])
   );
@@ -187,6 +204,8 @@ const styles = StyleSheet.create({
   },
   screenContainer: { flex: 1 },
   mainTabsWrap: { flex: 1 },
+  appLoadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', gap: 12 },
+  appLoadingText: { fontSize: 16 },
   contentContainer: { flex: 1, paddingHorizontal: 20, paddingBottom: 120 },
   misafirListContent: { paddingVertical: 12, paddingBottom: 120 },
   misafirCard: {
@@ -205,8 +224,6 @@ const styles = StyleSheet.create({
   misafirCardDate: { fontSize: 12, marginTop: 2 },
   misafirlerLoading: { flex: 1, justifyContent: 'center', alignItems: 'center', gap: 12 },
   misafirlerLoadingText: { fontSize: 14 },
-  mrzPlaceholder: { flex: 1, justifyContent: 'center', alignItems: 'center', gap: 12 },
-  mrzPlaceholderText: { fontSize: 14 },
   mrzTabIconWrap: { width: 48, height: 48, borderRadius: 24, alignItems: 'center', justifyContent: 'center', marginTop: -20 },
 });
 
@@ -223,20 +240,6 @@ const Stack = createStackNavigator();
 
 const TAB_NAMES = ['Odalar', 'Okuma', 'Misafirler', 'MRZ', 'Topluluk', 'Raporlar', 'Ayarlar'];
 
-function MrzTabPlaceholder({ navigation }) {
-  const { colors } = useTheme();
-  React.useEffect(() => {
-    const parent = navigation.getParent();
-    if (parent) parent.navigate('MrzScan', { fromCheckIn: false });
-  }, [navigation]);
-  return (
-    <View style={[styles.mrzPlaceholder, { backgroundColor: colors.background }]}>
-      <Ionicons name="document-text-outline" size={48} color={colors.textSecondary} />
-      <Text style={[styles.mrzPlaceholderText, { color: colors.textSecondary }]}>MRZ tarama açılıyor...</Text>
-    </View>
-  );
-}
-
 function MainTabs() {
   const insets = useSafeAreaInsets();
   const { user, lastTab, setLastTab } = useAuth();
@@ -251,6 +254,7 @@ function MainTabs() {
       <TrialWelcomeBanner />
       <CreditsBanner />
       <Tab.Navigator
+      lazy={false}
       initialRouteName={initialTab}
       screenOptions={({ route, navigation }) => ({
         tabBarIcon: ({ focused, color, size }) => {
@@ -320,7 +324,7 @@ function MainTabs() {
       />
       <Tab.Screen
         name="MRZ"
-        component={MrzTabPlaceholder}
+        component={MrzScanScreen}
         options={{
           tabBarLabel: 'MRZ Tara',
           tabBarActiveTintColor: colors.primary,
@@ -378,6 +382,16 @@ function parseRecoveryParams(url) {
   return null;
 }
 
+function AppLoadingScreen() {
+  const { colors } = useTheme();
+  return (
+    <View style={[styles.appLoadingContainer, { backgroundColor: colors.background || '#f5f5f5' }]}>
+      <ActivityIndicator size="large" color={colors.primary || '#4361EE'} />
+      <Text style={[styles.appLoadingText, { color: colors.textSecondary || '#666' }]}>Yükleniyor...</Text>
+    </View>
+  );
+}
+
 function AppNavigator() {
   const { isAuthenticated, isLoading, recoverySessionPending, clearRecoveryPending } = useAuth();
 
@@ -408,7 +422,7 @@ function AppNavigator() {
   }, []);
 
   if (isLoading) {
-    return null; // Loading screen
+    return <AppLoadingScreen />;
   }
 
   const showRecovery = !isAuthenticated && recoverySessionPending;
