@@ -25,6 +25,12 @@ export const logger = {
       console.info(`[INFO] ${message}`, data || '');
     }
   },
+
+  debug: (message, data = null) => {
+    if (TEST_MODE) {
+      console.log(`[DEBUG] ${message}`, data || '');
+    }
+  },
   
   button: (buttonName, action = 'clicked') => {
     if (TEST_MODE) {

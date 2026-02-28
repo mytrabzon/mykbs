@@ -72,7 +72,7 @@ export default function MrzResultScreen({ route, navigation }) {
     return (
       <View style={styles.center}>
         <Text style={styles.errorText}>Veri bulunamadı</Text>
-        <TouchableOpacity style={styles.button} onPress={() => navigation.goBack()}>
+        <TouchableOpacity style={styles.button} onPress={() => { if (navigation.canGoBack()) navigation.goBack(); else navigation.navigate('Main'); }}>
           <Text style={styles.buttonText}>Geri</Text>
         </TouchableOpacity>
       </View>
