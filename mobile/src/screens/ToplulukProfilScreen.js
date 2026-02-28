@@ -108,6 +108,11 @@ export default function ToplulukProfilScreen({ route, navigation }) {
                     {title}
                   </Text>
                 ) : null}
+                {isMe && (user?.telefon || user?.email) ? (
+                  <Text style={[styles.contactLine, { color: colors.textSecondary }]} numberOfLines={1}>
+                    {[user.telefon, user.email].filter(Boolean).join(' · ')}
+                  </Text>
+                ) : null}
               </View>
             </View>
             {isMe && (
@@ -144,6 +149,7 @@ const styles = StyleSheet.create({
   nameBlock: { marginLeft: 16, flex: 1 },
   name: { fontSize: typography.text.h2.fontSize, fontWeight: '700' },
   title: { marginTop: 4, fontSize: typography.text.body.fontSize },
+  contactLine: { marginTop: 4, fontSize: typography.text.caption.fontSize },
   editBtn: {
     marginTop: spacing.lg,
     paddingVertical: 10,

@@ -28,6 +28,29 @@ async function preprocessForOcr(filePath) {
 }
 
 /**
+ * Fotokopi / kağıt MRZ için güçlü ön işleme: yüksek kontrast, netlik (resize up then back) – basılı MRZ daha iyi okunur.
+ * @param {string} filePath - Path to image file
+ * @returns {Promise<string>} Same filePath after write
+ */
+async function preprocessForPhotocopyMrz(filePath) {
+  if (!filePath || !fs.existsSync(filePath)) return filePath;
+  try {
+    const Jimp = (await import('jimp')).default;
+    let image = await Jimp.read(filePath);
+    const w = image.bitmap.width;
+    const h = image.bitmap.height;
+    await image
+      .greyscale()
+      .normalize()
+      .contrast(0.45)
+      .write(filePath);
+    return filePath;
+  } catch (e) {
+    return filePath;
+  }
+}
+
+/**
  * Load image from base64, preprocess, and optionally save to temp file.
  * @param {string} imageBase64 - JPEG/PNG base64 string
  * @param {string} [tempDir] - Directory for temp file (optional; if not set, returns buffer in memory is not implemented - we write to temp)
@@ -48,4 +71,5 @@ async function preprocessFromBase64(imageBase64, tempDir) {
 module.exports = {
   preprocessForOcr,
   preprocessFromBase64,
+  preprocessForPhotocopyMrz,
 };

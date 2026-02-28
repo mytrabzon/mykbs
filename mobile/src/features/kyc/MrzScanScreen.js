@@ -1,5 +1,5 @@
 import React, { useState, useRef, useCallback, useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Alert, ActivityIndicator, Platform, Image, ScrollView, PanResponder, BackHandler } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Alert, ActivityIndicator, Platform, Image, ScrollView, PanResponder, BackHandler, Dimensions } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRoute, useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
@@ -58,8 +58,9 @@ try {
 
 const TIMEOUT_MS = 15000;
 const MAX_FAILS = 6;
-const STABLE_READ_COUNT = 3;
-const SHOW_INSTANT_RESULT = true; // MRZ okunur okunmaz anında sonuç ekranına geç
+const STABLE_READ_COUNT = 1; // 1 = hemen kabul et (tam otomatik)
+const SHOW_INSTANT_RESULT = true;
+const ACCEPT_ON_CHECK_FAIL = true; // Check digit hatası olsa da sonuç ekranında göster, kullanıcı düzeltsin
 
 function Row({ label, value }) {
   const v = value != null && value !== '' ? String(value) : '—';
@@ -84,9 +85,8 @@ function getFailureReasonMessage(checksReason, failCount) {
   return 'Işık ve hizayı kontrol edin veya manuel giriş ile devam edin.';
 }
 
-// Tek akış: pasaport veya kimlik (MRZ) — seçim yok, otomatik okuma (pasaport gibi MRZ parse).
-// Native reader iOS'ta sadece pasaport desteklediği için birleşik akışta kamera + backend kullanıyoruz; backend TD1/TD3 ikisini de parse eder.
-const USE_UNIFIED_MRZ_FLOW = true;
+// İlk kurulum: Önce native MRZ okuyucu (dev build). Yoksa kamera/galeri fallback (tek çekim + backend OCR).
+const USE_UNIFIED_MRZ_FLOW = false;
 
 export default function MrzScanScreen({ navigation }) {
   const route = useRoute();
@@ -99,6 +99,7 @@ export default function MrzScanScreen({ navigation }) {
   const [lastMrzRaw, setLastMrzRaw] = useState('');
   const [stableReadCount, setStableReadCount] = useState(0);
   const [lastMrzChecksReason, setLastMrzChecksReason] = useState('');
+  const [mrzCheckFailed, setMrzCheckFailed] = useState(false);
   const [cameraReady, setCameraReady] = useState(false);
   const [showDebug, setShowDebug] = useState(false);
   const [instantPayload, setInstantPayload] = useState(null);
@@ -107,6 +108,7 @@ export default function MrzScanScreen({ navigation }) {
   const [mergedPayload, setMergedPayload] = useState(null);
   const [frontLoading, setFrontLoading] = useState(false);
   const [torchOn, setTorchOn] = useState(false);
+  const [mrzDocType, setMrzDocType] = useState(Platform.OS === 'android' ? DocType.ID : DocType.Passport);
   const [isExiting, setIsExiting] = useState(false);
   const [isScreenFocused, setIsScreenFocused] = useState(true);
   const timeoutRef = useRef(null);
@@ -168,6 +170,32 @@ export default function MrzScanScreen({ navigation }) {
         if (fixed !== raw) payload = parseMrz(fixed);
       }
       if (!payload.checks?.ok) {
+        const hasMinimalData = (payload.passportNumber || '').trim() && (payload.birthDate || '').trim();
+        if (ACCEPT_ON_CHECK_FAIL && hasMinimalData) {
+          setLastMrzChecksReason('');
+          setMrzCheckFailed(true);
+          if (timeoutRef.current) clearTimeout(timeoutRef.current);
+          if (SHOW_INSTANT_RESULT && fromCheckIn) {
+            setInstantPayload(payload);
+          } else if (SHOW_INSTANT_RESULT && !fromCheckIn) {
+            navigation.replace('MrzResult', { payload });
+          } else {
+            lastStableRawRef.current = raw;
+            stableCountRef.current = STABLE_READ_COUNT;
+            if (fromCheckIn) {
+              const num = (payload.passportNumber || '').trim();
+              const isTc = /^\d{11}$/.test(num);
+              navigation.replace('CheckIn', { mrzPayload: payload, selectedOda: route.params?.selectedOda });
+              saveOkutulanBelgeAsync(
+                { ad: (payload.givenNames || '').trim(), soyad: (payload.surname || '').trim(), kimlikNo: isTc ? num : null, pasaportNo: !isTc ? num : null, belgeNo: num || null, dogumTarihi: payload.birthDate || null, uyruk: (payload.nationality || 'TÜRK').trim() },
+                null
+              );
+            } else {
+              navigation.replace('MrzResult', { payload });
+            }
+          }
+          return;
+        }
         setLastMrzChecksReason(payload.checks?.reason || 'invalid_format');
         setStableReadCount(0);
         lastStableRawRef.current = '';
@@ -188,6 +216,7 @@ export default function MrzScanScreen({ navigation }) {
         });
         return;
       }
+      setMrzCheckFailed(false);
       setLastMrzChecksReason('');
       if (SHOW_INSTANT_RESULT && fromCheckIn) {
         if (timeoutRef.current) clearTimeout(timeoutRef.current);
@@ -201,7 +230,7 @@ export default function MrzScanScreen({ navigation }) {
       if (lastStableRawRef.current === raw) {
         stableCountRef.current += 1;
         setStableReadCount(stableCountRef.current);
-        if (stableCountRef.current >= 3) {
+        if (stableCountRef.current >= STABLE_READ_COUNT) {
           if (timeoutRef.current) clearTimeout(timeoutRef.current);
           if (fromCheckIn) {
             const num = (payload.passportNumber || '').trim();
@@ -243,6 +272,16 @@ export default function MrzScanScreen({ navigation }) {
       }
       setLastMrzRaw(raw.slice(0, 30) + '…');
       if (payload.checks?.ok) {
+        setMrzCheckFailed(false);
+        if (SHOW_INSTANT_RESULT && fromCheckIn) {
+          setInstantPayload(payload);
+        } else if (fromCheckIn) {
+          navigation.replace('CheckIn', { mrzPayload: payload, selectedOda: route.params?.selectedOda });
+        } else {
+          navigation.replace('MrzResult', { payload });
+        }
+      } else if (ACCEPT_ON_CHECK_FAIL && (payload.passportNumber || '').trim() && (payload.birthDate || '').trim()) {
+        setMrzCheckFailed(true);
         if (SHOW_INSTANT_RESULT && fromCheckIn) {
           setInstantPayload(payload);
         } else if (fromCheckIn) {
@@ -364,6 +403,22 @@ export default function MrzScanScreen({ navigation }) {
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
       allowsEditing: false,
       quality: 0.9,
+    });
+    if (result.canceled || !result.assets?.[0]?.uri) return;
+    await uploadImageForDocument(result.assets[0].uri);
+  }, [uploadImageForDocument]);
+
+  /** Sistem kamerasını aç, çekilen fotoğrafı backend'e gönder (expo-camera siyah ekran yerine). */
+  const handleTakePhotoWithSystemCamera = useCallback(async () => {
+    const { status } = await ImagePicker.requestCameraPermissionsAsync();
+    if (status !== 'granted') {
+      Toast.show({ type: 'error', text1: 'Kamera izni gerekli' });
+      return;
+    }
+    const result = await ImagePicker.launchCameraAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: false,
+      quality: 0.95,
     });
     if (result.canceled || !result.assets?.[0]?.uri) return;
     await uploadImageForDocument(result.assets[0].uri);
@@ -499,7 +554,7 @@ export default function MrzScanScreen({ navigation }) {
     };
   }, []);
 
-  const selectedDocType = Platform.OS === 'ios' ? DocType.Passport : DocType.Passport;
+  const selectedDocType = Platform.OS === 'ios' ? DocType.Passport : mrzDocType;
   const useUnifiedFlow = USE_UNIFIED_MRZ_FLOW;
 
   const toggleTorch = useCallback(() => {
@@ -521,19 +576,25 @@ export default function MrzScanScreen({ navigation }) {
     const display = mergedPayload || {
       ad: (instantPayload.givenNames || '').trim(),
       soyad: (instantPayload.surname || '').trim(),
+      nameAr: '',
+      adAr: '',
+      soyadAr: '',
       kimlikNo: /^\d{11}$/.test((instantPayload.passportNumber || '').trim()) ? (instantPayload.passportNumber || '').trim() : '',
       pasaportNo: (instantPayload.passportNumber || '').trim() || '',
       dogumTarihi: isoToDDMMYYYY(instantPayload.birthDate) || '',
       uyruk: (instantPayload.nationality || 'TÜRK').trim(),
     };
+    const isKimlik = !!display.kimlikNo;
+    const belgeNoLabel = isKimlik ? 'TC kimlik no' : 'Pasaport no';
+    const hasArabicName = !!(display.nameAr || display.adAr || display.soyadAr);
     return (
       <SafeAreaView style={whiteResultStyles.container} edges={['top']}>
         <ScrollView contentContainerStyle={whiteResultStyles.scroll}>
           <View style={whiteResultStyles.header}>
-            <TouchableOpacity onPress={() => { setInstantPayload(null); setMergedPayload(null); setFrontImageUri(null); }} style={whiteResultStyles.backBtn}>
+            <TouchableOpacity onPress={() => { setInstantPayload(null); setMergedPayload(null); setFrontImageUri(null); setMrzCheckFailed(false); }} style={whiteResultStyles.backBtn}>
               <Ionicons name="arrow-back" size={24} color="#111" />
             </TouchableOpacity>
-            <Text style={whiteResultStyles.headerTitle}>Belge bilgileri (MRZ)</Text>
+            <Text style={whiteResultStyles.headerTitle}>{isKimlik ? 'Kimlik bilgileri (MRZ)' : 'Pasaport bilgileri (MRZ)'}</Text>
             <View style={whiteResultStyles.backBtn} />
           </View>
           {frontImageUri ? (
@@ -541,10 +602,28 @@ export default function MrzScanScreen({ navigation }) {
               <Image source={{ uri: frontImageUri }} style={whiteResultStyles.photo} resizeMode="cover" />
             </View>
           ) : null}
+          {mrzCheckFailed && (
+            <View style={whiteResultStyles.warningBanner}>
+              <Ionicons name="warning-outline" size={20} color={theme.colors.warning} />
+              <Text style={whiteResultStyles.warningBannerText}>Kontrol hanesi uyuşmuyor; bilgileri kontrol edip gerekirse düzeltin.</Text>
+            </View>
+          )}
           <View style={whiteResultStyles.card}>
             <Row label="Ad" value={display.ad} />
             <Row label="Soyad" value={display.soyad} />
-            <Row label="Belge no" value={display.pasaportNo || display.kimlikNo} />
+            {hasArabicName && (
+              <>
+                {(display.adAr || display.soyadAr) ? (
+                  <>
+                    <Row label="Ad (Arapça/İngilizce)" value={display.adAr} />
+                    <Row label="Soyad (Arapça/İngilizce)" value={display.soyadAr} />
+                  </>
+                ) : (
+                  <Row label="İsim (Arapça/İngilizce)" value={display.nameAr} />
+                )}
+              </>
+            )}
+            <Row label={belgeNoLabel} value={display.kimlikNo || display.pasaportNo} />
             <Row label="Doğum tarihi" value={display.dogumTarihi} />
             <Row label="Uyruk" value={display.uyruk} />
           </View>
@@ -618,18 +697,36 @@ export default function MrzScanScreen({ navigation }) {
             <Ionicons name="help-circle-outline" size={24} color="#fff" />
           </TouchableOpacity>
         </View>
-        <CameraFallbackView
-          onCapture={uploadImageForDocument}
-          onBack={goBack}
-          loading={ocrLoading}
-          permission={permission}
-          requestPermission={requestPermission}
-        />
-        <View style={[styles.overlayBottom, { paddingBottom: insets.bottom + 20, zIndex: 10 }]} pointerEvents="box-none">
-          <TouchableOpacity style={styles.overlayBottomBtn} onPress={handlePickImage} disabled={ocrLoading} activeOpacity={0.8}>
-            <Ionicons name="images-outline" size={28} color="#fff" />
-          </TouchableOpacity>
-          <View style={styles.overlayBottomBtn} />
+        <View style={styles.mrzPickContainer}>
+          <Text style={styles.mrzPickTitle}>Belgeyi tarayın</Text>
+          <Text style={styles.mrzPickHint}>
+            Pasaport veya kimlik (ön/arka). Kamera ile çekin veya galeriden seçin — backend MRZ/OCR okur.
+          </Text>
+          {ocrLoading ? (
+            <View style={styles.mrzPickLoading}>
+              <ActivityIndicator size="large" color="#fff" />
+              <Text style={styles.mrzPickLoadingText}>Okunuyor…</Text>
+            </View>
+          ) : (
+            <>
+              <TouchableOpacity
+                style={styles.mrzPickPrimaryBtn}
+                onPress={handleTakePhotoWithSystemCamera}
+                activeOpacity={0.8}
+              >
+                <Ionicons name="camera" size={36} color="#fff" />
+                <Text style={styles.mrzPickPrimaryBtnText}>Kamera ile çek</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.mrzPickSecondaryBtn}
+                onPress={handlePickImage}
+                activeOpacity={0.8}
+              >
+                <Ionicons name="images-outline" size={28} color="#fff" />
+                <Text style={styles.mrzPickSecondaryBtnText}>Galeriden seç</Text>
+              </TouchableOpacity>
+            </>
+          )}
         </View>
         <ScanHelpSheet visible={helpVisible} onClose={() => setHelpVisible(false)} />
       </SafeAreaView>
@@ -639,6 +736,7 @@ export default function MrzScanScreen({ navigation }) {
   return (
     <View style={styles.container}>
       <MrzReaderView
+        key={selectedDocType}
         style={StyleSheet.absoluteFill}
         docType={selectedDocType}
         cameraSelector={CameraSelector.Back}
@@ -655,6 +753,22 @@ export default function MrzScanScreen({ navigation }) {
           <Ionicons name="help-circle-outline" size={26} color="#fff" />
         </TouchableOpacity>
       </View>
+      {Platform.OS === 'android' && (
+        <View style={[styles.docTypeRow, { position: 'absolute', top: insets.top + 56, left: 12, right: 12, zIndex: 10 }]} pointerEvents="box-none">
+          <TouchableOpacity
+            style={[styles.docTypeBtn, selectedDocType === DocType.Passport && styles.docTypeBtnActive]}
+            onPress={() => setMrzDocType(DocType.Passport)}
+          >
+            <Text style={[styles.docTypeBtnText, selectedDocType === DocType.Passport && styles.docTypeBtnTextActive]}>Pasaport</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.docTypeBtn, selectedDocType === DocType.ID && styles.docTypeBtnActive]}
+            onPress={() => setMrzDocType(DocType.ID)}
+          >
+            <Text style={[styles.docTypeBtnText, selectedDocType === DocType.ID && styles.docTypeBtnTextActive]}>Türk kimliği</Text>
+          </TouchableOpacity>
+        </View>
+      )}
       {__DEV__ && showDebug && (
         <View style={[styles.debugPanel, { top: insets.top + 52 }]}>
           <Text style={styles.debugTitle}>Debug</Text>
@@ -668,7 +782,11 @@ export default function MrzScanScreen({ navigation }) {
       )}
       <View style={styles.overlayCenter} pointerEvents="none">
         <View style={styles.frame} />
-        <Text style={styles.frameHint}>Pasaport veya kimlik MRZ alanını hizalayın · Karanlıkta fener kullanın</Text>
+        <Text style={styles.frameHint}>
+          {selectedDocType === DocType.ID
+            ? 'Türk kimliği arka yüzündeki MRZ (3 satır) alanını çerçeveleyin · Karanlıkta fener kullanın'
+            : 'Pasaport veya kimlik MRZ alanını hizalayın · Karanlıkta fener kullanın'}
+        </Text>
       </View>
       <View style={[styles.overlayBottom, { paddingBottom: insets.bottom + 20 }]} pointerEvents="box-none">
         <TouchableOpacity style={styles.overlayBottomBtn} onPress={handlePickImage} disabled={ocrLoading} activeOpacity={0.8}>
@@ -697,22 +815,12 @@ export default function MrzScanScreen({ navigation }) {
   );
 }
 
-const AUTO_CAPTURE_COUNTDOWN_STEP_MS = 1000;
-
-function CameraFallbackView({ onCapture, onBack, loading, permission, requestPermission }) {
+function CameraFallbackView({ onCapture, onBack, loading, permission, requestPermission, enableTorch, onTorchToggle }) {
   const cameraRef = useRef(null);
   const [ready, setReady] = useState(false);
-  const [torchOn, setTorchOn] = useState(false);
-  const [autoCaptureCountdown, setAutoCaptureCountdown] = useState(null);
-  const autoCaptureTimerRef = useRef(null);
 
   const capture = async () => {
     if (!cameraRef.current || loading) return;
-    setAutoCaptureCountdown(null);
-    if (autoCaptureTimerRef.current) {
-      clearTimeout(autoCaptureTimerRef.current);
-      autoCaptureTimerRef.current = null;
-    }
     try {
       const photo = await cameraRef.current.takePictureAsync({
         quality: 0.95,
@@ -724,28 +832,6 @@ function CameraFallbackView({ onCapture, onBack, loading, permission, requestPer
       Toast.show({ type: 'error', text1: 'Fotoğraf alınamadı', text2: e?.message });
     }
   };
-
-  const startAutoCapture = () => {
-    if (loading || !ready) return;
-    setAutoCaptureCountdown(3);
-    let count = 3;
-    const step = () => {
-      count -= 1;
-      setAutoCaptureCountdown(count > 0 ? count : null);
-      if (count <= 0) {
-        capture();
-        return;
-      }
-      autoCaptureTimerRef.current = setTimeout(step, AUTO_CAPTURE_COUNTDOWN_STEP_MS);
-    };
-    autoCaptureTimerRef.current = setTimeout(step, AUTO_CAPTURE_COUNTDOWN_STEP_MS);
-  };
-
-  useEffect(() => {
-    return () => {
-      if (autoCaptureTimerRef.current) clearTimeout(autoCaptureTimerRef.current);
-    };
-  }, []);
 
   if (!permission?.granted) {
     return (
@@ -763,44 +849,22 @@ function CameraFallbackView({ onCapture, onBack, loading, permission, requestPer
 
   return (
     <View style={styles.cameraFallback}>
-      <CameraView
-        ref={cameraRef}
-        style={StyleSheet.absoluteFill}
-        facing="back"
-        onCameraReady={() => setReady(true)}
-        enableTorch={torchOn}
-      />
+      <View style={styles.cameraPreviewWrap}>
+        <CameraView
+          ref={cameraRef}
+          style={styles.cameraPreview}
+          facing="back"
+          onCameraReady={() => setReady(true)}
+          enableTorch={!!enableTorch}
+        />
+      </View>
       <View style={styles.captureOverlay}>
-        <TouchableOpacity
-          style={[styles.torchBtn, torchOn && styles.torchBtnOn]}
-          onPress={() => setTorchOn((v) => !v)}
-        >
-          <Ionicons name={torchOn ? 'flash' : 'flash-outline'} size={28} color="#fff" />
-          <Text style={styles.torchLabel}>{torchOn ? 'Flaş kapat' : 'Flaş aç'}</Text>
-        </TouchableOpacity>
         <Text style={styles.frameHint}>
-          {autoCaptureCountdown != null
-            ? `Belgeyi sabit tutun — ${autoCaptureCountdown}`
-            : 'Pasaport veya kimlik arkası MRZ alanını çerçeveleyip çekin veya "Otomatik yakala" ile sabit tutun'}
+          Pasaport veya kimlik arkası MRZ alanını çerçeveleyip çekin
         </Text>
-        {autoCaptureCountdown != null ? (
-          <View style={styles.autoCaptureBadge}>
-            <Text style={styles.autoCaptureBadgeText}>{autoCaptureCountdown} saniye</Text>
-            <TouchableOpacity onPress={() => { setAutoCaptureCountdown(null); if (autoCaptureTimerRef.current) clearTimeout(autoCaptureTimerRef.current); }} style={styles.autoCaptureCancelBtn}>
-              <Text style={styles.autoCaptureCancelText}>İptal</Text>
-            </TouchableOpacity>
-          </View>
-        ) : (
-          <>
-            <TouchableOpacity style={[styles.autoCaptureTriggerBtn, loading && styles.autoCaptureTriggerBtnDisabled]} onPress={startAutoCapture} disabled={loading}>
-              <Ionicons name="scan-outline" size={22} color="#fff" />
-              <Text style={styles.autoCaptureTriggerText}>Otomatik yakala</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.captureBtn} onPress={capture} disabled={loading}>
-              {loading ? <ActivityIndicator color="#fff" /> : <Ionicons name="camera" size={40} color="#fff" />}
-            </TouchableOpacity>
-          </>
-        )}
+        <TouchableOpacity style={styles.captureBtn} onPress={capture} disabled={loading}>
+          {loading ? <ActivityIndicator color="#fff" /> : <Ionicons name="camera" size={40} color="#fff" />}
+        </TouchableOpacity>
       </View>
     </View>
   );
@@ -808,6 +872,18 @@ function CameraFallbackView({ onCapture, onBack, loading, permission, requestPer
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#000' },
+  mrzPickContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', paddingHorizontal: theme.spacing.xl },
+  mrzPickTitle: { fontSize: theme.typography.fontSize.xl, fontWeight: '700', color: '#fff', marginBottom: theme.spacing.sm },
+  mrzPickHint: { color: 'rgba(255,255,255,0.85)', fontSize: theme.typography.fontSize.sm, textAlign: 'center', marginBottom: theme.spacing.xl },
+  mrzPickLoading: { alignItems: 'center', gap: 12 },
+  mrzPickLoadingText: { color: '#fff', fontSize: theme.typography.fontSize.sm },
+  mrzPickPrimaryBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 12, backgroundColor: theme.colors.primary, paddingVertical: 16, paddingHorizontal: 28, borderRadius: 12, marginBottom: theme.spacing.base, minWidth: 220 },
+  mrzPickPrimaryBtnText: { color: '#fff', fontSize: theme.typography.fontSize.base, fontWeight: '700' },
+  mrzPickSecondaryBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10, paddingVertical: 14, paddingHorizontal: 24, borderRadius: 12, backgroundColor: 'rgba(255,255,255,0.2)', minWidth: 220 },
+  mrzPickSecondaryBtnText: { color: '#fff', fontSize: theme.typography.fontSize.sm, fontWeight: '600' },
+  cameraFullScreen: { flex: 1, width: '100%', minHeight: 300, overflow: 'hidden' },
+  cameraPlaceholder: { backgroundColor: '#000' },
+  cameraAreaWrap: { flex: 1, minHeight: 280 },
   overlayTop: { position: 'absolute', top: 0, left: 0, right: 0, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 12 },
   overlayTopZ: { zIndex: 10, elevation: 10, backgroundColor: 'rgba(0,0,0,0.5)' },
   overlayIconBtn: { width: 44, height: 44, borderRadius: 22, backgroundColor: 'rgba(0,0,0,0.35)', alignItems: 'center', justifyContent: 'center' },
@@ -850,20 +926,16 @@ const styles = StyleSheet.create({
   buttonSecondaryText: { color: theme.colors.primary, fontWeight: theme.typography.fontWeight.semibold },
   buttonBack: { marginTop: theme.spacing.xl },
   buttonBackText: { color: theme.colors.textSecondary, fontSize: theme.typography.fontSize.sm },
-  cameraFallback: { flex: 1, position: 'relative', backgroundColor: '#000' },
+  cameraFallback: { flex: 1, position: 'relative', backgroundColor: '#000', minHeight: Dimensions.get('window').height * 0.4 },
+  cameraPreviewWrap: { flex: 1, overflow: 'hidden', minHeight: 240 },
+  cameraPreview: { flex: 1, width: '100%', height: '100%' },
   cameraFallbackText: { color: '#fff', marginBottom: theme.spacing.base },
   captureOverlay: { position: 'absolute', bottom: 0, left: 0, right: 0, alignItems: 'center', paddingVertical: theme.spacing.xl, backgroundColor: 'rgba(0,0,0,0.5)' },
-  torchBtn: { flexDirection: 'row', alignItems: 'center', paddingVertical: 8, paddingHorizontal: 14, marginBottom: 8, borderRadius: 20, backgroundColor: 'rgba(255,255,255,0.25)' },
-  torchBtnOn: { backgroundColor: theme.colors.primary },
-  torchLabel: { color: '#fff', marginLeft: 6, fontSize: theme.typography.fontSize.sm },
-  autoCaptureTriggerBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingVertical: 10, paddingHorizontal: 16, borderRadius: 20, backgroundColor: 'rgba(255,255,255,0.25)', marginBottom: 8 },
-  autoCaptureTriggerBtnDisabled: { opacity: 0.6 },
-  autoCaptureTriggerText: { color: '#fff', fontSize: theme.typography.fontSize.sm, fontWeight: '600' },
-  autoCaptureBadge: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 12 },
-  autoCaptureBadgeText: { color: '#fff', fontSize: 18, fontWeight: '700' },
-  autoCaptureCancelBtn: { paddingVertical: 6, paddingHorizontal: 12, borderRadius: 8, backgroundColor: 'rgba(255,255,255,0.3)' },
-  autoCaptureCancelText: { color: '#fff', fontSize: theme.typography.fontSize.sm, fontWeight: '600' },
   captureBtn: { width: 72, height: 72, borderRadius: 36, backgroundColor: theme.colors.primary, alignItems: 'center', justifyContent: 'center' },
+  autoScanBadge: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 8 },
+  autoScanBadgeText: { color: '#fff', fontSize: theme.typography.fontSize.sm, fontWeight: '600' },
+  cameraFallbackLink: { marginTop: 12, paddingVertical: 8, paddingHorizontal: 12 },
+  cameraFallbackLinkText: { color: 'rgba(255,255,255,0.9)', fontSize: 13, textDecorationLine: 'underline' },
 });
 
 const whiteResultStyles = StyleSheet.create({
@@ -884,4 +956,6 @@ const whiteResultStyles = StyleSheet.create({
   secondaryBtnText: { color: '#111', fontSize: theme.typography.fontSize.base, fontWeight: '700' },
   loadingWrap: { alignItems: 'center', paddingVertical: theme.spacing.lg },
   loadingText: { marginTop: 8, fontSize: theme.typography.fontSize.sm, color: '#6C757D' },
+  warningBanner: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: theme.colors.warningSoft || '#FFF8E6', padding: theme.spacing.sm, borderRadius: 8, marginBottom: theme.spacing.sm },
+  warningBannerText: { flex: 1, fontSize: theme.typography.fontSize.sm, color: '#856404' },
 });

@@ -83,17 +83,15 @@ function extractMrzFromOcr(text) {
   return '';
 }
 
-/** Karanlık/aydınlık için görüntü ön işleme: grayscale, kontrast, netlik – Tesseract okumasını iyileştirir */
+/** Fotokopi/kağıt MRZ için güçlü ön işleme: yüksek kontrast – basılı MRZ anında okunur */
 async function preprocessImageForMrz(filePath) {
   try {
     const Jimp = (await import('jimp')).default;
     const image = await Jimp.read(filePath);
-    const w = image.bitmap.width;
-    const h = image.bitmap.height;
     await image
       .greyscale()
       .normalize()
-      .contrast(0.2)
+      .contrast(0.45)
       .write(filePath);
     return filePath;
   } catch (e) {
@@ -101,7 +99,7 @@ async function preprocessImageForMrz(filePath) {
   }
 }
 
-/** MRZ: Ön işleme (grayscale, kontrast) + Tesseract. Kimlik/pasaport MRZ için tur+eng daha iyi sonuç verir. */
+/** MRZ: Fotokopi/kağıt için güçlü ön işleme + Tesseract. Kağıt üzerinde basılı MRZ da pasaport gibi okunur. */
 router.post('/mrz', authenticateTesisOrSupabase, upload.single('image'), async (req, res) => {
   const filePath = req.file?.path;
   try {
@@ -109,7 +107,7 @@ router.post('/mrz', authenticateTesisOrSupabase, upload.single('image'), async (
       return res.status(400).json({ message: 'Görüntü yüklenmedi' });
     }
     const processedPath = await preprocessImageForMrz(filePath);
-    const { data: { text } } = await Tesseract.recognize(processedPath, 'tur+eng', { logger: () => {} });
+    const { data: { text } } = await Tesseract.recognize(processedPath, 'eng+tur', { logger: () => {} });
     const raw = extractMrzFromOcr(text);
     if (!raw) {
       return res.status(400).json({ message: 'Görüntüde MRZ bulunamadı. MRZ alanını net ve çerçeve içine alın.' });
@@ -125,10 +123,9 @@ router.post('/mrz', authenticateTesisOrSupabase, upload.single('image'), async (
   }
 });
 
-/** Tek görsel: MRZ + ön yüz OCR birleşik. Ön işleme MRZ okumayı iyileştirir. Dosya yanıt sonrası silinir. */
-/** Tek dosya yolundan OCR çalıştır (document ve document-base64 ortak). */
+/** Tek görsel: MRZ + ön yüz OCR. Fotokopi/kağıt MRZ + Arapça/İngilizce isim için eng+ara+tur. */
 function runOcrOnFile(filePath) {
-  const languages = 'tur+eng';
+  const languages = 'eng+ara+tur';
   return preprocessImageForMrz(filePath).then((processedPath) =>
     Tesseract.recognize(processedPath, languages, { logger: () => {} }).then(({ data: { text } }) => {
       const mrzRaw = extractMrzFromOcr(text);
@@ -326,6 +323,9 @@ function parseIdentityDocument(text) {
   const result = {
     ad: '',
     soyad: '',
+    nameAr: '',
+    adAr: '',
+    soyadAr: '',
     kimlikNo: null,
     pasaportNo: null,
     dogumTarihi: null,
@@ -390,7 +390,7 @@ function parseIdentityDocument(text) {
     }
   }
 
-  const nameLike = /^[A-Za-zÇĞİÖŞÜçğıöşü\s\-]+$/;
+  const nameLike = /^[A-Za-zÇĞİÖŞÜçğıöşü\s\-']+$/;
   for (const line of lines) {
     if (line.length > 4 && nameLike.test(line) && !/\d{2,}/.test(line)) {
       const parts = line.split(/\s+/).filter(Boolean);
@@ -399,6 +399,22 @@ function parseIdentityDocument(text) {
         result.soyad = parts.slice(1).join(' ').trim();
         break;
       }
+    }
+  }
+
+  const arabicRegex = /[\u0600-\u06FF]/;
+  const arabicLines = lines.filter((l) => l.length > 2 && arabicRegex.test(l));
+  if (arabicLines.length > 0) {
+    result.nameAr = arabicLines.join(' ').trim();
+    const parts = arabicLines[0].trim().split(/\s+/).filter(Boolean);
+    if (parts.length >= 2) {
+      result.adAr = parts[0];
+      result.soyadAr = parts.slice(1).join(' ');
+    } else if (arabicLines.length >= 2) {
+      result.adAr = arabicLines[0].trim();
+      result.soyadAr = arabicLines.slice(1).join(' ').trim();
+    } else {
+      result.adAr = result.nameAr;
     }
   }
 
@@ -476,11 +492,14 @@ function parseMrzToPayload(raw) {
   return { documentNumber: docNumber, birthDate, expiryDate, surname, givenNames, issuingCountry };
 }
 
-/** MRZ + ön yüz OCR → tek merged obje (MRZ öncelikli) */
+/** MRZ + ön yüz OCR → tek merged obje (MRZ öncelikli). Arapça/İngilizce isimler parsed'dan. */
 function mergeMrzAndFront(mrzPayload, parsed) {
   const merged = {
     ad: parsed?.ad || '',
     soyad: parsed?.soyad || '',
+    nameAr: parsed?.nameAr || '',
+    adAr: parsed?.adAr || '',
+    soyadAr: parsed?.soyadAr || '',
     kimlikNo: parsed?.kimlikNo || null,
     pasaportNo: parsed?.pasaportNo || null,
     dogumTarihi: parsed?.dogumTarihi || null,
@@ -502,6 +521,9 @@ function mergeMrzAndFront(mrzPayload, parsed) {
   if (parsed?.kimlikNo) merged.kimlikNo = parsed.kimlikNo;
   if (parsed?.pasaportNo && !merged.belgeNo) merged.pasaportNo = parsed.pasaportNo;
   if (parsed?.dogumTarihi && !merged.dogumTarihi) merged.dogumTarihi = parsed.dogumTarihi;
+  if (parsed?.nameAr) merged.nameAr = parsed.nameAr;
+  if (parsed?.adAr) merged.adAr = parsed.adAr;
+  if (parsed?.soyadAr) merged.soyadAr = parsed.soyadAr;
   return merged;
 }
 

@@ -306,14 +306,26 @@ export const AuthProvider = ({ children }) => {
     }
     try {
       const res = await api.post('/auth/giris/yeni', { email: emailNorm, sifre: passwordNorm });
-      const { token: newToken, kullanici, tesis: tesisData } = res.data || {};
+      const { token: newToken, kullanici, tesis: tesisData, supabaseAccessToken: backendSupabaseToken } = res.data || {};
       if (newToken && kullanici && tesisData) {
-        // Supabase token dönmediği için null: profil/topluluk Edge çağrıları şifre ile girişte 401 verir; OTP giriş gerekir.
-        return await loginWithToken(newToken, kullanici, tesisData, null);
+        let supabaseAccessToken = backendSupabaseToken || null;
+        if (!supabaseAccessToken && supabase?.auth) {
+          try {
+            const { data, error } = await supabase.auth.signInWithPassword({
+              email: emailNorm,
+              password: passwordNorm,
+            });
+            if (!error && data?.session?.access_token) {
+              supabaseAccessToken = data.session.access_token;
+            }
+          } catch (e) {
+            logger.warn('Supabase signInWithPassword atlanıyor', e?.message || e);
+          }
+        }
+        return await loginWithToken(newToken, kullanici, tesisData, supabaseAccessToken);
       }
       return { success: false, message: res.data?.message || 'Giriş başarısız' };
     } catch (err) {
-      const status = err?.response?.status;
       const msg = err?.response?.data?.message || err?.message;
       logger.error('Login with password error', err);
       return { success: false, message: msg || 'Giriş başarısız' };
@@ -323,11 +335,26 @@ export const AuthProvider = ({ children }) => {
   const loginWithPhoneAndPassword = async (telefon, sifre) => {
     try {
       const response = await api.post('/auth/giris/yeni', { telefon, sifre });
-      const { token: newToken, kullanici, tesis: tesisData } = response.data || {};
+      const { token: newToken, kullanici, tesis: tesisData, supabaseAccessToken: backendSupabaseToken } = response.data || {};
       if (!newToken || !kullanici) {
         return { success: false, message: response.data?.message || 'Giriş başarısız' };
       }
-      return await loginWithToken(newToken, kullanici, tesisData, null);
+      let supabaseAccessToken = backendSupabaseToken || null;
+      const emailForSupabase = (kullanici.email || '').trim().toLowerCase();
+      if (!supabaseAccessToken && supabase?.auth && emailForSupabase) {
+        try {
+          const { data, error } = await supabase.auth.signInWithPassword({
+            email: emailForSupabase,
+            password: sifre.trim(),
+          });
+          if (!error && data?.session?.access_token) {
+            supabaseAccessToken = data.session.access_token;
+          }
+        } catch (e) {
+          logger.warn('Supabase signInWithPassword atlanıyor', e?.message || e);
+        }
+      }
+      return await loginWithToken(newToken, kullanici, tesisData, supabaseAccessToken);
     } catch (error) {
       return {
         success: false,

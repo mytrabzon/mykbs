@@ -8,6 +8,7 @@ const smsService = require('../services/sms');
 const emailService = require('../services/email');
 const { ensureSupabaseBranchAndProfile } = require('../services/supabaseSync');
 const { supabaseAdmin } = require('../lib/supabaseAdmin');
+const { supabase: supabaseAnon } = require('../services/supabase');
 const { setTrialDefaults } = require('../config/packages');
 
 const router = express.Router();
@@ -655,10 +656,24 @@ router.post('/giris/yeni', async (req, res) => {
       { expiresIn: process.env.JWT_EXPIRES_IN || '7d' }
     );
 
-    console.log('Yeni giriş başarılı:', { 
-      kullaniciId: kullanici.id, 
-      girisTipi: email ? 'email' : 'telefon' 
-    });
+    // Profil ve topluluk için Supabase token (nasıl girilirse girilsin aynı deneyim)
+    let supabaseAccessToken = null;
+    if (supabaseAnon?.auth) {
+      const emailForSupabase = (kullanici.email || '').trim().toLowerCase();
+      if (emailForSupabase) {
+        try {
+          const { data, error } = await supabaseAnon.auth.signInWithPassword({
+            email: emailForSupabase,
+            password: sifreTrim,
+          });
+          if (!error && data?.session?.access_token) {
+            supabaseAccessToken = data.session.access_token;
+          }
+        } catch (e) {
+          // Supabase hesabı yok veya şifre farklı; backend girişi yine başarılı
+        }
+      }
+    }
 
     res.json({
       token,
@@ -678,7 +693,8 @@ router.post('/giris/yeni', async (req, res) => {
         kota: kullanici.tesis.kota,
         kullanilanKota: kullanici.tesis.kullanilanKota,
         trialEndsAt: kullanici.tesis.trialEndsAt
-      }
+      },
+      ...(supabaseAccessToken && { supabaseAccessToken }),
     });
   } catch (error) {
     console.error('Yeni giriş hatası:', error);

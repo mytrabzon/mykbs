@@ -127,7 +127,7 @@ export default function ProfilDuzenleScreen() {
         await withTimeout(api.put('/auth/profile', body), SAVE_TIMEOUT_MS, 'Kayıt zaman aşımına uğradı. İnterneti kontrol edip tekrar deneyin.');
       } else {
         if (!token) {
-          Toast.show({ type: 'error', text1: 'Profil kaydedilemedi', text2: 'Bu hesap türünde profil için e-posta veya telefon ile giriş gerekir.' });
+          Toast.show({ type: 'error', text1: 'Profil kaydedilemedi', text2: 'Çıkış yapıp tekrar giriş yapın.' });
           setSaving(false);
           return;
         }
@@ -183,6 +183,14 @@ export default function ProfilDuzenleScreen() {
               <Ionicons name="camera" size={16} color="#fff" />
             </View>
           </TouchableOpacity>
+          {(user?.telefon || user?.email) ? (
+            <View style={styles.accountRow}>
+              <Text style={[styles.label, { color: colors.textSecondary }]}>Hesap (giriş bilgisi)</Text>
+              <Text style={[styles.accountValue, { color: colors.textSecondary }]} numberOfLines={1}>
+                {[user.telefon, user.email].filter(Boolean).join(' · ')}
+              </Text>
+            </View>
+          ) : null}
           <Text style={[styles.label, { color: colors.textSecondary }]}>Ad Soyad / Görünen ad</Text>
           <TextInput
             style={[styles.input, { backgroundColor: colors.background, color: colors.textPrimary, borderColor: colors.border }]}
@@ -246,6 +254,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  accountRow: { marginBottom: 16 },
+  accountValue: { fontSize: typography.text.body.fontSize },
   input: { borderWidth: 1, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12, fontSize: typography.text.body.fontSize, marginBottom: 16 },
   btn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingVertical: 14, borderRadius: 14 },
   btnText: { color: '#fff', fontSize: 16, fontWeight: '600' },

@@ -170,27 +170,6 @@ export default function ToplulukScreen({ navigation }) {
 
   const onRefresh = () => loadPosts(true);
 
-  // Giriş yapılmış ama bu hesap türünde topluluk yoksa boş içerik göster, engel koyma
-  const noCommunityToken = !!user && !token;
-  if (noCommunityToken) {
-    return (
-      <View style={[styles.screenContainer, { backgroundColor: colors.background }]}>
-        <AppHeader
-          title="Topluluk"
-          minimal
-          onNotification={() => navigation.navigate('Bildirimler')}
-          onProfile={() => navigation.navigate('ProfilDuzenle')}
-        />
-        <View style={styles.emptyWrap}>
-          <EmptyState
-            icon="people-outline"
-            title="Topluluk"
-            message="Topluluk paylaşımları e-posta veya telefon ile giriş yaptığınızda burada görünür."
-          />
-        </View>
-      </View>
-    );
-  }
   if (!user) {
     return (
       <View style={[styles.screenContainer, { backgroundColor: colors.background }]}>
@@ -204,7 +183,7 @@ export default function ToplulukScreen({ navigation }) {
           <EmptyState
             icon="people-outline"
             title="Topluluk"
-            message="Topluluk özelliğini kullanmak için giriş yapın."
+            message="Paylaşım ve topluluk özellikleri için giriş yapın."
           />
         </View>
       </View>
@@ -261,10 +240,10 @@ export default function ToplulukScreen({ navigation }) {
           ListEmptyComponent={
             <EmptyState
               icon="images-outline"
-              title="Henüz paylaşım yok"
-              message="İlk paylaşımı siz ekleyin."
+              title={token ? 'Henüz paylaşım yok' : 'Profil ve paylaşım için giriş gerekli'}
+              message={token ? 'İlk paylaşımı siz ekleyin.' : 'Çıkış yapıp tekrar giriş yaparak aynı tesis bilgileriyle devam edebilirsiniz.'}
               primaryCta={{ label: 'Paylaşım Ekle', onPress: () => navigation.navigate('PaylasimEkle') }}
-              secondaryCta={{ label: 'Kategori Seç', onPress: openCategoryModal }}
+              secondaryCta={token ? { label: 'Kategori Seç', onPress: openCategoryModal } : undefined}
             />
           }
           renderItem={({ item }) => (

@@ -59,5 +59,31 @@ serve(async (req) => {
     return errorResponse(error.message, 500);
   }
 
-  return jsonResponse({ posts: posts || [], total: count ?? 0 });
+  const list = posts || [];
+  const authorIds = [...new Set(list.map((p: { author_id: string }) => p.author_id).filter(Boolean))];
+  let profiles: Record<string, { display_name: string | null; avatar_url: string | null }> = {};
+  if (authorIds.length > 0) {
+    const { data: rows } = await auth.supabase
+      .from("user_profiles")
+      .select("user_id, display_name, avatar_url")
+      .in("user_id", authorIds);
+    if (rows?.length) {
+      for (const r of rows) {
+        profiles[r.user_id] = { display_name: r.display_name ?? null, avatar_url: r.avatar_url ?? null };
+      }
+    }
+  }
+
+  const postsWithAuthor = list.map((p: { author_id: string; [k: string]: unknown }) => ({
+    ...p,
+    author: p.author_id
+      ? {
+          user_id: p.author_id,
+          display_name: profiles[p.author_id]?.display_name ?? null,
+          avatar_url: profiles[p.author_id]?.avatar_url ?? null,
+        }
+      : null,
+  }));
+
+  return jsonResponse({ posts: postsWithAuthor, total: count ?? 0 });
 });

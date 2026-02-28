@@ -91,7 +91,7 @@ export default function PaylasimEkleScreen() {
     }
     const token = await getSupabaseToken();
     if (!token) {
-      Toast.show({ type: 'error', text1: 'Bu özellik e-posta veya telefon ile giriş gerektirir', text2: 'Topluluk paylaşımları bu hesap türünde kullanılamıyor.' });
+      Toast.show({ type: 'error', text1: 'Giriş gerekli', text2: 'Çıkış yapıp tekrar giriş yapın; aynı tesis bilgileriyle profil ve paylaşım kullanılır.' });
       return;
     }
     setLoading(true);
@@ -156,7 +156,13 @@ export default function PaylasimEkleScreen() {
       Toast.show({ type: 'success', text1: 'Paylaşım eklendi' });
       navigation.goBack();
     } catch (err) {
-      Toast.show({ type: 'error', text1: 'Gönderilemedi', text2: err?.message });
+      const msg = err?.message || '';
+      const isAuth = err?.status === 401 || msg.includes('Giriş gerekli') || err?.code === 'UNAUTHORIZED';
+      Toast.show({
+        type: 'error',
+        text1: isAuth ? 'Giriş gerekli' : 'Gönderilemedi',
+        text2: isAuth ? 'Çıkış yapıp tekrar giriş yapın.' : msg,
+      });
       setUploadProgress(0);
       setUploadStatus('');
     } finally {
