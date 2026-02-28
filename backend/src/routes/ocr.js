@@ -3,8 +3,19 @@ const multer = require('multer');
 const Tesseract = require('tesseract.js');
 const fs = require('fs');
 const path = require('path');
+const os = require('os');
 const { authenticateTesisOrSupabase } = require('../middleware/authTesisOrSupabase');
-const { cropBottomFraction, preprocessForKimlikMrz } = require('../lib/vision/preprocess');
+const {
+  cropBottomFraction,
+  cropTopFraction,
+  cropCenterFraction,
+  preprocessForKimlikMrz,
+  preprocessForPaperMrz,
+  preprocessForPhotocopyMrz,
+  cropMrzCandidates,
+  rotateImage,
+} = require('../lib/vision/preprocess');
+const { parseMrzRaw } = require('../lib/vision/mrz');
 
 const router = express.Router();
 const KIMLIK_UPLOAD_DIR = path.join(__dirname, '../../uploads/kimlikler');
@@ -39,6 +50,29 @@ const upload = multer({
 
 const DEBUG_MRZ = process.env.DEBUG_MRZ !== '0' && process.env.DEBUG_MRZ !== 'false';
 
+const MRZ_WHITELIST = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789<';
+const TESS_MRZ_OPTS = { logger: () => {}, tessedit_char_whitelist: MRZ_WHITELIST };
+
+/** MRZ adayı için puan: checksum +100, satır uzunluğu +20, < oranı +10, whitelist +10, fix az +5. */
+function scoreMrzCandidate(raw, fixedRaw, parsed) {
+  if (!raw || !parsed) return 0;
+  let score = 0;
+  if (parsed.checks && parsed.checks.compositeCheck) score += 100;
+  const lines = (fixedRaw || raw).replace(/\r/g, '\n').split('\n').map((l) => l.trim()).filter(Boolean);
+  const stdLens = [30, 44, 36];
+  const allCorrectLen = lines.every((l) => stdLens.some((len) => l.length === len));
+  if (allCorrectLen) score += 20;
+  const one = (fixedRaw || raw).replace(/\s/g, '');
+  const angleRatio = (one.match(/</g) || []).length / Math.max(1, one.length);
+  if (angleRatio >= 0.02 && angleRatio <= 0.3) score += 10;
+  if (/^[A-Z0-9<\s\n\r]+$/i.test(raw)) score += 10;
+  if (fixedRaw && raw !== fixedRaw) {
+    const changeCount = (fixedRaw.length - raw.length) + (fixedRaw.split('').filter((c, i) => raw[i] !== c).length);
+    if (changeCount <= 3) score += 5;
+  }
+  return score;
+}
+
 /** MRZ satırını standart uzunluğa tamamla (< ile). */
 function padMrzLine(line, targetLen) {
   if (!line || targetLen < 1) return line;
@@ -56,17 +90,16 @@ function normalizeOcrTextForMrz(text) {
     .replace(/[^A-Z0-9<]/g, '');
 }
 
-/** OCR çıktısından MRZ satır adayları: 30+ uzunluk, < içeren satırları önceliklendir; 3x30 → TD1, 2x44 → TD3. */
+/** OCR çıktısından MRZ satır adayları: kimlik/pasaport/fotokopi 22+ karakter kabul. */
 function extractMrzLinesFromOcr(text) {
-  const normalized = normalizeOcrTextForMrz(text);
-  if (!normalized) return [];
+  if (!text || typeof text !== 'string') return [];
   const lines = text.split(/\r\n|\r|\n/)
     .map((l) => l.trim().toUpperCase().replace(/\s/g, '').replace(/[\u00AB\u2039]/g, '<'))
     .map((l) => l.replace(/[^A-Z0-9<]/g, ''))
-    .filter((l) => l.length >= 28);
+    .filter((l) => l.length >= 22);
   const withAngle = lines.filter((l) => l.includes('<'));
   const candidates = withAngle.length >= 2 ? withAngle : lines;
-  return candidates.filter((l) => l.length >= 26 && l.length <= 46);
+  return candidates.filter((l) => l.length >= 22 && l.length <= 46);
 }
 
 /** OCR çıktısından MRZ benzeri satırları bul (TD1: 3x30 kimlik, TD2: 2x36, TD3: 2x44 pasaport). Esnek uzunluk kabul. */
@@ -74,41 +107,71 @@ function extractMrzFromOcr(text) {
   if (!text || typeof text !== 'string') return '';
   const normalized = normalizeOcrTextForMrz(text);
   const one = normalized.trim();
-  if (one.length >= 89 && one.length <= 91 && /^[A-Z0-9<]+$/.test(one)) {
-    const s1 = padMrzLine(one.slice(0, 30), 30);
-    const s2 = padMrzLine(one.slice(30, 60), 30);
-    const s3 = padMrzLine(one.slice(60, 90), 30);
+  if (one.length >= 85 && one.length <= 95 && /^[A-Z0-9<]+$/.test(one)) {
+    const a = one.length >= 90 ? 30 : Math.floor(one.length / 3);
+    const s1 = padMrzLine(one.slice(0, a), 30);
+    const s2 = padMrzLine(one.slice(a, a * 2), 30);
+    const s3 = padMrzLine(one.slice(a * 2, one.length), 30);
     return s1 + '\n' + s2 + '\n' + s3;
   }
-  if (one.length >= 88 && one.length <= 92 && /^[A-Z0-9<]+$/.test(one)) {
-    const s1 = padMrzLine(one.slice(0, 44), 44);
-    const s2 = padMrzLine(one.slice(44, 88), 44);
+  if (one.length >= 82 && one.length <= 96 && /^[A-Z0-9<]+$/.test(one)) {
+    const a = one.length >= 88 ? 44 : Math.floor(one.length / 2);
+    const s1 = padMrzLine(one.slice(0, a), 44);
+    const s2 = padMrzLine(one.slice(a, one.length), 44);
     return s1 + '\n' + s2;
   }
-  if (one.length >= 70 && one.length <= 74 && /^[A-Z0-9<]+$/.test(one)) {
+  if (one.length >= 68 && one.length <= 76 && /^[A-Z0-9<]+$/.test(one)) {
     const s1 = padMrzLine(one.slice(0, 36), 36);
     const s2 = padMrzLine(one.slice(36, 72), 36);
     return s1 + '\n' + s2;
   }
   const lines = extractMrzLinesFromOcr(text);
-  if (lines.length >= 3 && lines.every((l) => l.length >= 28 && l.length <= 32)) {
+  if (lines.length >= 3 && lines.every((l) => l.length >= 22 && l.length <= 33)) {
     return lines.slice(0, 3).map((l) => padMrzLine(l, 30)).join('\n');
   }
-  if (lines.length >= 2 && lines.every((l) => l.length >= 40 && l.length <= 46)) {
+  if (lines.length >= 2 && lines.every((l) => l.length >= 36 && l.length <= 46)) {
     return lines.slice(0, 2).map((l) => padMrzLine(l, 44)).join('\n');
   }
-  if (lines.length >= 2 && lines.every((l) => l.length >= 34 && l.length <= 38)) {
+  if (lines.length >= 2 && lines.every((l) => l.length >= 30 && l.length <= 38)) {
     return lines.slice(0, 2).map((l) => padMrzLine(l, 36)).join('\n');
   }
   if (lines.length >= 2) {
     const l0 = lines[0].length, l1 = lines[1].length;
-    if (l0 >= 40 && l1 >= 40) return padMrzLine(lines[0], 44) + '\n' + padMrzLine(lines[1], 44);
-    if (l0 >= 34 && l1 >= 34) return padMrzLine(lines[0], 36) + '\n' + padMrzLine(lines[1], 36);
-    if (l0 >= 28 && l1 >= 28) return padMrzLine(lines[0], 30) + '\n' + padMrzLine(lines[1], 30);
+    if (l0 >= 36 && l1 >= 36) return padMrzLine(lines[0], 44) + '\n' + padMrzLine(lines[1], 44);
+    if (l0 >= 30 && l1 >= 30) return padMrzLine(lines[0], 36) + '\n' + padMrzLine(lines[1], 36);
+    if (l0 >= 22 && l1 >= 22) return padMrzLine(lines[0], 30) + '\n' + padMrzLine(lines[1], 30);
   }
   if (lines.length >= 3) return lines.slice(0, 3).map((l) => padMrzLine(l, 30)).join('\n');
-  if (lines.length === 1 && lines[0].length >= 30) return padMrzLine(lines[0], 30);
+  if (lines.length === 1 && lines[0].length >= 22) return padMrzLine(lines[0], 30);
   return '';
+}
+
+/** Fotokopide OCR O→0, I/L→1 hatalarını rakam alanlarında düzeltir (parse öncesi). */
+function fixMrzOcrErrorsBackend(raw) {
+  if (!raw || typeof raw !== 'string') return raw;
+  const lines = normalizeMrzLinesBackend(raw);
+  if (lines.length >= 2 && lines[0].length >= 38) {
+    lines[1] = fixLineDigitPositions(lines[1], [[0, 10], [13, 20], [21, 28]]);
+  } else if (lines.length >= 2 && lines[0].length >= 32 && lines[0].length <= 36) {
+    lines[1] = fixLineDigitPositions(lines[1], [[0, 10], [13, 20], [21, 28]]);
+  } else if (lines.length >= 3 && lines[0].length >= 22) {
+    lines[0] = fixLineDigitPositions(lines[0], [[5, 15]]);
+    lines[1] = fixLineDigitPositions(lines[1], [[0, 8], [8, 15]]);
+  }
+  return lines.join('\n');
+}
+function fixLineDigitPositions(line, digitRanges) {
+  if (!line) return line;
+  const arr = line.split('');
+  for (const [start, end] of digitRanges) {
+    for (let i = start; i < end && i < arr.length; i++) {
+      const c = arr[i];
+      if (c === 'O' || c === 'Q') arr[i] = '0';
+      else if (c === 'I' || c === 'L' || c === '|') arr[i] = '1';
+      else if (c === 'S' && i >= 13 && i < 20) arr[i] = '5';
+    }
+  }
+  return arr.join('');
 }
 
 /** Fotokopi/kağıt MRZ için güçlü ön işleme: yüksek kontrast – basılı MRZ anında okunur */
@@ -127,57 +190,244 @@ async function preprocessImageForMrz(filePath) {
   }
 }
 
-/** Tek crop + preprocess + OCR + parse dene; başarılıysa { raw, payload } döner. */
-async function tryMrzFromImage(imagePath, cropFraction, preprocessFn) {
+/**
+ * Bölge: full | bottom | top | center + fraction. MRZ nerede olursa olsun taranır.
+ */
+async function tryMrzFromImageWithRegion(imagePath, region, preprocessFn) {
   let pathToOcr = imagePath;
   let cropPath = null;
-  if (cropFraction < 1) {
-    cropPath = path.join(path.dirname(imagePath), `mrz_crop_${Date.now()}_${cropFraction}.jpg`);
-    await cropBottomFraction(imagePath, cropFraction, cropPath);
+  const dir = path.dirname(imagePath);
+  const ts = Date.now();
+  if (region.type === 'full') {
+    await preprocessFn(imagePath);
+    pathToOcr = imagePath;
+  } else {
+    const frac = region.fraction ?? 0.4;
+    cropPath = path.join(dir, `mrz_crop_${ts}_${region.type}_${frac}.jpg`);
+    if (region.type === 'bottom') await cropBottomFraction(imagePath, frac, cropPath);
+    else if (region.type === 'top') await cropTopFraction(imagePath, frac, cropPath);
+    else if (region.type === 'center') await cropCenterFraction(imagePath, frac, cropPath);
+    else await cropBottomFraction(imagePath, frac, cropPath);
     await preprocessFn(cropPath);
     pathToOcr = cropPath;
-  } else {
-    await preprocessFn(imagePath);
   }
-  const { data: { text } } = await Tesseract.recognize(pathToOcr, 'eng+tur', { logger: () => {} });
-  const raw = extractMrzFromOcr(text);
+  const tesseractOpts = { logger: () => {}, tessedit_pageseg_mode: 6 };
+  let text = (await Tesseract.recognize(pathToOcr, 'eng', tesseractOpts)).data.text;
+  let raw = extractMrzFromOcr(text);
+  if (!raw && text) {
+    const resTur = await Tesseract.recognize(pathToOcr, 'eng+tur', tesseractOpts);
+    text = resTur.data.text;
+    raw = extractMrzFromOcr(text);
+  }
   if (cropPath && fs.existsSync(cropPath)) fs.unlink(cropPath, () => {});
-  const payload = raw ? parseMrzToPayload(raw) : null;
+  let payload = null;
+  if (raw) {
+    const fixed = fixMrzOcrErrorsBackend(raw);
+    payload = parseMrzToPayload(fixed) || parseMrzToPayload(raw);
+  }
   if (DEBUG_MRZ && text) {
     const lines = extractMrzLinesFromOcr(text);
-    console.log('[MRZ] crop=', cropFraction, 'lines=', lines.length, 'rawLen=', raw?.length || 0, 'payload=', payload ? 'ok' : 'fail');
+    console.log('[MRZ] region=', region.type, region.fraction ?? '—', 'lines=', lines.length, 'rawLen=', raw?.length || 0, 'payload=', payload ? 'ok' : 'fail');
   }
   return { raw, payload };
 }
 
-/** MRZ: Çoklu crop (alt %35 → %45 → full), TD1/TD3 otomatik; ilk başarılı parse'da dön. */
+/**
+ * Tek bir görüntü path'inde OCR çalıştırır; PSM ve whitelist kullanır.
+ * @param {object} worker - Tesseract worker (createWorker ile oluşturulmuş)
+ * @param {string} imagePath - Ön işlenmiş görüntü path
+ * @param {number} psm - tessedit_pageseg_mode (7, 6, 11, 13)
+ */
+async function runOcrWithPsm(worker, imagePath, psm) {
+  const opts = { ...TESS_MRZ_OPTS, tessedit_pageseg_mode: psm };
+  const { data } = await worker.recognize(imagePath, opts);
+  return data.text;
+}
+
+/**
+ * Kimlik MRZ canavarı: multi-preprocess × multi-PSM × crop candidates × rotate/deskew, checksum bazlı skor.
+ * @param {string} filePath - Yüklenen görüntü path
+ * @returns {Promise<{ ok: boolean, mrzRaw?: string, payload?: object, score?: number, attemptsUsed?: number, qualityHints?: object }>}
+ */
+async function runMrzPipeline(filePath) {
+  const dir = path.join(os.tmpdir(), `mrz_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`);
+  fs.mkdirSync(dir, { recursive: true });
+  const tempPaths = new Set();
+  const registerTemp = (p) => { if (p && fs.existsSync(p)) tempPaths.add(p); };
+  const cleanup = () => {
+    tempPaths.forEach((p) => { try { if (fs.existsSync(p)) fs.unlinkSync(p); } catch (_) {} });
+    try { if (fs.existsSync(dir)) fs.rmSync(dir, { recursive: true }); } catch (_) {}
+  };
+
+  let best = { score: 0, raw: '', fixed: '', payload: null, attemptsUsed: 0 };
+  const qualityHints = { needMoreZoom: false, glareHigh: false, blurry: false, suggestTorch: 'keep' };
+
+  try {
+    const worker = await Tesseract.createWorker('eng', 1, { logger: () => {} });
+
+    const preprocessVariants = [
+      { fn: (p) => preprocessForKimlikMrz(p, { contrast: 0.55 }), name: 'kimlik' },
+      { fn: (p) => preprocessForKimlikMrz(p, { contrast: 0.8 }), name: 'kimlikHi' },
+      { fn: preprocessForPhotocopyMrz, name: 'photocopy' },
+      { fn: preprocessForPaperMrz, name: 'paper' },
+      { fn: (p) => preprocessForKimlikMrz(p, { sharpen: true }), name: 'kimlikSharp' },
+    ];
+
+    const psms = [7, 6, 11];
+    const bottomFractions = [0.4, 0.35, 0.30, 0.25];
+
+    async function tryImage(inputPath) {
+      for (const variant of preprocessVariants) {
+        const prePath = path.join(dir, `pre_${variant.name}_${Date.now()}.jpg`);
+        try {
+          const Jimp = (await import('jimp')).default;
+          const img = await Jimp.read(inputPath);
+          await img.write(prePath);
+          registerTemp(prePath);
+        } catch (_) { continue; }
+        await variant.fn(prePath);
+        for (const psm of psms) {
+          best.attemptsUsed++;
+          let text = '';
+          try {
+            text = await runOcrWithPsm(worker, prePath, psm);
+          } catch (_) { continue; }
+          let raw = extractMrzFromOcr(text);
+          if (!raw) continue;
+          let fixed = raw;
+          let parsed = parseMrzRaw(raw);
+          if (!parsed) {
+            fixed = fixMrzOcrErrorsBackend(raw);
+            parsed = parseMrzRaw(fixed);
+          } else if (parsed.checks && !parsed.checks.compositeCheck) {
+            fixed = fixMrzOcrErrorsBackend(raw);
+            const reparsed = parseMrzRaw(fixed);
+            if (reparsed) parsed = reparsed;
+          }
+          if (!parsed) continue;
+          const score = scoreMrzCandidate(raw, fixed, parsed);
+          if (score > best.score) {
+            best.score = score;
+            best.raw = raw;
+            best.fixed = fixed;
+            best.payload = mrzFieldsToPayload(parsed.fields);
+          }
+          if (best.score >= 100) return true;
+        }
+      }
+      return false;
+    }
+
+    for (const frac of bottomFractions) {
+      const cropPath = path.join(dir, `crop_bottom_${frac}.jpg`);
+      await cropBottomFraction(filePath, frac, cropPath);
+      registerTemp(cropPath);
+      if (await tryImage(cropPath)) break;
+    }
+
+    if (best.score < 100) {
+      const candidates = await cropMrzCandidates(filePath, dir);
+      for (const { path: cropPath } of candidates) {
+        registerTemp(cropPath);
+        if (await tryImage(cropPath)) break;
+      }
+    }
+
+    if (best.score < 50) {
+      const angles = [90, 180, 270];
+      for (const deg of angles) {
+        const rotatedPath = path.join(dir, `rot_${deg}.jpg`);
+        await rotateImage(filePath, deg, rotatedPath);
+        registerTemp(rotatedPath);
+        for (const frac of [0.4, 0.3]) {
+          const cropPath = path.join(dir, `rot${deg}_crop_${frac}.jpg`);
+          await cropBottomFraction(rotatedPath, frac, cropPath);
+          registerTemp(cropPath);
+          if (await tryImage(cropPath)) break;
+        }
+        if (best.score >= 100) break;
+      }
+    }
+
+    await worker.terminate();
+  } catch (e) {
+    if (DEBUG_MRZ) console.error('[MRZ] pipeline error', e.message);
+  } finally {
+    cleanup();
+  }
+
+  const ok = !!(best.raw && (best.payload || best.score >= 50));
+  return {
+    ok,
+    mrzRaw: best.raw || undefined,
+    payload: best.payload || undefined,
+    score: best.score,
+    attemptsUsed: best.attemptsUsed,
+    qualityHints,
+  };
+}
+
+/** mrz.js parsed.fields → ocr payload format (documentNumber, birthDate, ...). */
+function mrzFieldsToPayload(fields) {
+  if (!fields) return null;
+  return {
+    documentNumber: fields.documentNumber || '',
+    birthDate: fields.birthDate || '',
+    expiryDate: fields.expiryDate || '',
+    surname: fields.surname || '',
+    givenNames: fields.givenNames || '',
+    issuingCountry: fields.issuingCountry || '',
+  };
+}
+
+/** MRZ: runMrzPipeline ile multi-preprocess/PSM/score; cevap ok, mrzRaw, payload, score, attemptsUsed, qualityHints. */
 router.post('/mrz', authenticateTesisOrSupabase, upload.single('image'), async (req, res) => {
   const filePath = req.file?.path;
   try {
     if (!req.file || !filePath) {
       return res.status(400).json({ message: 'Görüntü yüklenmedi' });
     }
-    const crops = [0.35, 0.45, 1.0];
-    let raw = '';
-    let payload = null;
-    for (const frac of crops) {
-      const preprocessFn = frac < 1 ? preprocessForKimlikMrz : preprocessImageForMrz;
-      const result = await tryMrzFromImage(filePath, frac, preprocessFn);
-      if (result.payload) {
-        raw = result.raw;
-        payload = result.payload;
-        if (DEBUG_MRZ) console.log('[MRZ] success crop=', frac, 'format=', raw.includes('\n') ? (raw.split('\n').length === 3 ? 'TD1' : 'TD3') : '?');
-        break;
-      }
-      if (result.raw && !payload) {
-        raw = result.raw;
-      }
+    const result = await runMrzPipeline(filePath);
+    if (result.mrzRaw) {
+      return res.json({
+        success: true,
+        raw: result.mrzRaw,
+        ok: result.ok,
+        payload: result.payload,
+        score: result.score,
+        attemptsUsed: result.attemptsUsed,
+        qualityHints: result.qualityHints,
+      });
     }
-    if (!raw) {
-      return res.status(400).json({ message: 'Görüntüde MRZ bulunamadı. MRZ alanını net ve çerçeve içine alın.' });
+    const preprocess = preprocessForPaperMrz;
+    const regions = [
+      { type: 'full' },
+      { type: 'bottom', fraction: 0.5 },
+      { type: 'bottom', fraction: 0.35 },
+      { type: 'bottom', fraction: 0.25 },
+    ];
+    let fallbackRaw = '';
+    let fallbackPayload = null;
+    for (const region of regions) {
+      const r = await tryMrzFromImageWithRegion(filePath, region, preprocess);
+      if (r.payload) { fallbackRaw = r.raw; fallbackPayload = r.payload; break; }
+      if (r.raw) fallbackRaw = r.raw;
     }
-    if (DEBUG_MRZ && !payload) console.log('[MRZ] raw found but parse failed (e.g. checkdigit)', raw.slice(0, 50) + '…');
-    res.json({ success: true, raw });
+    if (fallbackRaw) {
+      return res.json({
+        success: true,
+        raw: fallbackRaw,
+        ok: !!fallbackPayload,
+        payload: fallbackPayload,
+        score: fallbackPayload ? 100 : 0,
+        attemptsUsed: 0,
+        qualityHints: result.qualityHints || {},
+      });
+    }
+    return res.status(400).json({
+      message: 'Görüntüde MRZ bulunamadı. MRZ görünür olsun (pasaport, kimlik, kağıt fark etmez).',
+      qualityHints: result.qualityHints || {},
+    });
   } catch (error) {
     console.error('OCR MRZ hatası:', error);
     res.status(500).json({ message: 'MRZ okunamadı', error: error.message });
@@ -227,7 +477,7 @@ router.post('/document', authenticateTesisOrSupabase, upload.single('image'), as
   }
 });
 
-/** Galeriden seçilen görsel: base64 ile gönder (Android content URI FormData sorununu aşar). */
+/** Galeriden seçilen görsel: base64 ile gönder (Android content URI FormData sorununu aşar). MRZ için runMrzPipeline kullan (kimlik MRZ canavarı). */
 router.post('/document-base64', authenticateTesisOrSupabase, express.json({ limit: '8mb' }), async (req, res) => {
   const base64 = req.body?.imageBase64;
   let filePath = null;
@@ -244,10 +494,16 @@ router.post('/document-base64', authenticateTesisOrSupabase, express.json({ limi
     }
     filePath = path.join(KIMLIK_UPLOAD_DIR, `base64_${Date.now()}_${Math.random().toString(36).slice(2, 8)}.jpg`);
     fs.writeFileSync(filePath, buf);
-    const { rawText, mrzRaw, mrzPayload, front, merged } = await runOcrOnFile(filePath);
+    const mrzResult = await runMrzPipeline(filePath);
+    let mrzRaw = mrzResult.mrzRaw || null;
+    let mrzPayload = mrzResult.payload || null;
+    if (!mrzPayload && mrzRaw) mrzPayload = parseMrzToPayload(mrzRaw);
+    const { data: { text } } = await Tesseract.recognize(filePath, 'eng+ara+tur', { logger: () => {} });
+    const front = parseIdentityDocument(text);
+    const merged = mergeMrzAndFront(mrzPayload, front);
     res.json({
       success: true,
-      rawText,
+      rawText: text,
       mrz: mrzRaw || null,
       mrzPayload: mrzPayload || null,
       front,
@@ -519,13 +775,14 @@ function parseMrzToPayload(raw) {
   let surname = '';
   let givenNames = '';
   let issuingCountry = '';
-  if (lines.length >= 2 && lines[0].length >= 40) {
+  if (lines.length >= 2 && lines[0].length >= 38) {
+    const l1 = (lines[0] || '').padEnd(44, '<');
     const l2 = (lines[1] || '').padEnd(44, '<');
     docNumber = l2.substring(0, 9).replace(/</g, '').trim();
     birthDate = normalizeYYMMDD(l2.substring(13, 19));
     expiryDate = normalizeYYMMDD(l2.substring(21, 27));
-    issuingCountry = (lines[0] || '').substring(2, 5).replace(/</g, '').trim();
-    const nameBlock = (lines[0] || '').substring(5, 44);
+    issuingCountry = l1.substring(2, 5).replace(/</g, '').trim();
+    const nameBlock = l1.substring(5, 44);
     const parts = nameBlock.split('<<').filter(Boolean);
     surname = (parts[0] || '').replace(/</g, ' ').trim();
     givenNames = (parts[1] || '').replace(/</g, ' ').trim();
@@ -539,7 +796,7 @@ function parseMrzToPayload(raw) {
     const parts = nameBlock.split('<<').filter(Boolean);
     surname = (parts[0] || '').replace(/</g, ' ').trim();
     givenNames = (parts[1] || '').replace(/</g, ' ').trim();
-  } else if (lines.length >= 3 && lines[0].length >= 28) {
+  } else if (lines.length >= 3 && lines[0].length >= 26) {
     const l1 = (lines[0] || '').padEnd(30, '<');
     const l2 = (lines[1] || '').padEnd(30, '<');
     const l3 = (lines[2] || '').padEnd(30, '<');
@@ -578,6 +835,8 @@ function mergeMrzAndFront(mrzPayload, parsed) {
     merged.dogumTarihi = mrzPayload.birthDate || merged.dogumTarihi;
     merged.sonKullanma = mrzPayload.expiryDate || merged.sonKullanma;
     merged.ulkeKodu = mrzPayload.issuingCountry || merged.ulkeKodu;
+    const mrzUyruk = (mrzPayload.nationality || mrzPayload.issuingCountry || '').trim().toUpperCase();
+    if (mrzUyruk) merged.uyruk = mrzUyruk;
     if (mrzPayload.surname || mrzPayload.givenNames) {
       merged.soyad = mrzPayload.surname || merged.soyad;
       merged.ad = mrzPayload.givenNames || merged.ad;

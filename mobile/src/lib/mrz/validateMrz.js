@@ -24,7 +24,9 @@ export function validateMrz(payload) {
   if (birth > now) return { valid: false, reason: 'birth_date_future' };
   if (expiry < now) return { valid: false, reason: 'document_expired' };
 
-  if (payload.issuingCountry?.length !== 3) return { valid: false, reason: 'invalid_issuing_country' };
+  if (payload.issuingCountry != null && payload.issuingCountry !== '' && !/^[A-Z]{2,3}$/.test(String(payload.issuingCountry).trim().toUpperCase())) {
+    return { valid: false, reason: 'invalid_issuing_country' };
+  }
 
   return { valid: true };
 }

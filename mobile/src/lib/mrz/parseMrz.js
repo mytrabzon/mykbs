@@ -187,7 +187,7 @@ export function parseMrz(raw) {
     return { docType: 'OTHER', issuingCountry: '', surname: '', givenNames: '', passportNumber: '', nationality: '', birthDate: '', sex: 'U', expiryDate: '', raw: '', checks: { ok: false, reason: 'empty_input' } };
   }
   const lines = normalizeMrzLines(raw);
-  if (lines.length >= 2 && lines[0].length >= 40) return parseTD3(lines);
+  if (lines.length >= 2 && lines[0].length >= 38) return parseTD3(lines);
   if (lines.length >= 2 && lines[0].length >= 34 && lines[0].length <= 36) return parseTD2(lines);
   if (lines.length >= 3 && lines[0].length >= 28) return parseTD1(lines);
   return { docType: 'OTHER', issuingCountry: '', surname: '', givenNames: '', passportNumber: '', nationality: '', birthDate: '', sex: 'U', expiryDate: '', raw, checks: { ok: false, reason: 'invalid_format' } };

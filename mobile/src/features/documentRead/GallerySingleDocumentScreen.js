@@ -11,6 +11,7 @@ import Toast from 'react-native-toast-message';
 import { useTheme } from '../../context/ThemeContext';
 import { theme } from '../../theme';
 import { api } from '../../services/apiSupabase';
+import { logger } from '../../utils/logger';
 
 export default function GallerySingleDocumentScreen({ navigation, route }) {
   const { colors } = useTheme();
@@ -30,14 +31,30 @@ export default function GallerySingleDocumentScreen({ navigation, route }) {
       allowsMultipleSelection: false,
     });
     if (result.canceled || !result.assets || !result.assets[0] || !result.assets[0].uri) return;
-    const uri = result.assets[0].uri;
+    let uri = result.assets[0].uri;
+    logger.info('[Galeri belge] Seçilen uri', { uri: uri?.slice(0, 80) + '…' });
+    try {
+      const Manipulator = require('expo-image-manipulator');
+      if (Manipulator && typeof Manipulator.manipulateAsync === 'function') {
+        const m = await Manipulator.manipulateAsync(uri, [{ resize: { width: 2000 } }], { compress: 0.9 });
+        if (m?.uri) { uri = m.uri; logger.info('[Galeri belge] Resize sonrası uri', { uri: uri?.slice(0, 80) + '…' }); }
+      }
+    } catch (manipErr) {
+      logger.warn('[Galeri belge] Resize atlandı', { err: manipErr?.message });
+    }
     setLoading(true);
     try {
       const base64 = await FileSystem.readAsStringAsync(uri, { encoding: FileSystem.EncodingType.Base64 });
-      const { data } = await api.post('/ocr/document-base64', { imageBase64: base64 });
+      logger.info('[Galeri belge] Base64 hazır', { base64Len: base64?.length ?? 0 });
+      const res = await api.post('/ocr/document-base64', { imageBase64: base64 });
+      const data = res?.data;
+      logger.info('[Galeri belge] Backend OK', { hasMrz: !!data?.mrz, hasMerged: !!data?.merged });
       navigation.replace('DocumentResult', { data, docType });
     } catch (e) {
-      Toast.show({ type: 'error', text1: 'Okuma başarısız', text2: (e && e.message) || 'Belge okunamadı.' });
+      const msg = e?.message || String(e);
+      const resMsg = e?.response?.data?.message || e?.response?.data?.error;
+      logger.error('[Galeri belge] API hatası', { message: msg, responseMessage: resMsg, status: e?.response?.status, stack: e?.stack?.slice(0, 400) });
+      Toast.show({ type: 'error', text1: 'Okuma başarısız', text2: msg || resMsg || 'Belge okunamadı.' });
     } finally {
       setLoading(false);
     }

@@ -56,6 +56,11 @@ try {
   logger.warn('Torch not available', e?.message);
 }
 
+let ImageManipulator = null;
+try {
+  ImageManipulator = require('expo-image-manipulator');
+} catch (e) {}
+
 const TIMEOUT_MS = 15000;
 const MAX_FAILS = 6;
 // MRZ göründüğü anda anlık çekim (en üst düzey) — kimlik/pasaport fark etmez
@@ -111,6 +116,8 @@ export default function MrzScanScreen({ navigation }) {
   const [frontLoading, setFrontLoading] = useState(false);
   const [torchOn, setTorchOn] = useState(false);
   const [mrzDocType, setMrzDocType] = useState(Platform.OS === 'android' ? DocType.ID : DocType.Passport);
+  const [scanMode, setScanMode] = useState(DocType.ID); // ID_CARD ↔ Passport 800ms döngü (lock öncesi)
+  const [mrzLocked, setMrzLocked] = useState(false); // Sonuç gelince true, toggle durur
   const [isExiting, setIsExiting] = useState(false);
   const [isScreenFocused, setIsScreenFocused] = useState(true);
   const timeoutRef = useRef(null);
@@ -118,6 +125,9 @@ export default function MrzScanScreen({ navigation }) {
   const lastStableRawRef = useRef('');
   const stableCountRef = useRef(0);
   const acceptedRawRef = useRef(''); // Aynı MRZ ile çift tetiklemeyi engelle (anlık kabul)
+  const mrzLockedRef = useRef(false);
+  const lockedDocTypeRef = useRef(DocType.ID);
+  const selectedDocTypeRef = useRef(DocType.ID);
   const frontCameraRef = useRef(null);
   const insets = useSafeAreaInsets();
   const [permission, requestPermission] = useCameraPermissions();
@@ -179,6 +189,9 @@ export default function MrzScanScreen({ navigation }) {
 
       const acceptAndNavigate = (p) => {
         acceptedRawRef.current = raw;
+        mrzLockedRef.current = true;
+        lockedDocTypeRef.current = selectedDocTypeRef.current;
+        setMrzLocked(true);
         if (timeoutRef.current) clearTimeout(timeoutRef.current);
         if (fromCheckIn) {
           const num = (p.passportNumber || '').trim();
@@ -203,6 +216,9 @@ export default function MrzScanScreen({ navigation }) {
 
       const acceptInstant = (p) => {
         acceptedRawRef.current = raw;
+        mrzLockedRef.current = true;
+        lockedDocTypeRef.current = selectedDocTypeRef.current;
+        setMrzLocked(true);
         if (timeoutRef.current) clearTimeout(timeoutRef.current);
         setInstantPayload(p);
       };
@@ -290,8 +306,24 @@ export default function MrzScanScreen({ navigation }) {
         formData.append('image', { uri, type: 'image/jpeg', name: 'mrz.jpg' });
         const res = await api.post('/ocr/mrz', formData);
         const raw = res?.data?.raw;
-        if (raw) processMrzRaw(raw);
-        else Toast.show({ type: 'error', text1: 'MRZ bulunamadı', text2: 'MRZ alanı net görünsün, tekrar deneyin.' });
+        const qualityHints = res?.data?.qualityHints;
+        if (raw) {
+          processMrzRaw(raw);
+        } else {
+          if (TorchModule && qualityHints?.suggestTorch === 'on') {
+            try {
+              TorchModule.switchState(true);
+              setTorchOn(true);
+              Toast.show({ type: 'info', text1: 'Işık yetersiz', text2: 'Fener açıldı, tekrar deneyin.' });
+            } catch (_) {}
+          } else if (TorchModule && qualityHints?.suggestTorch === 'off') {
+            try {
+              TorchModule.switchState(false);
+              setTorchOn(false);
+            } catch (_) {}
+          }
+          Toast.show({ type: 'error', text1: 'MRZ bulunamadı', text2: 'MRZ alanı net görünsün, tekrar deneyin.' });
+        }
       } catch (e) {
         const msg = e?.message || '';
         Toast.show({
@@ -311,16 +343,26 @@ export default function MrzScanScreen({ navigation }) {
     async (uri) => {
       if (!mounted.current) return;
       setOcrLoading(true);
+      logger.info('[Galeri kimlik] Başlatılıyor', { uri: uri ? uri.slice(0, 80) + '…' : '' });
       try {
         const FileSystem = require('expo-file-system').default;
         const base64 = await FileSystem.readAsStringAsync(uri, { encoding: FileSystem.EncodingType.Base64 });
-        const { data } = await api.post('/ocr/document-base64', { imageBase64: base64 });
+        logger.info('[Galeri kimlik] Base64 okundu', { base64Len: base64?.length ?? 0 });
+        const res = await api.post('/ocr/document-base64', { imageBase64: base64 });
+        const data = res?.data;
         if (!mounted.current) return;
+        logger.info('[Galeri kimlik] Backend cevabı', {
+          hasMrz: !!data?.mrz,
+          hasMrzPayload: !!data?.mrzPayload,
+          hasMerged: !!data?.merged,
+          mergedKeys: data?.merged ? Object.keys(data.merged) : [],
+        });
         const mrzRaw = data?.mrz;
         const mrzPayload = data?.mrzPayload;
         const front = data?.front;
         const merged = data?.merged;
         if (mrzRaw) {
+          logger.info('[Galeri kimlik] MRZ bulundu, processMrzRaw çağrılıyor');
           processMrzRaw(mrzRaw);
           return;
         }
@@ -356,9 +398,13 @@ export default function MrzScanScreen({ navigation }) {
           setFrontImageUri(uri);
           return;
         }
+        logger.warn('[Galeri kimlik] MRZ ve merged/front yok, belge okunamadı');
         Toast.show({ type: 'error', text1: 'Belge okunamadı', text2: 'MRZ veya ön yüz net görünsün.' });
       } catch (e) {
-        Toast.show({ type: 'error', text1: 'Hata', text2: e?.message || 'Belge okunamadı.' });
+        const msg = e?.message || String(e);
+        const resMsg = e?.response?.data?.message || e?.response?.data?.error;
+        logger.error('[Galeri kimlik] Hata', { message: msg, responseMessage: resMsg, status: e?.response?.status, stack: e?.stack?.slice(0, 300) });
+        Toast.show({ type: 'error', text1: 'Hata', text2: msg || resMsg || 'Belge okunamadı.' });
       } finally {
         if (mounted.current) setOcrLoading(false);
       }
@@ -389,7 +435,14 @@ export default function MrzScanScreen({ navigation }) {
       quality: 0.9,
     });
     if (result.canceled || !result.assets?.[0]?.uri) return;
-    await uploadImageForDocument(result.assets[0].uri);
+    let uri = result.assets[0].uri;
+    if (ImageManipulator && typeof ImageManipulator.manipulateAsync === 'function') {
+      try {
+        const manipulated = await ImageManipulator.manipulateAsync(uri, [{ resize: { width: 2000 } }], { compress: 0.9 });
+        if (manipulated?.uri) uri = manipulated.uri;
+      } catch (_) {}
+    }
+    await uploadImageForDocument(uri);
   }, [uploadImageForDocument]);
 
   /** Sistem kamerasını aç, çekilen fotoğrafı backend'e gönder (expo-camera siyah ekran yerine). */
@@ -538,7 +591,21 @@ export default function MrzScanScreen({ navigation }) {
     };
   }, []);
 
-  const selectedDocType = Platform.OS === 'ios' ? DocType.Passport : mrzDocType;
+  // DocType toggle: ID_CARD (600–900ms) → Passport (600–900ms) döngüsü; sonuç gelince lock
+  const SCAN_MODE_INTERVAL_MS = 800;
+  useEffect(() => {
+    if (!MrzReaderView || Platform.OS !== 'android' || mrzLockedRef.current) return;
+    const t = setInterval(() => {
+      if (!mounted.current || mrzLockedRef.current) return;
+      setScanMode((prev) => (prev === DocType.ID ? DocType.Passport : DocType.ID));
+    }, SCAN_MODE_INTERVAL_MS);
+    return () => clearInterval(t);
+  }, [MrzReaderView, mrzLocked]);
+
+  const selectedDocType = Platform.OS === 'ios'
+    ? DocType.Passport
+    : (mrzLockedRef.current ? lockedDocTypeRef.current : scanMode);
+  selectedDocTypeRef.current = selectedDocType;
   const useUnifiedFlow = USE_UNIFIED_MRZ_FLOW;
 
   const toggleTorch = useCallback(() => {

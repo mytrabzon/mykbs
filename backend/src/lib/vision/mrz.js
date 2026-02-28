@@ -55,7 +55,7 @@ function extractMrzFromOcr(text) {
   if (mrzLike.length >= 2 && mrzLike.every((l) => l.length >= 34 && l.length <= 38)) {
     return mrzLike.slice(0, 2).map((l) => padMrzLine(l, 36)).join('\n');
   }
-  if (mrzLike.length >= 2 && mrzLike.every((l) => l.length >= 40 && l.length <= 46)) {
+  if (mrzLike.length >= 2 && mrzLike.every((l) => l.length >= 38 && l.length <= 46)) {
     return mrzLike.slice(0, 2).map((l) => padMrzLine(l, 44)).join('\n');
   }
   if (mrzLike.length >= 2) {
@@ -216,7 +216,7 @@ function parseTD1(lines) {
 function parseMrzRaw(mrzRaw) {
   if (!mrzRaw || typeof mrzRaw !== 'string') return null;
   const lines = normalizeMrzLines(mrzRaw);
-  if (lines.length >= 2 && lines[0].length >= 40) return parseTD3(lines);
+  if (lines.length >= 2 && lines[0].length >= 38) return parseTD3(lines);
   if (lines.length >= 2 && lines[0].length >= 34 && lines[0].length <= 36) return parseTD2(lines);
   if (lines.length >= 3 && lines[0].length >= 28) return parseTD1(lines);
   return null;
@@ -288,4 +288,6 @@ module.exports = {
   parseMrzRaw,
   confidenceFromChecks,
   runMrzPipeline,
+  checkDigit,
+  normalizeMrzLines,
 };
