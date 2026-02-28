@@ -35,7 +35,7 @@ app.use((req, res, next) => {
 
 // Middleware
 app.use(helmet());
-app.use(cors({ origin: '*', allowedHeaders: ['Content-Type', 'Authorization', 'X-Request-Id'] }));
+app.use(cors({ origin: '*', allowedHeaders: ['Content-Type', 'Authorization', 'X-Request-Id', 'X-Correlation-Id'] }));
 app.use(express.json({ limit: '2mb' }));
 app.use(express.urlencoded({ extended: true }));
 
@@ -58,9 +58,11 @@ app.use('/api/rapor', require('./routes/rapor'));
 app.use('/api/bildirim', require('./routes/bildirim'));
 app.use('/api/admin', require('./routes/admin'));
 app.use('/api/ocr', require('./routes/ocr'));
+app.use('/api/scan', require('./routes/scan'));
 app.use('/api/nfc', require('./routes/nfc'));
 app.use('/api/supabase', require('./routes/supabase'));
 app.use('/api/kyc', require('./routes/kyc'));
+app.use('/api/okutulan-belgeler', require('./routes/okutulanBelgeler'));
 app.use('/api/app-admin', require('./routes/appAdmin'));
 app.use('/api/siparis', require('./routes/siparis'));
 app.use('/api/push', require('./routes/push'));
@@ -93,10 +95,8 @@ app.get('/health/db', async (req, res) => {
     });
   }
   try {
-    const { PrismaClient } = require('@prisma/client');
-    const prisma = new PrismaClient();
+    const { prisma } = require('./lib/prisma');
     await prisma.$queryRaw`SELECT 1`;
-    await prisma.$disconnect();
     return res.json({ ok: true, db: true });
   } catch (err) {
     const pgCode = err.code || err.meta?.code;

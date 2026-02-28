@@ -1,0 +1,57 @@
+/**
+ * POST /scan/mrz/parse
+ * Body: imageBase64, docTypeHint ("passport"|"id"|"unknown"), correlationId
+ * Response: ok, confidence, mrzRawMasked?, fields, checks, errorCode?
+ */
+
+const express = require('express');
+const router = express.Router();
+const { authenticateTesisOrSupabase } = require('../../middleware/authTesisOrSupabase');
+const { preprocessFromBase64 } = require('../../lib/vision/preprocess');
+const { runMrzPipeline } = require('../../lib/vision/mrz');
+const fs = require('fs');
+
+router.post('/mrz/parse', authenticateTesisOrSupabase, express.json({ limit: '8mb' }), async (req, res) => {
+  const { imageBase64, docTypeHint, correlationId } = req.body || {};
+  const corr = correlationId || req.requestId || 'no-correlation';
+  let filePath = null;
+
+  try {
+    if (!imageBase64 || typeof imageBase64 !== 'string') {
+      return res.status(400).json({ ok: false, errorCode: 'missing_image', message: 'imageBase64 gerekli' });
+    }
+
+    const uploadsDir = require('path').join(__dirname, '../../../uploads/scan');
+    const { filePath: fp } = await preprocessFromBase64(imageBase64, uploadsDir);
+    filePath = fp;
+
+    const result = await runMrzPipeline(filePath, corr);
+
+    const response = {
+      ok: result.ok,
+      confidence: result.confidence,
+      fields: result.fields || {},
+      checks: result.checks || {},
+    };
+    if (result.mrzRawMasked != null) response.mrzRawMasked = result.mrzRawMasked;
+    if (result.errorCode) response.errorCode = result.errorCode;
+
+    res.json(response);
+  } catch (error) {
+    console.error('[scan] mrz/parse error:', error);
+    res.status(500).json({
+      ok: false,
+      confidence: 0,
+      fields: {},
+      checks: {},
+      errorCode: 'server_error',
+      message: error.message,
+    });
+  } finally {
+    if (filePath && fs.existsSync(filePath)) {
+      try { fs.unlinkSync(filePath); } catch (_) {}
+    }
+  }
+});
+
+module.exports = router;

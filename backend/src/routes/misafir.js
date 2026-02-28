@@ -1,10 +1,9 @@
 const express = require('express');
-const { PrismaClient } = require('@prisma/client');
+const { prisma } = require('../lib/prisma');
 const { authenticateTesisOrSupabase } = require('../middleware/authTesisOrSupabase');
 const { createKBSService } = require('../services/kbs');
 const { maskKimlikNo, maskPasaportNo } = require('../utils/mask');
 const { canSendBildirim } = require('../config/packages');
-const prisma = new PrismaClient();
 
 const router = express.Router();
 

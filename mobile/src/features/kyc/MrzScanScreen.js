@@ -10,7 +10,31 @@ import { theme } from '../../theme';
 import { parseMrz, fixMrzOcrErrors } from '../../lib/mrz';
 import { logger } from '../../utils/logger';
 import { api } from '../../services/apiSupabase';
+import * as FileSystem from 'expo-file-system';
 import ScanHelpSheet from './ScanHelpSheet';
+
+/** Okutulan belgeyi backend'e kaydet (arka planda; hata sessiz). */
+async function saveOkutulanBelgeAsync(payload, photoUri) {
+  try {
+    const body = {
+      belgeTuru: payload.belgeTuru || (payload.kimlikNo && /^\d{11}$/.test(String(payload.kimlikNo).replace(/\D/g, '')) ? 'kimlik' : 'pasaport'),
+      ad: payload.ad || '',
+      soyad: payload.soyad || '',
+      kimlikNo: payload.kimlikNo || null,
+      pasaportNo: payload.pasaportNo || null,
+      belgeNo: payload.belgeNo || payload.kimlikNo || payload.pasaportNo || null,
+      dogumTarihi: payload.dogumTarihi || null,
+      uyruk: payload.uyruk || 'TÜRK',
+    };
+    if (photoUri && typeof photoUri === 'string') {
+      const base64 = await FileSystem.readAsStringAsync(photoUri, { encoding: FileSystem.EncodingType.Base64 });
+      if (base64) body.photoBase64 = base64;
+    }
+    await api.post('/okutulan-belgeler', body);
+  } catch (e) {
+    logger.warn('Okutulan belge kaydı atlandı', e?.message);
+  }
+}
 
 let MrzReaderView = null;
 let CameraSelector = { Back: 'back', Front: 'front' };
@@ -60,8 +84,9 @@ function getFailureReasonMessage(checksReason, failCount) {
   return 'Işık ve hizayı kontrol edin veya manuel giriş ile devam edin.';
 }
 
-// Tek akış: kimlik/pasaport (seçenek kaldırıldı)
-const DEFAULT_DOC_TYPE = 'PASSPORT';
+// Tek akış: pasaport veya kimlik (MRZ) — seçim yok, otomatik okuma (pasaport gibi MRZ parse).
+// Native reader iOS'ta sadece pasaport desteklediği için birleşik akışta kamera + backend kullanıyoruz; backend TD1/TD3 ikisini de parse eder.
+const USE_UNIFIED_MRZ_FLOW = true;
 
 export default function MrzScanScreen({ navigation }) {
   const route = useRoute();
@@ -70,7 +95,7 @@ export default function MrzScanScreen({ navigation }) {
   const [timeoutWarning, setTimeoutWarning] = useState(false);
   const [failCount, setFailCount] = useState(0);
   const [ocrLoading, setOcrLoading] = useState(false);
-  const [showCameraFallback, setShowCameraFallback] = useState(false);
+  const [showCameraFallback, setShowCameraFallback] = useState(USE_UNIFIED_MRZ_FLOW);
   const [lastMrzRaw, setLastMrzRaw] = useState('');
   const [stableReadCount, setStableReadCount] = useState(0);
   const [lastMrzChecksReason, setLastMrzChecksReason] = useState('');
@@ -179,7 +204,21 @@ export default function MrzScanScreen({ navigation }) {
         if (stableCountRef.current >= 3) {
           if (timeoutRef.current) clearTimeout(timeoutRef.current);
           if (fromCheckIn) {
+            const num = (payload.passportNumber || '').trim();
+            const isTc = /^\d{11}$/.test(num);
             navigation.replace('CheckIn', { mrzPayload: payload, selectedOda: route.params?.selectedOda });
+            saveOkutulanBelgeAsync(
+              {
+                ad: (payload.givenNames || '').trim(),
+                soyad: (payload.surname || '').trim(),
+                kimlikNo: isTc ? num : null,
+                pasaportNo: !isTc ? num : null,
+                belgeNo: num || null,
+                dogumTarihi: payload.birthDate || null,
+                uyruk: (payload.nationality || 'TÜRK').trim(),
+              },
+              null
+            );
           } else {
             navigation.replace('MrzResult', { payload });
           }
@@ -340,25 +379,48 @@ export default function MrzScanScreen({ navigation }) {
     (payload, photoUri) => {
       const p = payload || mergedPayload || instantPayload;
       if (!p) return;
+      const docPhotoUri = frontImageUri || photoUri;
       if (mergedPayload && (mergedPayload.ad || mergedPayload.soyad || mergedPayload.kimlikNo || mergedPayload.pasaportNo)) {
+        const documentPayload = {
+          ad: mergedPayload.ad || (p.givenNames || '').trim(),
+          soyad: mergedPayload.soyad || (p.surname || '').trim(),
+          kimlikNo: mergedPayload.kimlikNo || (/^\d{11}$/.test((p.passportNumber || '').trim()) ? (p.passportNumber || '').trim() : ''),
+          pasaportNo: mergedPayload.pasaportNo || (p.passportNumber || '').trim() || undefined,
+          dogumTarihi: mergedPayload.dogumTarihi || isoToDDMMYYYY(p.birthDate) || '',
+          uyruk: mergedPayload.uyruk || (p.nationality || 'TÜRK').trim(),
+        };
         navigation.replace('CheckIn', {
-          documentPayload: {
-            ad: mergedPayload.ad || (p.givenNames || '').trim(),
-            soyad: mergedPayload.soyad || (p.surname || '').trim(),
-            kimlikNo: mergedPayload.kimlikNo || (/^\d{11}$/.test((p.passportNumber || '').trim()) ? (p.passportNumber || '').trim() : ''),
-            pasaportNo: mergedPayload.pasaportNo || (p.passportNumber || '').trim() || undefined,
-            dogumTarihi: mergedPayload.dogumTarihi || isoToDDMMYYYY(p.birthDate) || '',
-            uyruk: mergedPayload.uyruk || (p.nationality || 'TÜRK').trim(),
-          },
-          photoUri: frontImageUri || undefined,
+          documentPayload,
+          photoUri: docPhotoUri || undefined,
           selectedOda: route.params?.selectedOda,
         });
+        saveOkutulanBelgeAsync(
+          {
+            ...documentPayload,
+            belgeNo: documentPayload.kimlikNo || documentPayload.pasaportNo || null,
+          },
+          docPhotoUri
+        );
       } else {
+        const num = (p.passportNumber || '').trim();
+        const isTc = /^\d{11}$/.test(num);
         navigation.replace('CheckIn', {
           mrzPayload: { givenNames: p.givenNames, surname: p.surname, passportNumber: p.passportNumber, birthDate: p.birthDate, nationality: p.nationality },
-          photoUri: photoUri || undefined,
+          photoUri: docPhotoUri || undefined,
           selectedOda: route.params?.selectedOda,
         });
+        saveOkutulanBelgeAsync(
+          {
+            ad: (p.givenNames || '').trim(),
+            soyad: (p.surname || '').trim(),
+            kimlikNo: isTc ? num : null,
+            pasaportNo: !isTc ? num : null,
+            belgeNo: num || null,
+            dogumTarihi: isoToDDMMYYYY(p.birthDate) || null,
+            uyruk: (p.nationality || 'TÜRK').trim(),
+          },
+          docPhotoUri
+        );
       }
     },
     [mergedPayload, instantPayload, frontImageUri, navigation, route.params?.selectedOda, isoToDDMMYYYY]
@@ -438,6 +500,18 @@ export default function MrzScanScreen({ navigation }) {
   }, []);
 
   const selectedDocType = Platform.OS === 'ios' ? DocType.Passport : DocType.Passport;
+  const useUnifiedFlow = USE_UNIFIED_MRZ_FLOW;
+
+  const toggleTorch = useCallback(() => {
+    if (!TorchModule) return;
+    try {
+      const next = !torchOn;
+      TorchModule.switchState(next);
+      setTorchOn(next);
+    } catch (e) {
+      Toast.show({ type: 'error', text1: 'Fener kullanılamıyor', text2: e?.message || 'Bu cihazda desteklenmiyor olabilir.' });
+    }
+  }, [torchOn]);
 
   if (!isScreenFocused || isExiting) {
     return <View style={[styles.container, { backgroundColor: '#000', flex: 1 }]} />;
@@ -459,7 +533,7 @@ export default function MrzScanScreen({ navigation }) {
             <TouchableOpacity onPress={() => { setInstantPayload(null); setMergedPayload(null); setFrontImageUri(null); }} style={whiteResultStyles.backBtn}>
               <Ionicons name="arrow-back" size={24} color="#111" />
             </TouchableOpacity>
-            <Text style={whiteResultStyles.headerTitle}>Kimlik / Pasaport bilgileri</Text>
+            <Text style={whiteResultStyles.headerTitle}>Belge bilgileri (MRZ)</Text>
             <View style={whiteResultStyles.backBtn} />
           </View>
           {frontImageUri ? (
@@ -532,59 +606,35 @@ export default function MrzScanScreen({ navigation }) {
     );
   }
 
-  if (!MrzReaderView) {
-    if (showCameraFallback) {
-      return (
-        <SafeAreaView style={styles.container} edges={['top']}>
-          <View style={styles.header}>
-            <TouchableOpacity onPress={() => setShowCameraFallback(false)} style={styles.iconBtn}>
-              <Ionicons name="arrow-back" size={24} color="#fff" />
-            </TouchableOpacity>
-            <Text style={styles.title}>MRZ Tara</Text>
-            <View style={styles.iconBtn} />
-          </View>
-          <CameraFallbackView
-            onCapture={uploadImageForDocument}
-            onBack={() => setShowCameraFallback(false)}
-            loading={ocrLoading}
-            permission={permission}
-            requestPermission={requestPermission}
-          />
-        </SafeAreaView>
-      );
-    }
+  if (!MrzReaderView || useUnifiedFlow) {
     return (
-      <SafeAreaView style={styles.container}>
-        <View style={styles.placeholder}>
-          <Ionicons name="document-text-outline" size={64} color={theme.colors.textSecondary} />
-          <Text style={styles.placeholderTitle}>Pasaport · Kimlik · Ehliyet</Text>
-          <Text style={styles.placeholderText}>Otomatik algılanır: MRZ (pasaport/kimlik) veya ön yüz (ehliyet).</Text>
-          <Text style={styles.placeholderHint}>Kimlik arkası (MRZ çizgili kod) veya pasaport MRZ sayfası — kamera ile çekin veya galeriden seçin. Arka kamera kullanılır.</Text>
-          <TouchableOpacity style={styles.button} onPress={handleTakePhoto} disabled={ocrLoading}>
-            <Text style={styles.buttonText}>Kamera ile tara</Text>
+      <SafeAreaView style={styles.container} edges={['top']}>
+        <View style={styles.header}>
+          <TouchableOpacity onPress={goBack} style={styles.iconBtn}>
+            <Ionicons name="arrow-back" size={24} color="#fff" />
           </TouchableOpacity>
-          <TouchableOpacity style={[styles.button, styles.buttonSecondary]} onPress={handlePickImage} disabled={ocrLoading}>
-            <Text style={styles.buttonSecondaryText}>Galeriden seç</Text>
-          </TouchableOpacity>
-          {ocrLoading && <ActivityIndicator size="large" color={theme.colors.primary} style={{ marginTop: 16 }} />}
-          <TouchableOpacity style={styles.buttonBack} onPress={goBack}>
-            <Text style={styles.buttonBackText}>Geri</Text>
+          <Text style={styles.title}>MRZ Tara</Text>
+          <TouchableOpacity onPress={() => setHelpVisible(true)} style={styles.iconBtn}>
+            <Ionicons name="help-circle-outline" size={24} color="#fff" />
           </TouchableOpacity>
         </View>
+        <CameraFallbackView
+          onCapture={uploadImageForDocument}
+          onBack={goBack}
+          loading={ocrLoading}
+          permission={permission}
+          requestPermission={requestPermission}
+        />
+        <View style={[styles.overlayBottom, { paddingBottom: insets.bottom + 20, zIndex: 10 }]} pointerEvents="box-none">
+          <TouchableOpacity style={styles.overlayBottomBtn} onPress={handlePickImage} disabled={ocrLoading} activeOpacity={0.8}>
+            <Ionicons name="images-outline" size={28} color="#fff" />
+          </TouchableOpacity>
+          <View style={styles.overlayBottomBtn} />
+        </View>
+        <ScanHelpSheet visible={helpVisible} onClose={() => setHelpVisible(false)} />
       </SafeAreaView>
     );
   }
-
-  const toggleTorch = useCallback(() => {
-    if (!TorchModule) return;
-    try {
-      const next = !torchOn;
-      TorchModule.switchState(next);
-      setTorchOn(next);
-    } catch (e) {
-      Toast.show({ type: 'error', text1: 'Fener kullanılamıyor', text2: e?.message || 'Bu cihazda desteklenmiyor olabilir.' });
-    }
-  }, [torchOn]);
 
   return (
     <View style={styles.container}>
@@ -618,7 +668,7 @@ export default function MrzScanScreen({ navigation }) {
       )}
       <View style={styles.overlayCenter} pointerEvents="none">
         <View style={styles.frame} />
-        <Text style={styles.frameHint}>MRZ alanını hizalayın · Karanlıkta fener kullanın</Text>
+        <Text style={styles.frameHint}>Pasaport veya kimlik MRZ alanını hizalayın · Karanlıkta fener kullanın</Text>
       </View>
       <View style={[styles.overlayBottom, { paddingBottom: insets.bottom + 20 }]} pointerEvents="box-none">
         <TouchableOpacity style={styles.overlayBottomBtn} onPress={handlePickImage} disabled={ocrLoading} activeOpacity={0.8}>
@@ -731,7 +781,7 @@ function CameraFallbackView({ onCapture, onBack, loading, permission, requestPer
         <Text style={styles.frameHint}>
           {autoCaptureCountdown != null
             ? `Belgeyi sabit tutun — ${autoCaptureCountdown}`
-            : 'Kimlik arkası MRZ alanını çerçeve içine alıp çekin veya "Otomatik yakala" ile sabit tutun'}
+            : 'Pasaport veya kimlik arkası MRZ alanını çerçeveleyip çekin veya "Otomatik yakala" ile sabit tutun'}
         </Text>
         {autoCaptureCountdown != null ? (
           <View style={styles.autoCaptureBadge}>

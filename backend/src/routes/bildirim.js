@@ -1,5 +1,5 @@
 const express = require('express');
-const { PrismaClient } = require('@prisma/client');
+const { prisma } = require('../lib/prisma');
 const { authenticateTesisOrSupabase } = require('../middleware/authTesisOrSupabase');
 const { errorResponse } = require('../lib/errorResponse');
 const { createKBSService } = require('../services/kbs');
@@ -7,7 +7,6 @@ const { canSendBildirim } = require('../config/packages');
 const PDFDocument = require('pdfkit');
 const fs = require('fs');
 const path = require('path');
-const prisma = new PrismaClient();
 
 const router = express.Router();
 

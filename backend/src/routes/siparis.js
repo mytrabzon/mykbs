@@ -3,13 +3,12 @@
  * Auth: Supabase (mobil) veya legacy JWT.
  */
 const express = require('express');
-const { PrismaClient } = require('@prisma/client');
+const { prisma } = require('../lib/prisma');
 const { authenticateTesisOrSupabase } = require('../middleware/authTesisOrSupabase');
 const { ensureTesisForBranch } = require('../lib/ensureTesisForBranch');
 const { getPackageCredits, PACKAGES } = require('../config/packages');
 
 const router = express.Router();
-const prisma = new PrismaClient();
 
 function getTesisId(req) {
   return req.authSource === 'supabase' ? req.branchId : req.tesis?.id;

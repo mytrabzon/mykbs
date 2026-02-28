@@ -188,12 +188,6 @@ export default function AdminPanelScreen() {
   };
 
   useEffect(() => {
-    if (!isAdmin) {
-      navigation.navigate('Odalar');
-    }
-  }, [isAdmin, navigation]);
-
-  useEffect(() => {
     if (isAdmin) fetchDashboard();
   }, [isAdmin, fetchDashboard]);
 
@@ -208,7 +202,25 @@ export default function AdminPanelScreen() {
 
   const handleBack = () => navigation.goBack();
 
-  if (!isAdmin) return null;
+  if (!isAdmin) {
+    return (
+      <View style={[styles.container, { backgroundColor: colors.background }]}>
+        <StatusBar barStyle="dark-content" backgroundColor={colors.surface} />
+        <View style={[styles.header, { backgroundColor: colors.surface, paddingTop: Platform.OS === 'ios' ? Math.max(insets.top, 12) : 12, borderBottomColor: colors.border }]}>
+          <TouchableOpacity hitSlop={HIT_SLOP} activeOpacity={0.7} style={[styles.headerBtn, { backgroundColor: colors.background }]} onPress={handleBack}>
+            <Ionicons name="arrow-back" size={24} color={colors.textPrimary} />
+          </TouchableOpacity>
+          <Text style={[styles.headerTitle, { color: colors.textPrimary }]}>Admin Paneli</Text>
+          <View style={[styles.headerBtn, { backgroundColor: colors.background }]} />
+        </View>
+        <View style={{ flex: 1, justifyContent: 'center', padding: 24, alignItems: 'center' }}>
+          <Ionicons name="shield-outline" size={48} color={colors.textSecondary} style={{ marginBottom: 16 }} />
+          <Text style={[styles.sectionCardTitle, { color: colors.textPrimary, textAlign: 'center', marginBottom: 8 }]}>Admin yetkisi gerekli</Text>
+          <Text style={{ color: colors.textSecondary, textAlign: 'center', fontSize: 14 }}>Bu alan için hesabınızda admin tanımlı olmalı.{'\n'}Supabase: profiles.is_admin = true veya app_roles.role = 'admin'{'\n'}Backend: .env ADMIN_KULLANICI_ID</Text>
+        </View>
+      </View>
+    );
+  }
 
   const headerPaddingTop = Platform.OS === 'ios' ? Math.max(insets.top, 12) : 12;
 

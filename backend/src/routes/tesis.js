@@ -1,11 +1,11 @@
 const express = require('express');
-const { PrismaClient } = require('@prisma/client');
+const axios = require('axios');
+const { prisma } = require('../lib/prisma');
 const { authenticateTesisOrSupabase } = require('../middleware/authTesisOrSupabase');
 const { createKBSService } = require('../services/kbs');
 const { supabaseAdmin } = require('../lib/supabaseAdmin');
 const { ensureTesisForBranch } = require('../lib/ensureTesisForBranch');
 const { errorResponse } = require('../lib/errorResponse');
-const prisma = new PrismaClient();
 
 const router = express.Router();
 
@@ -235,6 +235,20 @@ router.get('/kbs', async (req, res) => {
     if (isSchema) return errorResponse(req, res, 500, 'SCHEMA_ERROR', 'Veritabanı şeması güncel değil. Lütfen yöneticiye bildirin.');
     if (isDb) return errorResponse(req, res, 500, 'DB_CONNECT_ERROR', 'Sunucuda geçici bir sorun var. Daha sonra tekrar deneyin.');
     return errorResponse(req, res, 500, 'UNHANDLED_ERROR', 'Ayarlar alınamadı.');
+  }
+});
+
+/**
+ * KBS için karakola bildirilecek sunucu IP'si (B2B: tüm otellerin istekleri bu IP'den çıkar).
+ * Ayarlar ekranında "Karakola bildirilecek IP" olarak gösterilebilir.
+ */
+router.get('/kbs/server-ip', async (req, res) => {
+  try {
+    const { data } = await axios.get('https://api.ipify.org?format=json', { timeout: 5000 });
+    const serverIp = data && typeof data.ip === 'string' ? data.ip : null;
+    res.json({ serverIp, hint: 'Gerekirse teknik destekte kullanın.' });
+  } catch (err) {
+    res.status(503).json({ serverIp: null, hint: 'Sunucu IP\'si alınamadı.' });
   }
 });
 

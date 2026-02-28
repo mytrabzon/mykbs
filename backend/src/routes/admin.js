@@ -1,10 +1,9 @@
 const express = require('express');
-const { PrismaClient } = require('@prisma/client');
+const { prisma } = require('../lib/prisma');
 const crypto = require('crypto');
 const emailService = require('../services/email');
 const whatsappService = require('../services/whatsapp');
 const { VALID_PAKET_KEYS, getPackageCredits, setTrialDefaults } = require('../config/packages');
-const prisma = new PrismaClient();
 const appAdminRouter = require('./appAdmin');
 
 const router = express.Router();

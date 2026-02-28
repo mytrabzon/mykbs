@@ -96,103 +96,94 @@ export default function Dashboard({ embedLayout = false }: DashboardProps) {
 
   const content = (
     <>
-      <header className="kbs-hero">
-          <div className="kbs-hero-wrap">
-            <div className="kbs-hero-border" aria-hidden />
-            <div className="kbs-hero-badge">
-              <span className="kbs-hero-badge-dot" />
-              Canlı Kontrol Paneli
+      <header className="kbs-dash-header">
+        <h1 className="kbs-dash-title">Kontrol Merkezi</h1>
+        <p className="kbs-dash-sub">Özet ve kota durumu</p>
+      </header>
+
+      {stats && (
+        <section className="kbs-stats kbs-stats--compact">
+          <article className="kbs-stat-card kbs-stat-card--compact kbs-stat-card--total">
+            <div className="kbs-stat-icon kbs-stat-icon--sm">
+              <IconBuilding />
+            </div>
+            <div className="kbs-stat-body">
+              <span className="kbs-stat-label">Toplam Tesis</span>
+              <span className="kbs-stat-value kbs-stat-value--sm">{stats.toplamTesis}</span>
+            </div>
+          </article>
+          <article className="kbs-stat-card kbs-stat-card--compact kbs-stat-card--active">
+            <div className="kbs-stat-icon kbs-stat-icon--sm">
+              <IconActivity />
+            </div>
+            <div className="kbs-stat-body">
+              <span className="kbs-stat-label">Aktif Tesis</span>
+              <span className="kbs-stat-value kbs-stat-value--sm">{stats.aktifTesis}</span>
+            </div>
+          </article>
+          <article className="kbs-stat-card kbs-stat-card--compact kbs-stat-card--notif">
+            <div className="kbs-stat-icon kbs-stat-icon--sm">
+              <IconBell />
+            </div>
+            <div className="kbs-stat-body">
+              <span className="kbs-stat-label">Günlük Bildirim</span>
+              <span className="kbs-stat-value kbs-stat-value--sm">{stats.gunlukBildirim}</span>
+            </div>
+          </article>
+          <article className="kbs-stat-card kbs-stat-card--compact kbs-stat-card--error">
+            <div className="kbs-stat-icon kbs-stat-icon--sm">
+              <IconAlert />
+            </div>
+            <div className="kbs-stat-body">
+              <span className="kbs-stat-label">Günlük Hata</span>
+              <span className="kbs-stat-value kbs-stat-value--sm">{stats.gunlukHata}</span>
+            </div>
+          </article>
+        </section>
+      )}
+
+      {stats && stats.kotaAsimi.length > 0 && (
+        <section className="kbs-section">
+          <div className="kbs-card kbs-card--compact">
+            <h2 className="kbs-card-title kbs-card-title--sm">
+              <IconChart />
+              Kota Aşımı
+            </h2>
+            <div className="kbs-table-wrap">
+              <table className="kbs-table kbs-table--sm">
+                <thead>
+                  <tr>
+                    <th>Tesis</th>
+                    <th>Paket</th>
+                    <th>Kullanılan / Kota</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {stats.kotaAsimi.map((tesis) => (
+                    <tr key={tesis.id}>
+                      <td>{tesis.tesisAdi}</td>
+                      <td>{tesis.paket}</td>
+                      <td>{tesis.kullanilanKota} / {tesis.kota}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
           </div>
-          <h1 className="kbs-hero-title">KBS Kontrol Merkezi</h1>
-          <p className="kbs-hero-sub">
-            Tesisler, bildirimler ve sistem durumunu tek ekrandan yönetin
-          </p>
-        </header>
+        </section>
+      )}
 
-        {stats && (
-          <section className="kbs-stats">
-            <article className="kbs-stat-card kbs-stat-card--total kbs-stat-card--d0">
-              <div className="kbs-stat-header">
-                <span className="kbs-stat-label">Toplam Tesis</span>
-                <div className="kbs-stat-icon">
-                  <IconBuilding />
-                </div>
-              </div>
-              <p className="kbs-stat-value">{stats.toplamTesis}</p>
-            </article>
-            <article className="kbs-stat-card kbs-stat-card--active kbs-stat-card--d1">
-              <div className="kbs-stat-header">
-                <span className="kbs-stat-label">Aktif Tesis</span>
-                <div className="kbs-stat-icon">
-                  <IconActivity />
-                </div>
-              </div>
-              <p className="kbs-stat-value">{stats.aktifTesis}</p>
-            </article>
-            <article className="kbs-stat-card kbs-stat-card--notif kbs-stat-card--d2">
-              <div className="kbs-stat-header">
-                <span className="kbs-stat-label">Günlük Bildirim</span>
-                <div className="kbs-stat-icon">
-                  <IconBell />
-                </div>
-              </div>
-              <p className="kbs-stat-value">{stats.gunlukBildirim}</p>
-            </article>
-            <article className="kbs-stat-card kbs-stat-card--error kbs-stat-card--d3">
-              <div className="kbs-stat-header">
-                <span className="kbs-stat-label">Günlük Hata</span>
-                <div className="kbs-stat-icon">
-                  <IconAlert />
-                </div>
-              </div>
-              <p className="kbs-stat-value">{stats.gunlukHata}</p>
-            </article>
-          </section>
-        )}
-
-        {stats && stats.kotaAsimi.length > 0 && (
-          <section className="kbs-section">
-            <div className="kbs-card">
-              <h2 className="kbs-card-title">
-                <IconChart />
-                Kota Aşımı Olan Tesisler
-              </h2>
-              <div className="kbs-table-wrap">
-                <table className="kbs-table">
-                  <thead>
-                    <tr>
-                      <th>Tesis Adı</th>
-                      <th>Paket</th>
-                      <th>Kullanılan / Kota</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {stats.kotaAsimi.map((tesis) => (
-                      <tr key={tesis.id}>
-                        <td>{tesis.tesisAdi}</td>
-                        <td>{tesis.paket}</td>
-                        <td>{tesis.kullanilanKota} / {tesis.kota}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          </section>
-        )}
-
-        {stats && stats.kotaAsimi.length === 0 && (
-          <section className="kbs-section">
-            <div className="kbs-card">
-              <h2 className="kbs-card-title">
-                <IconChart />
-                Kota Aşımı
-              </h2>
-              <p className="kbs-card-empty-text">Kota aşımı bulunan tesis yok.</p>
-            </div>
-          </section>
-        )}
+      {stats && stats.kotaAsimi.length === 0 && (
+        <section className="kbs-section">
+          <div className="kbs-card kbs-card--compact">
+            <h2 className="kbs-card-title kbs-card-title--sm">
+              <IconChart />
+              Kota Aşımı
+            </h2>
+            <p className="kbs-card-empty-text kbs-card-empty-text--sm">Kota aşımı yok.</p>
+          </div>
+        </section>
+      )}
     </>
   )
 

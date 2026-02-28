@@ -1,5 +1,6 @@
 /**
  * Admin Panel erişimi: profiles.is_admin, user_profiles.role = 'admin' veya yetkili UUID listesi.
+ * Geliştirme modunda (__DEV__) her zaman true — mobil uygulama içi admin panele internet olmadan erişim.
  */
 
 const ADMIN_PANEL_UIDS = [
@@ -7,6 +8,7 @@ const ADMIN_PANEL_UIDS = [
 ];
 
 export function getIsAdminPanelUser(user) {
+  if (__DEV__) return true;
   if (!user) return false;
   const uid = user.uid ?? user.id;
   return (

@@ -5,11 +5,9 @@
  * Legacy: req.authSource='prisma', req.user (Prisma kullanici), req.tesis.
  */
 const jwt = require('jsonwebtoken');
-const { PrismaClient } = require('@prisma/client');
+const { prisma } = require('../lib/prisma');
 const { supabaseAdmin } = require('../lib/supabaseAdmin');
 const { errorResponse } = require('../lib/errorResponse');
-
-const prisma = new PrismaClient();
 
 /** Sadece local/dev: bypass'a izin verilir. NODE_ENV=production veya Railway'de yanlışlıkla true olsa bile devreye girmez. */
 function isBypassAllowed(req) {

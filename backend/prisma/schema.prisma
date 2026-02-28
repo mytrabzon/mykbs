@@ -58,9 +58,36 @@ model Tesis {
   hatalar           Hata[]
   auditLogs         AuditLog[]
   siparisler        Siparis[]
+  hotelStaffs       HotelStaff[]
+  guests            Guest[]
+  stays             Stay[]
+  kbsSubmissions    KbsSubmission[]
+  okutulanBelgeler  OkutulanBelge[]
 
   createdAt         DateTime  @default(now())
   updatedAt         DateTime  @updatedAt
+}
+
+// Okutulan kimlik/pasaport kayıtları — ayarlarda listelenir, foto opsiyonel
+model OkutulanBelge {
+  id             String   @id @default(cuid())
+  tesisId        String
+  kullaniciId    String?  // Kim okuttu (Supabase user id veya backend kullanici id)
+  belgeTuru      String   // kimlik, pasaport
+  ad             String
+  soyad          String
+  kimlikNo       String?  // TC (maskeli saklanacak)
+  pasaportNo     String?  // Pasaport no (maskeli)
+  belgeNo        String?  // MRZ documentNumber (tek alan: kimlik veya pasaport no)
+  dogumTarihi    String?  // YYYY-MM-DD veya DD.MM.YYYY
+  uyruk          String?
+  photoUrl       String?  // Yüklenen belge/ön yüz foto path
+  createdAt      DateTime @default(now())
+
+  tesis          Tesis    @relation(fields: [tesisId], references: [id], onDelete: Cascade)
+
+  @@index([tesisId])
+  @@index([createdAt])
 }
 
 // Sipariş (Paket satışı) — mobil "Satın Al" veya admin manuel atama
@@ -109,7 +136,8 @@ model Kullanici {
   avatarUrl         String?
 
   tesis             Tesis    @relation(fields: [tesisId], references: [id], onDelete: Cascade)
-  
+  hotelStaffs       HotelStaff[]
+
   createdAt         DateTime  @default(now())
   updatedAt         DateTime  @updatedAt
   
@@ -131,6 +159,7 @@ model Oda {
   
   tesis             Tesis    @relation(fields: [tesisId], references: [id], onDelete: Cascade)
   misafirler        Misafir[]
+  stays             Stay[]
   
   createdAt         DateTime  @default(now())
   updatedAt         DateTime  @updatedAt
@@ -277,5 +306,89 @@ model KycVerification {
   @@index([userId])
   @@index([status])
   @@index([createdAt])
+}
+
+// Otel personeli: Tesis–Kullanıcı eşleşmesi, rol, foto görüntüleme yetkisi
+model HotelStaff {
+  id             String   @id @default(cuid())
+  tesisId        String
+  kullaniciId    String
+  role           String   @default("staff") // owner, manager, staff
+  canViewPhotos  Boolean  @default(true)
+  tesis          Tesis    @relation(fields: [tesisId], references: [id], onDelete: Cascade)
+  kullanici      Kullanici @relation(fields: [kullaniciId], references: [id], onDelete: Cascade)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@unique([tesisId, kullaniciId])
+  @@index([tesisId])
+  @@index([kullaniciId])
+}
+
+// Otel içi misafir profili: foto + identity_hash (belge no saklanmaz), 30 gün sonra silinir
+model Guest {
+  id             String   @id @default(cuid())
+  tesisId        String
+  displayName    String?
+  photoUrl       String?
+  photoBlurhash  String?
+  identityHash   String   // HMAC(docType+docNo+birthDate); eşleştirme için
+  expiresAt      DateTime
+  tesis          Tesis   @relation(fields: [tesisId], references: [id], onDelete: Cascade)
+  stays          Stay[]
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@index([tesisId])
+  @@index([expiresAt])
+  @@index([identityHash, tesisId])
+}
+
+// Konaklama kaydı (guest nullable; MRZ okunmadıysa geçici stay)
+model Stay {
+  id             String   @id @default(cuid())
+  tesisId        String
+  guestId        String?
+  odaId          String?
+  roomNo         String
+  checkInAt      DateTime @default(now())
+  checkOutAt     DateTime?
+  usageType      String   // konaklama, gunici, depremzede
+  kbsStatus      String   @default("PENDING") // PENDING, SENT, ACCEPTED, REJECTED
+  kbsLastError   String?
+  expiresAt      DateTime
+  tesis          Tesis   @relation(fields: [tesisId], references: [id], onDelete: Cascade)
+  guest          Guest?  @relation(fields: [guestId], references: [id], onDelete: SetNull)
+  oda            Oda?    @relation(fields: [odaId], references: [id], onDelete: SetNull)
+  kbsSubmissions KbsSubmission[]
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@index([tesisId])
+  @@index([guestId])
+  @@index([odaId])
+  @@index([checkInAt])
+  @@index([expiresAt])
+}
+
+// KBS'ye gönderilen payload (audit); PII minimize
+model KbsSubmission {
+  id               String   @id @default(cuid())
+  tesisId          String
+  stayId           String
+  citizenshipType  String   // TC, YKN, FOREIGN
+  payloadJson      Json
+  sentAt           DateTime @default(now())
+  responseCode     String?
+  responseMessage  String?
+  correlationId    String?
+  tesis            Tesis   @relation(fields: [tesisId], references: [id], onDelete: Cascade)
+  stay             Stay    @relation(fields: [stayId], references: [id], onDelete: Cascade)
+  createdAt        DateTime @default(now())
+
+  @@index([tesisId])
+  @@index([stayId])
+  @@index([sentAt])
+  @@index([correlationId])
 }
 

@@ -53,6 +53,9 @@ import GalleryBatchDocumentScreen from './src/features/documentRead/GalleryBatch
 import DocumentResultScreen from './src/features/documentRead/DocumentResultScreen';
 import DocumentBatchResultScreen from './src/features/documentRead/DocumentBatchResultScreen';
 import CameraTestScreen from './src/features/documentRead/CameraTestScreen';
+import ScanHome from './src/features/scan/ScanHome';
+import ScanCameraScreen from './src/features/scan/ScanCameraScreen';
+import ScanReviewScreen from './src/features/scan/ScanReviewScreen';
 import { useFocusEffect } from '@react-navigation/native';
 
 // Misafirler sekmesi: Oteldeki mevcut kişiler (check-in yapılan misafirler) listelenir.
@@ -241,14 +244,12 @@ const Stack = createStackNavigator();
 const MAIN_TAB_NAMES = ['Odalar', 'Misafirler', 'MRZ', 'Raporlar', 'DahaFazla'];
 
 function DahaFazlaStack() {
-  const { user } = useAuth();
-  const isAdmin = getIsAdminPanelUser(user);
   return (
     <Stack.Navigator screenOptions={{ headerShown: false }}>
       <Stack.Screen name="DahaFazlaMenu" component={DahaFazlaScreen} />
       <Stack.Screen name="Ayarlar" component={AyarlarScreen} />
       <Stack.Screen name="Topluluk" component={ToplulukScreen} />
-      {isAdmin && <Stack.Screen name="AdminPanel" component={AdminPanelScreen} />}
+      <Stack.Screen name="AdminPanel" component={AdminPanelScreen} />
     </Stack.Navigator>
   );
 }
@@ -471,6 +472,9 @@ function AppNavigator() {
             <Stack.Screen name="DocumentResult" component={DocumentResultScreen} />
             <Stack.Screen name="DocumentBatchResult" component={DocumentBatchResultScreen} />
             <Stack.Screen name="CameraTest" component={CameraTestScreen} />
+            <Stack.Screen name="ScanHome" component={ScanHome} />
+            <Stack.Screen name="ScanCamera" component={ScanCameraScreen} />
+            <Stack.Screen name="ScanReview" component={ScanReviewScreen} />
           </>
         )}
       </Stack.Navigator>

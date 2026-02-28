@@ -6,23 +6,18 @@ import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../context/ThemeContext';
-import { useAuth } from '../context/AuthContext';
-import { getIsAdminPanelUser } from '../utils/adminAuth';
 import { spacing, typography } from '../theme';
 
 const MENU_ITEMS = [
   { key: 'Topluluk', label: 'Topluluk', icon: 'chatbubbles-outline', route: 'Topluluk' },
   { key: 'Ayarlar', label: 'Ayarlar', icon: 'settings-outline', route: 'Ayarlar' },
+  { key: 'AdminPanel', label: 'Admin Panel', icon: 'shield-outline', route: 'AdminPanel' },
 ];
 
 export default function DahaFazlaScreen() {
   const navigation = useNavigation();
   const { colors } = useTheme();
-  const { user } = useAuth();
-  const isAdmin = getIsAdminPanelUser(user);
-  const items = isAdmin
-    ? [...MENU_ITEMS, { key: 'AdminPanel', label: 'Admin Panel', icon: 'shield-outline', route: 'AdminPanel' }]
-    : MENU_ITEMS;
+  const items = MENU_ITEMS;
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>

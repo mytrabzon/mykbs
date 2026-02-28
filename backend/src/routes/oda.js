@@ -11,12 +11,11 @@
  *    → Çözüm: DATABASE_URL'de direct (5432) veya Session mode + ?pgbouncer=true
  */
 const express = require('express');
-const { PrismaClient } = require('@prisma/client');
+const { prisma } = require('../lib/prisma');
 const { authenticateTesisOrSupabase } = require('../middleware/authTesisOrSupabase');
 const { maskAdSoyad } = require('../utils/mask');
 const { ensureTesisForBranch } = require('../lib/ensureTesisForBranch');
 const { errorResponse } = require('../lib/errorResponse');
-const prisma = new PrismaClient();
 
 const router = express.Router();
 

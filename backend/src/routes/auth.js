@@ -1,7 +1,7 @@
 const express = require('express');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
-const { PrismaClient } = require('@prisma/client');
+const { prisma } = require('../lib/prisma');
 const { authenticate } = require('../middleware/auth');
 const { authenticateTesisOrSupabase } = require('../middleware/authTesisOrSupabase');
 const smsService = require('../services/sms');
@@ -9,7 +9,6 @@ const emailService = require('../services/email');
 const { ensureSupabaseBranchAndProfile } = require('../services/supabaseSync');
 const { supabaseAdmin } = require('../lib/supabaseAdmin');
 const { setTrialDefaults } = require('../config/packages');
-const prisma = new PrismaClient();
 
 const router = express.Router();
 

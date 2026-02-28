@@ -4,12 +4,11 @@
  */
 const express = require('express');
 const jwt = require('jsonwebtoken');
-const { PrismaClient } = require('@prisma/client');
+const { prisma } = require('../lib/prisma');
 const { supabaseAdmin } = require('../lib/supabaseAdmin');
 const { encrypt } = require('../utils/kbsEncrypt');
 
 const router = express.Router();
-const prisma = new PrismaClient();
 
 const ADMIN_SECRET = process.env.ADMIN_SECRET || 'admin-secret-key';
 
@@ -88,72 +87,74 @@ async function requireAdminPanelUser(req, res, next) {
 router.use(requireAdminPanelUser);
 
 /**
- * Dashboard istatistikleri (uygulama içi admin)
+ * Dashboard istatistikleri (uygulama içi admin).
+ * Her blok ayrı try/catch ile korunur; bir sorgu hata verse bile diğerleri döner.
  */
 router.get('/dashboard', async (req, res) => {
+  const out = {
+    toplamTesis: 0,
+    aktifTesis: 0,
+    paketDagilimi: {},
+    gunlukBildirim: 0,
+    gunlukHata: 0,
+    kotaAsimi: []
+  };
+
   try {
-    const toplamTesis = await prisma.tesis.count();
-    const aktifTesis = await prisma.tesis.count({ where: { durum: 'aktif' } });
-
-    let paketDagilimi = {};
-    try {
-      const raw = await prisma.tesis.groupBy({
-        by: ['paket'],
-        _count: true,
-        where: { durum: 'aktif' }
-      });
-      raw.forEach(p => { paketDagilimi[p.paket] = p._count; });
-    } catch (_) {
-      // Prisma schema'da paket/durum yoksa boş bırak
-    }
-
-    const bugun = new Date();
-    bugun.setHours(0, 0, 0, 0);
-    const yarin = new Date(bugun);
-    yarin.setDate(yarin.getDate() + 1);
-
-    let gunlukBildirim = 0;
-    let gunlukHata = 0;
-    let kotaAsimi = [];
-    try {
-      gunlukBildirim = await prisma.bildirim.count({
-        where: { createdAt: { gte: bugun, lt: yarin } }
-      });
-    } catch (_) {}
-    try {
-      gunlukHata = await prisma.bildirim.count({
-        where: {
-          createdAt: { gte: bugun, lt: yarin },
-          durum: 'hatali'
-        }
-      });
-    } catch (_) {}
-    try {
-      const tesisler = await prisma.tesis.findMany({
-        where: { durum: 'aktif' },
-        select: {
-          id: true,
-          tesisAdi: true,
-          paket: true,
-          kota: true,
-          kullanilanKota: true
-        }
-      });
-      kotaAsimi = tesisler.filter(t => t.kullanilanKota != null && t.kota != null && t.kullanilanKota >= t.kota);
-    } catch (_) {}
-
-    res.json({
-      toplamTesis,
-      aktifTesis,
-      paketDagilimi,
-      gunlukBildirim,
-      gunlukHata,
-      kotaAsimi
-    });
-  } catch (error) {
-    console.error('App admin dashboard hatası:', error);
-    res.status(500).json({ message: 'Dashboard verileri alınamadı', error: error.message });
+    out.toplamTesis = await prisma.tesis.count();
+  } catch (e) {
+    console.error('App admin dashboard toplamTesis:', e?.message || e);
   }
+
+  try {
+    out.aktifTesis = await prisma.tesis.count({ where: { durum: 'aktif' } });
+  } catch (e) {
+    console.error('App admin dashboard aktifTesis:', e?.message || e);
+  }
+
+  try {
+    const raw = await prisma.tesis.groupBy({
+      by: ['paket'],
+      _count: true,
+      where: { durum: 'aktif' }
+    });
+    raw.forEach(p => { out.paketDagilimi[p.paket] = p._count; });
+  } catch (e) {
+    console.error('App admin dashboard paketDagilimi:', e?.message || e);
+  }
+
+  const bugun = new Date();
+  bugun.setHours(0, 0, 0, 0);
+  const yarin = new Date(bugun);
+  yarin.setDate(yarin.getDate() + 1);
+
+  try {
+    out.gunlukBildirim = await prisma.bildirim.count({
+      where: { createdAt: { gte: bugun, lt: yarin } }
+    });
+  } catch (e) {
+    console.error('App admin dashboard gunlukBildirim:', e?.message || e);
+  }
+
+  try {
+    out.gunlukHata = await prisma.bildirim.count({
+      where: { createdAt: { gte: bugun, lt: yarin }, durum: 'hatali' }
+    });
+  } catch (e) {
+    console.error('App admin dashboard gunlukHata:', e?.message || e);
+  }
+
+  try {
+    const tesisler = await prisma.tesis.findMany({
+      where: { durum: 'aktif' },
+      select: { id: true, tesisAdi: true, paket: true, kota: true, kullanilanKota: true }
+    });
+    out.kotaAsimi = tesisler.filter(t => t.kullanilanKota != null && t.kota != null && t.kullanilanKota >= t.kota);
+  } catch (e) {
+    console.error('App admin dashboard kotaAsimi:', e?.message || e);
+  }
+
+  res.json(out);
 });
 
 /**

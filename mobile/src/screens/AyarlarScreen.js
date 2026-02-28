@@ -56,6 +56,21 @@ export default function AyarlarScreen() {
   const [changeSifre, setChangeSifre] = useState('');
   const [kbsImportLoading, setKbsImportLoading] = useState(false);
   const [kbsImportResult, setKbsImportResult] = useState(null);
+  const [kbsServerIp, setKbsServerIp] = useState(null);
+  const [okutulanBelgeler, setOkutulanBelgeler] = useState([]);
+  const [okutulanBelgelerLoading, setOkutulanBelgelerLoading] = useState(false);
+
+  const loadOkutulanBelgeler = async () => {
+    setOkutulanBelgelerLoading(true);
+    try {
+      const res = await api.get('/okutulan-belgeler?limit=50');
+      setOkutulanBelgeler(res.data?.items ?? []);
+    } catch (_) {
+      setOkutulanBelgeler([]);
+    } finally {
+      setOkutulanBelgelerLoading(false);
+    }
+  };
 
   const loadCredentialStatus = async () => {
     try {
@@ -66,10 +81,21 @@ export default function AyarlarScreen() {
     }
   };
 
+  const loadKbsServerIp = async () => {
+    try {
+      const res = await api.get('/tesis/kbs/server-ip');
+      setKbsServerIp(res.data?.serverIp ?? null);
+    } catch (_) {
+      setKbsServerIp(null);
+    }
+  };
+
   useEffect(() => {
     if (!token) return;
     loadKBSSettings();
     loadCredentialStatus();
+    loadKbsServerIp();
+    loadOkutulanBelgeler();
     dataService.getTesis(true).then((t) => setTesisDetail(t)).catch(() => {});
   }, [token]);
 
@@ -368,6 +394,37 @@ export default function AyarlarScreen() {
         </View>
 
         <View style={[styles.section, { backgroundColor: colors.surface }]}>
+          <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>Okutulan kimlikler / pasaportlar</Text>
+          <Text style={[styles.infoText, { color: colors.textSecondary, marginBottom: spacing.sm }]}>
+            MRZ ile okuttuğunuz belgeler otomatik kaydedilir; liste burada görünür.
+          </Text>
+          {okutulanBelgelerLoading ? (
+            <Text style={[styles.infoText, { color: colors.textSecondary }]}>Yükleniyor...</Text>
+          ) : okutulanBelgeler.length === 0 ? (
+            <Text style={[styles.infoText, { color: colors.textSecondary }]}>Henüz kayıt yok.</Text>
+          ) : (
+            okutulanBelgeler.slice(0, 30).map((b) => (
+              <View
+                key={b.id}
+                style={[styles.okutulanBelgeRow, { borderBottomColor: colors.border }]}
+              >
+                <View style={styles.okutulanBelgeMain}>
+                  <Text style={[styles.okutulanBelgeName, { color: colors.textPrimary }]}>
+                    {b.ad} {b.soyad}
+                  </Text>
+                  <Text style={[styles.infoText, { color: colors.textSecondary }]}>
+                    {b.belgeTuru === 'kimlik' ? 'Kimlik' : 'Pasaport'}
+                    {(b.kimlikNo || b.pasaportNo || b.belgeNo) && ` · ${b.kimlikNo || b.pasaportNo || b.belgeNo}`}
+                    {' · '}
+                    {b.createdAt ? new Date(b.createdAt).toLocaleDateString('tr-TR') : ''}
+                  </Text>
+                </View>
+              </View>
+            ))
+          )}
+        </View>
+
+        <View style={[styles.section, { backgroundColor: colors.surface }]}>
           <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>Tesis Bilgileri</Text>
           {canEditTesis ? (
             <>
@@ -486,6 +543,16 @@ export default function AyarlarScreen() {
               thumbColor={kbsSettings.ipKisitAktif ? colors.primary : colors.textSecondary}
             />
           </View>
+
+          {kbsServerIp ? (
+            <View style={[styles.serverIpBox, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+              <Text style={[styles.label, { color: colors.textPrimary }]}>Sunucu IP'si</Text>
+              <Text style={[styles.serverIpText, { color: colors.textPrimary }]} selectable>{kbsServerIp}</Text>
+              <Text style={[styles.infoText, { color: colors.textSecondary, marginTop: 4 }]}>
+                Gerekirse teknik destekte kullanın.
+              </Text>
+            </View>
+          ) : null}
 
           <Button variant="secondary" onPress={handleKBSTest} loading={testLoading} disabled={testLoading}>
             Bağlantıyı Test Et
@@ -623,6 +690,16 @@ const styles = StyleSheet.create({
     marginBottom: spacing.md,
     paddingVertical: spacing.xs,
   },
+  serverIpBox: {
+    padding: spacing.md,
+    borderRadius: spacing.borderRadius.input,
+    borderWidth: 1,
+    marginBottom: spacing.md,
+  },
+  serverIpText: {
+    fontSize: typography.text.body.fontSize,
+    marginTop: 2,
+  },
   testResult: {
     padding: spacing.md,
     borderRadius: spacing.borderRadius.input,
@@ -669,4 +746,13 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
   },
   menuRowText: { fontSize: typography.text.body.fontSize },
+  okutulanBelgeRow: {
+    paddingVertical: spacing.sm,
+    borderBottomWidth: 1,
+  },
+  okutulanBelgeMain: { flex: 1 },
+  okutulanBelgeName: {
+    fontSize: typography.text.body.fontSize,
+    fontWeight: typography.fontWeight.semibold,
+  },
 });

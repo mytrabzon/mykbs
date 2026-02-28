@@ -42,7 +42,7 @@ export function setOnUnauthorized(callback: (() => void) | null) {
   onUnauthorized = callback;
 }
 
-async function getToken(): Promise<string | null> {
+export async function getToken(): Promise<string | null> {
   if (!tokenProvider) return null;
   const t = tokenProvider();
   return t instanceof Promise ? t : Promise.resolve(t);
@@ -245,6 +245,19 @@ export const api = {
         });
         const data = await r.json().catch(() => ({}));
         if (!r.ok) throw Object.assign(new Error((data as { message?: string })?.message || 'Durum alınamadı'), { response: { status: r.status, data } });
+        return toResponse(data);
+      }
+      if (pathname === '/okutulan-belgeler' || pathname === 'okutulan-belgeler') {
+        const backendUrl = getBackendUrl();
+        if (!backendUrl || !token) throw Object.assign(new Error('Giriş gerekli'), { response: { status: 401, data: {} } });
+        const qs = query && Object.keys(query).length ? '?' + new URLSearchParams(query as Record<string, string>).toString() : '';
+        const r = await fetchWithLog(`${backendUrl}/api/okutulan-belgeler${qs}`, {
+          method: 'GET',
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        const data = await r.json().catch(() => ({}));
+        if (r.status === 404) return toResponse({ items: [], nextCursor: null });
+        if (!r.ok) throw Object.assign(new Error((data as { message?: string })?.message || 'Liste alınamadı'), { response: { status: r.status, data } });
         return toResponse(data);
       }
       if (pathname === '/oda' || pathname === 'oda') {
@@ -566,6 +579,18 @@ export const api = {
           return toResponse(data as DocumentScanResponse);
         }
         throw new Error('Belge okuma için sunucu adresi ve giriş gerekli.');
+      }
+      if (pathname === '/okutulan-belgeler' || pathname === 'okutulan-belgeler') {
+        const backendUrl = getBackendUrl();
+        if (!backendUrl || !token) throw Object.assign(new Error('Giriş gerekli'), { response: { status: 401, data: {} } });
+        const r = await fetchWithLog(`${backendUrl}/api/okutulan-belgeler`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+          body: JSON.stringify(body || {}),
+        });
+        const data = await r.json().catch(() => ({}));
+        if (!r.ok) throw Object.assign(new Error((data as { message?: string })?.message || 'Kayıt başarısız'), { response: { status: r.status, data } });
+        return toResponse(data);
       }
       if (pathname === '/ocr/documents-batch' || pathname === 'ocr/documents-batch') {
         const backendUrl = getBackendUrl();

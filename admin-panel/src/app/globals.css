@@ -627,6 +627,101 @@ body {
   font-size: 0.95rem;
 }
 
+/* ---------- Dashboard anasayfa — sade, kompakt ---------- */
+.kbs-dash-header {
+  margin-bottom: 1.25rem;
+}
+.kbs-dash-title {
+  font-size: 1.35rem;
+  font-weight: 700;
+  color: var(--kbs-text);
+  letter-spacing: -0.02em;
+  margin-bottom: 0.2rem;
+}
+.kbs-dash-sub {
+  font-size: 0.875rem;
+  color: var(--kbs-text-muted);
+}
+
+.kbs-stats--compact {
+  grid-template-columns: repeat(4, 1fr);
+  gap: 0.75rem;
+  margin-bottom: 1.25rem;
+  perspective: none;
+}
+@media (max-width: 900px) {
+  .kbs-stats--compact {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+@media (max-width: 480px) {
+  .kbs-stats--compact {
+    grid-template-columns: 1fr;
+  }
+}
+
+.kbs-stat-card--compact {
+  padding: 0.75rem 1rem;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  animation: none;
+  transition: background 0.2s, border-color 0.2s;
+}
+.kbs-stat-card--compact:hover {
+  transform: none;
+  box-shadow: none;
+  background: var(--kbs-surface-elevated);
+  border-color: var(--kbs-border-bright);
+}
+.kbs-stat-icon--sm {
+  width: 36px;
+  height: 36px;
+  min-width: 36px;
+  border-radius: 10px;
+}
+.kbs-stat-icon--sm svg {
+  width: 18px;
+  height: 18px;
+}
+.kbs-stat-body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  min-width: 0;
+}
+.kbs-stat-card--compact .kbs-stat-label {
+  font-size: 0.75rem;
+  margin-bottom: 0;
+}
+.kbs-stat-value--sm {
+  font-size: 1.25rem !important;
+  font-weight: 700;
+  animation: none;
+}
+
+.kbs-card--compact {
+  padding: 1rem 1.25rem;
+}
+.kbs-card-title--sm {
+  font-size: 0.95rem;
+  margin-bottom: 0.75rem;
+}
+.kbs-card-empty-text--sm {
+  font-size: 0.875rem;
+}
+.kbs-table--sm {
+  font-size: 0.85rem;
+}
+.kbs-table--sm th,
+.kbs-table--sm td {
+  padding: 0.5rem 0.75rem;
+}
+
+.admin-dashboard-embed .kbs-dash-header {
+  margin-bottom: 1rem;
+}
+
 /* ---------- Login lobby — aynı kurumsal dinamik tema ---------- */
 .kbs-lobby-login {
   min-height: 100vh;
@@ -1076,12 +1171,8 @@ body {
   opacity: 0.9;
 }
 
-.admin-dashboard-embed .kbs-hero {
-  margin-bottom: 1.5rem;
-}
-
 .admin-dashboard-embed .kbs-section {
-  margin-top: 1.5rem;
+  margin-top: 1rem;
 }
 
 .admin-page {
