@@ -6,9 +6,7 @@ import {
   TouchableOpacity,
   StyleSheet,
   RefreshControl,
-  Image,
   StatusBar,
-  Animated,
   Dimensions,
   AppState,
   ScrollView,
@@ -27,154 +25,17 @@ import Toast from 'react-native-toast-message';
 import { logger } from '../utils/logger';
 import { Ionicons, MaterialIcons } from '@expo/vector-icons';
 import { theme, spacing } from '../theme';
-import AppHeader from '../components/AppHeader';
 import BackendErrorScreen from '../components/BackendErrorScreen';
-
-// Oda kartı — modern tasarım (onCheckout: listeden tek tıkla misafir çıkışı)
-const OdaCard = React.memo(({ item, onPress, onCheckout, getStatusColor, getStatusIcon, getKBSDurumIcon, getKBSDurumText }) => (
-  <View style={styles.odaCard}>
-    <TouchableOpacity
-      style={[styles.odaCardInner, { borderLeftWidth: 4, borderLeftColor: getStatusColor(item.durum) }]}
-      activeOpacity={0.9}
-      onPress={onPress}
-    >
-      {/* Oda Görseli */}
-      <View style={styles.odaImageContainer}>
-        {item.fotograf ? (
-          <Image 
-            source={{ uri: item.fotograf }} 
-            style={styles.odaFoto}
-            resizeMode="cover"
-          />
-        ) : (
-          <View style={styles.odaPlaceholder}>
-            <MaterialIcons name="hotel" size={22} color={theme.colors.gray400} />
-          </View>
-        )}
-        <View style={styles.odaImageOverlay} />
-        
-        {/* Oda Numarası */}
-        <View style={styles.odaNumberBadge}>
-          <Text style={styles.odaNumberText} numberOfLines={1}>Oda {item.odaNumarasi}</Text>
-        </View>
-        
-        {/* Oda Durumu */}
-        <View style={[styles.odaStatusBadge, { backgroundColor: getStatusColor(item.durum) }]}>
-          {getStatusIcon(item.durum)}
-          <Text style={styles.odaStatusText} numberOfLines={1}>
-            {item.durum === 'bos' ? 'Boş' : 
-             item.durum === 'dolu' ? 'Dolu' : 
-             item.durum === 'temizlik' ? 'Temizlik' : 
-             item.durum === 'bakim' ? 'Bakım' : 'Bilinmiyor'}
-          </Text>
-        </View>
-      </View>
-
-      {/* Oda Detayları */}
-      <View style={styles.odaContent}>
-        <View style={styles.odaHeader}>
-          <View style={styles.odaHeaderLeft}>
-            <Text style={styles.odaTipi} numberOfLines={1}>{item.odaTipi || 'Standart Oda'}</Text>
-            <View style={styles.odaCapacity}>
-              <Ionicons name="people-outline" size={10} color={theme.colors.textSecondary} />
-              <Text style={styles.odaCapacityText}>{item.kapasite || 2} Kişi</Text>
-            </View>
-          </View>
-          <View style={styles.odaPrice}>
-            <Text style={styles.odaPriceText}>₺{item.fiyat || '0'}</Text>
-            <Text style={styles.odaPriceLabel}>/gece</Text>
-          </View>
-        </View>
-
-        {/* Misafir Bilgileri — şu anda odada (tek kaynak: uygulama, KBS gecikmesi yok) */}
-        {(item.odadaMi || (item.durum === 'dolu' && item.misafir)) && (
-          <View style={styles.misafirInfo}>
-            <View style={styles.misafirHeader}>
-              <Ionicons name="person-circle-outline" size={20} color={theme.colors.primary} />
-              <Text style={styles.misafirAd} numberOfLines={1}>
-                {item.misafir.ad} {item.misafir.soyad}
-              </Text>
-              <View style={styles.odadaBadge}>
-                <Text style={styles.odadaBadgeText}>Şu anda odada</Text>
-              </View>
-            </View>
-            
-            <View style={styles.misafirDetails}>
-              <View style={styles.misafirDetail}>
-                <Ionicons name="calendar-outline" size={14} color={theme.colors.textSecondary} />
-                <Text style={styles.misafirDetailText} numberOfLines={1}>
-                  Giriş: {new Date(item.misafir.girisTarihi).toLocaleDateString('tr-TR')}
-                </Text>
-              </View>
-              
-              {item.misafir.cikisTarihi && (
-                <View style={styles.misafirDetail}>
-                  <Ionicons name="calendar-outline" size={14} color={theme.colors.textSecondary} />
-                  <Text style={styles.misafirDetailText} numberOfLines={1}>
-                    Çıkış: {new Date(item.misafir.cikisTarihi).toLocaleDateString('tr-TR')}
-                  </Text>
-                </View>
-              )}
-            </View>
-
-            {/* KBS Durumu */}
-            {item.kbsDurumu && (
-              <View style={styles.kbsDurum}>
-                <View style={styles.kbsDurumHeader}>
-                  {getKBSDurumIcon(item.kbsDurumu)}
-                  <Text style={styles.kbsDurumText} numberOfLines={1}>
-                    {getKBSDurumText(item.kbsDurumu)}
-                  </Text>
-                </View>
-                {item.kbsHataMesaji && (
-                  <Text style={styles.kbsHataText} numberOfLines={2}>{item.kbsHataMesaji}</Text>
-                )}
-              </View>
-            )}
-          </View>
-        )}
-
-        {/* Oda Aksiyonları — dolu odada: tek tıkla Çıkış + Düzenle */}
-        <View style={styles.odaActions}>
-          {item.durum === 'dolu' && item.misafir && !item.misafir.cikisTarihi ? (
-            <>
-              <TouchableOpacity
-                style={[styles.actionButton, styles.actionButtonCheckout]}
-                onPress={(e) => { e?.stopPropagation?.(); onCheckout?.(item); }}
-              >
-                <Ionicons name="log-out-outline" size={16} color={theme.colors.white} />
-                <Text style={styles.actionButtonText}>Çıkış</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.actionButton, styles.actionButtonPrimary]}
-                onPress={onPress}
-              >
-                <Ionicons name="create-outline" size={16} color={theme.colors.white} />
-                <Text style={styles.actionButtonText}>Detay</Text>
-              </TouchableOpacity>
-            </>
-          ) : item.durum !== 'dolu' ? (
-            <TouchableOpacity
-              style={[styles.actionButton, styles.actionButtonPrimary, styles.actionButtonFull]}
-              onPress={onPress}
-            >
-              <Ionicons name="log-in-outline" size={16} color={theme.colors.white} />
-              <Text style={styles.actionButtonText}>Check-in</Text>
-            </TouchableOpacity>
-          ) : (
-            <TouchableOpacity
-              style={[styles.actionButton, styles.actionButtonPrimary, styles.actionButtonFull]}
-              onPress={onPress}
-            >
-              <Ionicons name="create-outline" size={16} color={theme.colors.white} />
-              <Text style={styles.actionButtonText}>Detay</Text>
-            </TouchableOpacity>
-          )}
-        </View>
-      </View>
-    </TouchableOpacity>
-  </View>
-));
+import {
+  HomeCommandStrip,
+  KPICarousel,
+  QuickActionsStrip,
+  FilterSortBar,
+  RoomCardModern,
+  RoomDetailSheet,
+  FABHalfSheet,
+} from '../components/home';
+import { getIsAdminPanelUser } from '../utils/adminAuth';
 
 // Lobi CANLI noktası — nabız animasyonu
 function LiveDotPulse() {
@@ -224,13 +85,18 @@ export default function OdalarScreen() {
       if (tesisData?.ozet) setOzet(tesisData.ozet);
     });
     const unsubOdalar = dataService.subscribe('odalar:updated', ({ filtre: updatedFiltre, odalar: freshOdalar }) => {
-      if (updatedFiltre === filtreRef.current && Array.isArray(freshOdalar)) setOdalar(freshOdalar);
+      const apiF = filtreRef.current === 'cikisaYakin' ? 'dolu' : filtreRef.current;
+      if (updatedFiltre === apiF && Array.isArray(freshOdalar)) setOdalar(freshOdalar);
+    });
+    const unsubCacheCleared = dataService.subscribe('cache:cleared', () => {
+      loadData(true);
     });
     return () => {
       unsubTesis();
       unsubOdalar();
+      unsubCacheCleared();
     };
-  }, []);
+  }, [loadData]);
 
   // Backend health dinle: test başarılı olunca state resetlensin (sticky overlay kalkar)
   useEffect(() => {
@@ -501,7 +367,8 @@ export default function OdalarScreen() {
           logger.warn('[OdalarScreen] loadData timeout – showing screen so user is not stuck');
         }, 15000);
       }
-      logger.log('[OdalarScreen] loadData başladı', { filtre, isInitial });
+      const apiFiltre = filtre === 'cikisaYakin' ? 'dolu' : filtre;
+      logger.log('[OdalarScreen] loadData başladı', { filtre, apiFiltre, isInitial });
 
       let tesis = null;
       let odalar = [];
@@ -511,8 +378,8 @@ export default function OdalarScreen() {
         logger.log('[OdalarScreen] adım: tesis (cache)', { step: lastLoadStep });
         tesis = await dataService.getTesis(false);
         lastLoadStep = LOAD_STEP.ODALAR_CACHE;
-        logger.log('[OdalarScreen] adım: odalar (cache)', { step: lastLoadStep, filtre });
-        odalar = await dataService.getOdalar(filtre, false);
+        logger.log('[OdalarScreen] adım: odalar (cache)', { step: lastLoadStep, apiFiltre });
+        odalar = await dataService.getOdalar(apiFiltre, false);
 
         if (tesis && odalar.length > 0) {
           logger.log('[OdalarScreen] cache dolu, ekranda gösteriliyor; arka planda taze veri çekiliyor', { odaCount: odalar.length });
@@ -520,7 +387,7 @@ export default function OdalarScreen() {
           setOdalar(odalar);
           Promise.all([
             dataService.getTesis(true).catch((e) => { logger.warn('[OdalarScreen] silent refresh tesis hatası', e?.message || e); }),
-            dataService.getOdalar(filtre, true).catch((e) => { logger.warn('[OdalarScreen] silent refresh odalar hatası', e?.message || e, e?.step); })
+            dataService.getOdalar(apiFiltre, true).catch((e) => { logger.warn('[OdalarScreen] silent refresh odalar hatası', e?.message || e, e?.step); })
           ]).then(([freshTesis, freshOdalar]) => {
             if (freshTesis && freshOdalar) {
               logger.log('[OdalarScreen] silent refresh tamamlandı', { odaCount: freshOdalar.length });
@@ -533,7 +400,7 @@ export default function OdalarScreen() {
           logger.log('[OdalarScreen] cache yok/boş, API ile taze veri', { step: lastLoadStep });
           const [freshTesis, freshOdalar] = await Promise.all([
             dataService.getTesis(true),
-            dataService.getOdalar(filtre, true)
+            dataService.getOdalar(apiFiltre, true)
           ]);
           lastLoadStep = LOAD_STEP.ODALAR_FRESH;
           tesis = freshTesis;
@@ -548,7 +415,7 @@ export default function OdalarScreen() {
           code: apiError?.response?.data?.code,
         }, apiError);
         const cachedTesis = dataService.getCachedTesis();
-        const cachedOdalar = dataService.getCachedOdalar(filtre);
+        const cachedOdalar = dataService.getCachedOdalar(apiFiltre);
         if (cachedTesis || cachedOdalar) {
           logger.log('[OdalarScreen] cache fallback kullanılıyor', { hasTesis: !!cachedTesis, odaCount: cachedOdalar?.length || 0 });
           tesis = cachedTesis;
@@ -710,38 +577,72 @@ export default function OdalarScreen() {
     }
   }, []);
 
+  const getStatusLabel = useCallback((durum) => {
+    switch (durum) {
+      case 'bos': return 'Boş';
+      case 'dolu': return 'Dolu';
+      case 'temizlik': return 'Temizlik';
+      case 'bakim': return 'Bakım';
+      default: return '—';
+    }
+  }, []);
+
+  const isCheckoutSoon = useCallback((oda) => {
+    const cikis = oda?.misafir?.cikisTarihi;
+    if (!cikis) return false;
+    const d = new Date(cikis);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const tomorrow = new Date(today);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    d.setHours(0, 0, 0, 0);
+    return d.getTime() === today.getTime() || d.getTime() === tomorrow.getTime();
+  }, []);
+
+  const displayOdalar = useMemo(() => {
+    if (filtre === 'cikisaYakin') return odalar.filter(isCheckoutSoon);
+    return odalar;
+  }, [odalar, filtre, isCheckoutSoon]);
+
+  const odalarCountByFilter = useMemo(() => {
+    const counts = { temizlik: 0, bakim: 0 };
+    odalar.forEach((o) => {
+      if (o.durum === 'temizlik') counts.temizlik++;
+      if (o.durum === 'bakim') counts.bakim++;
+    });
+    return counts;
+  }, [odalar]);
+
   const handleOdaPress = useCallback((item) => {
     try {
       logger.button('Oda Card', 'clicked');
-      logger.log('Navigating to OdaDetay', { odaId: item.id });
-      navigation.navigate('OdaDetay', { odaId: item.id });
+      setSheetRoom(item);
     } catch (error) {
       logger.error('Navigation error', error);
     }
-  }, [navigation]);
+  }, []);
 
   const renderOdaCard = useCallback(({ item }) => (
     <View style={styles.odaCardWrapper}>
-      <OdaCard
+      <RoomCardModern
         item={item}
-        onPress={() => handleOdaPress(item)}
+        onPress={handleOdaPress}
         onCheckout={handleCheckout}
         getStatusColor={getStatusColor}
-        getStatusIcon={getStatusIcon}
         getKBSDurumIcon={getKBSDurumIcon}
-        getKBSDurumText={getKBSDurumText}
+        compact={commandMode}
       />
     </View>
-  ), [handleOdaPress, handleCheckout, getStatusColor, getStatusIcon, getKBSDurumIcon, getKBSDurumText]);
+  ), [handleOdaPress, handleCheckout, getStatusColor, getKBSDurumIcon, commandMode]);
 
   const keyExtractor = useCallback((item) => item.id.toString(), []);
 
-  const CARD_ROW_HEIGHT = 220;
+  const CARD_ROW_HEIGHT = commandMode ? 92 : 116;
   const getItemLayout = useCallback((data, index) => ({
     length: CARD_ROW_HEIGHT,
     offset: CARD_ROW_HEIGHT * Math.floor(index / 2),
     index,
-  }), []);
+  }), [commandMode]);
 
   const handleCheckout = useCallback((item) => {
     if (!item?.misafir?.id) return;
@@ -772,6 +673,12 @@ export default function OdalarScreen() {
   }, []);
 
   const [showFabMenu, setShowFabMenu] = useState(false);
+  const [selectedDateKey, setSelectedDateKey] = useState('bugun');
+  const [sortKey, setSortKey] = useState('odaNo');
+  const [commandMode, setCommandMode] = useState(false);
+  const [sheetRoom, setSheetRoom] = useState(null);
+  const [fabSheetVisible, setFabSheetVisible] = useState(false);
+  const isAdmin = getIsAdminPanelUser(user);
 
   const handleAddRoom = () => {
     setShowFabMenu(false);
@@ -782,15 +689,6 @@ export default function OdalarScreen() {
     setShowFabMenu(false);
     navigation.navigate('CheckIn');
   };
-
-  // Memoized filter options
-  const filterOptions = useMemo(() => [
-    { key: 'tumu', label: 'Tümü', icon: 'grid' },
-    { key: 'bos', label: 'Boş', icon: 'bed-outline' },
-    { key: 'dolu', label: 'Dolu', icon: 'bed' },
-    { key: 'temizlik', label: 'Temizlik', icon: 'water-outline' },
-    { key: 'hatali', label: 'Hatalı', icon: 'warning-outline' },
-  ], []);
 
   if (initialLoading) {
     return (
@@ -804,29 +702,24 @@ export default function OdalarScreen() {
     );
   }
 
-  const dolulukYuzde = ozet && ozet.toplamOda > 0 ? Math.round((ozet.doluOda / ozet.toplamOda) * 100) : 0;
-
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
-      <StatusBar barStyle={colors.background === '#0F172A' ? 'light-content' : 'dark-content'} backgroundColor={colors.primary} />
-      <AppHeader
-        minimal
-        variant="primary"
+      <StatusBar barStyle={colors.background === '#0F172A' ? 'light-content' : 'dark-content'} backgroundColor={colors.surface} />
+      {/* Komuta Şeridi — sticky üst */}
+      <HomeCommandStrip
         tesis={tesis}
-        backendConfigured={!!getBackendUrl()}
-        backendOnline={odalar.length > 0 ? true : backendStatus.isOnline}
-        backendError={backendStatus.error}
-        supabaseConfigured={supabaseStatus.configured}
-        supabaseOnline={supabaseStatus.isOnline}
-        supabaseError={supabaseStatus.error}
+        ozet={ozet}
         onNotification={() => navigation.navigate('Bildirimler')}
         onProfile={() => navigation.navigate('ProfilDuzenle')}
+        onDateChange={setSelectedDateKey}
+        selectedDateKey={selectedDateKey}
+        commandMode={commandMode}
+        onCommandModeChange={setCommandMode}
       />
 
-      {/* Oda Listesi — üst blok ListHeaderComponent içinde, tek kaydırmada kartlar yukarı gelir */}
       <FlatList
         ref={flatListRef}
-        data={odalar}
+        data={displayOdalar}
         renderItem={renderOdaCard}
         keyExtractor={keyExtractor}
         numColumns={2}
@@ -841,61 +734,27 @@ export default function OdalarScreen() {
         refreshControl={
           <RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[colors.primary]} tintColor={colors.primary} />
         }
-        contentContainerStyle={[styles.list, odalar.length === 0 && styles.listEmpty]}
+        contentContainerStyle={[styles.list, displayOdalar.length === 0 && styles.listEmpty]}
         showsVerticalScrollIndicator={false}
         ListHeaderComponent={
           <>
-            <View style={[styles.hero, { backgroundColor: colors.primary }]}>
-              <Text style={styles.heroGreeting}>Hoş geldiniz</Text>
-              <Text style={styles.heroTesis} numberOfLines={1}>{tesis?.tesisAdi || tesis?.adi || 'Tesis'}</Text>
-              {ozet && ozet.toplamOda > 0 && (
-                <View style={styles.heroStats}>
-                  <Text style={styles.heroDoluluk}>{dolulukYuzde}%</Text>
-                  <Text style={styles.heroLabel}>Doluluk · {ozet.doluOda}/{ozet.toplamOda} Oda</Text>
-                </View>
-              )}
-            </View>
-            {ozet && (
-              <View style={[styles.ozetWrapper, { marginTop: -16 }]}>
-                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.ozetScroll} scrollEnabled={true}>
-                  <TouchableOpacity style={[styles.ozetCard, { backgroundColor: colors.surface }]} onPress={() => setFiltre('dolu')} activeOpacity={0.7}>
-                    <View style={[styles.ozetIcon, { backgroundColor: colors.primarySoft }]}><Ionicons name="bed" size={20} color={colors.primary} /></View>
-                    <Text style={[styles.ozetValue, { color: colors.textPrimary }]}>{ozet.doluOda}/{ozet.toplamOda}</Text>
-                    <Text style={[styles.ozetLabel, { color: colors.textSecondary }]}>Dolu</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity style={[styles.ozetCard, { backgroundColor: colors.surface }]} onPress={() => setFiltre('tumu')} activeOpacity={0.7}>
-                    <View style={[styles.ozetIcon, { backgroundColor: colors.successSoft }]}><Ionicons name="log-in" size={20} color={colors.success} /></View>
-                    <Text style={[styles.ozetValue, { color: colors.textPrimary }]}>{ozet.bugunGiris}</Text>
-                    <Text style={[styles.ozetLabel, { color: colors.textSecondary }]}>Giriş</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity style={[styles.ozetCard, { backgroundColor: colors.surface }]} onPress={() => setFiltre('tumu')} activeOpacity={0.7}>
-                    <View style={[styles.ozetIcon, { backgroundColor: colors.warningSoft }]}><Ionicons name="log-out" size={20} color={colors.warning} /></View>
-                    <Text style={[styles.ozetValue, { color: colors.textPrimary }]}>{ozet.bugunCikis}</Text>
-                    <Text style={[styles.ozetLabel, { color: colors.textSecondary }]}>Çıkış</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity style={[styles.ozetCard, { backgroundColor: colors.surface }]} onPress={() => setFiltre('hatali')} activeOpacity={0.7}>
-                    <View style={[styles.ozetIcon, { backgroundColor: colors.errorSoft }]}><Ionicons name="warning" size={20} color={colors.error} /></View>
-                    <Text style={[styles.ozetValue, { color: colors.textPrimary }]}>{ozet.hataliBildirim}</Text>
-                    <Text style={[styles.ozetLabel, { color: colors.textSecondary }]}>Hatalı</Text>
-                  </TouchableOpacity>
-                </ScrollView>
-              </View>
-            )}
-            <View style={styles.lobbyFiltreContainer}>
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filtreScroll}>
-                {filterOptions.map((f) => (
-                  <TouchableOpacity
-                    key={f.key}
-                    style={[styles.lobbyFiltreButton, { backgroundColor: filtre === f.key ? colors.primary : colors.surface, borderColor: filtre === f.key ? colors.primary : colors.border }]}
-                    onPress={() => { try { logger.button('Filtre Button', 'clicked'); setFiltre(f.key); } catch (error) { logger.error('Filter change error', error); } }}
-                  >
-                    <Ionicons name={f.icon} size={14} color={filtre === f.key ? colors.textInverse : colors.textSecondary} style={styles.filtreIcon} />
-                    <Text style={[styles.lobbyFiltreText, { color: filtre === f.key ? colors.textInverse : colors.textSecondary }, filtre === f.key && styles.lobbyFiltreTextActive]}>{f.label}</Text>
-                  </TouchableOpacity>
-                ))}
-              </ScrollView>
-              {filterLoading && <View style={styles.filterLoadingIndicator}><ActivityIndicator size="small" color={colors.primary} /></View>}
-            </View>
+            <KPICarousel
+              ozet={ozet}
+              odalarCountByFilter={odalarCountByFilter}
+              onCardPress={setFiltre}
+              selectedFilter={filtre}
+            />
+            <QuickActionsStrip
+              onAction={({ type, route }) => route && navigation.navigate(route)}
+              isCompact={commandMode}
+            />
+            <FilterSortBar
+              selectedFilter={filtre}
+              onFilterChange={(key) => { logger.button('Filtre', key); setFiltre(key); }}
+              sortKey={sortKey}
+              onSortChange={setSortKey}
+              onToggleSortMenu={() => {}}
+            />
             {liveUpdates.length > 0 && (
               <View style={[styles.lobbyLiveContainer, { backgroundColor: colors.surface, borderColor: colors.border }]}>
                 <View style={styles.lobbyLiveHeader}>
@@ -992,37 +851,38 @@ export default function OdalarScreen() {
         }
       />
 
-      {/* FAB — artı butonu (yenile kaldırıldı, tek FAB yukarıda) */}
+      {/* FAB + half-sheet menü */}
       <View style={[styles.fabContainer, { zIndex: 20 }]}>
-        <TouchableOpacity style={[styles.fab, { backgroundColor: colors.primary }]} onPress={() => setShowFabMenu(!showFabMenu)}>
+        <TouchableOpacity
+          style={[styles.fab, { backgroundColor: colors.primary }]}
+          onPress={() => setFabSheetVisible(true)}
+        >
           <Ionicons name="add" size={28} color={colors.textInverse} />
         </TouchableOpacity>
-        {showFabMenu && (
-          <View style={[styles.fabMenu, { backgroundColor: colors.surface }]}>
-            <TouchableOpacity style={styles.fabMenuItem} onPress={handleAddRoom}>
-              <View style={[styles.fabMenuIcon, { backgroundColor: colors.primary }]}>
-                <Ionicons name="add-circle" size={20} color={colors.textInverse} />
-              </View>
-              <Text style={[styles.fabMenuText, { color: colors.textPrimary }]}>Yeni Oda Ekle</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.fabMenuItem} onPress={handleQuickCheckIn}>
-              <View style={[styles.fabMenuIcon, { backgroundColor: colors.success }]}>
-                <Ionicons name="log-in" size={20} color={colors.textInverse} />
-              </View>
-              <Text style={[styles.fabMenuText, { color: colors.textPrimary }]}>Hızlı Check-in</Text>
-            </TouchableOpacity>
-          </View>
-        )}
       </View>
 
-      {/* Overlay to close menu when clicking outside */}
-      {showFabMenu && (
-        <TouchableOpacity
-          style={styles.fabOverlay}
-          activeOpacity={1}
-          onPress={() => setShowFabMenu(false)}
-        />
-      )}
+      <FABHalfSheet
+        visible={fabSheetVisible}
+        onClose={() => setFabSheetVisible(false)}
+        onSelect={({ type, route }) => {
+          if (route) navigation.navigate(route);
+        }}
+        isAdmin={isAdmin}
+      />
+
+      <RoomDetailSheet
+        visible={!!sheetRoom}
+        room={sheetRoom}
+        onClose={() => setSheetRoom(null)}
+        onCheckout={() => sheetRoom && handleCheckout(sheetRoom)}
+        onUzat={() => { setSheetRoom(null); navigation.navigate('OdaDetay', { odaId: sheetRoom?.id }); }}
+        onOdaDegistir={() => { setSheetRoom(null); navigation.navigate('OdaDetay', { odaId: sheetRoom?.id }); }}
+        onFatura={() => { setSheetRoom(null); navigation.navigate('OdaDetay', { odaId: sheetRoom?.id }); }}
+        onGoToFullPage={() => { const odaId = sheetRoom?.id; setSheetRoom(null); if (odaId) navigation.navigate('OdaDetay', { odaId }); }}
+        getStatusColor={getStatusColor}
+        getStatusLabel={getStatusLabel}
+        getKBSDurumText={getKBSDurumText}
+      />
     </View>
   );
 }

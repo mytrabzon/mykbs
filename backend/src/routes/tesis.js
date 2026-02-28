@@ -343,19 +343,39 @@ router.post('/kbs/talebi', async (req, res) => {
 
 router.post('/kbs/test', async (req, res) => {
   try {
+    const bodyKbs = req.body && typeof req.body === 'object' ? req.body : {};
+    const fromBody = bodyKbs.kbsTuru && bodyKbs.kbsTesisKodu && bodyKbs.kbsWebServisSifre;
+
     let tesisLike;
     if (req.authSource === 'supabase') {
       const b = req.branch;
-      if (!b.kbs_turu || !b.kbs_tesis_kodu || !b.kbs_web_servis_sifre) {
-        return res.status(400).json({ message: 'KBS bilgileri eksik' });
+      if (fromBody) {
+        tesisLike = {
+          kbsTuru: bodyKbs.kbsTuru,
+          kbsTesisKodu: String(bodyKbs.kbsTesisKodu).trim(),
+          kbsWebServisSifre: bodyKbs.kbsWebServisSifre,
+          ipAdresleri: []
+        };
+      } else if (b.kbs_turu && b.kbs_tesis_kodu && b.kbs_web_servis_sifre) {
+        tesisLike = { kbsTuru: b.kbs_turu, kbsTesisKodu: b.kbs_tesis_kodu, kbsWebServisSifre: b.kbs_web_servis_sifre, ipAdresleri: [] };
+      } else {
+        return res.status(400).json({ message: 'KBS bilgileri eksik. Tesis kodu, şifre ve KBS türünü girin veya önce Kaydet ile talep gönderin.' });
       }
-      tesisLike = { kbsTuru: b.kbs_turu, kbsTesisKodu: b.kbs_tesis_kodu, kbsWebServisSifre: b.kbs_web_servis_sifre, ipAdresleri: [] };
     } else {
-      const tesis = await prisma.tesis.findUnique({ where: { id: req.tesis.id } });
-      if (!tesis || !tesis.kbsTuru || !tesis.kbsTesisKodu || !tesis.kbsWebServisSifre) {
-        return res.status(400).json({ message: 'KBS bilgileri eksik' });
+      if (fromBody) {
+        tesisLike = {
+          kbsTuru: bodyKbs.kbsTuru,
+          kbsTesisKodu: String(bodyKbs.kbsTesisKodu).trim(),
+          kbsWebServisSifre: bodyKbs.kbsWebServisSifre,
+          ipAdresleri: []
+        };
+      } else {
+        const tesis = await prisma.tesis.findUnique({ where: { id: req.tesis.id } });
+        if (!tesis || !tesis.kbsTuru || !tesis.kbsTesisKodu || !tesis.kbsWebServisSifre) {
+          return res.status(400).json({ message: 'KBS bilgileri eksik' });
+        }
+        tesisLike = tesis;
       }
-      tesisLike = tesis;
     }
 
     const kbsService = createKBSService(tesisLike);
@@ -382,20 +402,40 @@ router.post('/kbs/import', async (req, res) => {
       await ensureTesisForBranch(prisma, req.branchId, req.branch?.name);
     }
 
+    const bodyKbs = req.body && typeof req.body === 'object' ? req.body : {};
+    const fromBody = bodyKbs.kbsTuru && bodyKbs.kbsTesisKodu && bodyKbs.kbsWebServisSifre;
+
     const tesisId = req.authSource === 'supabase' ? req.branchId : req.tesis.id;
     let tesisLike;
     if (req.authSource === 'supabase') {
       const b = req.branch;
-      if (!b.kbs_turu || !b.kbs_tesis_kodu || !b.kbs_web_servis_sifre) {
+      if (fromBody) {
+        tesisLike = {
+          kbsTuru: bodyKbs.kbsTuru,
+          kbsTesisKodu: String(bodyKbs.kbsTesisKodu).trim(),
+          kbsWebServisSifre: bodyKbs.kbsWebServisSifre,
+          ipAdresleri: []
+        };
+      } else if (b.kbs_turu && b.kbs_tesis_kodu && b.kbs_web_servis_sifre) {
+        tesisLike = { kbsTuru: b.kbs_turu, kbsTesisKodu: b.kbs_tesis_kodu, kbsWebServisSifre: b.kbs_web_servis_sifre, ipAdresleri: [] };
+      } else {
         return res.status(400).json({ message: 'KBS bilgileri eksik. Önce Ayarlar\'dan KBS tesis kodu ve şifreyi girin.' });
       }
-      tesisLike = { kbsTuru: b.kbs_turu, kbsTesisKodu: b.kbs_tesis_kodu, kbsWebServisSifre: b.kbs_web_servis_sifre, ipAdresleri: [] };
     } else {
-      const tesis = await prisma.tesis.findUnique({ where: { id: req.tesis.id } });
-      if (!tesis || !tesis.kbsTuru || !tesis.kbsTesisKodu || !tesis.kbsWebServisSifre) {
-        return res.status(400).json({ message: 'KBS bilgileri eksik' });
+      if (fromBody) {
+        tesisLike = {
+          kbsTuru: bodyKbs.kbsTuru,
+          kbsTesisKodu: String(bodyKbs.kbsTesisKodu).trim(),
+          kbsWebServisSifre: bodyKbs.kbsWebServisSifre,
+          ipAdresleri: []
+        };
+      } else {
+        const tesis = await prisma.tesis.findUnique({ where: { id: req.tesis.id } });
+        if (!tesis || !tesis.kbsTuru || !tesis.kbsTesisKodu || !tesis.kbsWebServisSifre) {
+          return res.status(400).json({ message: 'KBS bilgileri eksik' });
+        }
+        tesisLike = tesis;
       }
-      tesisLike = tesis;
     }
 
     const kbsService = createKBSService(tesisLike);

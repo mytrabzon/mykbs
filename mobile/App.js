@@ -40,6 +40,7 @@ import PaylasimEkleScreen from './src/screens/PaylasimEkleScreen';
 import ProfilDuzenleScreen from './src/screens/ProfilDuzenleScreen';
 import ProfilIletisimScreen from './src/screens/ProfilIletisimScreen';
 import RaporlarScreen from './src/screens/RaporlarScreen';
+import DahaFazlaScreen from './src/screens/DahaFazlaScreen';
 import MrzScanScreen from './src/features/kyc/MrzScanScreen';
 import MrzResultScreen from './src/features/kyc/MrzResultScreen';
 import KycSubmitScreen from './src/features/kyc/KycSubmitScreen';
@@ -237,15 +238,26 @@ import TrialWelcomeBanner from './src/components/TrialWelcomeBanner';
 const Tab = createBottomTabNavigator();
 const Stack = createStackNavigator();
 
-const TAB_NAMES = ['Odalar', 'Misafirler', 'MRZ', 'Topluluk', 'Raporlar', 'Ayarlar'];
+const MAIN_TAB_NAMES = ['Odalar', 'Misafirler', 'MRZ', 'Raporlar', 'DahaFazla'];
+
+function DahaFazlaStack() {
+  const { user } = useAuth();
+  const isAdmin = getIsAdminPanelUser(user);
+  return (
+    <Stack.Navigator screenOptions={{ headerShown: false }}>
+      <Stack.Screen name="DahaFazlaMenu" component={DahaFazlaScreen} />
+      <Stack.Screen name="Ayarlar" component={AyarlarScreen} />
+      <Stack.Screen name="Topluluk" component={ToplulukScreen} />
+      {isAdmin && <Stack.Screen name="AdminPanel" component={AdminPanelScreen} />}
+    </Stack.Navigator>
+  );
+}
 
 function MainTabs() {
   const insets = useSafeAreaInsets();
   const { user, lastTab, setLastTab } = useAuth();
   const { colors } = useTheme();
-  const isAdminPanelUser = getIsAdminPanelUser(user);
-  const tabNames = isAdminPanelUser ? [...TAB_NAMES, 'AdminPanel'] : TAB_NAMES;
-  const initialTab = lastTab && tabNames.includes(lastTab) ? lastTab : 'Odalar';
+  const initialTab = lastTab && MAIN_TAB_NAMES.includes(lastTab) ? lastTab : 'Odalar';
   const tabBarBottom = Math.max(insets.bottom, 16);
 
   return (
@@ -255,29 +267,11 @@ function MainTabs() {
       <Tab.Navigator
       lazy={false}
       initialRouteName={initialTab}
-      screenOptions={({ route, navigation }) => ({
-        tabBarIcon: ({ focused, color, size }) => {
-          if (route.name === 'MRZ') {
-            return (
-              <View style={[styles.mrzTabIconWrap, { backgroundColor: colors.primary }]}>
-                <Ionicons name="document-text" size={26} color="#FFFFFF" />
-              </View>
-            );
-          }
-          let iconName;
-          if (route.name === 'Odalar') iconName = focused ? 'home' : 'home-outline';
-          else if (route.name === 'Okuma') iconName = focused ? 'scan' : 'scan-outline';
-          else if (route.name === 'Ayarlar') iconName = focused ? 'settings' : 'settings-outline';
-          else if (route.name === 'Raporlar') iconName = focused ? 'stats-chart' : 'stats-chart-outline';
-          else if (route.name === 'Misafirler') iconName = focused ? 'people' : 'people-outline';
-          else if (route.name === 'Topluluk') iconName = focused ? 'chatbubbles' : 'chatbubbles-outline';
-          else if (route.name === 'AdminPanel') iconName = focused ? 'shield' : 'shield-outline';
-          else iconName = 'ellipse-outline';
-          return <Ionicons name={iconName} size={focused ? 24 : 22} color={color} />;
-        },
-        tabBarActiveTintColor: colors.primary,
-        tabBarInactiveTintColor: colors.textSecondary,
-        tabBarStyle: {
+      screenOptions={({ route, navigation }) => {
+        const state = navigation.getState();
+        const currentRouteName = state?.routes?.[state.index]?.name;
+        const hideTabBar = currentRouteName === 'MRZ';
+        const baseTabBarStyle = {
           position: 'absolute',
           backgroundColor: colors.surface,
           borderTopWidth: 0,
@@ -292,7 +286,27 @@ function MainTabs() {
           shadowOffset: { width: 0, height: 4 },
           shadowOpacity: 0.15,
           shadowRadius: 16,
+        };
+        return {
+        tabBarIcon: ({ focused, color, size }) => {
+          if (route.name === 'MRZ') {
+            return (
+              <View style={[styles.mrzTabIconWrap, { backgroundColor: colors.primary }]}>
+                <Ionicons name="document-text" size={26} color="#FFFFFF" />
+              </View>
+            );
+          }
+          let iconName;
+          if (route.name === 'Odalar') iconName = focused ? 'home' : 'home-outline';
+          else if (route.name === 'Misafirler') iconName = focused ? 'people' : 'people-outline';
+          else if (route.name === 'Raporlar') iconName = focused ? 'stats-chart' : 'stats-chart-outline';
+          else if (route.name === 'DahaFazla') iconName = focused ? 'ellipsis-horizontal' : 'ellipsis-horizontal-outline';
+          else iconName = 'ellipse-outline';
+          return <Ionicons name={iconName} size={focused ? 24 : 22} color={color} />;
         },
+        tabBarActiveTintColor: colors.primary,
+        tabBarInactiveTintColor: colors.textSecondary,
+        tabBarStyle: hideTabBar ? { ...baseTabBarStyle, display: 'none' } : baseTabBarStyle,
         tabBarLabelStyle: {
           fontSize: 11,
           fontWeight: '600',
@@ -304,7 +318,9 @@ function MainTabs() {
         listeners: ({ route }) => ({
           focus: () => setLastTab(route.name),
         }),
-      })}
+        }
+      }
+    }
     >
       <Tab.Screen 
         name="Odalar" 
@@ -325,27 +341,15 @@ function MainTabs() {
         }}
       />
       <Tab.Screen 
-        name="Topluluk" 
-        component={ToplulukScreen}
-        options={{ tabBarLabel: 'Topluluk' }}
-      />
-      <Tab.Screen 
         name="Raporlar" 
         component={RaporlarScreen}
         options={{ tabBarLabel: 'Raporlar' }}
       />
-      <Tab.Screen 
-        name="Ayarlar" 
-        component={AyarlarScreen}
-        options={{ tabBarLabel: 'Ayarlar' }}
+      <Tab.Screen
+        name="DahaFazla"
+        component={DahaFazlaStack}
+        options={{ tabBarLabel: 'Daha Fazla' }}
       />
-      {isAdminPanelUser && (
-        <Tab.Screen
-          name="AdminPanel"
-          component={AdminPanelScreen}
-          options={{ tabBarLabel: 'Admin' }}
-        />
-      )}
     </Tab.Navigator>
     </View>
   );

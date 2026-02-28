@@ -21,9 +21,12 @@ interface Kullanici {
   girisTalepAt: string | null
   hasPin: boolean
   hasSifre: boolean
+  displayName: string | null
+  title: string | null
+  avatarUrl: string | null
   createdAt: string
   updatedAt: string
-  tesis?: { id: string; tesisAdi: string; tesisKodu: string }
+  tesis?: { id: string; tesisAdi: string; tesisKodu: string; paket?: string; trialEndsAt?: string | null; createdAt?: string }
 }
 
 const ROL_OPTIONS = [
@@ -146,13 +149,17 @@ export default function KullaniciDuzenlePage() {
         </div>
         <div className="kbs-card kbs-form-max">
           <p className="kbs-card-empty-text">{loadError || 'Kullanıcı yüklenemedi.'}</p>
-          <button type="button" className="kbs-btn-primary" style={{ marginTop: 16 }} onClick={() => load()}>
+          <button type="button" className="kbs-btn-primary admin-retry-btn" onClick={() => load()}>
             Tekrar dene
           </button>
         </div>
       </div>
     )
   }
+
+  const tesisPaket = k.tesis?.paket ?? '—'
+  const trialBitis = k.tesis?.trialEndsAt ? new Date(k.tesis.trialEndsAt).toLocaleDateString('tr-TR') : null
+  const tesisKayit = k.tesis?.createdAt ? new Date(k.tesis.createdAt).toLocaleDateString('tr-TR') : null
 
   return (
     <div className="admin-page">
@@ -161,8 +168,61 @@ export default function KullaniciDuzenlePage() {
           ← Kullanıcı listesi
         </Link>
       </div>
-      <h1 className="kbs-page-title">Kullanıcı düzenle</h1>
-      <p className="kbs-page-sub">{k.tesis?.tesisAdi ? `${k.tesis.tesisAdi}` : ''} — Ad soyad, yetkiler ve giriş onayı</p>
+
+      {/* Profil özeti */}
+      <div className="kbs-card admin-user-profile-card">
+        <div className="admin-user-profile-header">
+          <div className="admin-user-avatar-wrap">
+            {k.avatarUrl ? (
+              <img src={k.avatarUrl} alt="" className="admin-user-avatar" />
+            ) : (
+              <div className="admin-user-avatar-placeholder">
+                {(k.adSoyad || k.displayName || '?').charAt(0).toUpperCase()}
+              </div>
+            )}
+          </div>
+          <div className="admin-user-profile-meta">
+            <h1 className="kbs-page-title admin-page-title-no-mb">{k.displayName || k.adSoyad}</h1>
+            {k.title && <p className="kbs-page-sub admin-user-sub-mt">{k.title}</p>}
+            <p className="admin-user-dates">
+              Kayıt: <strong>{new Date(k.createdAt).toLocaleString('tr-TR')}</strong>
+              {' · '}
+              Son güncelleme: <strong>{new Date(k.updatedAt).toLocaleString('tr-TR')}</strong>
+            </p>
+          </div>
+        </div>
+        <dl className="admin-tesis-dl admin-user-dl">
+          <dt className="admin-tesis-info-dt">E-posta</dt>
+          <dd className="admin-tesis-info-dd">{k.email ? <a href={`mailto:${k.email}`}>{k.email}</a> : '—'}</dd>
+          <dt className="admin-tesis-info-dt">Telefon</dt>
+          <dd className="admin-tesis-info-dd"><a href={`tel:${k.telefon}`}>{k.telefon}</a></dd>
+          <dt className="admin-tesis-info-dt">Tesis</dt>
+          <dd className="admin-tesis-info-dd">
+            {k.tesisId ? <Link href={`/tesisler/${k.tesisId}`} className="kbs-link-accent">{k.tesis?.tesisAdi || k.tesisId}</Link> : '—'}
+          </dd>
+          <dt className="admin-tesis-info-dt">Tesis paketi</dt>
+          <dd className="admin-tesis-info-dd">{tesisPaket}</dd>
+          {trialBitis && (
+            <>
+              <dt className="admin-tesis-info-dt">Deneme bitişi</dt>
+              <dd className="admin-tesis-info-dd">{trialBitis}</dd>
+            </>
+          )}
+          {tesisKayit && (
+            <>
+              <dt className="admin-tesis-info-dt">Tesis kayıt tarihi</dt>
+              <dd className="admin-tesis-info-dd">{tesisKayit}</dd>
+            </>
+          )}
+          <dt className="admin-tesis-info-dt">Rol</dt>
+          <dd className="admin-tesis-info-dd">{k.rol}</dd>
+          <dt className="admin-tesis-info-dt">Giriş talebi</dt>
+          <dd className="admin-tesis-info-dd">{k.girisTalepAt ? new Date(k.girisTalepAt).toLocaleString('tr-TR') : '—'}</dd>
+        </dl>
+      </div>
+
+      <h2 className="kbs-card-title admin-form-section-title">Düzenle</h2>
+      <p className="kbs-page-sub admin-form-section-sub">Ad soyad, yetkiler ve giriş onayı</p>
 
       <form onSubmit={handleSubmit} className="kbs-card kbs-form-max">
         <div className="kbs-form-grid">
@@ -226,6 +286,14 @@ export default function KullaniciDuzenlePage() {
           {saving ? 'Kaydediliyor...' : 'Kaydet'}
         </button>
       </form>
+
+      <div className="kbs-card admin-user-danger-zone">
+        <h2 className="kbs-card-title admin-danger-title">Tehlikeli işlemler</h2>
+        <p className="admin-tesis-summary-sm">
+          Bu kullanıcıyı devre dışı bırakmak (ban) veya tesis kullanıcı listesinden kaldırmak için backend API kullanılır.
+          Paylaşım sayısı, bildirilen kimlik/pasaport sayısı ve son konum bilgisi mobil uygulama / topluluk modülü üzerinden takip edilir.
+        </p>
+      </div>
     </div>
   )
 }

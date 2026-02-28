@@ -1,10 +1,11 @@
 /**
- * Galeriden tek belge seçip POST /ocr/document ile okut.
+ * Galeriden tek belge seçip base64 ile POST /ocr/document-base64 ile okut (FormData galeri URI sorununu aşar).
  */
 import React, { useState, useCallback } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import * as ImagePicker from 'expo-image-picker';
+import * as FileSystem from 'expo-file-system';
 import { Ionicons } from '@expo/vector-icons';
 import Toast from 'react-native-toast-message';
 import { useTheme } from '../../context/ThemeContext';
@@ -32,9 +33,8 @@ export default function GallerySingleDocumentScreen({ navigation, route }) {
     const uri = result.assets[0].uri;
     setLoading(true);
     try {
-      const formData = new FormData();
-      formData.append('image', { uri, type: 'image/jpeg', name: 'doc.jpg' });
-      const { data } = await api.post('/ocr/document', formData);
+      const base64 = await FileSystem.readAsStringAsync(uri, { encoding: FileSystem.EncodingType.Base64 });
+      const { data } = await api.post('/ocr/document-base64', { imageBase64: base64 });
       navigation.replace('DocumentResult', { data, docType });
     } catch (e) {
       Toast.show({ type: 'error', text1: 'Okuma başarısız', text2: (e && e.message) || 'Belge okunamadı.' });

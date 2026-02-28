@@ -29,7 +29,7 @@ import AppHeader from '../components/AppHeader';
 export default function AyarlarScreen() {
   const navigation = useNavigation();
   const { colors } = useTheme();
-  const { logout, tesis, user, setTesis } = useAuth();
+  const { logout, tesis, user, setTesis, token } = useAuth();
   const { triggerPaywall } = useCredits();
   const [tesisDetail, setTesisDetail] = useState(null);
   const [tesisAdiEdit, setTesisAdiEdit] = useState('');
@@ -42,6 +42,7 @@ export default function AyarlarScreen() {
     ipKisitAktif: false,
   });
   const [testResult, setTestResult] = useState(null);
+  const [testLoading, setTestLoading] = useState(false);
   const [loading, setLoading] = useState(false);
   const [sifreValue, setSifreValue] = useState('');
   const [sifreTekrar, setSifreTekrar] = useState('');
@@ -66,10 +67,11 @@ export default function AyarlarScreen() {
   };
 
   useEffect(() => {
+    if (!token) return;
     loadKBSSettings();
     loadCredentialStatus();
     dataService.getTesis(true).then((t) => setTesisDetail(t)).catch(() => {});
-  }, []);
+  }, [token]);
 
   useEffect(() => {
     const backendUrl = getApiBaseUrl();
@@ -118,7 +120,13 @@ export default function AyarlarScreen() {
   const loadKBSSettings = async () => {
     try {
       const response = await api.get('/tesis/kbs');
-      setKbsSettings((prev) => ({ ...prev, ...response.data }));
+      setKbsSettings((prev) => ({
+        ...prev,
+        ...response.data,
+        kbsWebServisSifre: response.data.kbsWebServisSifre !== undefined && response.data.kbsWebServisSifre !== null
+          ? response.data.kbsWebServisSifre
+          : prev.kbsWebServisSifre,
+      }));
     } catch (e) {
       console.error('KBS ayarları yüklenemedi:', e);
       const status = e?.response?.status;
@@ -137,10 +145,21 @@ export default function AyarlarScreen() {
   };
 
   const handleKBSTest = async () => {
-    setLoading(true);
+    const kbsTuru = kbsSettings.kbsTuru || 'jandarma';
+    const kbsTesisKodu = (kbsSettings.kbsTesisKodu || '').trim();
+    const kbsWebServisSifre = kbsSettings.kbsWebServisSifre || '';
+    if (!kbsTesisKodu || !kbsWebServisSifre) {
+      Toast.show({ type: 'error', text1: 'Eksik alan', text2: 'KBS tesis kodu ve web servis şifresini girin.' });
+      return;
+    }
+    setTestLoading(true);
     setTestResult(null);
     try {
-      const response = await api.post('/tesis/kbs/test');
+      const response = await api.post('/tesis/kbs/test', {
+        kbsTuru,
+        kbsTesisKodu,
+        kbsWebServisSifre,
+      });
       setTestResult(response.data);
       if (response.data.success) {
         Toast.show({ type: 'success', text1: 'Başarılı', text2: 'KBS bağlantısı başarılı' });
@@ -151,15 +170,26 @@ export default function AyarlarScreen() {
       Toast.show({ type: 'error', text1: 'Hata', text2: 'Test başarısız' });
       setTestResult({ success: false, message: e?.response?.data?.message || 'Test başarısız' });
     } finally {
-      setLoading(false);
+      setTestLoading(false);
     }
   };
 
   const handleKBSImport = async () => {
+    const kbsTuru = kbsSettings.kbsTuru || 'jandarma';
+    const kbsTesisKodu = (kbsSettings.kbsTesisKodu || '').trim();
+    const kbsWebServisSifre = kbsSettings.kbsWebServisSifre || '';
+    if (!kbsTesisKodu || !kbsWebServisSifre) {
+      Toast.show({ type: 'error', text1: 'Eksik alan', text2: 'KBS tesis kodu ve web servis şifresini girin.' });
+      return;
+    }
     setKbsImportLoading(true);
     setKbsImportResult(null);
     try {
-      const response = await api.post('/tesis/kbs/import');
+      const response = await api.post('/tesis/kbs/import', {
+        kbsTuru,
+        kbsTesisKodu,
+        kbsWebServisSifre,
+      });
       const data = response.data || {};
       setKbsImportResult(data);
       const msg = data.message || (data.imported > 0 ? `${data.imported} misafir aktarıldı.` : 'Aktarım tamamlandı.');
@@ -442,7 +472,8 @@ export default function AyarlarScreen() {
             value={kbsSettings.kbsWebServisSifre || ''}
             onChangeText={(t) => setKbsSettings((prev) => ({ ...prev, kbsWebServisSifre: t }))}
             placeholder="Web Servis Şifresi"
-            secureTextEntry
+            secureTextEntry={true}
+            autoComplete="off"
             editable={credentialState !== 'PENDING'}
           />
 
@@ -456,7 +487,7 @@ export default function AyarlarScreen() {
             />
           </View>
 
-          <Button variant="secondary" onPress={handleKBSTest} loading={loading} disabled={loading}>
+          <Button variant="secondary" onPress={handleKBSTest} loading={testLoading} disabled={testLoading}>
             Bağlantıyı Test Et
           </Button>
           {testResult && (
@@ -477,7 +508,7 @@ export default function AyarlarScreen() {
             variant="secondary"
             onPress={handleKBSImport}
             loading={kbsImportLoading}
-            disabled={kbsImportLoading || loading || !kbsSettings.kbsTesisKodu?.trim()}
+            disabled={kbsImportLoading || !kbsSettings.kbsTesisKodu?.trim()}
             style={{ marginTop: spacing.sm }}
           >
             KBS'ten mevcut misafirleri getir

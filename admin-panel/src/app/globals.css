@@ -564,10 +564,25 @@ body {
   background: rgba(34, 211, 238, 0.06);
 }
 
+.kbs-table-row-clickable {
+  cursor: pointer;
+}
+.kbs-table-row-clickable:focus {
+  outline: 2px solid var(--kbs-accent);
+  outline-offset: -2px;
+}
+.kbs-table-row-clickable .kbs-table-cell-link {
+  color: var(--kbs-accent);
+  font-weight: 500;
+}
+
 .kbs-table td:last-child {
   text-align: right;
   font-variant-numeric: tabular-nums;
   color: var(--kbs-warning);
+}
+.kbs-table-row-clickable td:last-child {
+  cursor: default;
 }
 
 /* Loading state */
@@ -1196,6 +1211,25 @@ body {
 .admin-tesis-summary-sm code { background: var(--kbs-bg); padding: 0.2rem 0.5rem; border-radius: 6px; }
 .admin-tesis-detail-back { display: flex; align-items: center; gap: 1rem; margin-bottom: 1rem; flex-wrap: wrap; }
 .admin-tesis-detail-back a { color: var(--kbs-accent); text-decoration: none; font-size: 0.95rem; }
+.admin-tesis-users-header { display: flex; align-items: center; justify-content: space-between; gap: 1rem; margin-bottom: 1rem; flex-wrap: wrap; }
+.admin-tesis-users-header .kbs-card-title { margin: 0; }
+
+/* Kullanıcı profil kartı (detay sayfası) */
+.admin-user-profile-card { margin-bottom: 1.5rem; }
+.admin-user-profile-header { display: flex; align-items: flex-start; gap: 1.25rem; flex-wrap: wrap; margin-bottom: 1rem; }
+.admin-user-avatar-wrap { flex-shrink: 0; }
+.admin-user-avatar { width: 72px; height: 72px; border-radius: 50%; object-fit: cover; border: 2px solid var(--kbs-border); }
+.admin-user-avatar-placeholder { width: 72px; height: 72px; border-radius: 50%; background: var(--kbs-accent-dim); color: var(--kbs-accent); display: flex; align-items: center; justify-content: center; font-size: 1.75rem; font-weight: 700; }
+.admin-user-profile-meta { flex: 1; min-width: 0; }
+.admin-user-dates { font-size: 0.875rem; color: var(--kbs-text-muted); margin-top: 0.5rem; }
+.admin-user-dl { margin-top: 0.5rem; }
+.admin-user-danger-zone { border-color: rgba(248, 113, 113, 0.3); margin-top: 1.5rem; }
+.admin-page-title-no-mb { margin-bottom: 0 !important; }
+.admin-user-sub-mt { margin-top: 4px; }
+.admin-form-section-title { margin-top: 1.5rem; margin-bottom: 0.5rem; }
+.admin-form-section-sub { margin-bottom: 1rem; }
+.admin-danger-title { color: var(--kbs-danger); }
+.admin-retry-btn { margin-top: 16px; }
 .admin-card-mb { margin-bottom: 1.5rem; }
 .admin-detail-user-id { background: var(--kbs-surface); padding: 0.2rem 0.5rem; border-radius: 6px; }
 .admin-audit-link { color: var(--kbs-accent); text-decoration: none; }

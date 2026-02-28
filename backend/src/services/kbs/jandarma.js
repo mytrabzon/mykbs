@@ -65,11 +65,13 @@ class JandarmaKBS {
         webServisSifre: this.webServisSifre,
         misafir: {
           ad: misafirData.ad,
+          ad2: misafirData.ad2 || null,
           soyad: misafirData.soyad,
-          kimlikNo: misafirData.kimlikNo,
-          pasaportNo: misafirData.pasaportNo,
+          kimlikNo: misafirData.kimlikNo || null,
+          pasaportNo: misafirData.pasaportNo || null,
           dogumTarihi: misafirData.dogumTarihi,
           uyruk: misafirData.uyruk,
+          misafirTipi: misafirData.misafirTipi || null,
           girisTarihi: misafirData.girisTarihi,
           odaNumarasi: misafirData.odaNumarasi
         }

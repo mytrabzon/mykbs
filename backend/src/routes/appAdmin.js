@@ -573,7 +573,7 @@ router.get('/kullanicilar/:id', async (req, res) => {
   try {
     const k = await prisma.kullanici.findUnique({
       where: { id: req.params.id },
-      include: { tesis: { select: { id: true, tesisAdi: true, tesisKodu: true } } },
+      include: { tesis: { select: { id: true, tesisAdi: true, tesisKodu: true, paket: true, trialEndsAt: true, createdAt: true } } },
     });
     if (!k) return res.status(404).json({ message: 'Kullanıcı bulunamadı' });
     const { pin, sifre, ...rest } = k;

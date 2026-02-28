@@ -89,8 +89,12 @@ export default function TesisKullanicilarPage() {
             </thead>
             <tbody>
               {kullanicilar.map((k) => (
-                <tr key={k.id}>
-                  <td>{k.adSoyad}</td>
+                <tr
+                  key={k.id}
+                  className="kbs-table-row-clickable"
+                  onClick={() => router.push(`/kullanicilar/${k.id}`)}
+                >
+                  <td className="kbs-table-cell-link">{k.adSoyad}</td>
                   <td>{k.telefon}</td>
                   <td>{k.email || '—'}</td>
                   <td>{k.rol}</td>
@@ -98,9 +102,9 @@ export default function TesisKullanicilarPage() {
                   <td>{k.odaDegistirmeYetki ? 'Evet' : 'Hayır'}</td>
                   <td>{k.bilgiDuzenlemeYetki ? 'Evet' : 'Hayır'}</td>
                   <td>{k.girisOnaylandi ? 'Evet' : 'Hayır'}</td>
-                  <td>
+                  <td onClick={(e) => e.stopPropagation()}>
                     <Link href={`/kullanicilar/${k.id}`} className="kbs-btn-primary admin-users-link">
-                      Düzenle
+                      Detay / Düzenle
                     </Link>
                   </td>
                 </tr>

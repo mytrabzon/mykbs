@@ -1,6 +1,6 @@
-import React, { useState, useRef, useCallback } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Alert, ActivityIndicator, Platform, Image, ScrollView } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import React, { useState, useRef, useCallback, useEffect } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, Alert, ActivityIndicator, Platform, Image, ScrollView, PanResponder, BackHandler } from 'react-native';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRoute } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
@@ -22,6 +22,14 @@ try {
   DocType = pkg.DocType || DocType;
 } catch (e) {
   logger.warn('MRZ reader not available', e?.message);
+}
+
+let TorchModule = null;
+try {
+  const T = require('react-native-torch');
+  TorchModule = T.default || T;
+} catch (e) {
+  logger.warn('Torch not available', e?.message);
 }
 
 const TIMEOUT_MS = 15000;
@@ -67,20 +75,39 @@ export default function MrzScanScreen({ navigation }) {
   const [stableReadCount, setStableReadCount] = useState(0);
   const [lastMrzChecksReason, setLastMrzChecksReason] = useState('');
   const [cameraReady, setCameraReady] = useState(false);
-  const [ocrLatencyMs, setOcrLatencyMs] = useState(null);
   const [showDebug, setShowDebug] = useState(false);
   const [instantPayload, setInstantPayload] = useState(null);
   const [showFrontCamera, setShowFrontCamera] = useState(false);
   const [frontImageUri, setFrontImageUri] = useState(null);
   const [mergedPayload, setMergedPayload] = useState(null);
   const [frontLoading, setFrontLoading] = useState(false);
-  const [readTimeMs, setReadTimeMs] = useState(null);
+  const [torchOn, setTorchOn] = useState(false);
   const timeoutRef = useRef(null);
   const mounted = useRef(true);
   const lastStableRawRef = useRef('');
   const stableCountRef = useRef(0);
   const frontCameraRef = useRef(null);
+  const insets = useSafeAreaInsets();
   const [permission, requestPermission] = useCameraPermissions();
+
+  const goBack = useCallback(() => {
+    navigation.goBack();
+  }, [navigation]);
+
+  useEffect(() => {
+    const sub = BackHandler.addEventListener('hardwareBackPress', () => {
+      goBack();
+      return true;
+    });
+    return () => {
+      sub.remove();
+      if (TorchModule) {
+        try {
+          TorchModule.switchState(false);
+        } catch (e) {}
+      }
+    };
+  }, [goBack]);
 
 
   const handleMRZRead = useCallback(
@@ -116,7 +143,6 @@ export default function MrzScanScreen({ navigation }) {
         return;
       }
       setLastMrzChecksReason('');
-      setReadTimeMs(Date.now() - t0);
       if (SHOW_INSTANT_RESULT && fromCheckIn) {
         if (timeoutRef.current) clearTimeout(timeoutRef.current);
         setInstantPayload(payload);
@@ -155,9 +181,6 @@ export default function MrzScanScreen({ navigation }) {
         const fixed = fixMrzOcrErrors(raw);
         if (fixed !== raw) payload = parseMrz(fixed);
       }
-      const latency = Date.now() - t0;
-      setOcrLatencyMs(latency);
-      setReadTimeMs(latency);
       setLastMrzRaw(raw.slice(0, 30) + '…');
       if (payload.checks?.ok) {
         if (SHOW_INSTANT_RESULT && fromCheckIn) {
@@ -200,15 +223,15 @@ export default function MrzScanScreen({ navigation }) {
     [processMrzRaw]
   );
 
-  /** Tek fotoğraftan otomatik algılama: pasaport/kimlik = MRZ, ehliyet = ön yüz OCR. Backend tek kaynak — hızlı çalışır. */
+  /** Tek fotoğraftan otomatik algılama: pasaport/kimlik = MRZ, ehliyet = ön yüz OCR. Galeriden seçimde base64 kullan (FormData content URI sorununu aşar). */
   const uploadImageForDocument = useCallback(
     async (uri) => {
       if (!mounted.current) return;
       setOcrLoading(true);
       try {
-        const formData = new FormData();
-        formData.append('image', { uri, type: 'image/jpeg', name: 'document.jpg' });
-        const { data } = await api.post('/ocr/document', formData);
+        const FileSystem = require('expo-file-system').default;
+        const base64 = await FileSystem.readAsStringAsync(uri, { encoding: FileSystem.EncodingType.Base64 });
+        const { data } = await api.post('/ocr/document-base64', { imageBase64: base64 });
         if (!mounted.current) return;
         const mrzRaw = data?.mrz;
         const mrzPayload = data?.mrzPayload;
@@ -228,7 +251,6 @@ export default function MrzScanScreen({ navigation }) {
             nationality: merged.uyruk || 'TÜRK',
           });
           setFrontImageUri(uri);
-          setReadTimeMs(null);
           return;
         }
         if (front && (front.ad || front.soyad)) {
@@ -249,7 +271,6 @@ export default function MrzScanScreen({ navigation }) {
           });
           setInstantPayload(payload);
           setFrontImageUri(uri);
-          setReadTimeMs(null);
           return;
         }
         Toast.show({ type: 'error', text1: 'Belge okunamadı', text2: 'MRZ veya ön yüz net görünsün.' });
@@ -416,9 +437,6 @@ export default function MrzScanScreen({ navigation }) {
             <Text style={whiteResultStyles.headerTitle}>Kimlik / Pasaport bilgileri</Text>
             <View style={whiteResultStyles.backBtn} />
           </View>
-          {readTimeMs != null && (
-            <Text style={whiteResultStyles.latency}>{readTimeMs} ms içinde okundu</Text>
-          )}
           {frontImageUri ? (
             <View style={whiteResultStyles.photoWrap}>
               <Image source={{ uri: frontImageUri }} style={whiteResultStyles.photo} resizeMode="cover" />
@@ -516,6 +534,7 @@ export default function MrzScanScreen({ navigation }) {
           <Ionicons name="document-text-outline" size={64} color={theme.colors.textSecondary} />
           <Text style={styles.placeholderTitle}>Pasaport · Kimlik · Ehliyet</Text>
           <Text style={styles.placeholderText}>Otomatik algılanır: MRZ (pasaport/kimlik) veya ön yüz (ehliyet).</Text>
+          <Text style={styles.placeholderHint}>Canlı MRZ tarama bu ortamda yok; fotoğraf veya kamera ile tek çekim yapıp sunucuda okutulur.</Text>
           <TouchableOpacity style={styles.button} onPress={handleTakePhoto} disabled={ocrLoading}>
             <Text style={styles.buttonText}>Kamera ile tara</Text>
           </TouchableOpacity>
@@ -531,24 +550,43 @@ export default function MrzScanScreen({ navigation }) {
     );
   }
 
+  const toggleTorch = useCallback(() => {
+    if (!TorchModule) return;
+    try {
+      const next = !torchOn;
+      TorchModule.switchState(next);
+      setTorchOn(next);
+    } catch (e) {
+      Toast.show({ type: 'error', text1: 'Fener kullanılamıyor', text2: e?.message || 'Bu cihazda desteklenmiyor olabilir.' });
+    }
+  }, [torchOn]);
+
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.iconBtn}>
-          <Ionicons name="arrow-back" size={24} color={theme.colors.textPrimary} />
+    <View style={styles.container}>
+      <MrzReaderView
+        style={StyleSheet.absoluteFill}
+        docType={selectedDocType}
+        cameraSelector={CameraSelector.Back}
+        onMRZRead={handleMRZRead}
+      />
+      <View style={[styles.overlayTop, { paddingTop: insets.top + 8 }, styles.overlayTopZ]} pointerEvents="box-none">
+        <TouchableOpacity
+          onPress={goBack}
+          style={styles.overlayIconBtn}
+          hitSlop={{ top: 16, bottom: 16, left: 16, right: 16 }}
+          activeOpacity={0.7}
+        >
+          <Ionicons name="arrow-back" size={28} color="#fff" />
         </TouchableOpacity>
-        <TouchableOpacity style={styles.titleWrap} onLongPress={() => setShowDebug((d) => !d)}>
-          <Text style={styles.title}>MRZ Tara</Text>
-          {stableReadCount > 0 && (
-            <Text style={styles.stableBadge}>{stableReadCount}/{STABLE_READ_COUNT}</Text>
-          )}
+        <TouchableOpacity style={styles.titleWrap} onLongPress={() => setShowDebug((d) => !d)} pointerEvents="box-none">
+          <Text style={styles.overlayTitle}>MRZ Tara</Text>
         </TouchableOpacity>
-        <TouchableOpacity onPress={() => setHelpVisible(true)} style={styles.iconBtn}>
-          <Ionicons name="help-circle-outline" size={24} color={theme.colors.primary} />
+        <TouchableOpacity onPress={() => setHelpVisible(true)} style={styles.overlayIconBtn}>
+          <Ionicons name="help-circle-outline" size={26} color="#fff" />
         </TouchableOpacity>
       </View>
       {showDebug && (
-        <View style={styles.debugPanel}>
+        <View style={[styles.debugPanel, { top: insets.top + 52 }]}>
           <Text style={styles.debugTitle}>Debug</Text>
           <Text style={styles.debugLine}>permission: {permission?.granted ? 'ok' : 'yok'}</Text>
           <Text style={styles.debugLine}>cameraReady: {cameraReady ? 'ok' : 'N/A (native reader)'}</Text>
@@ -556,40 +594,45 @@ export default function MrzScanScreen({ navigation }) {
           <Text style={styles.debugLine}>checksReason: {lastMrzChecksReason || '—'}</Text>
           <Text style={styles.debugLine}>failCount: {failCount}</Text>
           <Text style={styles.debugLine}>stableReadCount: {stableReadCount}</Text>
-          {ocrLatencyMs != null && <Text style={styles.debugLine}>ocrLatencyMs: {ocrLatencyMs}</Text>}
         </View>
       )}
-      <View style={styles.cameraWrap}>
-        <MrzReaderView
-          style={styles.camera}
-          docType={selectedDocType}
-          cameraSelector={CameraSelector.Back}
-          onMRZRead={handleMRZRead}
-        />
-        <View style={styles.overlay} pointerEvents="none">
-          <View style={styles.frame} />
-          <Text style={styles.frameHint}>Pasaport/kimlik: MRZ alanını hizalayın · Ehliyet: "Fotoğraf ile tara"</Text>
-          <Text style={styles.frameHintSecondary}>Belge tipi seçilmez; otomatik algılanır</Text>
-        </View>
+      <View style={styles.overlayCenter} pointerEvents="none">
+        <View style={styles.frame} />
+        <Text style={styles.frameHint}>MRZ alanını hizalayın · Karanlıkta fener kullanın</Text>
       </View>
-      <View style={styles.photoFallbackRow}>
-        <TouchableOpacity style={styles.photoFallbackBtn} onPress={handlePickImage} disabled={ocrLoading}>
-          <Ionicons name="image-outline" size={20} color="rgba(255,255,255,0.9)" />
-          <Text style={styles.photoFallbackBtnText}>Fotoğraf ile tara</Text>
+      <View style={[styles.overlayBottom, { paddingBottom: insets.bottom + 20 }]} pointerEvents="box-none">
+        <TouchableOpacity
+          style={styles.overlayBottomBtn}
+          onPress={handlePickImage}
+          disabled={ocrLoading}
+          activeOpacity={0.8}
+        >
+          <Ionicons name="images-outline" size={28} color="#fff" />
         </TouchableOpacity>
+        {TorchModule ? (
+          <TouchableOpacity
+            style={[styles.overlayBottomBtn, styles.torchBtnRound, torchOn && styles.torchBtnRoundOn]}
+            onPress={toggleTorch}
+            activeOpacity={0.8}
+          >
+            <Ionicons name={torchOn ? 'flash' : 'flash-outline'} size={28} color="#fff" />
+          </TouchableOpacity>
+        ) : (
+          <View style={styles.overlayBottomBtn} />
+        )}
       </View>
       {(timeoutWarning || (failCount > 0 && lastMrzChecksReason)) && (
-        <View style={styles.banner}>
-          <Ionicons name="warning-outline" size={20} color={theme.colors.warning} />
+        <View style={[styles.bannerFloating, { bottom: insets.bottom + 80 }]}>
+          <Ionicons name="warning-outline" size={18} color={theme.colors.warning} />
           <Text style={styles.bannerText}>
             {lastMrzChecksReason
-              ? (lastMrzChecksReason === 'invalid_format' ? 'MRZ görünmüyor veya format tanınmadı. Çizgileri net gösterin.' : 'Check digit hatası; belgeyi net tutun veya flaş kullanın.')
-              : 'Işık, odak veya hiza kontrol edin. İpucu için ? tuşuna basın.'}
+              ? (lastMrzChecksReason === 'invalid_format' ? 'MRZ görünmüyor veya format tanınmadı.' : 'Check digit hatası; fener kullanın.')
+              : 'Işık veya hiza kontrol edin. ? ile ipucu.'}
           </Text>
         </View>
       )}
       <ScanHelpSheet visible={helpVisible} onClose={() => setHelpVisible(false)} />
-    </SafeAreaView>
+    </View>
   );
 }
 
@@ -653,12 +696,15 @@ function CameraFallbackView({ onCapture, onBack, loading, permission, requestPer
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#000' },
-  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: theme.spacing.base, paddingVertical: theme.spacing.sm, backgroundColor: 'rgba(0,0,0,0.6)' },
+  overlayTop: { position: 'absolute', top: 0, left: 0, right: 0, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 12 },
+  overlayTopZ: { zIndex: 10, elevation: 10, backgroundColor: 'rgba(0,0,0,0.5)' },
+  overlayIconBtn: { width: 44, height: 44, borderRadius: 22, backgroundColor: 'rgba(0,0,0,0.35)', alignItems: 'center', justifyContent: 'center' },
   titleWrap: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  overlayTitle: { fontSize: theme.typography.fontSize.lg, fontWeight: theme.typography.fontWeight.semibold, color: '#fff' },
+  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: theme.spacing.base, paddingVertical: theme.spacing.sm, backgroundColor: 'rgba(0,0,0,0.6)' },
   title: { fontSize: theme.typography.fontSize.lg, fontWeight: theme.typography.fontWeight.semibold, color: theme.colors.white },
-  stableBadge: { fontSize: 11, color: 'rgba(255,255,255,0.8)', backgroundColor: 'rgba(255,255,255,0.2)', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 10 },
   iconBtn: { padding: theme.spacing.sm },
-  debugPanel: { backgroundColor: 'rgba(0,0,0,0.85)', padding: theme.spacing.sm, marginHorizontal: theme.spacing.sm, marginBottom: 4, borderRadius: 8 },
+  debugPanel: { position: 'absolute', left: 12, right: 12, backgroundColor: 'rgba(0,0,0,0.88)', padding: theme.spacing.sm, borderRadius: 8 },
   debugTitle: { color: theme.colors.warning, fontWeight: '600', marginBottom: 4 },
   debugLine: { color: 'rgba(255,255,255,0.9)', fontSize: 11 },
   docTypeRow: { flexDirection: 'row', paddingHorizontal: theme.spacing.base, paddingVertical: theme.spacing.sm, gap: theme.spacing.sm },
@@ -668,18 +714,24 @@ const styles = StyleSheet.create({
   docTypeBtnTextActive: { color: '#fff' },
   cameraWrap: { flex: 1, position: 'relative' },
   camera: { flex: 1, width: '100%' },
-  overlay: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center' },
+  overlayCenter: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center' },
   frame: { width: '90%', height: 120, borderWidth: 2, borderColor: 'rgba(255,255,255,0.7)', borderRadius: 8 },
-  frameHint: { marginTop: theme.spacing.sm, color: 'rgba(255,255,255,0.9)', fontSize: theme.typography.fontSize.sm },
+  frameHint: { marginTop: theme.spacing.sm, color: 'rgba(255,255,255,0.95)', fontSize: theme.typography.fontSize.sm, textAlign: 'center', paddingHorizontal: theme.spacing.base },
   frameHintSecondary: { marginTop: 4, color: 'rgba(255,255,255,0.7)', fontSize: 11, textAlign: 'center', paddingHorizontal: theme.spacing.base },
+  overlayBottom: { position: 'absolute', bottom: 0, left: 0, right: 0, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 28 },
+  overlayBottomBtn: { width: 52, height: 52, borderRadius: 26, backgroundColor: 'rgba(0,0,0,0.4)', alignItems: 'center', justifyContent: 'center' },
+  torchBtnRound: {},
+  torchBtnRoundOn: { backgroundColor: 'rgba(255,180,0,0.85)' },
+  bannerFloating: { position: 'absolute', left: 12, right: 12, flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.75)', padding: 10, borderRadius: 8 },
+  bannerText: { marginLeft: theme.spacing.sm, color: '#fff', fontSize: theme.typography.fontSize.sm, flex: 1 },
   photoFallbackRow: { flexDirection: 'row', justifyContent: 'center', paddingVertical: theme.spacing.sm, backgroundColor: 'rgba(0,0,0,0.5)' },
   photoFallbackBtn: { flexDirection: 'row', alignItems: 'center', paddingVertical: 8, paddingHorizontal: 16, borderRadius: 8, backgroundColor: 'rgba(255,255,255,0.15)' },
   photoFallbackBtnText: { color: 'rgba(255,255,255,0.9)', marginLeft: 8, fontSize: theme.typography.fontSize.sm, fontWeight: '600' },
   banner: { flexDirection: 'row', alignItems: 'center', backgroundColor: theme.colors.warningSoft, padding: theme.spacing.sm, margin: theme.spacing.sm, borderRadius: 8 },
-  bannerText: { marginLeft: theme.spacing.sm, color: theme.colors.textPrimary, fontSize: theme.typography.fontSize.sm, flex: 1 },
   placeholder: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: theme.spacing.xl },
   placeholderTitle: { fontSize: theme.typography.fontSize.xl, fontWeight: theme.typography.fontWeight.semibold, color: theme.colors.textPrimary, marginBottom: theme.spacing.sm },
-  placeholderText: { marginTop: theme.spacing.xs, color: theme.colors.textSecondary, textAlign: 'center', marginBottom: theme.spacing.lg },
+  placeholderText: { marginTop: theme.spacing.xs, color: theme.colors.textSecondary, textAlign: 'center', marginBottom: theme.spacing.sm },
+  placeholderHint: { fontSize: 12, color: theme.colors.textSecondary, textAlign: 'center', marginBottom: theme.spacing.lg, fontStyle: 'italic' },
   button: { marginTop: theme.spacing.sm, ...theme.styles.button.primary, paddingHorizontal: theme.spacing.xl },
   buttonSecondary: { backgroundColor: 'transparent', borderWidth: 2, borderColor: theme.colors.primary },
   buttonText: { color: '#fff', fontWeight: theme.typography.fontWeight.semibold },
@@ -701,7 +753,6 @@ const whiteResultStyles = StyleSheet.create({
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: theme.spacing.sm, marginBottom: 8 },
   backBtn: { padding: theme.spacing.sm, minWidth: 44 },
   headerTitle: { fontSize: theme.typography.fontSize.xl, fontWeight: '700', color: '#111' },
-  latency: { fontSize: theme.typography.fontSize.sm, color: theme.colors.success, marginBottom: theme.spacing.sm, fontWeight: '600' },
   photoWrap: { alignSelf: 'center', width: 120, height: 150, borderRadius: 8, overflow: 'hidden', backgroundColor: '#f0f0f0', marginBottom: theme.spacing.lg },
   photo: { width: '100%', height: '100%' },
   card: { backgroundColor: '#F8F9FA', borderRadius: 12, padding: theme.spacing.lg, marginBottom: theme.spacing.lg },

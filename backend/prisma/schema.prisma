@@ -144,12 +144,14 @@ model Misafir {
   id                String   @id @default(cuid())
   odaId             String
   tesisId           String
-  ad                String
+  ad                String   // 1. ad
+  ad2               String?  // 2. ad (opsiyonel)
   soyad             String
-  kimlikNo          String   // Maskeli saklanacak
-  pasaportNo        String?  // Maskeli saklanacak
+  kimlikNo          String?  // TC no (maskeli saklanacak)
+  pasaportNo        String?  // Pasaport no (maskeli saklanacak)
   dogumTarihi       DateTime
-  uyruk             String
+  uyruk             String   // Ülke / uyruk
+  misafirTipi       String?  // tc_vatandasi | ykn | yabanci (Jandarma/Polis bildirimi için)
   girisTarihi       DateTime @default(now())
   cikisTarihi       DateTime?
   

@@ -6,6 +6,7 @@
     "postinstall": "node scripts/ensure-patch-package-state.js && node -e \"try{require('child_process').execSync('npx patch-package',{stdio:'inherit'})}catch(e){console.warn('patch-package skipped')}\"",
     "start": "expo start",
     "start:dev": "expo start --dev-client",
+    "start:dev:clear": "expo start --dev-client --clear",
     "start:development": "NODE_ENV=development expo start --dev-client --clear",
     "android": "expo run:android",
     "ios": "expo run:ios",
@@ -44,6 +45,7 @@
     "react-native-nfc-manager": "^3.14.3",
     "react-native-safe-area-context": "~5.6.0",
     "react-native-screens": "~4.16.0",
+    "react-native-torch": "^1.0.5",
     "react-native-toast-message": "^2.1.6",
     "react-native-webview": "13.15.0"
   },
@@ -52,7 +54,8 @@
       "reactNativeDirectoryCheck": {
         "exclude": [
           "@corupta/react-native-mrz-reader",
-          "react-native-nfc-manager"
+          "react-native-nfc-manager",
+          "react-native-torch"
         ]
       }
     }

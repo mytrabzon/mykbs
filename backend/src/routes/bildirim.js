@@ -81,7 +81,7 @@ router.get('/', async (req, res) => {
  */
 router.post('/toplu-gonder', async (req, res) => {
   try {
-    const { misafirIds } = req.body; // Array of misafir IDs
+    const { misafirIds, misafirTipi } = req.body; // misafirIds: array; misafirTipi: tc_vatandasi | ykn | yabanci (tek sefer, hepsine uygulanır)
 
     if (!misafirIds || !Array.isArray(misafirIds) || misafirIds.length === 0) {
       return res.status(400).json({ message: 'Misafir ID\'leri gerekli' });
@@ -128,11 +128,13 @@ router.post('/toplu-gonder', async (req, res) => {
       try {
         const kbsResult = await kbsService.bildirimGonder({
           ad: misafir.ad,
+          ad2: misafir.ad2 || null,
           soyad: misafir.soyad,
           kimlikNo: misafir.kimlikNo,
           pasaportNo: misafir.pasaportNo,
           dogumTarihi: misafir.dogumTarihi,
           uyruk: misafir.uyruk,
+          misafirTipi: misafirTipi || misafir.misafirTipi || null,
           girisTarihi: misafir.girisTarihi,
           odaNumarasi: misafir.oda.odaNumarasi
         });
@@ -241,11 +243,13 @@ router.post('/:bildirimId/tekrar-dene', async (req, res) => {
         const kbsService = createKBSService(tesisForRetry);
         const kbsResult = await kbsService.bildirimGonder({
           ad: bildirim.misafir.ad,
+          ad2: bildirim.misafir.ad2 || null,
           soyad: bildirim.misafir.soyad,
           kimlikNo: bildirim.misafir.kimlikNo,
           pasaportNo: bildirim.misafir.pasaportNo,
           dogumTarihi: bildirim.misafir.dogumTarihi,
           uyruk: bildirim.misafir.uyruk,
+          misafirTipi: bildirim.misafir.misafirTipi || null,
           girisTarihi: bildirim.misafir.girisTarihi,
           odaNumarasi: bildirim.misafir.oda.odaNumarasi
         });

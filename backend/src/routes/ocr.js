@@ -126,25 +126,33 @@ router.post('/mrz', authenticateTesisOrSupabase, upload.single('image'), async (
 });
 
 /** Tek görsel: MRZ + ön yüz OCR birleşik. Ön işleme MRZ okumayı iyileştirir. Dosya yanıt sonrası silinir. */
+/** Tek dosya yolundan OCR çalıştır (document ve document-base64 ortak). */
+function runOcrOnFile(filePath) {
+  const languages = 'tur+eng';
+  return preprocessImageForMrz(filePath).then((processedPath) =>
+    Tesseract.recognize(processedPath, languages, { logger: () => {} }).then(({ data: { text } }) => {
+      const mrzRaw = extractMrzFromOcr(text);
+      const parsed = parseIdentityDocument(text);
+      const mrzPayload = mrzRaw ? parseMrzToPayload(mrzRaw) : null;
+      const merged = mergeMrzAndFront(mrzPayload, parsed);
+      return { rawText: text, mrzRaw, mrzPayload, front: parsed, merged };
+    })
+  );
+}
+
 router.post('/document', authenticateTesisOrSupabase, upload.single('image'), async (req, res) => {
   const filePath = req.file?.path;
   try {
     if (!req.file || !filePath) {
       return res.status(400).json({ message: 'Görüntü yüklenmedi' });
     }
-    const languages = req.query.languages || 'tur+eng';
-    const processedPath = await preprocessImageForMrz(filePath);
-    const { data: { text } } = await Tesseract.recognize(processedPath, languages, { logger: () => {} });
-    const mrzRaw = extractMrzFromOcr(text);
-    const parsed = parseIdentityDocument(text);
-    const mrzPayload = mrzRaw ? parseMrzToPayload(mrzRaw) : null;
-    const merged = mergeMrzAndFront(mrzPayload, parsed);
+    const { rawText, mrzRaw, mrzPayload, front, merged } = await runOcrOnFile(filePath);
     res.json({
       success: true,
-      rawText: text,
+      rawText: rawText,
       mrz: mrzRaw || null,
       mrzPayload: mrzPayload || null,
-      front: parsed,
+      front,
       merged,
     });
   } catch (error) {
@@ -153,6 +161,42 @@ router.post('/document', authenticateTesisOrSupabase, upload.single('image'), as
   } finally {
     if (filePath && fs.existsSync(filePath)) {
       fs.unlink(filePath, () => {});
+    }
+  }
+});
+
+/** Galeriden seçilen görsel: base64 ile gönder (Android content URI FormData sorununu aşar). */
+router.post('/document-base64', authenticateTesisOrSupabase, express.json({ limit: '8mb' }), async (req, res) => {
+  const base64 = req.body?.imageBase64;
+  let filePath = null;
+  try {
+    if (!base64 || typeof base64 !== 'string') {
+      return res.status(400).json({ message: 'imageBase64 gerekli' });
+    }
+    const buf = Buffer.from(base64, 'base64');
+    if (buf.length === 0) {
+      return res.status(400).json({ message: 'Geçersiz görüntü' });
+    }
+    if (!fs.existsSync(KIMLIK_UPLOAD_DIR)) {
+      fs.mkdirSync(KIMLIK_UPLOAD_DIR, { recursive: true });
+    }
+    filePath = path.join(KIMLIK_UPLOAD_DIR, `base64_${Date.now()}_${Math.random().toString(36).slice(2, 8)}.jpg`);
+    fs.writeFileSync(filePath, buf);
+    const { rawText, mrzRaw, mrzPayload, front, merged } = await runOcrOnFile(filePath);
+    res.json({
+      success: true,
+      rawText,
+      mrz: mrzRaw || null,
+      mrzPayload: mrzPayload || null,
+      front,
+      merged,
+    });
+  } catch (error) {
+    console.error('OCR document-base64 hatası:', error);
+    res.status(500).json({ message: 'Belge okunamadı', error: error.message });
+  } finally {
+    if (filePath && fs.existsSync(filePath)) {
+      try { fs.unlinkSync(filePath); } catch (_) {}
     }
   }
 });

@@ -68,26 +68,31 @@ export const AuthProvider = ({ children }) => {
   const [recoverySessionPending, setRecoverySessionPending] = useState(false);
   const mounted = useRef(true);
 
-  /** Supabase kullanılıyorsa her istekte güncel session'dan token alır; süresi dolmuşsa refresh eder. Böylece "Geçersiz token" 401 önlenir. */
+  /** Supabase kullanılıyorsa her istekte güncel session'dan token alır; süresi dolmuşsa refresh eder. Böylece "Geçersiz token" 401 önlenir. getSession hata verirse veya session boşsa AsyncStorage'dan dön (oturum açıkken token null görünmesin). */
   const getSupabaseAwareTokenProvider = () => {
     return async () => {
-      if (supabase?.auth) {
-        const { data: { session } } = await supabase.auth.getSession();
-        if (session?.access_token) {
-          const expiresAt = session.expires_at;
-          const nowSec = Math.floor(Date.now() / 1000);
-          const bufferSec = 5 * 60;
-          if (!expiresAt || expiresAt > nowSec + bufferSec) {
+      try {
+        if (supabase?.auth) {
+          const { data: { session } } = await supabase.auth.getSession();
+          if (session?.access_token) {
+            const expiresAt = session.expires_at;
+            const nowSec = Math.floor(Date.now() / 1000);
+            const bufferSec = 5 * 60;
+            if (!expiresAt || expiresAt > nowSec + bufferSec) {
+              return session.access_token;
+            }
+            const { data: { session: refreshed }, error } = await supabase.auth.refreshSession();
+            if (!error && refreshed?.access_token) {
+              await AsyncStorage.setItem(AUTH_STORAGE_KEYS.SUPABASE_TOKEN, refreshed.access_token);
+              await AsyncStorage.setItem(AUTH_STORAGE_KEYS.TOKEN, refreshed.access_token);
+              setToken(refreshed.access_token);
+              return refreshed.access_token;
+            }
             return session.access_token;
           }
-          const { data: { session: refreshed }, error } = await supabase.auth.refreshSession();
-          if (!error && refreshed?.access_token) {
-            await AsyncStorage.setItem(AUTH_STORAGE_KEYS.SUPABASE_TOKEN, refreshed.access_token);
-            await AsyncStorage.setItem(AUTH_STORAGE_KEYS.TOKEN, refreshed.access_token);
-            setToken(refreshed.access_token);
-            return refreshed.access_token;
-          }
         }
+      } catch (e) {
+        logger.warn('getSupabaseAwareTokenProvider getSession/refresh failed, using storage', e?.message || e);
       }
       return await AsyncStorage.getItem(AUTH_STORAGE_KEYS.TOKEN);
     };

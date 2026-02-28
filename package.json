@@ -6,6 +6,8 @@
     "postinstall": "node -e \"require('child_process').execSync('npm install --prefix backend' + (process.env.NODE_ENV === 'production' ? ' --omit=dev' : ''), { stdio: 'inherit' })\"",
     "mobile": "npm run start --prefix mobile",
     "mobile:dev": "npm run start:dev --prefix mobile",
+    "mobile:dev:clear": "npm run start:dev:clear --prefix mobile",
+    "expo": "npm run start:dev:clear --prefix mobile",
     "backend": "npm start --prefix backend",
     "deploy": "npm run deploy --prefix backend",
     "admin": "npm run dev --prefix admin-panel"

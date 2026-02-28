@@ -28,11 +28,13 @@ export default function CheckInScreen({ navigation, route }) {
   const [selectedOda, setSelectedOda] = useState(null);
   const [formData, setFormData] = useState({
     ad: '',
+    ad2: '',
     soyad: '',
     kimlikNo: '',
     pasaportNo: '',
     dogumTarihi: '',
-    uyruk: 'TÜRK'
+    uyruk: 'TÜRK',
+    misafirTipi: '' // tc_vatandasi | ykn | yabanci — Jandarma/Polis için
   });
   const [nfcSupported, setNfcSupported] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -61,11 +63,13 @@ export default function CheckInScreen({ navigation, route }) {
         setFormData(prev => ({
           ...prev,
           ad: (doc.ad || '').trim() || prev.ad,
+          ad2: (doc.ad2 || '').trim() || prev.ad2,
           soyad: (doc.soyad || '').trim() || prev.soyad,
           kimlikNo: (doc.kimlikNo || '').trim() || prev.kimlikNo,
           pasaportNo: (doc.pasaportNo || '').trim() || prev.pasaportNo,
           dogumTarihi: (doc.dogumTarihi || '').trim() || prev.dogumTarihi,
           uyruk: (doc.uyruk || 'TÜRK').trim() || prev.uyruk,
+          misafirTipi: (doc.misafirTipi || '').trim() || prev.misafirTipi,
         }));
         setDocumentPhotoUri(route.params?.photoUri || null);
         setStep(3);
@@ -79,9 +83,12 @@ export default function CheckInScreen({ navigation, route }) {
         const [y, m, d] = iso.split('-');
         return [d, m, y].filter(Boolean).join('.');
       };
+      const givenNames = (p.givenNames || '').trim();
+      const nameParts = givenNames ? givenNames.split(/\s+/) : [];
       setFormData(prev => ({
         ...prev,
-        ad: (p.givenNames || '').trim(),
+        ad: nameParts[0] || '',
+        ad2: nameParts.length > 1 ? nameParts.slice(1).join(' ') : prev.ad2,
         soyad: (p.surname || '').trim(),
         pasaportNo: (p.passportNumber || '').trim(),
         kimlikNo: /^\d{11}$/.test((p.passportNumber || '').trim()) ? (p.passportNumber || '').trim() : prev.kimlikNo,
@@ -155,7 +162,11 @@ export default function CheckInScreen({ navigation, route }) {
     try {
       logger.log('NFC read started');
       // Pasaport / kimlik çipi IsoDep (ISO 14443-4) kullanır; NDEF sadece basit etiketler içindir
-      const tech = NfcManager.NfcTech.IsoDep ?? NfcManager.NfcTech.NfcA ?? NfcManager.NfcTech.Ndef;
+      const NfcTech = NfcManager.NfcTech;
+      if (!NfcTech) {
+        throw new Error('NFC bu cihazda desteklenmiyor.');
+      }
+      const tech = NfcTech.IsoDep ?? NfcTech.NfcA ?? NfcTech.Ndef;
       await NfcManager.requestTechnology(tech);
       techRequested = true;
       const tag = await NfcManager.getTag();
@@ -328,7 +339,18 @@ export default function CheckInScreen({ navigation, route }) {
       }
 
       setLoading(true);
-      const payload = { odaId: selectedOda.id, room_number: selectedOda.odaNumarasi, ...formData };
+      const payload = {
+        odaId: selectedOda.id,
+        room_number: selectedOda.odaNumarasi,
+        ad: formData.ad,
+        ad2: formData.ad2 || undefined,
+        soyad: formData.soyad,
+        kimlikNo: formData.kimlikNo || undefined,
+        pasaportNo: formData.pasaportNo || undefined,
+        dogumTarihi: formData.dogumTarihi,
+        uyruk: formData.uyruk,
+        misafirTipi: formData.misafirTipi || undefined
+      };
       logger.api('POST', '/misafir/checkin', payload);
       
       const response = await api.post('/misafir/checkin', payload);
@@ -591,17 +613,73 @@ export default function CheckInScreen({ navigation, route }) {
           </View>
         ) : null}
 
+        {/* Kimlik okunduğunda tüm bilgiler şeffaf arka planda (Jandarma/Polis’e gidecek alanlar) */}
+        <View style={styles.transparentInfoCard}>
+          <Text style={styles.transparentInfoTitle}>Okunan Kimlik Bilgileri (KBS’e gidecek)</Text>
+          <View style={styles.transparentInfoRow}>
+            <Text style={styles.transparentInfoLabel}>1. Ad</Text>
+            <Text style={styles.transparentInfoValue}>{formData.ad || '—'}</Text>
+          </View>
+          <View style={styles.transparentInfoRow}>
+            <Text style={styles.transparentInfoLabel}>2. Ad</Text>
+            <Text style={styles.transparentInfoValue}>{formData.ad2 || '—'}</Text>
+          </View>
+          <View style={styles.transparentInfoRow}>
+            <Text style={styles.transparentInfoLabel}>Soyad</Text>
+            <Text style={styles.transparentInfoValue}>{formData.soyad || '—'}</Text>
+          </View>
+          <View style={styles.transparentInfoRow}>
+            <Text style={styles.transparentInfoLabel}>T.C. Kimlik No</Text>
+            <Text style={styles.transparentInfoValue}>{formData.kimlikNo || '—'}</Text>
+          </View>
+          <View style={styles.transparentInfoRow}>
+            <Text style={styles.transparentInfoLabel}>Pasaport No</Text>
+            <Text style={styles.transparentInfoValue}>{formData.pasaportNo || '—'}</Text>
+          </View>
+          <View style={styles.transparentInfoRow}>
+            <Text style={styles.transparentInfoLabel}>Doğum Tarihi</Text>
+            <Text style={styles.transparentInfoValue}>{formData.dogumTarihi || '—'}</Text>
+          </View>
+          <View style={styles.transparentInfoRow}>
+            <Text style={styles.transparentInfoLabel}>Ülke / Uyruk</Text>
+            <Text style={styles.transparentInfoValue}>{formData.uyruk || '—'}</Text>
+          </View>
+          <View style={styles.transparentInfoRow}>
+            <Text style={styles.transparentInfoLabel}>Oda No</Text>
+            <Text style={styles.transparentInfoValue}>{selectedOda?.odaNumarasi || '—'}</Text>
+          </View>
+          <View style={styles.transparentInfoRow}>
+            <Text style={styles.transparentInfoLabel}>Misafir tipi (KBS)</Text>
+            <Text style={styles.transparentInfoValue}>
+              {formData.misafirTipi === 'tc_vatandasi' ? 'T.C. Vatandaşı' : formData.misafirTipi === 'ykn' ? 'YKN' : formData.misafirTipi === 'yabanci' ? 'Yabancı' : '—'}
+            </Text>
+          </View>
+        </View>
+
         <View style={styles.formCard}>
           <View style={styles.inputGroup}>
             <Text style={styles.inputLabel}>
-              <Ionicons name="person-outline" size={16} color={theme.colors.textSecondary} /> Ad *
+              <Ionicons name="person-outline" size={16} color={theme.colors.textSecondary} /> 1. Ad *
             </Text>
             <TextInput
               style={styles.input}
-              placeholder="Misafir adı"
+              placeholder="İlk ad"
               placeholderTextColor={theme.colors.textDisabled}
               value={formData.ad}
               onChangeText={(text) => setFormData({ ...formData, ad: text })}
+            />
+          </View>
+
+          <View style={styles.inputGroup}>
+            <Text style={styles.inputLabel}>
+              <Ionicons name="person-outline" size={16} color={theme.colors.textSecondary} /> 2. Ad
+            </Text>
+            <TextInput
+              style={styles.input}
+              placeholder="İkinci ad (opsiyonel)"
+              placeholderTextColor={theme.colors.textDisabled}
+              value={formData.ad2}
+              onChangeText={(text) => setFormData({ ...formData, ad2: text })}
             />
           </View>
 
@@ -611,11 +689,40 @@ export default function CheckInScreen({ navigation, route }) {
             </Text>
             <TextInput
               style={styles.input}
-              placeholder="Misafir soyadı"
+              placeholder="Soyad"
               placeholderTextColor={theme.colors.textDisabled}
               value={formData.soyad}
               onChangeText={(text) => setFormData({ ...formData, soyad: text })}
             />
+          </View>
+
+          <View style={styles.inputGroup}>
+            <Text style={styles.inputLabel}>
+              <Ionicons name="shield-checkmark-outline" size={16} color={theme.colors.textSecondary} /> Misafir tipi (Jandarma/Polis)
+            </Text>
+            <View style={styles.misafirTipiRow}>
+              {[
+                { value: 'tc_vatandasi', label: 'T.C. Vatandaşı' },
+                { value: 'ykn', label: 'YKN' },
+                { value: 'yabanci', label: 'Yabancı' }
+              ].map(({ value, label }) => (
+                <TouchableOpacity
+                  key={value}
+                  style={[
+                    styles.misafirTipiBtn,
+                    formData.misafirTipi === value && styles.misafirTipiBtnActive
+                  ]}
+                  onPress={() => setFormData({ ...formData, misafirTipi: value })}
+                >
+                  <Text style={[
+                    styles.misafirTipiBtnText,
+                    formData.misafirTipi === value && styles.misafirTipiBtnTextActive
+                  ]}>
+                    {label}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
           </View>
 
           <View style={styles.rowInputs}>
@@ -939,6 +1046,62 @@ const styles = StyleSheet.create({
     fontSize: theme.typography.fontSize.sm,
     color: theme.colors.textSecondary,
     marginTop: theme.spacing.xs,
+  },
+  transparentInfoCard: {
+    backgroundColor: 'rgba(255, 255, 255, 0.75)',
+    borderRadius: theme.spacing.borderRadius.lg,
+    padding: theme.spacing.xl,
+    marginBottom: theme.spacing.lg,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.9)',
+  },
+  transparentInfoTitle: {
+    fontSize: theme.typography.fontSize.base,
+    fontWeight: theme.typography.fontWeight.semibold,
+    color: theme.colors.textPrimary,
+    marginBottom: theme.spacing.base,
+  },
+  transparentInfoRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: theme.spacing.sm,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: 'rgba(0, 0, 0, 0.08)',
+  },
+  transparentInfoLabel: {
+    fontSize: theme.typography.fontSize.sm,
+    color: theme.colors.textSecondary,
+  },
+  transparentInfoValue: {
+    fontSize: theme.typography.fontSize.base,
+    fontWeight: theme.typography.fontWeight.medium,
+    color: theme.colors.textPrimary,
+  },
+  misafirTipiRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: theme.spacing.sm,
+  },
+  misafirTipiBtn: {
+    paddingVertical: theme.spacing.sm,
+    paddingHorizontal: theme.spacing.base,
+    borderRadius: theme.spacing.borderRadius.base,
+    backgroundColor: theme.colors.gray100,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+  },
+  misafirTipiBtnActive: {
+    backgroundColor: theme.colors.primary + '20',
+    borderColor: theme.colors.primary,
+  },
+  misafirTipiBtnText: {
+    fontSize: theme.typography.fontSize.sm,
+    color: theme.colors.textSecondary,
+  },
+  misafirTipiBtnTextActive: {
+    color: theme.colors.primary,
+    fontWeight: theme.typography.fontWeight.semibold,
   },
   formCard: {
     backgroundColor: theme.colors.surface,

@@ -191,9 +191,14 @@ export const api = {
       if (pathname === '/tesis' || pathname === 'tesis') {
         const backendUrl = getBackendUrl();
         if (backendUrl) {
+          if (!token) {
+            const err = new Error('Giriş gerekli') as Error & { response?: { status: number; data: unknown } };
+            err.response = { status: 401, data: { message: 'Token bulunamadı' } };
+            throw err;
+          }
           const r = await fetchWithLog(`${backendUrl}/api/tesis`, {
             method: 'GET',
-            headers: token ? { Authorization: `Bearer ${token}` } : {},
+            headers: { Authorization: `Bearer ${token}` },
           });
           const data = await r.json().catch(() => ({}));
           if (!r.ok) throw Object.assign(new Error((data as { message?: string }).message || 'Tesis alınamadı'), { response: { status: r.status, data } });
@@ -205,9 +210,14 @@ export const api = {
       if (pathname.startsWith('/tesis/kbs') || pathname === 'tesis/kbs') {
         const backendUrl = getBackendUrl();
         if (backendUrl) {
+          if (!token) {
+            const err = new Error('Giriş gerekli') as Error & { response?: { status: number; data: unknown } };
+            err.response = { status: 401, data: { message: 'Token bulunamadı' } };
+            throw err;
+          }
           const r = await fetchWithLog(`${backendUrl}/api/tesis/kbs`, {
             method: 'GET',
-            headers: token ? { Authorization: `Bearer ${token}` } : {},
+            headers: { Authorization: `Bearer ${token}` },
           });
           const data = await r.json().catch(() => ({}));
           if (!r.ok) throw Object.assign(new Error((data as { message?: string }).message || 'Yetkisiz'), { response: { status: r.status, data } });
@@ -375,7 +385,10 @@ export const api = {
       }
       if (pathname === '/auth/giris/otp-dogrula' || pathname === 'auth/giris/otp-dogrula') {
         const backendUrl = getBackendUrl();
-        if (backendUrl && payload && (payload as { access_token?: string }).access_token) {
+        const p = payload as { access_token?: string; telefon?: string; otp?: string };
+        const hasAccessToken = !!p?.access_token;
+        const hasTelefonOtp = !!p?.telefon && !!p?.otp;
+        if (backendUrl && (hasAccessToken || hasTelefonOtp)) {
           const r = await fetchWithLog(`${backendUrl}/api/auth/giris/otp-dogrula`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -383,6 +396,9 @@ export const api = {
           });
           const data = await r.json().catch(() => ({}));
           if (r.ok) return toResponse(data);
+          throw Object.assign(new Error((data as { message?: string })?.message || 'Doğrulama başarısız'), {
+            response: { status: r.status, data },
+          });
         }
         const res = await callFn('auth_verify_otp', payload, null);
         return toResponse(res);
@@ -508,6 +524,25 @@ export const api = {
         }
         throw new Error('Belge okuma için sunucu adresi ve giriş gerekli.');
       }
+      if (pathname === '/ocr/document-base64' || pathname === 'ocr/document-base64') {
+        const backendUrl = getBackendUrl();
+        const payload = body as { imageBase64?: string };
+        if (backendUrl && token && payload && typeof payload.imageBase64 === 'string') {
+          const r = await fetchWithLog(`${backendUrl}/api/ocr/document-base64`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+            body: JSON.stringify({ imageBase64: payload.imageBase64 }),
+          });
+          const data = await r.json().catch(() => ({}));
+          if (!r.ok) {
+            throw Object.assign(new Error((data as { message?: string })?.message || 'Belge okunamadı'), {
+              response: { status: r.status, data },
+            });
+          }
+          return toResponse(data as DocumentScanResponse);
+        }
+        throw new Error('Belge okuma için sunucu adresi ve giriş gerekli.');
+      }
       if (pathname === '/ocr/documents-batch' || pathname === 'ocr/documents-batch') {
         const backendUrl = getBackendUrl();
         if (backendUrl && token && body instanceof FormData) {
@@ -572,10 +607,13 @@ export const api = {
       if (pathname === '/tesis/kbs/test' || pathname === 'tesis/kbs/test') {
         const backendUrl = getBackendUrl();
         if (backendUrl && token) {
+          const body = (payload && typeof payload === 'object' && !Array.isArray(payload))
+            ? { kbsTuru: (payload as { kbsTuru?: string })?.kbsTuru, kbsTesisKodu: (payload as { kbsTesisKodu?: string })?.kbsTesisKodu, kbsWebServisSifre: (payload as { kbsWebServisSifre?: string })?.kbsWebServisSifre }
+            : {};
           const r = await fetchWithLog(`${backendUrl}/api/tesis/kbs/test`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-            body: JSON.stringify({}),
+            body: JSON.stringify(body),
           });
           const data = await r.json().catch(() => ({}));
           if (!r.ok) {

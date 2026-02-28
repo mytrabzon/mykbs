@@ -6,6 +6,15 @@ import Link from 'next/link'
 import toast from 'react-hot-toast'
 import { api } from '@/services/api'
 
+interface TesisKullanici {
+  id: string
+  adSoyad: string
+  telefon: string
+  email: string | null
+  rol: string
+  createdAt: string
+}
+
 interface TesisDetay {
   id: string
   tesisAdi: string
@@ -29,6 +38,7 @@ export default function TesisDetayPage() {
   const params = useParams()
   const id = params?.id as string
   const [tesis, setTesis] = useState<TesisDetay | null>(null)
+  const [kullanicilar, setKullanicilar] = useState<TesisKullanici[]>([])
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
@@ -38,8 +48,12 @@ export default function TesisDetayPage() {
 
   const load = async () => {
     try {
-      const response = await api.get(`/admin/tesis/${id}`)
-      setTesis(response.data.tesis)
+      const [tesisRes, kullanicilarRes] = await Promise.all([
+        api.get(`/admin/tesis/${id}`),
+        api.get<{ kullanicilar: TesisKullanici[] }>(`/app-admin/tesis/${id}/kullanicilar`).catch(() => ({ data: { kullanicilar: [] } })),
+      ])
+      setTesis(tesisRes.data.tesis)
+      setKullanicilar(kullanicilarRes.data?.kullanicilar ?? [])
     } catch (error: unknown) {
       toast.error('Tesis yüklenemedi')
       const err = error as { response?: { status?: number } }
@@ -167,6 +181,51 @@ export default function TesisDetayPage() {
         <p className="admin-tesis-summary-sm">
           Log ve hata listesi backend API üzerinden: <code>GET /api/admin/tesis/{tesis.id}/loglar</code> ve <code>GET /api/admin/tesis/{tesis.id}/hatalar</code>
         </p>
+      </div>
+
+      <div className="kbs-card">
+        <div className="admin-tesis-users-header">
+          <h2 className="kbs-card-title">Tesis kullanıcıları (tesis sahipleri)</h2>
+          <Link href={`/tesisler/${id}/kullanicilar`} className="kbs-btn-primary kbs-btn-sm-alt">
+            Tüm kullanıcılar →
+          </Link>
+        </div>
+        {kullanicilar.length === 0 ? (
+          <p className="kbs-card-empty-text kbs-card-empty-pad">Bu tesise ait kullanıcı yok.</p>
+        ) : (
+          <div className="kbs-table-wrap">
+            <table className="kbs-table">
+              <thead>
+                <tr>
+                  <th>Ad Soyad</th>
+                  <th>Rol</th>
+                  <th>Telefon</th>
+                  <th>Kayıt</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody>
+                {kullanicilar.map((k) => (
+                  <tr
+                    key={k.id}
+                    className="kbs-table-row-clickable"
+                    onClick={() => router.push(`/kullanicilar/${k.id}`)}
+                  >
+                    <td className="kbs-table-cell-link">{k.adSoyad}</td>
+                    <td>{k.rol}</td>
+                    <td>{k.telefon}</td>
+                    <td>{new Date(k.createdAt).toLocaleDateString('tr-TR')}</td>
+                    <td onClick={(e) => e.stopPropagation()}>
+                      <Link href={`/kullanicilar/${k.id}`} className="kbs-btn-primary kbs-btn-sm-alt">
+                        Detay
+                      </Link>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
     </div>
   )

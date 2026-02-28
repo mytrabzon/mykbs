@@ -108,9 +108,13 @@ export default function TesislerPage() {
             </thead>
             <tbody>
               {tesisler.map((tesis) => (
-                <tr key={tesis.id}>
-                  <td>{tesis.tesisAdi}</td>
-                  <td>{tesis.yetkiliAdSoyad}</td>
+                <tr
+                  key={tesis.id}
+                  className="kbs-table-row-clickable"
+                  onClick={() => router.push(`/tesisler/${tesis.id}`)}
+                >
+                  <td className="kbs-table-cell-link">{tesis.tesisAdi}</td>
+                  <td className="kbs-table-cell-link">{tesis.yetkiliAdSoyad}</td>
                   <td>{tesis.telefon}</td>
                   <td>{tesis.il}</td>
                   <td>{tesis.paket}</td>
@@ -120,7 +124,7 @@ export default function TesislerPage() {
                       {tesis.durum}
                     </span>
                   </td>
-                  <td>
+                  <td onClick={(e) => e.stopPropagation()}>
                     {tesis.durum === 'incelemede' && (
                       <button type="button" onClick={() => handleOnayla(tesis.id)} className="kbs-btn-primary kbs-btn-sm kbs-btn-sm-mr">
                         Onayla

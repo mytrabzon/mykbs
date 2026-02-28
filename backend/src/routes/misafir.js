@@ -73,11 +73,13 @@ router.get('/', async (req, res) => {
     const maskelenmisMisafirler = misafirler.map(m => ({
       id: m.id,
       ad: m.ad,
+      ad2: m.ad2 || null,
       soyad: m.soyad,
       kimlikNo: kimlikGorebilir ? m.kimlikNo : maskKimlikNo(m.kimlikNo),
       pasaportNo: m.pasaportNo ? (kimlikGorebilir ? m.pasaportNo : maskPasaportNo(m.pasaportNo)) : null,
       dogumTarihi: m.dogumTarihi,
       uyruk: m.uyruk,
+      misafirTipi: m.misafirTipi || null,
       girisTarihi: m.girisTarihi,
       cikisTarihi: m.cikisTarihi,
       oda: m.oda,
@@ -100,7 +102,7 @@ router.post('/checkin', async (req, res) => {
       return res.status(403).json({ message: 'Check-in yetkiniz yok' });
     }
 
-    const { odaId, ad, soyad, kimlikNo, pasaportNo, dogumTarihi, uyruk } = req.body;
+    const { odaId, ad, ad2, soyad, kimlikNo, pasaportNo, dogumTarihi, uyruk, misafirTipi } = req.body;
     const tesisId = getTesisId(req);
 
     if (!odaId || !ad || !soyad || !dogumTarihi || !uyruk) {
@@ -134,14 +136,16 @@ router.post('/checkin', async (req, res) => {
     // Misafir oluştur
     const misafir = await prisma.misafir.create({
       data: {
-tesisId,
-      odaId,
-      ad,
-      soyad,
+        tesisId,
+        odaId,
+        ad,
+        ad2: ad2 || null,
+        soyad,
         kimlikNo: kimlikNo || null,
         pasaportNo: pasaportNo || null,
         dogumTarihi: new Date(dogumTarihi),
         uyruk,
+        misafirTipi: misafirTipi || null,
         girisTarihi: new Date()
       }
     });
@@ -171,11 +175,13 @@ tesisId,
           const kbsService = createKBSService(tesisSnapshot);
           const kbsResult = await kbsService.bildirimGonder({
             ad: misafir.ad,
+            ad2: misafir.ad2 || null,
             soyad: misafir.soyad,
             kimlikNo: misafir.kimlikNo,
             pasaportNo: misafir.pasaportNo,
             dogumTarihi: misafir.dogumTarihi,
             uyruk: misafir.uyruk,
+            misafirTipi: misafir.misafirTipi || null,
             girisTarihi: misafir.girisTarihi,
             odaNumarasi: oda.odaNumarasi
           });
@@ -441,7 +447,7 @@ router.put('/:misafirId', async (req, res) => {
     }
 
     const { misafirId } = req.params;
-    const { ad, soyad, dogumTarihi, uyruk } = req.body;
+    const { ad, ad2, soyad, dogumTarihi, uyruk, misafirTipi } = req.body;
 
     const misafir = await prisma.misafir.findFirst({
       where: {
@@ -455,10 +461,12 @@ router.put('/:misafirId', async (req, res) => {
     }
 
     const updateData = {};
-    if (ad) updateData.ad = ad;
-    if (soyad) updateData.soyad = soyad;
-    if (dogumTarihi) updateData.dogumTarihi = new Date(dogumTarihi);
-    if (uyruk) updateData.uyruk = uyruk;
+    if (ad !== undefined) updateData.ad = ad;
+    if (ad2 !== undefined) updateData.ad2 = ad2 || null;
+    if (soyad !== undefined) updateData.soyad = soyad;
+    if (dogumTarihi !== undefined) updateData.dogumTarihi = new Date(dogumTarihi);
+    if (uyruk !== undefined) updateData.uyruk = uyruk;
+    if (misafirTipi !== undefined) updateData.misafirTipi = misafirTipi || null;
 
     await prisma.misafir.update({
       where: { id: misafirId },

@@ -33,11 +33,13 @@ function createKBSClient(branch) {
     async sendCheckIn(payload) {
       const result = await kbsService.bildirimGonder({
         ad: payload.ad,
+        ad2: payload.ad2 || null,
         soyad: payload.soyad,
         kimlikNo: payload.kimlikNo || null,
         pasaportNo: payload.pasaportNo || null,
         dogumTarihi: payload.dogumTarihi,
         uyruk: payload.uyruk,
+        misafirTipi: payload.misafirTipi || null,
         girisTarihi: payload.girisTarihi,
         odaNumarasi: payload.odaNumarasi
       });
