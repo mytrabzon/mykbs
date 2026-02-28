@@ -209,16 +209,20 @@ router.post('/', async (req, res) => {
       }
     });
 
-    await prisma.log.create({
-      data: {
-        tesisId,
-        kullaniciId: req.user.id,
-        islem: 'oda-ekle',
-        detay: { odaNumarasi, kapasite }
-      }
-    });
+    try {
+      await prisma.log.create({
+        data: {
+          tesisId,
+          kullaniciId: req.user.id,
+          islem: 'oda-ekle',
+          detay: JSON.stringify({ odaNumarasi, kapasite })
+        }
+      });
+    } catch (logErr) {
+      console.warn('[oda POST] log create atlandi', logErr?.message);
+    }
 
-    res.status(201).json({ message: 'Oda eklendi', oda });
+    res.status(201).json({ message: 'Oda kuruldu', oda });
   };
 
   let lastError;
@@ -227,11 +231,18 @@ router.post('/', async (req, res) => {
     return;
   } catch (error) {
     lastError = error;
+    console.error('[oda POST] hata', {
+      requestId: req.requestId,
+      code: error?.code,
+      message: error?.message,
+      meta: error?.meta,
+    });
     if (is08P01(error)) {
       try {
         await run();
         return;
       } catch (retryErr) {
+        console.error('[oda POST] retry hata', { code: retryErr?.code, message: retryErr?.message });
         if (is08P01(retryErr)) {
           return errorResponse(req, res, 503, 'DB_POOLER_ERROR', 'Veritabanı bağlantısı geçici hata verdi. Tekrar deneyin. (Yönetici: DATABASE_URL için direct veya pgbouncer=true)');
         }
@@ -273,7 +284,7 @@ router.put('/:odaId', async (req, res) => {
         tesisId: getTesisId(req),
         kullaniciId: req.user.id,
         islem: 'oda-guncelle',
-        detay: { odaId: oda.id }
+        detay: JSON.stringify({ odaId: oda.id })
       }
     });
 
@@ -324,7 +335,7 @@ router.delete('/:odaId', async (req, res) => {
         tesisId: getTesisId(req),
         kullaniciId: req.user.id,
         islem: 'oda-sil',
-        detay: { odaNumarasi: oda.odaNumarasi }
+        detay: JSON.stringify({ odaNumarasi: oda.odaNumarasi })
       }
     });
 

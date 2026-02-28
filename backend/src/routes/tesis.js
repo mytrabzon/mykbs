@@ -372,5 +372,126 @@ router.post('/kbs/test', async (req, res) => {
   }
 });
 
+/**
+ * KBS'ten mevcut misafirleri çekip sisteme aktar (farklı sistemden geçen kullanıcı, KBS bilgilerini yazınca kaldığı yerden devam etsin).
+ * KBS API'de misafir listesi endpoint'i yoksa veya boş dönerse imported: 0 ve mesaj döner.
+ */
+router.post('/kbs/import', async (req, res) => {
+  try {
+    if (req.authSource === 'supabase') {
+      await ensureTesisForBranch(prisma, req.branchId, req.branch?.name);
+    }
+
+    const tesisId = req.authSource === 'supabase' ? req.branchId : req.tesis.id;
+    let tesisLike;
+    if (req.authSource === 'supabase') {
+      const b = req.branch;
+      if (!b.kbs_turu || !b.kbs_tesis_kodu || !b.kbs_web_servis_sifre) {
+        return res.status(400).json({ message: 'KBS bilgileri eksik. Önce Ayarlar\'dan KBS tesis kodu ve şifreyi girin.' });
+      }
+      tesisLike = { kbsTuru: b.kbs_turu, kbsTesisKodu: b.kbs_tesis_kodu, kbsWebServisSifre: b.kbs_web_servis_sifre, ipAdresleri: [] };
+    } else {
+      const tesis = await prisma.tesis.findUnique({ where: { id: req.tesis.id } });
+      if (!tesis || !tesis.kbsTuru || !tesis.kbsTesisKodu || !tesis.kbsWebServisSifre) {
+        return res.status(400).json({ message: 'KBS bilgileri eksik' });
+      }
+      tesisLike = tesis;
+    }
+
+    const kbsService = createKBSService(tesisLike);
+    const result = await kbsService.misafirListesiGetir();
+
+    if (!result.success || !result.misafirler || result.misafirler.length === 0) {
+      return res.json({
+        imported: 0,
+        skipped: 0,
+        message: result.message || 'KBS\'ten misafir listesi alınamadı veya liste boş. Bu KBS türünde liste sorgulama desteklenmiyorsa manuel check-in kullanın.'
+      });
+    }
+
+    let imported = 0;
+    let skipped = 0;
+
+    for (const g of result.misafirler) {
+      if (!g.ad && !g.soyad) continue;
+      if (!g.kimlikNo && !g.pasaportNo) {
+        skipped++;
+        continue;
+      }
+
+      const odaNumarasi = (g.odaNumarasi || '').toString().trim() || 'Bilinmeyen';
+      let oda = await prisma.oda.findFirst({
+        where: { tesisId, odaNumarasi }
+      });
+      if (!oda) {
+        oda = await prisma.oda.create({
+          data: {
+            tesisId,
+            odaNumarasi,
+            odaTipi: 'Standart',
+            kapasite: 2,
+            durum: 'bos'
+          }
+        });
+      }
+
+      const existing = await prisma.misafir.findFirst({
+        where: {
+          tesisId,
+          cikisTarihi: null,
+          OR: [
+            ...(g.kimlikNo ? [{ kimlikNo: g.kimlikNo }] : []),
+            ...(g.pasaportNo ? [{ pasaportNo: g.pasaportNo }] : [])
+          ].filter(Boolean)
+        }
+      });
+      if (existing) {
+        skipped++;
+        continue;
+      }
+
+      const dogumTarihi = g.dogumTarihi ? new Date(g.dogumTarihi) : new Date(1990, 0, 1);
+      const girisTarihi = g.girisTarihi ? new Date(g.girisTarihi) : new Date();
+      const cikisTarihi = g.cikisTarihi ? new Date(g.cikisTarihi) : null;
+
+      await prisma.misafir.create({
+        data: {
+          tesisId,
+          odaId: oda.id,
+          ad: (g.ad || '').trim() || 'Misafir',
+          soyad: (g.soyad || '').trim() || '—',
+          kimlikNo: (g.kimlikNo || '').trim() || '—',
+          pasaportNo: (g.pasaportNo || '').trim() || null,
+          dogumTarihi,
+          uyruk: (g.uyruk || 'TÜRK').trim(),
+          girisTarihi,
+          cikisTarihi
+        }
+      });
+
+      if (!cikisTarihi && oda.durum !== 'dolu') {
+        await prisma.oda.update({
+          where: { id: oda.id },
+          data: { durum: 'dolu' }
+        });
+      }
+      imported++;
+    }
+
+    const message = imported > 0
+      ? `${imported} misafir KBS'ten aktarıldı.${skipped > 0 ? ` ${skipped} zaten kayıtlıydı.` : ''}`
+      : (skipped > 0 ? `Tüm kayıtlar zaten mevcut (${skipped}).` : (result.message || 'Aktarım tamamlandı.'));
+
+    res.json({ imported, skipped, message });
+  } catch (error) {
+    const msg = error?.message || '';
+    const isSchema = /column|relation|does not exist|no such column/i.test(msg);
+    const isDb = /prisma|ECONNREFUSED|connect|migrate|relation|column|table/i.test(msg);
+    if (isSchema) return errorResponse(req, res, 500, 'SCHEMA_ERROR', 'Veritabanı şeması güncel değil. Lütfen yöneticiye bildirin.');
+    if (isDb) return errorResponse(req, res, 500, 'DB_CONNECT_ERROR', 'Sunucuda geçici bir sorun var. Daha sonra tekrar deneyin.');
+    return errorResponse(req, res, 500, 'UNHANDLED_ERROR', msg || 'Aktarım başarısız');
+  }
+});
+
 module.exports = router;
 

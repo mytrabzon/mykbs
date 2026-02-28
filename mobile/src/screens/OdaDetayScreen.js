@@ -9,6 +9,7 @@ import {
 } from 'react-native';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { api } from '../services/api';
+import { dataService } from '../services/dataService';
 import Toast from 'react-native-toast-message';
 
 export default function OdaDetayScreen() {
@@ -72,6 +73,36 @@ export default function OdaDetayScreen() {
     );
   };
 
+  const handleDeleteOda = () => {
+    const hasMisafir = oda?.misafirler?.length > 0 && oda.misafirler.some(m => !m.cikisTarihi);
+    if (hasMisafir) {
+      Alert.alert('Silinemez', 'Dolu oda silinemez. Önce misafir çıkışı yapın.');
+      return;
+    }
+    Alert.alert(
+      'Odayı Sil',
+      `"Oda ${oda.odaNumarasi}" kalıcı olarak silinecek. Emin misiniz?`,
+      [
+        { text: 'İptal', style: 'cancel' },
+        {
+          text: 'Sil',
+          style: 'destructive',
+            onPress: async () => {
+            try {
+              await api.delete(`/oda/${odaId}`);
+              dataService.clearCache().catch(() => {});
+              Toast.show({ type: 'success', text1: 'Oda silindi' });
+              navigation.goBack();
+            } catch (err) {
+              const msg = err?.response?.data?.message || err?.message || 'Oda silinemedi';
+              Toast.show({ type: 'error', text1: 'Hata', text2: msg });
+            }
+          }
+        }
+      ]
+    );
+  };
+
   if (loading) {
     return (
       <View style={styles.center}>
@@ -117,6 +148,14 @@ export default function OdaDetayScreen() {
             <Text style={styles.emptyText}>Oda Boş</Text>
           </View>
         )}
+
+        <TouchableOpacity
+          style={[styles.deleteButton, (oda?.misafirler?.length > 0 && oda.misafirler.some(m => !m.cikisTarihi)) && styles.deleteButtonDisabled]}
+          onPress={handleDeleteOda}
+          disabled={!!(oda?.misafirler?.length > 0 && oda.misafirler.some(m => !m.cikisTarihi))}
+        >
+          <Text style={styles.deleteButtonText}>Odayı Sil</Text>
+        </TouchableOpacity>
       </View>
     </ScrollView>
   );
@@ -184,6 +223,22 @@ const styles = StyleSheet.create({
   emptyText: {
     fontSize: 16,
     color: '#999'
+  },
+  deleteButton: {
+    backgroundColor: '#d32f2f',
+    borderRadius: 8,
+    padding: 14,
+    alignItems: 'center',
+    marginTop: 24
+  },
+  deleteButtonDisabled: {
+    backgroundColor: '#999',
+    opacity: 0.7
+  },
+  deleteButtonText: {
+    color: '#fff',
+    fontSize: 15,
+    fontWeight: '600'
   }
 });
 

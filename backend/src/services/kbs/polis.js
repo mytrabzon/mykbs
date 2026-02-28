@@ -146,6 +146,66 @@ class PolisKBS {
   }
 
   /**
+   * KBS'te tesisin daha önce bildirdiği (aktif veya son çıkan) misafirleri listele.
+   * Resmi Polis KBS API'de bu endpoint varsa kullanılır; yoksa { success: false, misafirler: [] } döner.
+   * Kullanıcı farklı sistemden geçince "KBS bilgilerini yazınca" mevcut misafirleri çekip sistemimize aktarabilir.
+   */
+  async misafirListesiGetir() {
+    try {
+      const response = await axios.post(
+        `${this.baseURL}/misafirler`,
+        {
+          tesisKodu: this.tesisKodu,
+          webServisSifre: this.webServisSifre
+        },
+        {
+          timeout: 15000,
+          headers: { 'Content-Type': 'application/json' },
+          validateStatus: () => true
+        }
+      );
+
+      if (response.status === 404 || response.status === 501 || response.status === 400) {
+        return {
+          success: false,
+          message: 'Bu KBS türünde misafir listesi sorgulama desteklenmiyor veya yapılandırılmamış.',
+          misafirler: []
+        };
+      }
+
+      if (response.status !== 200 || !response.data) {
+        return {
+          success: false,
+          message: response.data?.message || 'Liste alınamadı',
+          misafirler: []
+        };
+      }
+
+      const list = response.data.misafirler || response.data.liste || [];
+      const normalized = (Array.isArray(list) ? list : []).map((m) => ({
+        ad: m.ad || '',
+        soyad: m.soyad || '',
+        kimlikNo: m.kimlikNo || null,
+        pasaportNo: m.pasaportNo || null,
+        dogumTarihi: m.dogumTarihi || m.girisTarihi,
+        uyruk: m.uyruk || 'TÜRK',
+        girisTarihi: m.girisTarihi || new Date().toISOString(),
+        cikisTarihi: m.cikisTarihi || null,
+        odaNumarasi: m.odaNumarasi || m.oda || ''
+      }));
+
+      return { success: true, misafirler: normalized };
+    } catch (error) {
+      const msg = error.response?.data?.message || error.message || 'KBS bağlantı hatası';
+      return {
+        success: false,
+        message: msg,
+        misafirler: []
+      };
+    }
+  }
+
+  /**
    * Oda değişikliği bildirimi
    */
   async odaDegistir(misafirData, yeniOdaNumarasi) {

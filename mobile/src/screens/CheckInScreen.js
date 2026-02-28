@@ -19,6 +19,7 @@ import { logger } from '../utils/logger';
 import { Ionicons, MaterialIcons } from '@expo/vector-icons';
 import { theme } from '../theme';
 import { useCredits } from '../context/CreditsContext';
+import { useFocusEffect } from '@react-navigation/native';
 
 export default function CheckInScreen({ navigation, route }) {
   const { triggerPaywall } = useCredits();
@@ -48,6 +49,50 @@ export default function CheckInScreen({ navigation, route }) {
       logger.log('CheckInScreen unmounted');
     };
   }, []);
+
+  // MRZ veya belge taramasından dönünce formu otomatik doldur, oda seçimini geri yükle
+  const [documentPhotoUri, setDocumentPhotoUri] = useState(null);
+  useFocusEffect(
+    React.useCallback(() => {
+      const odaFromParams = route.params?.selectedOda;
+      if (odaFromParams) setSelectedOda(odaFromParams);
+      const doc = route.params?.documentPayload;
+      if (doc) {
+        setFormData(prev => ({
+          ...prev,
+          ad: (doc.ad || '').trim() || prev.ad,
+          soyad: (doc.soyad || '').trim() || prev.soyad,
+          kimlikNo: (doc.kimlikNo || '').trim() || prev.kimlikNo,
+          pasaportNo: (doc.pasaportNo || '').trim() || prev.pasaportNo,
+          dogumTarihi: (doc.dogumTarihi || '').trim() || prev.dogumTarihi,
+          uyruk: (doc.uyruk || 'TÜRK').trim() || prev.uyruk,
+        }));
+        setDocumentPhotoUri(route.params?.photoUri || null);
+        setStep(3);
+        navigation.setParams({ documentPayload: undefined, photoUri: undefined, selectedOda: undefined });
+        return;
+      }
+      const p = route.params?.mrzPayload;
+      if (!p) return;
+      const isoToDDMMYYYY = (iso) => {
+        if (!iso) return '';
+        const [y, m, d] = iso.split('-');
+        return [d, m, y].filter(Boolean).join('.');
+      };
+      setFormData(prev => ({
+        ...prev,
+        ad: (p.givenNames || '').trim(),
+        soyad: (p.surname || '').trim(),
+        pasaportNo: (p.passportNumber || '').trim(),
+        kimlikNo: /^\d{11}$/.test((p.passportNumber || '').trim()) ? (p.passportNumber || '').trim() : prev.kimlikNo,
+        dogumTarihi: isoToDDMMYYYY(p.birthDate) || prev.dogumTarihi,
+        uyruk: (p.nationality || 'TÜRK').trim(),
+      }));
+      setDocumentPhotoUri(route.params?.photoUri || null);
+      setStep(3);
+      navigation.setParams({ mrzPayload: undefined, selectedOda: undefined, photoUri: undefined });
+    }, [route.params?.mrzPayload, route.params?.documentPayload, route.params?.photoUri, route.params?.selectedOda, navigation])
+  );
 
   const checkNFC = async () => {
     try {
@@ -106,43 +151,58 @@ export default function CheckInScreen({ navigation, route }) {
   };
 
   const handleNFCRead = async () => {
+    let techRequested = false;
     try {
       logger.log('NFC read started');
-      await NfcManager.requestTechnology(NfcManager.NfcTech.Ndef);
+      // Pasaport / kimlik çipi IsoDep (ISO 14443-4) kullanır; NDEF sadece basit etiketler içindir
+      const tech = NfcManager.NfcTech.IsoDep ?? NfcManager.NfcTech.NfcA ?? NfcManager.NfcTech.Ndef;
+      await NfcManager.requestTechnology(tech);
+      techRequested = true;
       const tag = await NfcManager.getTag();
-      logger.log('NFC tag read', { tagId: tag?.id });
-      
-      // NFC verisini parse et ve API'ye gönder
+      logger.log('NFC tag read', { tagId: tag?.id, tech });
+
       logger.api('POST', '/nfc/okut', { nfcData: tag });
       const response = await api.post('/nfc/okut', {
-        nfcData: tag
+        nfcData: tag,
       });
 
-      logger.api('POST', '/nfc/okut', null, { 
-        status: response.status,
-        success: response.data.success 
+      logger.api('POST', '/nfc/okut', null, {
+        status: response?.status,
+        success: response?.data?.success,
       });
 
-      if (response.data.success) {
+      if (response?.data?.success && response?.data?.parsed) {
         logger.log('NFC read successful, updating form data');
-        setFormData({
-          ...formData,
-          ...response.data.parsed
-        });
-        setStep(3); // Bilgi onay ekranına geç
+        setFormData((prev) => ({
+          ...prev,
+          ...response.data.parsed,
+        }));
+        setStep(3);
       } else {
-        logger.warn('NFC read failed', response.data);
+        logger.warn('NFC read failed or no parsed data', response?.data);
+        Toast.show({
+          type: 'info',
+          text1: 'NFC okundu',
+          text2: 'Veri çıkarılamadı. MRZ veya manuel giriş kullanın.',
+        });
       }
     } catch (error) {
       logger.error('NFC read error', error);
+      const msg = error?.message || '';
       Toast.show({
         type: 'error',
         text1: 'NFC Hatası',
-        text2: 'Kimlik okunamadı'
+        text2: msg.includes('cancel') ? 'Okuma iptal edildi.' : (msg || 'Kimlik okunamadı. MRZ veya kamera deneyin.'),
       });
     } finally {
-      NfcManager.cancelTechnologyRequest();
-      logger.log('NFC technology request cancelled');
+      if (techRequested) {
+        try {
+          NfcManager.cancelTechnologyRequest();
+          logger.log('NFC technology request cancelled');
+        } catch (e) {
+          logger.warn('NFC cancelTechnologyRequest', e?.message);
+        }
+      }
     }
   };
 
@@ -469,6 +529,14 @@ export default function CheckInScreen({ navigation, route }) {
             </TouchableOpacity>
 
             <TouchableOpacity
+              style={[styles.okutButton, styles.mrzButton]}
+              onPress={() => navigation.navigate('MrzScan', { fromCheckIn: true, selectedOda })}
+            >
+              <Ionicons name="document-text-outline" size={24} color={theme.colors.white} style={styles.okutButtonIcon} />
+              <Text style={styles.okutButtonText}>MRZ ile Tara (kimlik/pasaport arka yüz)</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
               style={styles.manualButton}
               onPress={() => {
                 try {
@@ -523,6 +591,13 @@ export default function CheckInScreen({ navigation, route }) {
             {selectedOda && `Oda ${selectedOda.odaNumarasi} için bilgileri kontrol edin`}
           </Text>
         </View>
+
+        {documentPhotoUri ? (
+          <View style={styles.documentPhotoWrap}>
+            <Image source={{ uri: documentPhotoUri }} style={styles.documentPhoto} resizeMode="cover" />
+            <Text style={styles.documentPhotoLabel}>Belge ön yüz</Text>
+          </View>
+        ) : null}
 
         <View style={styles.formCard}>
           <View style={styles.inputGroup}>
@@ -820,6 +895,10 @@ const styles = StyleSheet.create({
   okutButtonCamera: {
     backgroundColor: theme.colors.secondary,
   },
+  mrzButton: {
+    backgroundColor: theme.colors.primary,
+    marginTop: theme.spacing.md,
+  },
   okutButtonIcon: {
     marginRight: theme.spacing.sm,
   },
@@ -856,6 +935,22 @@ const styles = StyleSheet.create({
     fontSize: theme.typography.fontSize.sm,
     color: theme.colors.warningDark,
     flex: 1,
+  },
+  documentPhotoWrap: {
+    alignSelf: 'center',
+    marginBottom: theme.spacing.lg,
+    alignItems: 'center',
+  },
+  documentPhoto: {
+    width: 100,
+    height: 125,
+    borderRadius: theme.spacing.borderRadius.base,
+    backgroundColor: theme.colors.gray100,
+  },
+  documentPhotoLabel: {
+    fontSize: theme.typography.fontSize.sm,
+    color: theme.colors.textSecondary,
+    marginTop: theme.spacing.xs,
   },
   formCard: {
     backgroundColor: theme.colors.surface,

@@ -69,7 +69,7 @@ async function preprocessImageForMrz(filePath) {
   }
 }
 
-/** MRZ: JWT veya Supabase token ile erişilebilir (check-in KYC için) */
+/** MRZ: Tüm giriş yapmış kullanıcılar kullanabilir (sadece admin değil). JWT veya Supabase token yeterli. */
 router.post('/mrz', authenticateTesisOrSupabase, upload.single('image'), async (req, res) => {
   try {
     if (!req.file) {
@@ -90,7 +90,7 @@ router.post('/mrz', authenticateTesisOrSupabase, upload.single('image'), async (
   }
 });
 
-/** Tek görsel: MRZ + ön yüz OCR birleşik (havalimanı tarzı nokta atışı veri) */
+/** Tek görsel: MRZ + ön yüz OCR birleşik. Tüm giriş yapmış kullanıcılar kullanabilir (admin şart değil). */
 router.post('/document', authenticateTesisOrSupabase, upload.single('image'), async (req, res) => {
   try {
     if (!req.file) {
@@ -132,6 +132,7 @@ const uploadMany = multer({
   fileFilter: (req, file, cb) => (file.mimetype.startsWith('image/') ? cb(null, true) : cb(new Error('Sadece resim'))),
 }).array('images', 10);
 
+/** Toplu belge: Tüm giriş yapmış kullanıcılar kullanabilir (admin şart değil). */
 router.post('/documents-batch', authenticateTesisOrSupabase, (req, res) => {
   uploadMany(req, res, async (err) => {
     if (err) {
@@ -163,7 +164,7 @@ router.post('/documents-batch', authenticateTesisOrSupabase, (req, res) => {
 router.use(authenticateTesisOrSupabase);
 
 /**
- * Kimlik/pasaport görüntüsü — tüm yetkili kullanıcılar (Supabase veya legacy)
+ * Kimlik/pasaport görüntüsü — tüm giriş yapmış kullanıcılar (admin şart değil; Supabase veya legacy token yeterli)
  */
 router.get('/kimlik/:filename', (req, res) => {
   const filename = path.basename(req.params.filename);

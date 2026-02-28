@@ -9,6 +9,7 @@ import {
   ActivityIndicator,
   Image,
 } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as ImagePicker from 'expo-image-picker';
 import * as FileSystem from 'expo-file-system';
 import { useNavigation } from '@react-navigation/native';
@@ -23,7 +24,7 @@ import { typography, spacing } from '../theme';
 export default function ProfilDuzenleScreen() {
   const navigation = useNavigation();
   const { colors } = useTheme();
-  const { tesis, getSupabaseToken } = useAuth();
+  const { user, tesis, getSupabaseToken } = useAuth();
   const [displayName, setDisplayName] = useState('');
   const [title, setTitle] = useState('');
   const [avatarUrl, setAvatarUrl] = useState(null);
@@ -33,24 +34,40 @@ export default function ProfilDuzenleScreen() {
 
   useEffect(() => {
     let cancelled = false;
+    const timeout = setTimeout(() => {
+      if (!cancelled) setLoading(false);
+    }, 8000);
     (async () => {
-      const t = await getSupabaseToken();
-      if (!t) {
-        setLoading(false);
-        return;
-      }
       try {
+        const t = await getSupabaseToken();
+        if (!t) {
+          if (!cancelled) setLoading(false);
+          return;
+        }
         const me = await communityApi.getMe(t);
         if (!cancelled) {
           setDisplayName(me?.display_name || '');
           setTitle(me?.title || '');
           setAvatarUrl(me?.avatar_url || null);
         }
-      } catch (_) {}
-      if (!cancelled) setLoading(false);
+      } catch (_) {
+        // Hata olsa da formu göster
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
     })();
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+      clearTimeout(timeout);
+    };
   }, [getSupabaseToken]);
+
+  // E-posta/şifre ile girişte Supabase token yok; adı en azından backend'den göster
+  useEffect(() => {
+    if (!loading && user?.adSoyad && !displayName) {
+      setDisplayName(user.adSoyad);
+    }
+  }, [loading, user?.adSoyad, displayName]);
 
   const pickAvatar = async () => {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -72,7 +89,15 @@ export default function ProfilDuzenleScreen() {
   const handleSave = async () => {
     const token = await getSupabaseToken();
     if (!token) {
-      Toast.show({ type: 'error', text1: 'Giriş gerekli' });
+      if (user) {
+        Toast.show({
+          type: 'info',
+          text1: 'Profil düzenleme bu giriş türünde yok',
+          text2: 'Ad/fotoğraf düzenlemek için uygulamada "Kod ile giriş" (OTP) kullanın. E-posta/şifre ile girişte bu özellik kapalıdır.',
+        });
+      } else {
+        Toast.show({ type: 'error', text1: 'Giriş gerekli', text2: 'Profil düzenlemek için giriş yapın.' });
+      }
       return;
     }
     setSaving(true);
@@ -102,10 +127,21 @@ export default function ProfilDuzenleScreen() {
         },
         token
       );
-      Toast.show({ type: 'success', text1: 'Profil güncellendi' });
+      Toast.show({ type: 'success', text1: 'Profil kaydedildi' });
       navigation.goBack();
     } catch (err) {
-      Toast.show({ type: 'error', text1: 'Kaydedilemedi', text2: err?.message });
+      const msg = err?.message || (err?.data && typeof err.data === 'object' && err.data?.message) || 'Kaydedilemedi';
+      const isUnauth = err?.status === 401;
+      if (isUnauth) {
+        AsyncStorage.removeItem('@mykbs:auth:supabase_token');
+        Toast.show({
+          type: 'info',
+          text1: 'Profil bu giriş türünde yok',
+          text2: 'Ad/fotoğraf için "Kod ile giriş" (OTP) kullanın. E-posta/şifre ile girişte kapalı.',
+        });
+      } else {
+        Toast.show({ type: 'error', text1: 'Kaydedilemedi', text2: msg });
+      }
     } finally {
       setSaving(false);
     }

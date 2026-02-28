@@ -43,6 +43,7 @@ serve(async (req) => {
     .from("user_profiles")
     .update(updates)
     .eq("user_id", auth.userId)
+    .eq("branch_id", auth.profile.branch_id)
     .select("user_id, display_name, avatar_url, title")
     .single();
 

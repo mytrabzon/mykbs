@@ -35,27 +35,39 @@ router.post('/okut', async (req, res) => {
 });
 
 /**
- * NFC verisini parse et
- * Gerçek uygulamada NFC okuyucu kütüphanesinin formatına göre düzenlenmeli
+ * NFC verisini parse et.
+ * Mobil getTag() ham nesne gönderir (id, techTypes); e-passport DG1 verisi ayrı kütüphane ile okunur.
+ * Ham tag geldiğinde boş/eksik alanlarla success döner ki uygulama MRZ/manuel fallback yapsın.
  */
 function parseNFCData(nfcData) {
-  // Örnek: NFC'den gelen veri yapısı
-  // Gerçek uygulamada passport.js veya benzeri kütüphane kullanılabilir
   try {
     if (typeof nfcData === 'string') {
-      nfcData = JSON.parse(nfcData);
+      try {
+        nfcData = JSON.parse(nfcData);
+      } catch {
+        return { ad: '', soyad: '', kimlikNo: null, pasaportNo: null, dogumTarihi: null, uyruk: 'TÜRK' };
+      }
+    }
+    if (!nfcData || typeof nfcData !== 'object') {
+      return { ad: '', soyad: '', kimlikNo: null, pasaportNo: null, dogumTarihi: null, uyruk: 'TÜRK' };
     }
 
+    const ad = nfcData.givenName || nfcData.firstName || nfcData.ad || '';
+    const soyad = nfcData.surname || nfcData.lastName || nfcData.soyad || '';
+    const docNo = nfcData.documentNumber || nfcData.personalNumber || nfcData.documentNo || nfcData.kimlikNo || nfcData.pasaportNo || null;
+    const dogumTarihi = nfcData.dateOfBirth || nfcData.dogumTarihi || null;
+    const uyruk = nfcData.nationality || nfcData.uyruk || 'TÜRK';
+
     return {
-      ad: nfcData.givenName || nfcData.firstName || '',
-      soyad: nfcData.surname || nfcData.lastName || '',
-      kimlikNo: nfcData.documentNumber || nfcData.personalNumber || null,
-      pasaportNo: nfcData.documentNumber || null,
-      dogumTarihi: nfcData.dateOfBirth || null,
-      uyruk: nfcData.nationality || 'TÜRK'
+      ad: String(ad).trim() || '',
+      soyad: String(soyad).trim() || '',
+      kimlikNo: docNo ? String(docNo).trim() : null,
+      pasaportNo: docNo ? String(docNo).trim() : null,
+      dogumTarihi: dogumTarihi ? String(dogumTarihi).trim() : null,
+      uyruk: String(uyruk).trim() || 'TÜRK',
     };
   } catch (error) {
-    throw new Error('NFC verisi parse edilemedi');
+    return { ad: '', soyad: '', kimlikNo: null, pasaportNo: null, dogumTarihi: null, uyruk: 'TÜRK' };
   }
 }
 

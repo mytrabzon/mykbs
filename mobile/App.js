@@ -1,5 +1,5 @@
 import 'react-native-gesture-handler';
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { getApiBaseUrl } from './src/config/api';
 import { dataService } from './src/services/dataService';
@@ -15,7 +15,7 @@ import { logger } from './src/utils/logger';
 import { getIsAdminPanelUser } from './src/utils/adminAuth';
 import { backendHealth } from './src/services/backendHealth';
 import { registerPushToken } from './src/services/pushNotifications';
-import { BackHandler, Alert, Platform, View, Text, StyleSheet, TouchableOpacity, Linking } from 'react-native';
+import { BackHandler, Alert, Platform, View, Text, StyleSheet, TouchableOpacity, Linking, FlatList, RefreshControl, ActivityIndicator } from 'react-native';
 import { supabase } from './src/lib/supabase/supabase';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -53,22 +53,96 @@ import GalleryBatchDocumentScreen from './src/features/documentRead/GalleryBatch
 import DocumentResultScreen from './src/features/documentRead/DocumentResultScreen';
 import DocumentBatchResultScreen from './src/features/documentRead/DocumentBatchResultScreen';
 import CameraTestScreen from './src/features/documentRead/CameraTestScreen';
+import { useFocusEffect } from '@react-navigation/native';
 
-// Placeholder screens for tabs (theme-aware, modern design)
+// Misafirler sekmesi: Oteldeki mevcut kişiler (check-in yapılan misafirler) listelenir.
 function MisafirlerScreen({ navigation }) {
   const { colors } = useTheme();
   const { tesis } = useAuth();
+  const [misafirler, setMisafirler] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+
+  const loadMisafirler = useCallback(async (forceRefresh = true) => {
+    try {
+      const list = await dataService.getMisafirler(forceRefresh);
+      setMisafirler(list || []);
+    } catch (e) {
+      setMisafirler([]);
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      setLoading(true);
+      loadMisafirler(true);
+    }, [loadMisafirler])
+  );
+
+  const onRefresh = useCallback(() => {
+    setRefreshing(true);
+    loadMisafirler(true);
+  }, [loadMisafirler]);
+
+  const renderMisafir = useCallback(({ item }) => {
+    const girisStr = item.girisTarihi
+      ? new Date(item.girisTarihi).toLocaleDateString('tr-TR', { day: '2-digit', month: '2-digit', year: 'numeric' })
+      : '';
+    return (
+      <View style={[styles.misafirCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+        <View style={styles.misafirCardLeft}>
+          <Ionicons name="person-circle-outline" size={32} color={colors.primary} />
+          <View style={styles.misafirCardBody}>
+            <Text style={[styles.misafirCardName, { color: colors.text }]} numberOfLines={1}>
+              {item.ad} {item.soyad}
+            </Text>
+            <Text style={[styles.misafirCardOda, { color: colors.textSecondary }]}>
+              Oda {item.odaNumarasi || '—'}
+            </Text>
+            {girisStr ? (
+              <Text style={[styles.misafirCardDate, { color: colors.textSecondary }]}>
+                Giriş: {girisStr}
+              </Text>
+            ) : null}
+          </View>
+        </View>
+      </View>
+    );
+  }, [colors]);
+
+  const keyExtractor = useCallback((item) => item.id, []);
+
   return (
     <View style={[styles.screenContainer, { backgroundColor: colors.background }]}>
       <AppHeader title="Misafirler" tesis={tesis} onNotification={() => navigation.navigate('Bildirimler')} onProfile={() => navigation.navigate('ProfilDuzenle')} />
       <View style={styles.contentContainer}>
-        <EmptyState
-          icon="people-outline"
-          title="Misafir Bulunamadı"
-          message="Henüz kayıtlı misafir bulunmuyor. Odalar ekranından check-in yaparak misafir ekleyebilirsiniz."
-          primaryCta={{ label: 'Hızlı Check-in', onPress: () => navigation.navigate('CheckIn') }}
-          secondaryCta={{ label: 'Oda Ekle', onPress: () => navigation.navigate('Odalar') }}
-        />
+        {loading && misafirler.length === 0 ? (
+          <View style={styles.misafirlerLoading}>
+            <ActivityIndicator size="large" color={colors.primary} />
+            <Text style={[styles.misafirlerLoadingText, { color: colors.textSecondary }]}>Yükleniyor...</Text>
+          </View>
+        ) : misafirler.length === 0 ? (
+          <EmptyState
+            icon="people-outline"
+            title="Misafir Bulunamadı"
+            message="Henüz kayıtlı misafir bulunmuyor. Odalar ekranından check-in yaparak misafir ekleyebilirsiniz."
+            primaryCta={{ label: 'Hızlı Check-in', onPress: () => navigation.navigate('CheckIn') }}
+            secondaryCta={{ label: 'Oda Ekle', onPress: () => navigation.navigate('Odalar') }}
+          />
+        ) : (
+          <FlatList
+            data={misafirler}
+            renderItem={renderMisafir}
+            keyExtractor={keyExtractor}
+            contentContainerStyle={styles.misafirListContent}
+            refreshControl={
+              <RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[colors.primary]} />
+            }
+          />
+        )}
       </View>
     </View>
   );
@@ -114,6 +188,26 @@ const styles = StyleSheet.create({
   screenContainer: { flex: 1 },
   mainTabsWrap: { flex: 1 },
   contentContainer: { flex: 1, paddingHorizontal: 20, paddingBottom: 120 },
+  misafirListContent: { paddingVertical: 12, paddingBottom: 120 },
+  misafirCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 16,
+    marginHorizontal: 4,
+    marginBottom: 10,
+    borderRadius: 12,
+    borderWidth: 1,
+  },
+  misafirCardLeft: { flexDirection: 'row', alignItems: 'center', flex: 1 },
+  misafirCardBody: { marginLeft: 12, flex: 1 },
+  misafirCardName: { fontSize: 16, fontWeight: '600' },
+  misafirCardOda: { fontSize: 14, marginTop: 2 },
+  misafirCardDate: { fontSize: 12, marginTop: 2 },
+  misafirlerLoading: { flex: 1, justifyContent: 'center', alignItems: 'center', gap: 12 },
+  misafirlerLoadingText: { fontSize: 14 },
+  mrzPlaceholder: { flex: 1, justifyContent: 'center', alignItems: 'center', gap: 12 },
+  mrzPlaceholderText: { fontSize: 14 },
+  mrzTabIconWrap: { width: 48, height: 48, borderRadius: 24, alignItems: 'center', justifyContent: 'center', marginTop: -20 },
 });
 
 // Context (useAuth used in MisafirlerScreen, RaporlarScreen)
@@ -127,7 +221,21 @@ import TrialWelcomeBanner from './src/components/TrialWelcomeBanner';
 const Tab = createBottomTabNavigator();
 const Stack = createStackNavigator();
 
-const TAB_NAMES = ['Odalar', 'Okuma', 'Misafirler', 'Topluluk', 'Bildirimler', 'Raporlar', 'Ayarlar'];
+const TAB_NAMES = ['Odalar', 'Okuma', 'Misafirler', 'MRZ', 'Topluluk', 'Raporlar', 'Ayarlar'];
+
+function MrzTabPlaceholder({ navigation }) {
+  const { colors } = useTheme();
+  React.useEffect(() => {
+    const parent = navigation.getParent();
+    if (parent) parent.navigate('MrzScan', { fromCheckIn: false });
+  }, [navigation]);
+  return (
+    <View style={[styles.mrzPlaceholder, { backgroundColor: colors.background }]}>
+      <Ionicons name="document-text-outline" size={48} color={colors.textSecondary} />
+      <Text style={[styles.mrzPlaceholderText, { color: colors.textSecondary }]}>MRZ tarama açılıyor...</Text>
+    </View>
+  );
+}
 
 function MainTabs() {
   const insets = useSafeAreaInsets();
@@ -144,8 +252,15 @@ function MainTabs() {
       <CreditsBanner />
       <Tab.Navigator
       initialRouteName={initialTab}
-      screenOptions={({ route }) => ({
+      screenOptions={({ route, navigation }) => ({
         tabBarIcon: ({ focused, color, size }) => {
+          if (route.name === 'MRZ') {
+            return (
+              <View style={[styles.mrzTabIconWrap, { backgroundColor: colors.primary }]}>
+                <Ionicons name="document-text" size={26} color="#FFFFFF" />
+              </View>
+            );
+          }
           let iconName;
           if (route.name === 'Odalar') iconName = focused ? 'home' : 'home-outline';
           else if (route.name === 'Okuma') iconName = focused ? 'scan' : 'scan-outline';
@@ -153,7 +268,6 @@ function MainTabs() {
           else if (route.name === 'Raporlar') iconName = focused ? 'stats-chart' : 'stats-chart-outline';
           else if (route.name === 'Misafirler') iconName = focused ? 'people' : 'people-outline';
           else if (route.name === 'Topluluk') iconName = focused ? 'chatbubbles' : 'chatbubbles-outline';
-          else if (route.name === 'Bildirimler') iconName = focused ? 'notifications' : 'notifications-outline';
           else if (route.name === 'AdminPanel') iconName = focused ? 'shield' : 'shield-outline';
           else iconName = 'ellipse-outline';
           return <Ionicons name={iconName} size={focused ? 24 : 22} color={color} />;
@@ -202,19 +316,20 @@ function MainTabs() {
       <Tab.Screen 
         name="Misafirler" 
         component={MisafirlerScreen}
+        options={{ tabBarLabel: 'Misafirler' }}
+      />
+      <Tab.Screen
+        name="MRZ"
+        component={MrzTabPlaceholder}
         options={{
-          tabBarLabel: 'Misafirler',
+          tabBarLabel: 'MRZ Tara',
+          tabBarActiveTintColor: colors.primary,
         }}
       />
       <Tab.Screen 
         name="Topluluk" 
         component={ToplulukScreen}
         options={{ tabBarLabel: 'Topluluk' }}
-      />
-      <Tab.Screen 
-        name="Bildirimler" 
-        component={BildirimlerScreen}
-        options={{ tabBarLabel: 'Bildirimler' }}
       />
       <Tab.Screen 
         name="Raporlar" 
@@ -331,6 +446,7 @@ function AppNavigator() {
             <Stack.Screen name="ToplulukProfil" component={ToplulukProfilScreen} />
             <Stack.Screen name="AdminPanel" component={AdminPanelScreen} />
             <Stack.Screen name="TesisList" component={TesisListScreen} />
+            <Stack.Screen name="Bildirimler" component={BildirimlerScreen} />
             <Stack.Screen name="MrzScan" component={MrzScanScreen} />
             <Stack.Screen name="MrzResult" component={MrzResultScreen} />
             <Stack.Screen name="KycSubmit" component={KycSubmitScreen} />

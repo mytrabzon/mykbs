@@ -46,6 +46,8 @@ export default function PaylasimEkleScreen() {
   const [images, setImages] = useState([]);
   const [loading, setLoading] = useState(false);
   const [showTitleField, setShowTitleField] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const [uploadStatus, setUploadStatus] = useState('');
 
   const pickImage = async () => {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -56,7 +58,7 @@ export default function PaylasimEkleScreen() {
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
       allowsMultipleSelection: true,
-      quality: 0.85,
+      quality: 0.5,
       base64: true,
     });
     if (!result.canceled && result.assets) {
@@ -93,9 +95,16 @@ export default function PaylasimEkleScreen() {
       return;
     }
     setLoading(true);
+    setUploadProgress(0);
+    setUploadStatus(images.length ? 'Resimler hazırlanıyor...' : 'Paylaşım gönderiliyor...');
     try {
       let imageUrls = [];
-      for (const img of images) {
+      const totalImages = images.length;
+      for (let i = 0; i < images.length; i++) {
+        const img = images[i];
+        const step = totalImages > 0 ? (i / totalImages) * 0.7 : 0;
+        setUploadProgress(0.05 + step);
+        setUploadStatus(totalImages > 1 ? `Resim yükleniyor (${i + 1}/${totalImages})...` : 'Resim yükleniyor...');
         try {
           let base64 = null;
           if (typeof img.base64 === 'string' && img.base64.length > 0) {
@@ -114,16 +123,23 @@ export default function PaylasimEkleScreen() {
           if (!base64 || typeof base64 !== 'string') {
             Toast.show({ type: 'error', text1: 'Resim yüklenemedi', text2: 'Resim verisi alınamadı' });
             setLoading(false);
+            setUploadProgress(0);
+            setUploadStatus('');
             return;
           }
           const url = await communityApi.uploadCommunityImage(base64, branchId, token);
           imageUrls.push(url);
+          setUploadProgress(0.05 + ((i + 1) / totalImages) * 0.7);
         } catch (e) {
           Toast.show({ type: 'error', text1: 'Resim yüklenemedi', text2: e?.message || 'Resim verisi işlenemedi' });
           setLoading(false);
+          setUploadProgress(0);
+          setUploadStatus('');
           return;
         }
       }
+      setUploadProgress(0.9);
+      setUploadStatus('Paylaşım gönderiliyor...');
       await communityApi.createPost(
         {
           branch_id: branchId,
@@ -135,12 +151,18 @@ export default function PaylasimEkleScreen() {
         },
         token
       );
+      setUploadProgress(1);
+      setUploadStatus('Tamamlandı');
       Toast.show({ type: 'success', text1: 'Paylaşım eklendi' });
       navigation.goBack();
     } catch (err) {
       Toast.show({ type: 'error', text1: 'Gönderilemedi', text2: err?.message });
+      setUploadProgress(0);
+      setUploadStatus('');
     } finally {
       setLoading(false);
+      setUploadProgress(0);
+      setUploadStatus('');
     }
   };
 
@@ -158,14 +180,29 @@ export default function PaylasimEkleScreen() {
             disabled={loading || !body.trim()}
             style={[styles.headerShareBtn, (loading || !body.trim()) && styles.headerShareBtnDisabled]}
           >
-            {loading ? (
-              <ActivityIndicator size="small" color={colors.primary} />
-            ) : (
-              <Text style={[styles.headerShareText, { color: colors.primary }]}>Paylaş</Text>
-            )}
+            {!loading && <Text style={[styles.headerShareText, { color: colors.primary }]}>Paylaş</Text>}
           </TouchableOpacity>
         }
       />
+
+      {loading && (
+        <View style={[styles.progressSection, { backgroundColor: colors.surface }]}>
+          <View style={[styles.progressTrack, { backgroundColor: colors.border }]}>
+            <View
+              style={[
+                styles.progressFill,
+                {
+                  backgroundColor: colors.primary,
+                  width: `${Math.min(100, Math.max(0, uploadProgress * 100))}%`,
+                },
+              ]}
+            />
+          </View>
+          <Text style={[styles.progressStatus, { color: colors.textSecondary }]} numberOfLines={1}>
+            {uploadStatus}
+          </Text>
+        </View>
+      )}
 
       <KeyboardAvoidingView
         style={styles.keyboard}
@@ -303,6 +340,26 @@ const styles = StyleSheet.create({
   headerShareBtn: { paddingVertical: 8, paddingHorizontal: 12, minWidth: 60, alignItems: 'flex-end' },
   headerShareBtnDisabled: { opacity: 0.5 },
   headerShareText: { fontSize: typography.text.body.fontSize, fontWeight: '600' },
+
+  progressSection: {
+    paddingHorizontal: spacing.screenPadding,
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(0,0,0,0.06)',
+  },
+  progressTrack: {
+    height: 6,
+    borderRadius: 3,
+    overflow: 'hidden',
+    marginBottom: 6,
+  },
+  progressFill: {
+    height: '100%',
+    borderRadius: 3,
+  },
+  progressStatus: {
+    fontSize: 13,
+  },
 
   photoSection: {
     padding: spacing.screenPadding,

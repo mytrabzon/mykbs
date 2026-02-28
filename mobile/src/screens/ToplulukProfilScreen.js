@@ -14,7 +14,8 @@ export default function ToplulukProfilScreen({ route, navigation }) {
 
   const [profile, setProfile] = useState(initialProfile || null);
   const [meId, setMeId] = useState(null);
-  const [loading, setLoading] = useState(true);
+  const hasInitialData = !!(userId && initialProfile && typeof initialProfile === 'object');
+  const [loading, setLoading] = useState(!hasInitialData);
 
   useEffect(() => {
     let cancelled = false;
@@ -22,13 +23,12 @@ export default function ToplulukProfilScreen({ route, navigation }) {
       try {
         const token = await getSupabaseToken();
         if (!token) {
-          setLoading(false);
+          if (!cancelled) setLoading(false);
           return;
         }
         const me = await communityApi.getMe(token);
         if (!cancelled) {
           setMeId(me?.user_id || null);
-          // Eğer kendi profilimiz ise en güncel veriyi kullan
           if (!userId || userId === me?.user_id) {
             setProfile({
               display_name: me?.display_name || null,

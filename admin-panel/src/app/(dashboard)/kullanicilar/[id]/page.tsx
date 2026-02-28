@@ -38,6 +38,7 @@ export default function KullaniciDuzenlePage() {
   const id = params?.id as string
   const [k, setK] = useState<Kullanici | null>(null)
   const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
   const [form, setForm] = useState({
     adSoyad: '',
@@ -58,6 +59,7 @@ export default function KullaniciDuzenlePage() {
   }, [id])
 
   const load = async () => {
+    setLoadError(null)
     try {
       const res = await api.get<{ kullanici: Kullanici }>(`/app-admin/kullanicilar/${id}`)
       const u = res.data.kullanici
@@ -75,10 +77,16 @@ export default function KullaniciDuzenlePage() {
         pin: '',
       })
     } catch (e: unknown) {
-      const err = e as { response?: { status?: number } }
-      if (err.response?.status === 401) router.push('/login')
-      else if (err.response?.status === 404) toast.error('Kullanıcı bulunamadı')
-      else toast.error('Yüklenemedi')
+      const err = e as { response?: { status?: number; data?: { message?: string } }; message?: string }
+      if (err.response?.status === 401) {
+        router.push('/login')
+        return
+      }
+      const msg = err.response?.status === 404
+        ? 'Kullanıcı bulunamadı'
+        : (err.response?.data?.message || (err as Error).message || 'Yüklenemedi')
+      setLoadError(msg)
+      toast.error(msg)
     } finally {
       setLoading(false)
     }
@@ -119,12 +127,28 @@ export default function KullaniciDuzenlePage() {
     }
   }
 
-  if (loading || !k) {
+  if (loading) {
     return (
       <div className="kbs-loading">
         <div className="kbs-loading-inner">
           <div className="kbs-loading-spinner" />
           <p className="kbs-loading-text">Yükleniyor...</p>
+        </div>
+      </div>
+    )
+  }
+
+  if (!k) {
+    return (
+      <div className="admin-page">
+        <div className="kbs-admin-mb-16">
+          <Link href="/tesisler" className="kbs-page-back">← Tesis listesi</Link>
+        </div>
+        <div className="kbs-card kbs-form-max">
+          <p className="kbs-card-empty-text">{loadError || 'Kullanıcı yüklenemedi.'}</p>
+          <button type="button" className="kbs-btn-primary" style={{ marginTop: 16 }} onClick={() => load()}>
+            Tekrar dene
+          </button>
         </div>
       </div>
     )

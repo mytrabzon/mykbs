@@ -87,7 +87,7 @@ export async function callFn<T = unknown>(
     data = { message: text || res.statusText };
   }
 
-  if (res.status === 401 && requireAuth && (name === 'me' || name === 'facilities_list' || name === 'rooms_list' || name === 'upload_community_image')) {
+  if (res.status === 401 && requireAuth && (name === 'me' || name === 'facilities_list' || name === 'rooms_list' || name === 'upload_community_image' || name === 'profile_update' || name === 'upload_avatar')) {
     const { data: { session: refreshed } } = await supabase.auth.refreshSession();
     const newToken = refreshed?.access_token;
     if (newToken) {

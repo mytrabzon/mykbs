@@ -28,7 +28,6 @@ const AVATAR_SIZE = 36;
 
 const CATEGORIES = [
   { key: '', label: 'Tümü' },
-  { key: 'announcement', label: 'Duyurular' },
   { key: 'procedure', label: 'Prosedür' },
   { key: 'warning', label: 'Uyarı' },
   { key: 'experience', label: 'Deneyim' },
@@ -86,7 +85,7 @@ function PostCard({ item, colors, onPostPress, onAuthorPress, onCommentPress, ca
       {/* Alt: aksiyonlar + caption */}
       <View style={styles.postFooter}>
         <View style={styles.actionRow}>
-          <TouchableOpacity style={styles.actionBtn} onPress={onPress}>
+          <TouchableOpacity style={styles.actionBtn}>
             <Ionicons name="heart-outline" size={24} color={colors.textPrimary} />
           </TouchableOpacity>
           <TouchableOpacity style={styles.actionBtn} onPress={onCommentPress}>
@@ -107,7 +106,6 @@ function PostCard({ item, colors, onPostPress, onAuthorPress, onCommentPress, ca
 export default function ToplulukScreen({ navigation }) {
   const { tesis, getSupabaseToken } = useAuth();
   const { colors } = useTheme();
-  const [tab, setTab] = useState('announcement');
   const [posts, setPosts] = useState([]);
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
@@ -144,7 +142,7 @@ export default function ToplulukScreen({ navigation }) {
       }
       const res = await communityApi.getCommunityPosts({
         branch_id: branchId,
-        type: tab === 'announcement' ? 'announcement' : 'post',
+        type: 'post',
         category: category || undefined,
         limit: 30,
         offset: 0,
@@ -159,7 +157,7 @@ export default function ToplulukScreen({ navigation }) {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [tesis?.id, tab, category, getSupabaseToken]);
+  }, [tesis?.id, category, getSupabaseToken]);
 
   useEffect(() => {
     loadToken();
@@ -168,7 +166,7 @@ export default function ToplulukScreen({ navigation }) {
   useEffect(() => {
     if (token) loadPosts();
     else setPosts([]);
-  }, [token, tab, category]);
+  }, [token, category]);
 
   const onRefresh = () => loadPosts(true);
 
@@ -177,7 +175,7 @@ export default function ToplulukScreen({ navigation }) {
       <View style={[styles.screenContainer, { backgroundColor: colors.background }]}>
         <AppHeader
           title="Topluluk"
-          tesis={tesis}
+          minimal
           onNotification={() => navigation.navigate('Bildirimler')}
           onProfile={() => navigation.navigate('ProfilDuzenle')}
         />
@@ -199,60 +197,10 @@ export default function ToplulukScreen({ navigation }) {
     <View style={[styles.screenContainer, { backgroundColor: colors.background }]}>
       <AppHeader
         title="Topluluk"
-        tesis={tesis}
+        minimal
         onNotification={() => navigation.navigate('Bildirimler')}
         onProfile={() => navigation.navigate('ProfilDuzenle')}
-        rightComponent={
-          <View style={styles.headerRight}>
-            <TouchableOpacity
-              style={[styles.headerAddBtn, { backgroundColor: colors.primary }]}
-              onPress={() => navigation.navigate('PaylasimEkle')}
-            >
-              <Ionicons name="add" size={22} color="#fff" />
-            </TouchableOpacity>
-            <TouchableOpacity onPress={() => navigation.navigate('Bildirimler')} style={styles.headerIconBtn}>
-              <Ionicons name="notifications-outline" size={22} color={colors.textSecondary} />
-            </TouchableOpacity>
-            <TouchableOpacity onPress={() => navigation.navigate('ProfilDuzenle')} style={styles.headerIconBtn}>
-              <Ionicons name="person-circle-outline" size={24} color={colors.textSecondary} />
-            </TouchableOpacity>
-          </View>
-        }
       />
-
-      {/* Tab bar - Instagram style */}
-      <View style={[styles.tabBar, { borderBottomColor: colors.border }]}>
-        <TouchableOpacity
-          style={[styles.tabItem, tab === 'announcement' && styles.tabItemActive]}
-          onPress={() => setTab('announcement')}
-        >
-          <Text
-            style={[
-              styles.tabLabel,
-              { color: tab === 'announcement' ? colors.primary : colors.textSecondary },
-              tab === 'announcement' && styles.tabLabelActive,
-            ]}
-          >
-            Duyurular
-          </Text>
-          {tab === 'announcement' && <View style={[styles.tabIndicator, { backgroundColor: colors.primary }]} />}
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.tabItem, tab === 'post' && styles.tabItemActive]}
-          onPress={() => setTab('post')}
-        >
-          <Text
-            style={[
-              styles.tabLabel,
-              { color: tab === 'post' ? colors.primary : colors.textSecondary },
-              tab === 'post' && styles.tabLabelActive,
-            ]}
-          >
-            Paylaşımlar
-          </Text>
-          {tab === 'post' && <View style={[styles.tabIndicator, { backgroundColor: colors.primary }]} />}
-        </TouchableOpacity>
-      </View>
 
       {/* Kategori chips */}
       <View style={styles.filterRow}>
@@ -293,7 +241,7 @@ export default function ToplulukScreen({ navigation }) {
             <EmptyState
               icon="images-outline"
               title="Henüz paylaşım yok"
-              message="İlk duyuruyu veya paylaşımı siz ekleyin."
+              message="İlk paylaşımı siz ekleyin."
               primaryCta={{ label: 'Paylaşım Ekle', onPress: () => navigation.navigate('PaylasimEkle') }}
               secondaryCta={{ label: 'Kategori Seç', onPress: openCategoryModal }}
             />
@@ -316,13 +264,13 @@ export default function ToplulukScreen({ navigation }) {
         />
       )}
 
-      {/* FAB - Paylaşım Ekle */}
+      {/* FAB - Paylaşım Ekle (küçük, yukarıda) */}
       <TouchableOpacity
         style={[styles.fab, { backgroundColor: colors.primary }]}
         onPress={() => navigation.navigate('PaylasimEkle')}
         activeOpacity={0.9}
       >
-        <Ionicons name="add" size={28} color="#fff" />
+        <Ionicons name="add" size={22} color="#fff" />
       </TouchableOpacity>
 
       <Modal visible={categoryModalVisible} transparent animationType="fade">
@@ -358,42 +306,6 @@ export default function ToplulukScreen({ navigation }) {
 const styles = StyleSheet.create({
   screenContainer: { flex: 1 },
   emptyWrap: { flex: 1 },
-  headerRight: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  headerAddBtn: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  headerIconBtn: { padding: 8, minWidth: 44, minHeight: 44, justifyContent: 'center', alignItems: 'center' },
-  tabBar: {
-    flexDirection: 'row',
-    borderBottomWidth: 1,
-    paddingHorizontal: spacing.screenPadding,
-  },
-  tabItem: {
-    flex: 1,
-    paddingVertical: 14,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  tabItemActive: {},
-  tabLabel: {
-    fontSize: typography.text.body.fontSize,
-    fontWeight: '500',
-  },
-  tabLabelActive: {
-    fontWeight: '600',
-  },
-  tabIndicator: {
-    position: 'absolute',
-    bottom: -1,
-    left: '20%',
-    right: '20%',
-    height: 2,
-    borderRadius: 1,
-  },
   filterRow: { marginBottom: 8, maxHeight: 44 },
   chipsContent: { paddingHorizontal: spacing.screenPadding, gap: 8, paddingVertical: 8 },
   listContent: { paddingBottom: 100 },
@@ -453,17 +365,17 @@ const styles = StyleSheet.create({
   fab: {
     position: 'absolute',
     right: spacing.screenPadding,
-    bottom: 90,
-    width: 56,
-    height: 56,
-    borderRadius: 28,
+    bottom: 110,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     alignItems: 'center',
     justifyContent: 'center',
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.2,
-    shadowRadius: 8,
-    elevation: 8,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.18,
+    shadowRadius: 6,
+    elevation: 6,
   },
 
   modalOverlay: {

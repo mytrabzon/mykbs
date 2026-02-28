@@ -272,9 +272,14 @@ export default function OdalarScreen() {
     }
   }, [filtre]);
 
+  const isFirstFocus = useRef(true);
   useFocusEffect(
     React.useCallback(() => {
-      // Ekran focus olduğunda verileri yenile (sadece initial loading değilse)
+      // İlk açılışta loadData(true) zaten çalışıyor; sadece ekrana geri dönüşte yenile (silinen oda hemen kalkar)
+      if (isFirstFocus.current) {
+        isFirstFocus.current = false;
+        return () => {};
+      }
       if (!initialLoading) {
         loadData(false);
       }
@@ -762,34 +767,50 @@ export default function OdalarScreen() {
       {ozet && (
         <View style={[styles.ozetWrapper, { marginTop: -24 }]}>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.ozetScroll}>
-            <View style={[styles.ozetCard, { backgroundColor: colors.surface }]}>
+            <TouchableOpacity
+              style={[styles.ozetCard, { backgroundColor: colors.surface }]}
+              onPress={() => setFiltre('dolu')}
+              activeOpacity={0.7}
+            >
               <View style={[styles.ozetIcon, { backgroundColor: colors.primarySoft }]}>
                 <Ionicons name="bed" size={24} color={colors.primary} />
               </View>
               <Text style={[styles.ozetValue, { color: colors.textPrimary }]}>{ozet.doluOda}/{ozet.toplamOda}</Text>
               <Text style={[styles.ozetLabel, { color: colors.textSecondary }]}>Dolu</Text>
-            </View>
-            <View style={[styles.ozetCard, { backgroundColor: colors.surface }]}>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.ozetCard, { backgroundColor: colors.surface }]}
+              onPress={() => setFiltre('tumu')}
+              activeOpacity={0.7}
+            >
               <View style={[styles.ozetIcon, { backgroundColor: colors.successSoft }]}>
                 <Ionicons name="log-in" size={24} color={colors.success} />
               </View>
               <Text style={[styles.ozetValue, { color: colors.textPrimary }]}>{ozet.bugunGiris}</Text>
               <Text style={[styles.ozetLabel, { color: colors.textSecondary }]}>Giriş</Text>
-            </View>
-            <View style={[styles.ozetCard, { backgroundColor: colors.surface }]}>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.ozetCard, { backgroundColor: colors.surface }]}
+              onPress={() => setFiltre('tumu')}
+              activeOpacity={0.7}
+            >
               <View style={[styles.ozetIcon, { backgroundColor: colors.warningSoft }]}>
                 <Ionicons name="log-out" size={24} color={colors.warning} />
               </View>
               <Text style={[styles.ozetValue, { color: colors.textPrimary }]}>{ozet.bugunCikis}</Text>
               <Text style={[styles.ozetLabel, { color: colors.textSecondary }]}>Çıkış</Text>
-            </View>
-            <View style={[styles.ozetCard, { backgroundColor: colors.surface }]}>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.ozetCard, { backgroundColor: colors.surface }]}
+              onPress={() => setFiltre('hatali')}
+              activeOpacity={0.7}
+            >
               <View style={[styles.ozetIcon, { backgroundColor: colors.errorSoft }]}>
                 <Ionicons name="warning" size={24} color={colors.error} />
               </View>
               <Text style={[styles.ozetValue, { color: colors.textPrimary }]}>{ozet.hataliBildirim}</Text>
               <Text style={[styles.ozetLabel, { color: colors.textSecondary }]}>Hatalı</Text>
-            </View>
+            </TouchableOpacity>
           </ScrollView>
         </View>
       )}

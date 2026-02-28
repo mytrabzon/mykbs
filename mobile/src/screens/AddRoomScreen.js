@@ -56,7 +56,7 @@ export default function AddRoomScreen() {
         kapasite: kap,
         not: not.trim() || undefined,
       });
-      Toast.show({ type: 'success', text1: 'Oda eklendi' });
+      Toast.show({ type: 'success', text1: 'Oda kuruldu' });
       if (route.params?.onAdded) route.params.onAdded();
       navigation.goBack();
     } catch (e) {

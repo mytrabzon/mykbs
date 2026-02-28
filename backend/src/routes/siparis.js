@@ -1,13 +1,19 @@
 /**
  * Paket siparişi: mobil "Satın Al" ile oluşturulur; admin panelde ödeme alındı + paket atanır.
+ * Auth: Supabase (mobil) veya legacy JWT.
  */
 const express = require('express');
 const { PrismaClient } = require('@prisma/client');
-const { authenticate } = require('../middleware/auth');
+const { authenticateTesisOrSupabase } = require('../middleware/authTesisOrSupabase');
+const { ensureTesisForBranch } = require('../lib/ensureTesisForBranch');
 const { getPackageCredits, PACKAGES } = require('../config/packages');
 
 const router = express.Router();
 const prisma = new PrismaClient();
+
+function getTesisId(req) {
+  return req.authSource === 'supabase' ? req.branchId : req.tesis?.id;
+}
 
 /** Okunabilir sipariş no: ORD-YYYYMMDD-XXX (günlük sıra) */
 async function generateSiparisNo() {
@@ -26,10 +32,13 @@ async function generateSiparisNo() {
  * POST /api/siparis — Sipariş oluştur (giriş yapmış tesis kullanıcısı)
  * Body: { paket: 'starter' | 'pro' | 'business' | 'enterprise' }
  */
-router.post('/', authenticate, async (req, res) => {
+router.post('/', authenticateTesisOrSupabase, async (req, res) => {
   try {
-    const tesis = req.tesis;
-    if (!tesis) return res.status(403).json({ message: 'Tesis bilgisi bulunamadı' });
+    if (req.authSource === 'supabase' && req.branch) {
+      await ensureTesisForBranch(prisma, req.branchId, req.branch.name);
+    }
+    const tesisId = getTesisId(req);
+    if (!tesisId) return res.status(403).json({ message: 'Tesis bilgisi bulunamadı' });
 
     const { paket } = req.body;
     const valid = ['starter', 'pro', 'business', 'enterprise'];
@@ -44,7 +53,7 @@ router.post('/', authenticate, async (req, res) => {
     const siparis = await prisma.siparis.create({
       data: {
         siparisNo,
-        tesisId: tesis.id,
+        tesisId,
         paket,
         tutarTL: pkg.priceTL,
         kredi: pkg.credits,
@@ -68,15 +77,18 @@ router.post('/', authenticate, async (req, res) => {
 });
 
 /**
- * GET /api/siparis — Giriş yapan tesisin siparişleri (opsiyonel: kullanıcı kendi siparişlerini görsün)
+ * GET /api/siparis — Giriş yapan tesisin siparişleri
  */
-router.get('/', authenticate, async (req, res) => {
+router.get('/', authenticateTesisOrSupabase, async (req, res) => {
   try {
-    const tesis = req.tesis;
-    if (!tesis) return res.status(403).json({ message: 'Tesis bilgisi bulunamadı' });
+    if (req.authSource === 'supabase' && req.branch) {
+      await ensureTesisForBranch(prisma, req.branchId, req.branch.name);
+    }
+    const tesisId = getTesisId(req);
+    if (!tesisId) return res.status(403).json({ message: 'Tesis bilgisi bulunamadı' });
 
     const list = await prisma.siparis.findMany({
-      where: { tesisId: tesis.id },
+      where: { tesisId },
       orderBy: { createdAt: 'desc' },
       take: 50,
     });

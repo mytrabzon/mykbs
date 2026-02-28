@@ -278,7 +278,8 @@ export const AuthProvider = ({ children }) => {
       const res = await api.post('/auth/giris/yeni', { email: emailNorm, sifre: passwordNorm });
       const { token: newToken, kullanici, tesis: tesisData } = res.data || {};
       if (newToken && kullanici && tesisData) {
-        return await loginWithToken(newToken, kullanici, tesisData, newToken);
+        // Supabase token dönmediği için null: profil/topluluk Edge çağrıları şifre ile girişte 401 verir; OTP giriş gerekir.
+        return await loginWithToken(newToken, kullanici, tesisData, null);
       }
       return { success: false, message: res.data?.message || 'Giriş başarısız' };
     } catch (err) {
@@ -296,7 +297,7 @@ export const AuthProvider = ({ children }) => {
       if (!newToken || !kullanici) {
         return { success: false, message: response.data?.message || 'Giriş başarısız' };
       }
-      return await loginWithToken(newToken, kullanici, tesisData, newToken);
+      return await loginWithToken(newToken, kullanici, tesisData, null);
     } catch (error) {
       return {
         success: false,

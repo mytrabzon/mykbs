@@ -53,6 +53,8 @@ export default function AyarlarScreen() {
   const [changeModalVisible, setChangeModalVisible] = useState(false);
   const [changeTesisKodu, setChangeTesisKodu] = useState('');
   const [changeSifre, setChangeSifre] = useState('');
+  const [kbsImportLoading, setKbsImportLoading] = useState(false);
+  const [kbsImportResult, setKbsImportResult] = useState(null);
 
   const loadCredentialStatus = async () => {
     try {
@@ -150,6 +152,29 @@ export default function AyarlarScreen() {
       setTestResult({ success: false, message: e?.response?.data?.message || 'Test başarısız' });
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleKBSImport = async () => {
+    setKbsImportLoading(true);
+    setKbsImportResult(null);
+    try {
+      const response = await api.post('/tesis/kbs/import');
+      const data = response.data || {};
+      setKbsImportResult(data);
+      const msg = data.message || (data.imported > 0 ? `${data.imported} misafir aktarıldı.` : 'Aktarım tamamlandı.');
+      if (data.imported > 0) {
+        dataService.clearCache().catch(() => {});
+        Toast.show({ type: 'success', text1: 'KBS aktarımı', text2: msg, visibilityTime: 5000 });
+      } else {
+        Toast.show({ type: 'info', text1: 'KBS aktarımı', text2: msg, visibilityTime: 5000 });
+      }
+    } catch (e) {
+      const errMsg = e?.response?.data?.message || e?.message || 'Aktarım başarısız';
+      setKbsImportResult({ error: errMsg });
+      Toast.show({ type: 'error', text1: 'KBS aktarımı', text2: errMsg, visibilityTime: 5000 });
+    } finally {
+      setKbsImportLoading(false);
     }
   };
 
@@ -449,6 +474,31 @@ export default function AyarlarScreen() {
               ]}
             >
               <Text style={[styles.testResultText, { color: colors.textPrimary }]}>{testResult.message}</Text>
+            </View>
+          )}
+
+          <Text style={[styles.infoText, { color: colors.textSecondary, marginTop: spacing.md }]}>
+            Farklı bir sistemden geçtiyseniz, KBS bilgilerinizi kaydettikten sonra aşağıdaki butonla daha önce KBS'e bildirdiğiniz misafirleri sistemimize aktarabilirsiniz; kaldığınız yerden devam edersiniz.
+          </Text>
+          <Button
+            variant="secondary"
+            onPress={handleKBSImport}
+            loading={kbsImportLoading}
+            disabled={kbsImportLoading || loading || !kbsSettings.kbsTesisKodu?.trim()}
+            style={{ marginTop: spacing.sm }}
+          >
+            KBS'ten mevcut misafirleri getir
+          </Button>
+          {kbsImportResult && (
+            <View
+              style={[
+                styles.testResult,
+                { marginTop: spacing.sm, backgroundColor: kbsImportResult.error ? (colors.errorSoft || '#fef2f2') : (colors.successSoft || '#f0fdf4') },
+              ]}
+            >
+              <Text style={[styles.testResultText, { color: colors.textPrimary }]}>
+                {kbsImportResult.error || kbsImportResult.message || (kbsImportResult.imported > 0 ? `${kbsImportResult.imported} misafir aktarıldı.` : 'İşlem tamamlandı.')}
+              </Text>
             </View>
           )}
 

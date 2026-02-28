@@ -1,3 +1,4 @@
+/** Belge okutma (OCR/okut): Tüm giriş yapmış kullanıcılar kullanabilir; sadece admin değil. */
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 const corsHeaders = { "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type" };
 Deno.serve(async (req: Request) => {

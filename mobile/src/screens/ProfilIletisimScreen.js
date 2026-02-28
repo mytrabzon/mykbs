@@ -64,18 +64,24 @@ export default function ProfilIletisimScreen() {
     }
     if (!supabase) {
       Toast.show({ type: 'error', text1: 'Hata', text2: 'E-posta servisi kullanılamıyor.' });
+      setSendingCode(false);
       return;
     }
     setSendingCode(true);
     try {
       const { error } = await supabase.auth.updateUser({ email });
       if (error) throw error;
-      setStep('enter_code');
-      setTarget('email');
-      setCode(['', '', '', '', '', '']);
-      Toast.show({ type: 'success', text1: 'Kod gönderildi', text2: `${email} adresine doğrulama kodu gönderildi` });
+      setStep('list');
+      setTarget(null);
+      setNewEmail('');
+      Toast.show({
+        type: 'success',
+        text1: 'Doğrulama linki gönderildi',
+        text2: `${email} adresine doğrulama linki gönderildi. E-postanızı kontrol edin ve linke tıklayın.`,
+        visibilityTime: 5000,
+      });
     } catch (e) {
-      Toast.show({ type: 'error', text1: 'Kod gönderilemedi', text2: e?.message || 'Tekrar deneyin.' });
+      Toast.show({ type: 'error', text1: 'Gönderilemedi', text2: e?.message || 'Tekrar deneyin.' });
     } finally {
       setSendingCode(false);
     }
@@ -245,6 +251,9 @@ export default function ProfilIletisimScreen() {
                     keyboardType="email-address"
                     autoCapitalize="none"
                   />
+                  <Text style={[styles.hint, { color: colors.textSecondary }]}>
+                    Doğrulama linki bu adrese gönderilir. Linke tıklayarak e-postanızı bağlayın.
+                  </Text>
                   <View style={styles.rowButtons}>
                     <Button variant="secondary" onPress={cancelFlow}>İptal</Button>
                     <Button variant="primary" onPress={sendCodeToEmail} loading={sendingCode} disabled={sendingCode}>

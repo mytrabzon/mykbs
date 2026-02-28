@@ -439,6 +439,21 @@ export const api = {
         return toResponse(res);
       }
       if (pathname === '/nfc/okut' || pathname === 'nfc/okut') {
+        const backendUrl = getBackendUrl();
+        if (backendUrl && token) {
+          const r = await fetchWithLog(`${backendUrl}/api/nfc/okut`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+            body: JSON.stringify(payload),
+          });
+          const data = await r.json().catch(() => ({}));
+          if (!r.ok) {
+            throw Object.assign(new Error((data as { message?: string })?.message || 'NFC okunamadı'), {
+              response: { status: r.status, data },
+            });
+          }
+          return toResponse(data as { success: boolean; parsed?: Record<string, unknown> });
+        }
         const res = await callFn('nfc_read', payload, token);
         return toResponse(res);
       }
@@ -518,7 +533,7 @@ export const api = {
       if (pathname === '/misafir/checkin' || pathname === 'misafir/checkin') {
         const backendUrl = getBackendUrl();
         if (backendUrl && token) {
-          const r = await fetchWithLog(`${backendUrl}/api/checkin`, {
+          const r = await fetchWithLog(`${backendUrl}/api/misafir/checkin`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
             body: JSON.stringify(payload),
@@ -529,7 +544,8 @@ export const api = {
             (e as EdgeFunctionError & { skipAuthRedirect?: boolean }).skipAuthRedirect = true;
             throw e;
           }
-          return toResponse({ success: true, message: (data as { message?: string })?.message || 'Check-in kaydedildi', guestId: (data as { guestId?: string })?.guestId });
+          const msg = (data as { message?: string })?.message || 'Check-in kaydedildi';
+          return toResponse({ success: true, message: msg, misafir: (data as { misafir?: unknown })?.misafir, guestId: (data as { guestId?: string })?.guestId });
         }
         const res = await callFn('checkin_create', payload, token);
         return toResponse(res);
@@ -567,6 +583,22 @@ export const api = {
           });
           const data = await r.json().catch(() => ({}));
           if (!r.ok) throw Object.assign(new Error((data as { message?: string })?.message || 'Talep gönderilemedi'), { response: { status: r.status, data } });
+          return toResponse(data);
+        }
+        throw new Error('Sunucu adresi tanımlı değil');
+      }
+      if (pathname === '/tesis/kbs/import' || pathname === 'tesis/kbs/import') {
+        const backendUrl = getBackendUrl();
+        if (backendUrl && token) {
+          const r = await fetchWithLog(`${backendUrl}/api/tesis/kbs/import`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+            body: JSON.stringify(payload || {}),
+          });
+          const data = await r.json().catch(() => ({}));
+          if (!r.ok) {
+            throw Object.assign(new Error((data as { message?: string })?.message || 'KBS aktarımı başarısız'), { response: { status: r.status, data } });
+          }
           return toResponse(data);
         }
         throw new Error('Sunucu adresi tanımlı değil');

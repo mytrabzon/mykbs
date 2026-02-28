@@ -30,6 +30,9 @@ export default function AppHeader({
   title,
   tesis,
   variant = 'default',
+  hideTesisAndTitle = false,
+  /** Sadece başlık + bildirim + profil (tesis/paket ve durum noktaları gizlenir) */
+  minimal = false,
   backendConfigured = false,
   backendOnline = null,
   backendError = null,
@@ -73,49 +76,55 @@ export default function AppHeader({
     <View style={[styles.wrap, { backgroundColor: isPrimary ? colors.primary : colors.surface, borderBottomWidth: 0, paddingTop: insets.top }]}>
       <View style={[styles.row, { minHeight: spacing.headerHeight }]}>
         <View style={styles.left}>
-          {onBack ? (
-            <TouchableOpacity onPress={onBack} style={styles.iconBtn} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
-              <Ionicons name="arrow-back" size={24} color={isPrimary ? '#FFF' : colors.textPrimary} />
-            </TouchableOpacity>
-          ) : (
-            <Text style={[styles.tesisName, { color: isPrimary ? '#FFF' : colors.textPrimary }]} numberOfLines={1}>
-              {tesis?.tesisAdi || tesis?.adi || 'Tesis'}
-            </Text>
-          )}
-          {(tesis?.paket || tesis?.kota) && !onBack && (
-            <Text style={[styles.package, { color: isPrimary ? 'rgba(255,255,255,0.8)' : colors.textSecondary }]} numberOfLines={1}>
-              {[
-                tesis?.paket,
-                tesis?.kota != null
-                  ? `Kalan: ${Math.max(0, (tesis.kota ?? 0) - (tesis.kullanilanKota ?? 0))} bildirim`
-                  : null
-              ].filter(Boolean).join(' · ')}
-            </Text>
+          {!hideTesisAndTitle && !minimal && (
+            <>
+              {onBack ? (
+                <TouchableOpacity onPress={onBack} style={styles.iconBtn} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
+                  <Ionicons name="arrow-back" size={24} color={isPrimary ? '#FFF' : colors.textPrimary} />
+                </TouchableOpacity>
+              ) : (
+                <Text style={[styles.tesisName, { color: isPrimary ? '#FFF' : colors.textPrimary }]} numberOfLines={1}>
+                  {tesis?.tesisAdi || tesis?.adi || 'Tesis'}
+                </Text>
+              )}
+              {(tesis?.paket || tesis?.kota) && !onBack && (
+                <Text style={[styles.package, { color: isPrimary ? 'rgba(255,255,255,0.8)' : colors.textSecondary }]} numberOfLines={1}>
+                  {[
+                    tesis?.paket,
+                    tesis?.kota != null
+                      ? `Kalan: ${Math.max(0, (tesis.kota ?? 0) - (tesis.kullanilanKota ?? 0))} bildirim`
+                      : null
+                  ].filter(Boolean).join(' · ')}
+                </Text>
+              )}
+            </>
           )}
         </View>
-        {title ? (
+        {title && (!hideTesisAndTitle || minimal) ? (
           <Text style={[styles.title, { color: isPrimary ? '#FFF' : colors.textPrimary }]} numberOfLines={1}>
             {title}
           </Text>
         ) : null}
         <View style={styles.right} pointerEvents="box-none">
-          <View style={styles.dotsRow} pointerEvents="box-none">
-            <StatusDot
-              configured={backendConfigured}
-              isOnline={backendOnline}
-              error={backendError}
-              label="Backend"
-              onPress={() => showNote('backend')}
-            />
-            <View style={[styles.dotDivider, { backgroundColor: colors.border }]} />
-            <StatusDot
-              configured={supabaseConfigured}
-              isOnline={supabaseOnline}
-              error={supabaseError}
-              label="Supabase"
-              onPress={() => showNote('supabase')}
-            />
-          </View>
+          {!minimal && (
+            <View style={styles.dotsRow} pointerEvents="box-none">
+              <StatusDot
+                configured={backendConfigured}
+                isOnline={backendOnline}
+                error={backendError}
+                label="Backend"
+                onPress={() => showNote('backend')}
+              />
+              <View style={[styles.dotDivider, { backgroundColor: colors.border }]} />
+              <StatusDot
+                configured={supabaseConfigured}
+                isOnline={supabaseOnline}
+                error={supabaseError}
+                label="Supabase"
+                onPress={() => showNote('supabase')}
+              />
+            </View>
+          )}
           {rightComponent ?? (
             <>
               {onNotification != null && (
