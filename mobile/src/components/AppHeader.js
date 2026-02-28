@@ -55,17 +55,17 @@ export default function AppHeader({
       if (!backendConfigured) {
         setModalContent({ title: 'Backend', body: 'Backend adresi yapılandırılmadı. EXPO_PUBLIC_BACKEND_URL tanımlanmamış.' });
       } else if (backendOnline === true) {
-        setModalContent({ title: 'Backend', body: 'Backend sunucusu ile bağlantı başarılı.' });
+        setModalContent({ title: 'Backend', body: 'Bağlantı var.' });
       } else {
-        setModalContent({ title: 'Backend', body: backendError || 'Backend sunucusuna ulaşılamıyor.' });
+        setModalContent({ title: 'Backend', body: 'Bağlantı yok. Sorun yok, sistem geliştiriliyor.' });
       }
     } else {
       if (!supabaseConfigured) {
         setModalContent({ title: 'Supabase', body: 'Supabase yapılandırılmadı. EXPO_PUBLIC_SUPABASE_URL tanımlanmamış.' });
       } else if (supabaseOnline === true) {
-        setModalContent({ title: 'Supabase', body: 'Supabase ile bağlantı başarılı.' });
+        setModalContent({ title: 'Supabase', body: 'Bağlantı var.' });
       } else {
-        setModalContent({ title: 'Supabase', body: supabaseError || 'Supabase servisine ulaşılamıyor.' });
+        setModalContent({ title: 'Supabase', body: 'Bağlantı yok. Sorun yok, sistem geliştiriliyor.' });
       }
     }
     setModalVisible(true);

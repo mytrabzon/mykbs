@@ -26,7 +26,8 @@ try {
 
 const TIMEOUT_MS = 15000;
 const MAX_FAILS = 6;
-const SHOW_INSTANT_RESULT = true; // MRZ okunur okunmaz milisaniyede beyaz ekranda göster
+const STABLE_READ_COUNT = 3;
+const SHOW_INSTANT_RESULT = true; // MRZ okunur okunmaz anında sonuç ekranına geç
 
 function Row({ label, value }) {
   const v = value != null && value !== '' ? String(value) : '—';
@@ -184,9 +185,14 @@ export default function MrzScanScreen({ navigation }) {
         const res = await api.post('/ocr/mrz', formData);
         const raw = res?.data?.raw;
         if (raw) processMrzRaw(raw);
-        else Toast.show({ type: 'error', text1: 'MRZ bulunamadı', text2: 'MRZ alanı görünür olsun.' });
+        else Toast.show({ type: 'error', text1: 'MRZ bulunamadı', text2: 'MRZ alanı net görünsün, tekrar deneyin.' });
       } catch (e) {
-        Toast.show({ type: 'error', text1: 'Hata', text2: e?.message || 'MRZ okunamadı.' });
+        const msg = e?.message || '';
+        Toast.show({
+          type: 'error',
+          text1: 'MRZ okunamadı',
+          text2: msg.includes('sunucu') || msg.includes('giriş') ? 'Backend bağlantısı ve giriş gerekli.' : msg || 'Tekrar deneyin.',
+        });
       } finally {
         if (mounted.current) setOcrLoading(false);
       }
@@ -194,7 +200,7 @@ export default function MrzScanScreen({ navigation }) {
     [processMrzRaw]
   );
 
-  /** Tek fotoğraftan otomatik algılama: pasaport/kimlik = MRZ, ehliyet = ön yüz OCR */
+  /** Tek fotoğraftan otomatik algılama: pasaport/kimlik = MRZ, ehliyet = ön yüz OCR. Backend tek kaynak — hızlı çalışır. */
   const uploadImageForDocument = useCallback(
     async (uri) => {
       if (!mounted.current) return;

@@ -39,7 +39,6 @@ import AddRoomScreen from './src/screens/AddRoomScreen';
 import PaylasimEkleScreen from './src/screens/PaylasimEkleScreen';
 import ProfilDuzenleScreen from './src/screens/ProfilDuzenleScreen';
 import ProfilIletisimScreen from './src/screens/ProfilIletisimScreen';
-import OkumaScreen from './src/screens/OkumaScreen';
 import RaporlarScreen from './src/screens/RaporlarScreen';
 import MrzScanScreen from './src/features/kyc/MrzScanScreen';
 import MrzResultScreen from './src/features/kyc/MrzResultScreen';
@@ -238,7 +237,7 @@ import TrialWelcomeBanner from './src/components/TrialWelcomeBanner';
 const Tab = createBottomTabNavigator();
 const Stack = createStackNavigator();
 
-const TAB_NAMES = ['Odalar', 'Okuma', 'Misafirler', 'MRZ', 'Topluluk', 'Raporlar', 'Ayarlar'];
+const TAB_NAMES = ['Odalar', 'Misafirler', 'MRZ', 'Topluluk', 'Raporlar', 'Ayarlar'];
 
 function MainTabs() {
   const insets = useSafeAreaInsets();
@@ -311,11 +310,6 @@ function MainTabs() {
         name="Odalar" 
         component={OdalarScreen}
         options={{ tabBarLabel: 'Odalar' }}
-      />
-      <Tab.Screen 
-        name="Okuma" 
-        component={OkumaScreen}
-        options={{ tabBarLabel: 'Okuma' }}
       />
       <Tab.Screen 
         name="Misafirler" 

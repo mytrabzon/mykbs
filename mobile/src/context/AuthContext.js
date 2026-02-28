@@ -18,8 +18,12 @@ const AUTH_STORAGE_KEYS = {
 
 const AuthContext = createContext({});
 
+/**
+ * Token ile /auth/me çağırıp user/tesis state'ini günceller.
+ * @returns {Promise<boolean>} true = kullanıcı/tesis set edildi veya zaten token geçerli; false = 401 ile oturum temizlendi (giriş başarısız).
+ */
 async function fetchMeAndSetState(accessToken, setUser, setTesis, setToken, getTokenProvider) {
-  if (!accessToken) return;
+  if (!accessToken) return false;
   await AsyncStorage.setItem(AUTH_STORAGE_KEYS.TOKEN, accessToken);
   await AsyncStorage.setItem(AUTH_STORAGE_KEYS.SUPABASE_TOKEN, accessToken);
   setToken(accessToken);
@@ -37,6 +41,7 @@ async function fetchMeAndSetState(accessToken, setUser, setTesis, setToken, getT
       setTesis(tesisData);
       await AsyncStorage.setItem(AUTH_STORAGE_KEYS.TESIS, JSON.stringify(tesisData));
     }
+    return true;
   } catch (e) {
     const status = e?.response?.status;
     if (status === 401) {
@@ -47,9 +52,10 @@ async function fetchMeAndSetState(accessToken, setUser, setTesis, setToken, getT
       setToken(null);
       setUser(null);
       setTesis(null);
-    } else {
-      logger.error('AuthContext fetch /me failed', e);
+      return false;
     }
+    logger.error('AuthContext fetch /me failed', e);
+    return true; // Diğer hatalarda token'ı tutuyoruz, kullanıcı sonra tekrar dener
   }
 }
 
@@ -270,7 +276,10 @@ export const AuthProvider = ({ children }) => {
         await AsyncStorage.setItem(AUTH_STORAGE_KEYS.TESIS, JSON.stringify(tesisData));
       }
       if (!kullanici || !tesisData) {
-        await fetchMeAndSetState(tokenForApi, setUser, setTesis, setToken, supabase ? getSupabaseAwareTokenProvider : undefined);
+        const fetched = await fetchMeAndSetState(tokenForApi, setUser, setTesis, setToken, supabase ? getSupabaseAwareTokenProvider : undefined);
+        if (!fetched) {
+          return { success: false, message: 'Bu hesap uygulamada tanımlı değil. Lütfen önce kayıt olun veya tesis kodunuzu kontrol edin.' };
+        }
       }
       return { success: true };
     } catch (error) {

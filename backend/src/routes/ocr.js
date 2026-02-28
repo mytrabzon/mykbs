@@ -36,17 +36,49 @@ const upload = multer({
   }
 });
 
-/** OCR çıktısından MRZ benzeri satırları bul (TD1: 3x30, TD2: 2x36, TD3: 2x44). Tek satırda birleşik (90/72/88 char) desteklenir. */
+/** MRZ satırını standart uzunluğa tamamla (< ile). */
+function padMrzLine(line, targetLen) {
+  if (!line || targetLen < 1) return line;
+  return line.padEnd(targetLen, '<').slice(0, targetLen);
+}
+
+/** OCR çıktısından MRZ benzeri satırları bul (TD1: 3x30 kimlik, TD2: 2x36, TD3: 2x44 pasaport). Esnek uzunluk kabul. */
 function extractMrzFromOcr(text) {
   if (!text || typeof text !== 'string') return '';
-  const lines = text.split(/\r\n|\r|\n/).map((l) => l.trim().toUpperCase().replace(/\s/g, ''));
-  const mrzLike = lines.filter((l) => /^[A-Z0-9<]+$/.test(l) && (l.length === 30 || l.length === 36 || l.length === 44));
-  if (mrzLike.length >= 3 && mrzLike.every((l) => l.length === 30)) return mrzLike.slice(0, 3).join('\n');
-  if (mrzLike.length >= 2) return mrzLike.join('\n');
   const one = text.replace(/\s/g, '').trim().toUpperCase();
-  if (/^[A-Z0-9<]+$/.test(one) && one.length === 90) return [one.slice(0, 30), one.slice(30, 60), one.slice(60, 90)].join('\n');
-  if (/^[A-Z0-9<]+$/.test(one) && one.length === 88) return [one.slice(0, 44), one.slice(44, 88)].join('\n');
-  if (/^[A-Z0-9<]+$/.test(one) && one.length === 72) return [one.slice(0, 36), one.slice(36, 72)].join('\n');
+  if (/^[A-Z0-9<]+$/.test(one) && one.length >= 88 && one.length <= 92) {
+    if (one.length >= 89 && one.length <= 91) {
+      const s1 = padMrzLine(one.slice(0, 30), 30);
+      const s2 = padMrzLine(one.slice(30, 60), 30);
+      const s3 = padMrzLine(one.slice(60, 90), 30);
+      return s1 + '\n' + s2 + '\n' + s3;
+    }
+    const s1 = padMrzLine(one.slice(0, 44), 44);
+    const s2 = padMrzLine(one.slice(44, 88), 44);
+    return s1 + '\n' + s2;
+  }
+  if (/^[A-Z0-9<]+$/.test(one) && one.length >= 70 && one.length <= 74) {
+    const s1 = padMrzLine(one.slice(0, 36), 36);
+    const s2 = padMrzLine(one.slice(36, 72), 36);
+    return s1 + '\n' + s2;
+  }
+  const lines = text.split(/\r\n|\r|\n/).map((l) => l.trim().toUpperCase().replace(/\s/g, ''));
+  const mrzLike = lines.filter((l) => /^[A-Z0-9<]+$/.test(l) && l.length >= 26 && l.length <= 46);
+  if (mrzLike.length >= 3 && mrzLike.every((l) => l.length >= 28 && l.length <= 32)) {
+    return mrzLike.slice(0, 3).map((l) => padMrzLine(l, 30)).join('\n');
+  }
+  if (mrzLike.length >= 2 && mrzLike.every((l) => l.length >= 34 && l.length <= 38)) {
+    return mrzLike.slice(0, 2).map((l) => padMrzLine(l, 36)).join('\n');
+  }
+  if (mrzLike.length >= 2 && mrzLike.every((l) => l.length >= 40 && l.length <= 46)) {
+    return mrzLike.slice(0, 2).map((l) => padMrzLine(l, 44)).join('\n');
+  }
+  if (mrzLike.length >= 2) {
+    const l0 = mrzLike[0].length, l1 = mrzLike[1].length;
+    if (l0 >= 40 && l1 >= 40) return padMrzLine(mrzLike[0], 44) + '\n' + padMrzLine(mrzLike[1], 44);
+    if (l0 >= 34 && l1 >= 34) return padMrzLine(mrzLike[0], 36) + '\n' + padMrzLine(mrzLike[1], 36);
+    if (l0 >= 28 && l1 >= 28) return padMrzLine(mrzLike[0], 30) + '\n' + padMrzLine(mrzLike[1], 30);
+  }
   if (mrzLike.length === 1 && mrzLike[0].length >= 30) return mrzLike[0];
   return '';
 }
@@ -69,16 +101,15 @@ async function preprocessImageForMrz(filePath) {
   }
 }
 
-/** MRZ: Tüm giriş yapmış kullanıcılar kullanabilir (sadece admin değil). JWT veya Supabase token yeterli. */
+/** MRZ: Ön işleme (grayscale, kontrast) + Tesseract. Kimlik/pasaport MRZ için tur+eng daha iyi sonuç verir. */
 router.post('/mrz', authenticateTesisOrSupabase, upload.single('image'), async (req, res) => {
+  const filePath = req.file?.path;
   try {
-    if (!req.file) {
+    if (!req.file || !filePath) {
       return res.status(400).json({ message: 'Görüntü yüklenmedi' });
     }
-    const imagePath = await preprocessImageForMrz(req.file.path);
-    const { data: { text } } = await Tesseract.recognize(imagePath, 'eng', {
-      logger: () => {},
-    });
+    const processedPath = await preprocessImageForMrz(filePath);
+    const { data: { text } } = await Tesseract.recognize(processedPath, 'tur+eng', { logger: () => {} });
     const raw = extractMrzFromOcr(text);
     if (!raw) {
       return res.status(400).json({ message: 'Görüntüde MRZ bulunamadı. MRZ alanını net ve çerçeve içine alın.' });
@@ -87,18 +118,23 @@ router.post('/mrz', authenticateTesisOrSupabase, upload.single('image'), async (
   } catch (error) {
     console.error('OCR MRZ hatası:', error);
     res.status(500).json({ message: 'MRZ okunamadı', error: error.message });
+  } finally {
+    if (filePath && fs.existsSync(filePath)) {
+      fs.unlink(filePath, () => {});
+    }
   }
 });
 
-/** Tek görsel: MRZ + ön yüz OCR birleşik. Tüm giriş yapmış kullanıcılar kullanabilir (admin şart değil). */
+/** Tek görsel: MRZ + ön yüz OCR birleşik. Ön işleme MRZ okumayı iyileştirir. Dosya yanıt sonrası silinir. */
 router.post('/document', authenticateTesisOrSupabase, upload.single('image'), async (req, res) => {
+  const filePath = req.file?.path;
   try {
-    if (!req.file) {
+    if (!req.file || !filePath) {
       return res.status(400).json({ message: 'Görüntü yüklenmedi' });
     }
-    const imagePath = await preprocessImageForMrz(req.file.path);
     const languages = req.query.languages || 'tur+eng';
-    const { data: { text } } = await Tesseract.recognize(imagePath, languages, { logger: () => {} });
+    const processedPath = await preprocessImageForMrz(filePath);
+    const { data: { text } } = await Tesseract.recognize(processedPath, languages, { logger: () => {} });
     const mrzRaw = extractMrzFromOcr(text);
     const parsed = parseIdentityDocument(text);
     const mrzPayload = mrzRaw ? parseMrzToPayload(mrzRaw) : null;
@@ -114,6 +150,10 @@ router.post('/document', authenticateTesisOrSupabase, upload.single('image'), as
   } catch (error) {
     console.error('OCR document hatası:', error);
     res.status(500).json({ message: 'Belge okunamadı', error: error.message });
+  } finally {
+    if (filePath && fs.existsSync(filePath)) {
+      fs.unlink(filePath, () => {});
+    }
   }
 });
 
@@ -145,9 +185,9 @@ router.post('/documents-batch', authenticateTesisOrSupabase, (req, res) => {
     const results = [];
     for (let i = 0; i < files.length; i++) {
       const file = files[i];
+      const filePath = file?.path;
       try {
-        const imagePath = await preprocessImageForMrz(file.path);
-        const { data: { text } } = await Tesseract.recognize(imagePath, 'tur+eng', { logger: () => {} });
+        const { data: { text } } = await Tesseract.recognize(filePath, 'tur+eng', { logger: () => {} });
         const mrzRaw = extractMrzFromOcr(text);
         const parsed = parseIdentityDocument(text);
         const mrzPayload = mrzRaw ? parseMrzToPayload(mrzRaw) : null;
@@ -155,6 +195,8 @@ router.post('/documents-batch', authenticateTesisOrSupabase, (req, res) => {
         results.push({ index: i, success: true, mrz: mrzRaw, front: parsed, merged });
       } catch (e) {
         results.push({ index: i, success: false, error: e.message });
+      } finally {
+        if (filePath && fs.existsSync(filePath)) fs.unlink(filePath, () => {});
       }
     }
     res.json({ success: true, results });

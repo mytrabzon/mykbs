@@ -36,6 +36,14 @@ function formatPhoneForSupabase(telefon) {
 
 const isEmail = (v) => (v || '').trim().includes('@');
 
+const SEND_CODE_TIMEOUT_MS = 15000;
+function withTimeout(promise, ms, msg = 'İstek zaman aşımına uğradı') {
+  return Promise.race([
+    promise,
+    new Promise((_, reject) => setTimeout(() => reject(new Error(msg)), ms)),
+  ]);
+}
+
 export default function ProfilIletisimScreen() {
   const navigation = useNavigation();
   const { colors } = useTheme();
@@ -64,12 +72,15 @@ export default function ProfilIletisimScreen() {
     }
     if (!supabase) {
       Toast.show({ type: 'error', text1: 'Hata', text2: 'E-posta servisi kullanılamıyor.' });
-      setSendingCode(false);
       return;
     }
     setSendingCode(true);
     try {
-      const { error } = await supabase.auth.updateUser({ email });
+      const { error } = await withTimeout(
+        supabase.auth.updateUser({ email }),
+        SEND_CODE_TIMEOUT_MS,
+        'E-posta gönderimi zaman aşımına uğradı. İnterneti kontrol edip tekrar deneyin.'
+      );
       if (error) throw error;
       setStep('list');
       setTarget(null);
@@ -77,11 +88,25 @@ export default function ProfilIletisimScreen() {
       Toast.show({
         type: 'success',
         text1: 'Doğrulama linki gönderildi',
-        text2: `${email} adresine doğrulama linki gönderildi. E-postanızı kontrol edin ve linke tıklayın.`,
+        text2: `${email} adresine doğrulama linki gönderildi. E-postanızı (ve gerekiyorsa spam klasörünü) kontrol edin.`,
         visibilityTime: 5000,
       });
     } catch (e) {
-      Toast.show({ type: 'error', text1: 'Gönderilemedi', text2: e?.message || 'Tekrar deneyin.' });
+      const msg = e?.message || 'Tekrar deneyin.';
+      const hint =
+        msg.includes('authorized') || msg.includes('Email address not authorized')
+          ? 'Supabase Dashboard → Custom SMTP yapılandırın veya adresi ekleyin.'
+          : msg.includes('rate') || msg.includes('limit')
+            ? 'E-posta limiti aşıldı; biraz sonra tekrar deneyin.'
+            : msg.includes('smtp') || msg.includes('SMTP')
+              ? 'Supabase Dashboard → Auth → SMTP ayarlarını kontrol edin.'
+              : null;
+      Toast.show({
+        type: 'error',
+        text1: 'E-posta gönderilemedi',
+        text2: hint ? `${msg} ${hint}` : msg,
+        visibilityTime: 6000,
+      });
     } finally {
       setSendingCode(false);
     }
@@ -100,7 +125,11 @@ export default function ProfilIletisimScreen() {
     }
     setSendingCode(true);
     try {
-      const { error } = await supabase.auth.updateUser({ phone });
+      const { error } = await withTimeout(
+        supabase.auth.updateUser({ phone }),
+        SEND_CODE_TIMEOUT_MS,
+        'SMS gönderimi zaman aşımına uğradı. İnterneti kontrol edip tekrar deneyin.'
+      );
       if (error) throw error;
       setStep('enter_code');
       setTarget('phone');

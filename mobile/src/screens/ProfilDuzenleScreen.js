@@ -14,8 +14,16 @@ import * as FileSystem from 'expo-file-system';
 import { useNavigation } from '@react-navigation/native';
 import { useTheme } from '../context/ThemeContext';
 import { useAuth } from '../context/AuthContext';
-import { api } from '../services/api';
+import { api, getBackendUrl } from '../services/api';
 import * as communityApi from '../services/communityApi';
+
+const SAVE_TIMEOUT_MS = 30000;
+function withTimeout(promise, ms, msg = 'İstek zaman aşımına uğradı') {
+  return Promise.race([
+    promise,
+    new Promise((_, reject) => setTimeout(() => reject(new Error(msg)), ms)),
+  ]);
+}
 import Toast from 'react-native-toast-message';
 import { Ionicons } from '@expo/vector-icons';
 import AppHeader from '../components/AppHeader';
@@ -25,7 +33,7 @@ export default function ProfilDuzenleScreen() {
   const navigation = useNavigation();
   const { colors } = useTheme();
   const { user, tesis, getSupabaseToken } = useAuth();
-  const [displayName, setDisplayName] = useState('');
+  const [displayName, setDisplayName] = useState(() => (user?.adSoyad || '').trim());
   const [title, setTitle] = useState('');
   const [avatarUrl, setAvatarUrl] = useState(null);
   const [localAvatarUri, setLocalAvatarUri] = useState(null);
@@ -34,37 +42,42 @@ export default function ProfilDuzenleScreen() {
 
   useEffect(() => {
     let cancelled = false;
-    const timeout = setTimeout(() => {
+    const maxWait = 2500;
+    const timeoutId = setTimeout(() => {
       if (!cancelled) setLoading(false);
-    }, 8000);
+    }, maxWait);
     (async () => {
       try {
         const t = await getSupabaseToken();
         if (t) {
-          const me = await communityApi.getMe(t);
+          const me = await withTimeout(communityApi.getMe(t), 6000).catch(() => null);
           if (!cancelled) {
-            setDisplayName(me?.display_name || '');
-            setTitle(me?.title || '');
-            setAvatarUrl(me?.avatar_url || null);
+            if (me) {
+              setDisplayName((me.display_name || user?.adSoyad || '').trim());
+              setTitle(me.title || '');
+              setAvatarUrl(me.avatar_url || null);
+            } else if (user?.adSoyad) setDisplayName((user.adSoyad || '').trim());
           }
         } else {
-          const res = await api.get('/auth/profile');
+          const res = await withTimeout(api.get('/auth/profile'), 6000).catch(() => null);
           const data = res?.data || {};
           if (!cancelled) {
-            setDisplayName(data.display_name || user?.adSoyad || '');
-            setTitle(data.title || '');
-            setAvatarUrl(data.avatar_url || null);
+            if (data.display_name != null || data.title != null || data.avatar_url != null) {
+              setDisplayName((data.display_name || user?.adSoyad || '').trim());
+              setTitle(data.title || '');
+              setAvatarUrl(data.avatar_url || null);
+            } else if (user?.adSoyad) setDisplayName((user.adSoyad || '').trim());
           }
         }
       } catch (_) {
-        if (!cancelled && user?.adSoyad) setDisplayName(user.adSoyad);
+        if (!cancelled && user?.adSoyad) setDisplayName((user.adSoyad || '').trim());
       } finally {
         if (!cancelled) setLoading(false);
       }
     })();
     return () => {
       cancelled = true;
-      clearTimeout(timeout);
+      clearTimeout(timeoutId);
     };
   }, [getSupabaseToken, user?.adSoyad]);
 
@@ -86,46 +99,46 @@ export default function ProfilDuzenleScreen() {
   };
 
   const handleSave = async () => {
-    const token = await getSupabaseToken();
-    if (!token && !user) {
-      Toast.show({ type: 'error', text1: 'Giriş gerekli', text2: 'Profil düzenlemek için giriş yapın.' });
-      return;
-    }
     setSaving(true);
     try {
-      if (token) {
-        let finalAvatarUrl = avatarUrl;
-        if (localAvatarUri) {
-          let base64 = await FileSystem.readAsStringAsync(localAvatarUri, { encoding: FileSystem.EncodingType.Base64 });
-          if (typeof base64 === 'string') {
-            base64 = base64.replace(/^data:image\/[^;]+;base64,/i, '').replace(/[^A-Za-z0-9+/=]/g, '');
-          }
-          if (!base64 || base64.length === 0) {
-            Toast.show({ type: 'error', text1: 'Resim okunamadı' });
-            setSaving(false);
-            return;
-          }
-          finalAvatarUrl = await communityApi.uploadAvatar(base64, token);
-        }
-        await communityApi.updateProfile(
-          { display_name: displayName.trim() || null, avatar_url: finalAvatarUrl || null, title: title.trim() || null },
-          token
-        );
-      } else {
-        const body = {
-          display_name: displayName.trim() || null,
-          title: title.trim() || null,
-          avatar_url: avatarUrl || null,
-        };
-        if (localAvatarUri) {
-          let base64 = await FileSystem.readAsStringAsync(localAvatarUri, { encoding: FileSystem.EncodingType.Base64 });
-          if (typeof base64 === 'string') {
-            base64 = base64.replace(/^data:image\/[^;]+;base64,/i, '').replace(/[^A-Za-z0-9+/=]/g, '');
-          }
-          if (base64 && base64.length > 0) body.avatar_base64 = base64;
-        }
-        await api.put('/auth/profile', body);
+      const token = await getSupabaseToken();
+      if (!token && !user) {
+        Toast.show({ type: 'error', text1: 'Giriş gerekli', text2: 'Profil düzenlemek için giriş yapın.' });
+        return;
       }
+
+      const body = {
+        display_name: displayName.trim() || null,
+        title: title.trim() || null,
+        avatar_url: avatarUrl || null,
+      };
+      if (localAvatarUri) {
+        let base64 = await FileSystem.readAsStringAsync(localAvatarUri, { encoding: FileSystem.EncodingType.Base64 });
+        if (typeof base64 === 'string') {
+          base64 = base64.replace(/^data:image\/[^;]+;base64,/i, '').replace(/[^A-Za-z0-9+/=]/g, '');
+        }
+        if (base64 && base64.length > 0) body.avatar_base64 = base64;
+      }
+
+      const backendAvailable = !!getBackendUrl();
+
+      if (backendAvailable) {
+        await withTimeout(api.put('/auth/profile', body), SAVE_TIMEOUT_MS, 'Kayıt zaman aşımına uğradı. İnterneti kontrol edip tekrar deneyin.');
+      } else {
+        if (!token) {
+          Toast.show({ type: 'error', text1: 'Kayıt yok', text2: 'Profil kaydetmek için sunucu adresi veya giriş gerekli.' });
+          return;
+        }
+        let finalAvatarUrl = body.avatar_url;
+        if (body.avatar_base64) {
+          finalAvatarUrl = await withTimeout(communityApi.uploadAvatar(body.avatar_base64, token), SAVE_TIMEOUT_MS);
+        }
+        await withTimeout(
+          communityApi.updateProfile({ display_name: body.display_name, avatar_url: finalAvatarUrl, title: body.title }, token),
+          SAVE_TIMEOUT_MS
+        );
+      }
+
       Toast.show({ type: 'success', text1: 'Profil kaydedildi' });
       navigation.goBack();
     } catch (err) {

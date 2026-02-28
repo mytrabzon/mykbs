@@ -214,7 +214,10 @@ export default function OTPVerifyScreen() {
         if (onSuccess) {
           onSuccess({ token, kullanici, tesis });
         } else {
-          await loginWithToken(token, kullanici, tesis);
+          const result = await loginWithToken(token, kullanici, tesis);
+          if (!result?.success) {
+            Toast.show({ type: 'error', text1: 'Giriş hatası', text2: result?.message || 'Oturum açılamadı.' });
+          }
         }
       } else {
         // Giriş: E-posta OTP veya SMS OTP
@@ -228,33 +231,36 @@ export default function OTPVerifyScreen() {
             const accessToken = data.session.access_token;
             if (onSuccess) {
               onSuccess({ token: accessToken, kullanici: null, tesis: null });
-              setLoading(false);
               return;
             }
             try {
               const sessionRes = await api.post('/auth/giris/otp-dogrula', { access_token: accessToken });
               const { token: t, kullanici: k, tesis: tesisData } = sessionRes.data || {};
+              let result;
               if (t && k && tesisData) {
-                await loginWithToken(t, k, tesisData, accessToken);
+                result = await loginWithToken(t, k, tesisData, accessToken);
               } else {
-                await loginWithToken(accessToken, null, null, accessToken);
+                result = await loginWithToken(accessToken, null, null, accessToken);
+              }
+              if (!result?.success) {
+                Toast.show({ type: 'error', text1: 'Giriş hatası', text2: result?.message || 'Oturum açılamadı.' });
               }
             } catch (sessionErr) {
               const status = sessionErr?.response?.status;
               const msg = sessionErr?.response?.data?.message || sessionErr?.message;
               if (status === 503 && (msg || '').includes('Veritabanı')) {
                 Toast.show({ type: 'error', text1: 'Bakım', text2: msg || 'Veritabanı güncellemesi gerekli.' });
-                setLoading(false);
                 return;
               }
-              await loginWithToken(accessToken, null, null, accessToken);
+              const fallback = await loginWithToken(accessToken, null, null, accessToken);
+              if (!fallback?.success) {
+                Toast.show({ type: 'error', text1: 'Giriş hatası', text2: fallback?.message || msg || 'Oturum açılamadı.' });
+              }
             }
-            setLoading(false);
             return;
           }
           if (error) {
             const isExpired = error?.message?.toLowerCase?.().includes('expired') || error?.code === 'otp_expired';
-            setLoading(false);
             Toast.show({
               type: 'error',
               text1: isExpired ? 'Kodun süresi doldu' : 'Doğrulama Başarısız',
@@ -273,33 +279,37 @@ export default function OTPVerifyScreen() {
             const accessToken = data.session.access_token;
             if (onSuccess) {
               onSuccess({ token: accessToken, kullanici: null, tesis: null });
-              setLoading(false);
               return;
             }
             try {
               const sessionRes = await api.post('/auth/giris/otp-dogrula', { access_token: accessToken });
               const { token: t, kullanici: k, tesis: tesisData } = sessionRes.data || {};
+              let result;
               if (t && k && tesisData) {
-                await loginWithToken(t, k, tesisData, accessToken);
+                result = await loginWithToken(t, k, tesisData, accessToken);
               } else {
-                await loginWithToken(accessToken, null, null, accessToken);
+                result = await loginWithToken(accessToken, null, null, accessToken);
               }
+              if (!result?.success) {
+                Toast.show({ type: 'error', text1: 'Giriş hatası', text2: result?.message || 'Oturum açılamadı.' });
+              }
+              // result.success ise isAuthenticated güncellenir, AppNavigator ana sayfaya geçer
             } catch (sessionErr) {
               const status = sessionErr?.response?.status;
               const msg = sessionErr?.response?.data?.message || sessionErr?.message;
               if (status === 503 && (msg || '').includes('Veritabanı')) {
                 Toast.show({ type: 'error', text1: 'Bakım', text2: msg || 'Veritabanı güncellemesi gerekli.' });
-                setLoading(false);
                 return;
               }
-              await loginWithToken(accessToken, null, null, accessToken);
+              const fallback = await loginWithToken(accessToken, null, null, accessToken);
+              if (!fallback?.success) {
+                Toast.show({ type: 'error', text1: 'Giriş hatası', text2: fallback?.message || msg || 'Oturum açılamadı.' });
+              }
             }
-            setLoading(false);
             return;
           }
           if (error) {
             const isExpired = error?.message?.toLowerCase?.().includes('expired') || error?.code === 'otp_expired';
-            setLoading(false);
             Toast.show({
               type: 'error',
               text1: isExpired ? 'Kodun süresi doldu' : 'Doğrulama Başarısız',
@@ -312,23 +322,22 @@ export default function OTPVerifyScreen() {
         }
         const response = await api.post('/auth/giris/otp-dogrula', { telefon, otp: code });
         const { token, kullanici, tesis } = response.data;
-        try {
-          if (onSuccess) onSuccess({ token, kullanici, tesis });
-          else await loginWithToken(token, kullanici, tesis);
-        } finally {
-          setLoading(false);
+        if (onSuccess) {
+          onSuccess({ token, kullanici, tesis });
+        } else {
+          const result = await loginWithToken(token, kullanici, tesis);
+          if (!result?.success) {
+            Toast.show({ type: 'error', text1: 'Giriş hatası', text2: result?.message || 'Oturum açılamadı.' });
+          }
         }
         return;
       }
-
-      setLoading(false);
     } catch (error) {
       logger.error('OTP verification error', {
         message: error.message,
         response: error.response?.data,
         status: error.response?.status
       });
-      setLoading(false);
       const apiMessage = error.response?.data?.message || error.response?.data?.error;
       const isNetwork = error.message === 'Network Error' || error.code === 'NETWORK_ERROR';
       const isTimeout = error.name === 'AbortError' || error.message?.includes('abort');
@@ -344,6 +353,8 @@ export default function OTPVerifyScreen() {
       });
       setOtp(['', '', '', '', '', '']);
       inputRefs.current[0]?.focus();
+    } finally {
+      setLoading(false);
     }
   };
 

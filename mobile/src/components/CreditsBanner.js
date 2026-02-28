@@ -56,26 +56,26 @@ export default function CreditsBanner() {
 
 const styles = StyleSheet.create({
   banner: {
-    paddingVertical: 10,
-    paddingHorizontal: 16,
+    paddingVertical: 6,
+    paddingHorizontal: 12,
     borderBottomWidth: 1,
   },
   gentle: {
-    paddingVertical: 8,
+    paddingVertical: 5,
   },
   yellow: {},
   prominent: {
-    paddingVertical: 12,
+    paddingVertical: 8,
   },
   text: {
-    fontSize: 15,
+    fontSize: 14,
     textAlign: 'center',
   },
   prominentText: {
     fontWeight: '600',
   },
   smallText: {
-    fontSize: 13,
+    fontSize: 12,
     textAlign: 'center',
   },
   bold: {
