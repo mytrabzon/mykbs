@@ -6,10 +6,11 @@ import AppHeader from '../components/AppHeader';
 import { typography, spacing } from '../theme';
 import { Ionicons } from '@expo/vector-icons';
 import * as communityApi from '../services/communityApi';
+import { api } from '../services/api';
 
 export default function ToplulukProfilScreen({ route, navigation }) {
   const { colors } = useTheme();
-  const { tesis, getSupabaseToken } = useAuth();
+  const { tesis, user, getSupabaseToken } = useAuth();
   const { userId, profile: initialProfile } = route.params || {};
 
   const [profile, setProfile] = useState(initialProfile || null);
@@ -22,19 +23,40 @@ export default function ToplulukProfilScreen({ route, navigation }) {
     (async () => {
       try {
         const token = await getSupabaseToken();
-        if (!token) {
-          if (!cancelled) setLoading(false);
-          return;
-        }
-        const me = await communityApi.getMe(token);
-        if (!cancelled) {
-          setMeId(me?.user_id || null);
-          if (!userId || userId === me?.user_id) {
-            setProfile({
-              display_name: me?.display_name || null,
-              avatar_url: me?.avatar_url || null,
-              title: me?.title || null,
-            });
+        if (token) {
+          const me = await communityApi.getMe(token);
+          if (!cancelled) {
+            setMeId(me?.user_id || null);
+            if (!userId || userId === me?.user_id) {
+              setProfile({
+                display_name: me?.display_name || null,
+                avatar_url: me?.avatar_url || null,
+                title: me?.title || null,
+              });
+            }
+          }
+        } else if (user && !userId) {
+          // Tesis kodu / PIN ile giriş: kendi profilini backend'den al
+          try {
+            const res = await api.get('/auth/profile');
+            const data = res?.data || {};
+            if (!cancelled) {
+              setMeId(user?.id || null);
+              setProfile({
+                display_name: data.display_name ?? user?.adSoyad ?? user?.displayName ?? null,
+                avatar_url: data.avatar_url ?? null,
+                title: data.title ?? null,
+              });
+            }
+          } catch {
+            if (!cancelled) {
+              setMeId(user?.id || null);
+              setProfile({
+                display_name: user?.adSoyad ?? user?.displayName ?? null,
+                avatar_url: null,
+                title: null,
+              });
+            }
           }
         }
       } catch {
@@ -46,7 +68,7 @@ export default function ToplulukProfilScreen({ route, navigation }) {
     return () => {
       cancelled = true;
     };
-  }, [getSupabaseToken, userId]);
+  }, [getSupabaseToken, userId, user]);
 
   const displayName = profile?.display_name || 'Kullanıcı';
   const avatarUrl = profile?.avatar_url || null;

@@ -16,7 +16,7 @@ import * as communityApi from '../services/communityApi';
 import Toast from 'react-native-toast-message';
 
 export default function BildirimlerScreen({ navigation }) {
-  const { tesis, getSupabaseToken } = useAuth();
+  const { tesis, user, getSupabaseToken } = useAuth();
   const { colors } = useTheme();
   const [list, setList] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -33,6 +33,7 @@ export default function BildirimlerScreen({ navigation }) {
     if (!t) {
       setList([]);
       setLoading(false);
+      setRefreshing(false);
       return;
     }
     if (isRefresh) setRefreshing(true);
@@ -77,7 +78,9 @@ export default function BildirimlerScreen({ navigation }) {
     }
   };
 
-  if (!token) {
+  // Giriş yapılmış ama bu hesap türünde bildirim yoksa boş liste göster, engel koyma
+  const showEmptyBecauseNoSupabase = !!user && !token && !loading;
+  if (showEmptyBecauseNoSupabase) {
     return (
       <View style={[styles.screenContainer, { backgroundColor: colors.background }]}>
         <AppHeader
@@ -92,7 +95,24 @@ export default function BildirimlerScreen({ navigation }) {
           </View>
           <Text style={[styles.emptyStateTitle, { color: colors.textPrimary }]}>Bildirimler</Text>
           <Text style={[styles.emptyStateText, { color: colors.textSecondary }]}>
-            Push ve uygulama içi bildirimler için kurumsal giriş gereklidir.
+            Uygulama içi bildirimler e-posta veya telefon ile giriş yaptığınızda burada listelenir.
+          </Text>
+        </View>
+      </View>
+    );
+  }
+  if (!user) {
+    return (
+      <View style={[styles.screenContainer, { backgroundColor: colors.background }]}>
+        <AppHeader
+          title="Bildirimler"
+          tesis={tesis}
+          onNotification={() => navigation.navigate('Bildirimler')}
+          onProfile={() => navigation.navigate('ProfilDuzenle')}
+        />
+        <View style={styles.emptyState}>
+          <Text style={[styles.emptyStateText, { color: colors.textSecondary }]}>
+            Bildirimleri görmek için giriş yapın.
           </Text>
         </View>
       </View>

@@ -10,7 +10,7 @@ import { spacing, typography } from '../../theme';
 
 const ACTIONS = [
   { key: 'checkin', label: 'Check-in', icon: 'log-in-outline', nav: 'CheckIn' },
-  { key: 'mrz', label: 'MRZ Tara', icon: 'document-text-outline', nav: 'MRZ' },
+  { key: 'mrz', label: 'MRZ Tara', icon: 'document-text-outline', nav: 'MrzScan' },
   { key: 'rezervasyon', label: 'Hızlı Rezervasyon', icon: 'calendar-outline', nav: 'CheckIn' },
   { key: 'odaDegistir', label: 'Oda Değiştir', icon: 'swap-horizontal-outline', nav: null },
   { key: 'sorun', label: 'Sorun Bildir', icon: 'alert-circle-outline', nav: null },

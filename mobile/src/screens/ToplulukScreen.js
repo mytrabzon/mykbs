@@ -104,7 +104,7 @@ function PostCard({ item, colors, onPostPress, onAuthorPress, onCommentPress, ca
 }
 
 export default function ToplulukScreen({ navigation }) {
-  const { tesis, getSupabaseToken } = useAuth();
+  const { tesis, user, getSupabaseToken } = useAuth();
   const { colors } = useTheme();
   const [posts, setPosts] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -170,7 +170,9 @@ export default function ToplulukScreen({ navigation }) {
 
   const onRefresh = () => loadPosts(true);
 
-  if (!hasCommunity && !token) {
+  // Giriş yapılmış ama bu hesap türünde topluluk yoksa boş içerik göster, engel koyma
+  const noCommunityToken = !!user && !token;
+  if (noCommunityToken) {
     return (
       <View style={[styles.screenContainer, { backgroundColor: colors.background }]}>
         <AppHeader
@@ -182,8 +184,27 @@ export default function ToplulukScreen({ navigation }) {
         <View style={styles.emptyWrap}>
           <EmptyState
             icon="people-outline"
-            title="Topluluk özelliği"
-            message="Topluluk ve bildirimler için kurumsal giriş (Supabase) gereklidir. Giriş sonrası bu alan aktif olur."
+            title="Topluluk"
+            message="Topluluk paylaşımları e-posta veya telefon ile giriş yaptığınızda burada görünür."
+          />
+        </View>
+      </View>
+    );
+  }
+  if (!user) {
+    return (
+      <View style={[styles.screenContainer, { backgroundColor: colors.background }]}>
+        <AppHeader
+          title="Topluluk"
+          minimal
+          onNotification={() => navigation.navigate('Bildirimler')}
+          onProfile={() => navigation.navigate('ProfilDuzenle')}
+        />
+        <View style={styles.emptyWrap}>
+          <EmptyState
+            icon="people-outline"
+            title="Topluluk"
+            message="Topluluk özelliğini kullanmak için giriş yapın."
           />
         </View>
       </View>

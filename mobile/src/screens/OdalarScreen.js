@@ -687,7 +687,7 @@ export default function OdalarScreen() {
 
   const handleQuickCheckIn = () => {
     setShowFabMenu(false);
-    navigation.navigate('CheckIn');
+    navigation.navigate('MrzScan', { fromCheckIn: true });
   };
 
   if (initialLoading) {
@@ -745,7 +745,10 @@ export default function OdalarScreen() {
               selectedFilter={filtre}
             />
             <QuickActionsStrip
-              onAction={({ type, route }) => route && navigation.navigate(route)}
+              onAction={({ type, route }) => {
+                if (route === 'CheckIn') navigation.navigate('MrzScan', { fromCheckIn: true });
+                else if (route) navigation.navigate(route);
+              }}
               isCompact={commandMode}
             />
             <FilterSortBar
@@ -865,7 +868,8 @@ export default function OdalarScreen() {
         visible={fabSheetVisible}
         onClose={() => setFabSheetVisible(false)}
         onSelect={({ type, route }) => {
-          if (route) navigation.navigate(route);
+          if (route === 'CheckIn') navigation.navigate('MrzScan', { fromCheckIn: true });
+          else if (route) navigation.navigate(route);
         }}
         isAdmin={isAdmin}
       />
@@ -878,6 +882,10 @@ export default function OdalarScreen() {
         onUzat={() => { setSheetRoom(null); navigation.navigate('OdaDetay', { odaId: sheetRoom?.id }); }}
         onOdaDegistir={() => { setSheetRoom(null); navigation.navigate('OdaDetay', { odaId: sheetRoom?.id }); }}
         onFatura={() => { setSheetRoom(null); navigation.navigate('OdaDetay', { odaId: sheetRoom?.id }); }}
+        onCheckIn={(room) => {
+          setSheetRoom(null);
+          navigation.navigate('MrzScan', { fromCheckIn: true, selectedOda: room });
+        }}
         onGoToFullPage={() => { const odaId = sheetRoom?.id; setSheetRoom(null); if (odaId) navigation.navigate('OdaDetay', { odaId }); }}
         getStatusColor={getStatusColor}
         getStatusLabel={getStatusLabel}

@@ -30,6 +30,7 @@ export default function RoomDetailSheet({
   onUzat,
   onOdaDegistir,
   onFatura,
+  onCheckIn,
   onGoToFullPage,
   getStatusColor,
   getStatusLabel,
@@ -135,7 +136,7 @@ export default function RoomDetailSheet({
               {isBos && (
                 <TouchableOpacity
                   style={[styles.actionBtn, { backgroundColor: colors.primary }]}
-                  onPress={onGoToFullPage}
+                  onPress={() => (onCheckIn ? onCheckIn(room) : onGoToFullPage?.())}
                 >
                   <Ionicons name="log-in-outline" size={20} color={colors.textInverse} />
                   <Text style={[styles.actionBtnText, { color: colors.textInverse }]}>Check-in</Text>

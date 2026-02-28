@@ -134,8 +134,8 @@ export default function AyarlarScreen() {
       if (status === 401) {
         Toast.show({
           type: 'error',
-          text1: 'Giriş gerekli',
-          text2: 'Tekrar giriş yapın.',
+          text1: 'Oturum süresi dolmuş olabilir',
+          text2: 'Lütfen tekrar giriş yapın.',
           visibilityTime: 5000,
         });
       } else if (msg) {

@@ -85,7 +85,8 @@ const CACHE_DURATION = 45 * 1000;
 
 export type DataServiceTokenProvider = () => Promise<string | null> | string | null;
 
-let tokenProvider: DataServiceTokenProvider | null = null;
+/** Açılışta hemen token kullanılsın: modül yüklenir yüklenmez AsyncStorage'dan okuyan sağlayıcı. AuthContext init sonra güncelleyebilir. */
+let tokenProvider: DataServiceTokenProvider | null = () => AsyncStorage.getItem(AUTH_KEYS.TOKEN);
 
 /** Edge Function çağrıları için token (AsyncStorage'taki TOKEN/SUPABASE_TOKEN). AuthContext girişte ayarlar. */
 export function setDataServiceTokenProvider(provider: DataServiceTokenProvider | null) {

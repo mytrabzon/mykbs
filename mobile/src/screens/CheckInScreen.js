@@ -382,7 +382,7 @@ export default function CheckInScreen({ navigation, route }) {
       } else {
         Toast.show({
           type: 'error',
-          text1: status === 401 ? 'Giriş gerekli' : 'Hata',
+          text1: status === 401 ? 'Oturum süresi dolmuş olabilir' : 'Hata',
           text2: status === 401 ? 'Tekrar giriş yapın.' : msg
         });
       }

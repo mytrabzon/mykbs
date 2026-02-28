@@ -1,9 +1,12 @@
 /**
  * Tek backend: config/api.ts tek kaynak. Health test ve API çağrıları aynı base URL'i kullanır.
  */
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { callFn, EdgeFunctionError } from '../lib/supabase/functions';
 import { logger } from '../utils/logger';
 import { getApiBaseUrl } from '../config/api';
+
+const AUTH_TOKEN_KEY = '@mykbs:auth:token';
 
 export function getBackendUrl(): string {
   return getApiBaseUrl();
@@ -23,6 +26,12 @@ export type ApiTokenProvider = () => Promise<string | null> | string | null;
 
 let tokenProvider: ApiTokenProvider | null = null;
 let onUnauthorized: (() => void) | null = null;
+
+/** Açılışta hemen token kullanılsın: modül yüklenir yüklenmez AsyncStorage'dan okuyan sağlayıcı ayarlı. AuthContext init sonra bunu Supabase-aware sağlayıcı ile güncelleyebilir. */
+function getBootstrapToken(): Promise<string | null> {
+  return AsyncStorage.getItem(AUTH_TOKEN_KEY);
+}
+tokenProvider = getBootstrapToken;
 
 export function setApiTokenProvider(provider: ApiTokenProvider | null) {
   tokenProvider = provider;
@@ -242,9 +251,14 @@ export const api = {
         const filtre = query.filtre || 'tumu';
         const backendUrl = getBackendUrl();
         if (backendUrl) {
+          if (!token) {
+            const err = new Error('Giriş gerekli') as Error & { response?: { status: number; data: unknown } };
+            err.response = { status: 401, data: { message: 'Token bulunamadı' } };
+            throw err;
+          }
           const r = await fetchWithLog(`${backendUrl}/api/oda?filtre=${encodeURIComponent(filtre)}`, {
             method: 'GET',
-            headers: token ? { Authorization: `Bearer ${token}` } : {},
+            headers: { Authorization: `Bearer ${token}` },
           });
           const data = await r.json().catch(() => ({}));
           if (!r.ok) throw Object.assign(new Error((data as { message?: string }).message || 'Odalar alınamadı'), { response: { status: r.status, data } });
@@ -257,9 +271,14 @@ export const api = {
       if (odaMatch) {
         const backendUrl = getBackendUrl();
         if (backendUrl) {
+          if (!token) {
+            const err = new Error('Giriş gerekli') as Error & { response?: { status: number; data: unknown } };
+            err.response = { status: 401, data: { message: 'Token bulunamadı' } };
+            throw err;
+          }
           const r = await fetchWithLog(`${backendUrl}/api/oda/${odaMatch[1]}`, {
             method: 'GET',
-            headers: token ? { Authorization: `Bearer ${token}` } : {},
+            headers: { Authorization: `Bearer ${token}` },
           });
           const data = await r.json().catch(() => ({}));
           if (!r.ok) throw Object.assign(new Error((data as { message?: string }).message || 'Oda alınamadı'), { response: { status: r.status, data } });
@@ -275,9 +294,14 @@ export const api = {
           err.response = { status: 503, data: { message: 'EXPO_PUBLIC_BACKEND_URL tanımlayın.' } };
           throw err;
         }
+        if (!token) {
+          const err = new Error('Giriş gerekli') as Error & { response?: { status: number; data: unknown } };
+          err.response = { status: 401, data: { message: 'Token bulunamadı' } };
+          throw err;
+        }
         const r = await fetchWithLog(`${backendUrl}/api/rapor`, {
           method: 'GET',
-          headers: token ? { Authorization: `Bearer ${token}` } : {},
+          headers: { Authorization: `Bearer ${token}` },
         });
         const data = await r.json().catch(() => ({}));
         if (!r.ok) throw Object.assign(new Error((data as { message?: string }).message || 'Rapor alınamadı'), { response: { status: r.status, data } });
@@ -767,11 +791,16 @@ export const api = {
       if (pathname === '/tesis/kbs' || pathname === 'tesis/kbs') {
         const backendUrl = getBackendUrl();
         if (backendUrl) {
+          if (!token) {
+            const err = new Error('Giriş gerekli') as Error & { response?: { status: number; data: unknown } };
+            err.response = { status: 401, data: { message: 'Token bulunamadı' } };
+            throw err;
+          }
           const r = await fetchWithLog(`${backendUrl}/api/tesis/kbs`, {
             method: 'PUT',
             headers: {
               'Content-Type': 'application/json',
-              ...(token ? { Authorization: `Bearer ${token}` } : {}),
+              Authorization: `Bearer ${token}`,
             },
             body: JSON.stringify(body || {}),
           });

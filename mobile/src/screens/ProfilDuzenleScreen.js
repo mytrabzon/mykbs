@@ -101,11 +101,14 @@ export default function ProfilDuzenleScreen() {
   const handleSave = async () => {
     setSaving(true);
     try {
-      const token = await getSupabaseToken();
-      if (!token && !user) {
+      if (!user) {
         Toast.show({ type: 'error', text1: 'Giriş gerekli', text2: 'Profil düzenlemek için giriş yapın.' });
+        setSaving(false);
         return;
       }
+
+      const token = await getSupabaseToken();
+      const backendAvailable = !!getBackendUrl();
 
       const body = {
         display_name: displayName.trim() || null,
@@ -120,13 +123,12 @@ export default function ProfilDuzenleScreen() {
         if (base64 && base64.length > 0) body.avatar_base64 = base64;
       }
 
-      const backendAvailable = !!getBackendUrl();
-
       if (backendAvailable) {
         await withTimeout(api.put('/auth/profile', body), SAVE_TIMEOUT_MS, 'Kayıt zaman aşımına uğradı. İnterneti kontrol edip tekrar deneyin.');
       } else {
         if (!token) {
-          Toast.show({ type: 'error', text1: 'Kayıt yok', text2: 'Profil kaydetmek için sunucu adresi veya giriş gerekli.' });
+          Toast.show({ type: 'error', text1: 'Profil kaydedilemedi', text2: 'Bu hesap türünde profil için e-posta veya telefon ile giriş gerekir.' });
+          setSaving(false);
           return;
         }
         let finalAvatarUrl = body.avatar_url;

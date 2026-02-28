@@ -1,7 +1,7 @@
 import React, { useState, useRef, useCallback, useEffect } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Alert, ActivityIndicator, Platform, Image, ScrollView, PanResponder, BackHandler } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useRoute } from '@react-navigation/native';
+import { useRoute, useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { CameraView, useCameraPermissions } from 'expo-camera';
@@ -82,6 +82,8 @@ export default function MrzScanScreen({ navigation }) {
   const [mergedPayload, setMergedPayload] = useState(null);
   const [frontLoading, setFrontLoading] = useState(false);
   const [torchOn, setTorchOn] = useState(false);
+  const [isExiting, setIsExiting] = useState(false);
+  const [isScreenFocused, setIsScreenFocused] = useState(true);
   const timeoutRef = useRef(null);
   const mounted = useRef(true);
   const lastStableRawRef = useRef('');
@@ -90,23 +92,42 @@ export default function MrzScanScreen({ navigation }) {
   const insets = useSafeAreaInsets();
   const [permission, requestPermission] = useCameraPermissions();
 
+  useFocusEffect(
+    useCallback(() => {
+      setIsScreenFocused(true);
+      return () => {
+        setIsScreenFocused(false);
+        if (TorchModule) {
+          try {
+            TorchModule.switchState(false);
+          } catch (e) {}
+        }
+      };
+    }, [])
+  );
+
   const goBack = useCallback(() => {
-    navigation.goBack();
-  }, [navigation]);
+    if (timeoutRef.current) {
+      clearTimeout(timeoutRef.current);
+      timeoutRef.current = null;
+    }
+    mounted.current = false;
+    setIsScreenFocused(false);
+    setIsExiting(true);
+  }, []);
+
+  useEffect(() => {
+    if (!isExiting) return;
+    const t = setTimeout(() => navigation.goBack(), 0);
+    return () => clearTimeout(t);
+  }, [isExiting, navigation]);
 
   useEffect(() => {
     const sub = BackHandler.addEventListener('hardwareBackPress', () => {
       goBack();
       return true;
     });
-    return () => {
-      sub.remove();
-      if (TorchModule) {
-        try {
-          TorchModule.switchState(false);
-        } catch (e) {}
-      }
-    };
+    return () => sub.remove();
   }, [goBack]);
 
 
@@ -418,6 +439,10 @@ export default function MrzScanScreen({ navigation }) {
 
   const selectedDocType = Platform.OS === 'ios' ? DocType.Passport : DocType.Passport;
 
+  if (!isScreenFocused || isExiting) {
+    return <View style={[styles.container, { backgroundColor: '#000', flex: 1 }]} />;
+  }
+
   if (instantPayload != null && !showFrontCamera) {
     const display = mergedPayload || {
       ad: (instantPayload.givenNames || '').trim(),
@@ -534,7 +559,7 @@ export default function MrzScanScreen({ navigation }) {
           <Ionicons name="document-text-outline" size={64} color={theme.colors.textSecondary} />
           <Text style={styles.placeholderTitle}>Pasaport · Kimlik · Ehliyet</Text>
           <Text style={styles.placeholderText}>Otomatik algılanır: MRZ (pasaport/kimlik) veya ön yüz (ehliyet).</Text>
-          <Text style={styles.placeholderHint}>Canlı MRZ tarama bu ortamda yok; fotoğraf veya kamera ile tek çekim yapıp sunucuda okutulur.</Text>
+          <Text style={styles.placeholderHint}>Kimlik arkası (MRZ çizgili kod) veya pasaport MRZ sayfası — kamera ile çekin veya galeriden seçin. Arka kamera kullanılır.</Text>
           <TouchableOpacity style={styles.button} onPress={handleTakePhoto} disabled={ocrLoading}>
             <Text style={styles.buttonText}>Kamera ile tara</Text>
           </TouchableOpacity>
@@ -542,7 +567,7 @@ export default function MrzScanScreen({ navigation }) {
             <Text style={styles.buttonSecondaryText}>Galeriden seç</Text>
           </TouchableOpacity>
           {ocrLoading && <ActivityIndicator size="large" color={theme.colors.primary} style={{ marginTop: 16 }} />}
-          <TouchableOpacity style={styles.buttonBack} onPress={() => navigation.goBack()}>
+          <TouchableOpacity style={styles.buttonBack} onPress={goBack}>
             <Text style={styles.buttonBackText}>Geri</Text>
           </TouchableOpacity>
         </View>
@@ -570,22 +595,17 @@ export default function MrzScanScreen({ navigation }) {
         onMRZRead={handleMRZRead}
       />
       <View style={[styles.overlayTop, { paddingTop: insets.top + 8 }, styles.overlayTopZ]} pointerEvents="box-none">
-        <TouchableOpacity
-          onPress={goBack}
-          style={styles.overlayIconBtn}
-          hitSlop={{ top: 16, bottom: 16, left: 16, right: 16 }}
-          activeOpacity={0.7}
-        >
+        <TouchableOpacity onPress={goBack} style={styles.overlayIconBtn} hitSlop={{ top: 16, bottom: 16, left: 16, right: 16 }} activeOpacity={0.7}>
           <Ionicons name="arrow-back" size={28} color="#fff" />
         </TouchableOpacity>
-        <TouchableOpacity style={styles.titleWrap} onLongPress={() => setShowDebug((d) => !d)} pointerEvents="box-none">
+        <View style={styles.titleWrap} pointerEvents="none">
           <Text style={styles.overlayTitle}>MRZ Tara</Text>
-        </TouchableOpacity>
+        </View>
         <TouchableOpacity onPress={() => setHelpVisible(true)} style={styles.overlayIconBtn}>
           <Ionicons name="help-circle-outline" size={26} color="#fff" />
         </TouchableOpacity>
       </View>
-      {showDebug && (
+      {__DEV__ && showDebug && (
         <View style={[styles.debugPanel, { top: insets.top + 52 }]}>
           <Text style={styles.debugTitle}>Debug</Text>
           <Text style={styles.debugLine}>permission: {permission?.granted ? 'ok' : 'yok'}</Text>
@@ -601,20 +621,11 @@ export default function MrzScanScreen({ navigation }) {
         <Text style={styles.frameHint}>MRZ alanını hizalayın · Karanlıkta fener kullanın</Text>
       </View>
       <View style={[styles.overlayBottom, { paddingBottom: insets.bottom + 20 }]} pointerEvents="box-none">
-        <TouchableOpacity
-          style={styles.overlayBottomBtn}
-          onPress={handlePickImage}
-          disabled={ocrLoading}
-          activeOpacity={0.8}
-        >
+        <TouchableOpacity style={styles.overlayBottomBtn} onPress={handlePickImage} disabled={ocrLoading} activeOpacity={0.8}>
           <Ionicons name="images-outline" size={28} color="#fff" />
         </TouchableOpacity>
         {TorchModule ? (
-          <TouchableOpacity
-            style={[styles.overlayBottomBtn, styles.torchBtnRound, torchOn && styles.torchBtnRoundOn]}
-            onPress={toggleTorch}
-            activeOpacity={0.8}
-          >
+          <TouchableOpacity style={[styles.overlayBottomBtn, styles.torchBtnRound, torchOn && styles.torchBtnRoundOn]} onPress={toggleTorch} activeOpacity={0.8}>
             <Ionicons name={torchOn ? 'flash' : 'flash-outline'} size={28} color="#fff" />
           </TouchableOpacity>
         ) : (
@@ -636,13 +647,22 @@ export default function MrzScanScreen({ navigation }) {
   );
 }
 
+const AUTO_CAPTURE_COUNTDOWN_STEP_MS = 1000;
+
 function CameraFallbackView({ onCapture, onBack, loading, permission, requestPermission }) {
   const cameraRef = useRef(null);
   const [ready, setReady] = useState(false);
   const [torchOn, setTorchOn] = useState(false);
+  const [autoCaptureCountdown, setAutoCaptureCountdown] = useState(null);
+  const autoCaptureTimerRef = useRef(null);
 
   const capture = async () => {
     if (!cameraRef.current || loading) return;
+    setAutoCaptureCountdown(null);
+    if (autoCaptureTimerRef.current) {
+      clearTimeout(autoCaptureTimerRef.current);
+      autoCaptureTimerRef.current = null;
+    }
     try {
       const photo = await cameraRef.current.takePictureAsync({
         quality: 0.95,
@@ -654,6 +674,28 @@ function CameraFallbackView({ onCapture, onBack, loading, permission, requestPer
       Toast.show({ type: 'error', text1: 'Fotoğraf alınamadı', text2: e?.message });
     }
   };
+
+  const startAutoCapture = () => {
+    if (loading || !ready) return;
+    setAutoCaptureCountdown(3);
+    let count = 3;
+    const step = () => {
+      count -= 1;
+      setAutoCaptureCountdown(count > 0 ? count : null);
+      if (count <= 0) {
+        capture();
+        return;
+      }
+      autoCaptureTimerRef.current = setTimeout(step, AUTO_CAPTURE_COUNTDOWN_STEP_MS);
+    };
+    autoCaptureTimerRef.current = setTimeout(step, AUTO_CAPTURE_COUNTDOWN_STEP_MS);
+  };
+
+  useEffect(() => {
+    return () => {
+      if (autoCaptureTimerRef.current) clearTimeout(autoCaptureTimerRef.current);
+    };
+  }, []);
 
   if (!permission?.granted) {
     return (
@@ -674,6 +716,7 @@ function CameraFallbackView({ onCapture, onBack, loading, permission, requestPer
       <CameraView
         ref={cameraRef}
         style={StyleSheet.absoluteFill}
+        facing="back"
         onCameraReady={() => setReady(true)}
         enableTorch={torchOn}
       />
@@ -685,10 +728,29 @@ function CameraFallbackView({ onCapture, onBack, loading, permission, requestPer
           <Ionicons name={torchOn ? 'flash' : 'flash-outline'} size={28} color="#fff" />
           <Text style={styles.torchLabel}>{torchOn ? 'Flaş kapat' : 'Flaş aç'}</Text>
         </TouchableOpacity>
-        <Text style={styles.frameHint}>MRZ alanını çerçeve içine alıp fotoğraf çekin (karanlıkta flaş kullanın)</Text>
-        <TouchableOpacity style={styles.captureBtn} onPress={capture} disabled={loading}>
-          {loading ? <ActivityIndicator color="#fff" /> : <Ionicons name="camera" size={40} color="#fff" />}
-        </TouchableOpacity>
+        <Text style={styles.frameHint}>
+          {autoCaptureCountdown != null
+            ? `Belgeyi sabit tutun — ${autoCaptureCountdown}`
+            : 'Kimlik arkası MRZ alanını çerçeve içine alıp çekin veya "Otomatik yakala" ile sabit tutun'}
+        </Text>
+        {autoCaptureCountdown != null ? (
+          <View style={styles.autoCaptureBadge}>
+            <Text style={styles.autoCaptureBadgeText}>{autoCaptureCountdown} saniye</Text>
+            <TouchableOpacity onPress={() => { setAutoCaptureCountdown(null); if (autoCaptureTimerRef.current) clearTimeout(autoCaptureTimerRef.current); }} style={styles.autoCaptureCancelBtn}>
+              <Text style={styles.autoCaptureCancelText}>İptal</Text>
+            </TouchableOpacity>
+          </View>
+        ) : (
+          <>
+            <TouchableOpacity style={[styles.autoCaptureTriggerBtn, loading && styles.autoCaptureTriggerBtnDisabled]} onPress={startAutoCapture} disabled={loading}>
+              <Ionicons name="scan-outline" size={22} color="#fff" />
+              <Text style={styles.autoCaptureTriggerText}>Otomatik yakala</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.captureBtn} onPress={capture} disabled={loading}>
+              {loading ? <ActivityIndicator color="#fff" /> : <Ionicons name="camera" size={40} color="#fff" />}
+            </TouchableOpacity>
+          </>
+        )}
       </View>
     </View>
   );
@@ -744,6 +806,13 @@ const styles = StyleSheet.create({
   torchBtn: { flexDirection: 'row', alignItems: 'center', paddingVertical: 8, paddingHorizontal: 14, marginBottom: 8, borderRadius: 20, backgroundColor: 'rgba(255,255,255,0.25)' },
   torchBtnOn: { backgroundColor: theme.colors.primary },
   torchLabel: { color: '#fff', marginLeft: 6, fontSize: theme.typography.fontSize.sm },
+  autoCaptureTriggerBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingVertical: 10, paddingHorizontal: 16, borderRadius: 20, backgroundColor: 'rgba(255,255,255,0.25)', marginBottom: 8 },
+  autoCaptureTriggerBtnDisabled: { opacity: 0.6 },
+  autoCaptureTriggerText: { color: '#fff', fontSize: theme.typography.fontSize.sm, fontWeight: '600' },
+  autoCaptureBadge: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 12 },
+  autoCaptureBadgeText: { color: '#fff', fontSize: 18, fontWeight: '700' },
+  autoCaptureCancelBtn: { paddingVertical: 6, paddingHorizontal: 12, borderRadius: 8, backgroundColor: 'rgba(255,255,255,0.3)' },
+  autoCaptureCancelText: { color: '#fff', fontSize: theme.typography.fontSize.sm, fontWeight: '600' },
   captureBtn: { width: 72, height: 72, borderRadius: 36, backgroundColor: theme.colors.primary, alignItems: 'center', justifyContent: 'center' },
 });
 

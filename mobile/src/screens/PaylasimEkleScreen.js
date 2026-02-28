@@ -91,7 +91,7 @@ export default function PaylasimEkleScreen() {
     }
     const token = await getSupabaseToken();
     if (!token) {
-      Toast.show({ type: 'error', text1: 'Giriş gerekli' });
+      Toast.show({ type: 'error', text1: 'Bu özellik e-posta veya telefon ile giriş gerektirir', text2: 'Topluluk paylaşımları bu hesap türünde kullanılamıyor.' });
       return;
     }
     setLoading(true);

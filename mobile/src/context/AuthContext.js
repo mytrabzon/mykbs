@@ -125,6 +125,11 @@ export const AuthProvider = ({ children }) => {
     const LOAD_TIMEOUT_MS = 10000; // Takılırsa 10 sn sonra ana sayfa açılsın
     let timeoutId;
 
+    // Token sağlayıcıyı hemen ayarla: init tamamlanmadan yapılan api.get('/oda') vb. istekler
+    // AsyncStorage'daki token ile gider; backend 401 "Token bulunamadı" almaz.
+    setApiTokenProvider(() => AsyncStorage.getItem(AUTH_STORAGE_KEYS.TOKEN));
+    setDataServiceTokenProvider(() => AsyncStorage.getItem(AUTH_STORAGE_KEYS.TOKEN));
+
     async function init() {
       try {
         const storedLastTab = await AsyncStorage.getItem(AUTH_STORAGE_KEYS.LAST_TAB);
