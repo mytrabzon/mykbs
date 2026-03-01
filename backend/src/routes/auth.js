@@ -721,9 +721,10 @@ router.post('/giris/otp-iste', async (req, res) => {
       return res.status(400).json({ message: 'Geçersiz telefon numarası' });
     }
 
-    // Kullanıcı var mı kontrol et (önce normalize, yoksa ham format - eski kayıtlar için)
+    // Kullanıcı var mı — şifre girişiyle aynı mantık: phoneVariants ile bul (DB farklı formatta kayıtlı olabilir)
+    const variants = phoneVariants(formattedPhone);
     let kullanici = await prisma.kullanici.findFirst({
-      where: { telefon: formattedPhone },
+      where: variants.length ? { OR: variants.map((t) => ({ telefon: t })) } : { telefon: formattedPhone },
       include: { tesis: true }
     });
     if (!kullanici) {
