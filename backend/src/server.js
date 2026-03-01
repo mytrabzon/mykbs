@@ -77,6 +77,9 @@ app.use('/mock', require('./routes/mockKbs'));
 // Internal: KBS worker (Railway cron: POST /internal/kbs/worker, header x-worker-secret)
 app.use('/internal', require('./routes/internal/kbsWorker'));
 
+// Debug: egress IP (KBS whitelist doğrulama — VPS sabit IP)
+app.use('/debug', require('./routes/debug'));
+
 // Health check (DB'siz) — mobil önce bunu çağırır
 const pkg = require('../package.json');
 app.get('/health', (req, res) => {

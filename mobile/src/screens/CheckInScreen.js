@@ -12,7 +12,7 @@ import {
 } from 'react-native';
 // expo-camera Expo Go'da çalışmaz, expo-image-picker kullanıyoruz
 import * as ImagePicker from 'expo-image-picker';
-import NfcManager from 'react-native-nfc-manager';
+import NfcManager, { NfcEvents } from 'react-native-nfc-manager';
 import { api } from '../services/api';
 import { showKimlikBildirimInProgress, dismissKimlikBildirimNotification } from '../services/pushNotifications';
 import Toast from 'react-native-toast-message';
@@ -46,6 +46,8 @@ export default function CheckInScreen({ navigation, route }) {
   const [showCameraPermissionCard, setShowCameraPermissionCard] = useState(false);
   const nfcSessionCancelledRef = useRef(false);
   const nfcTechRequestedRef = useRef(false);
+  const nfcProcessingRef = useRef(false);
+  const processNfcTagRef = useRef(null);
 
   useEffect(() => {
     logger.log('CheckInScreen mounted');
@@ -204,9 +206,9 @@ export default function CheckInScreen({ navigation, route }) {
       }
     }
   };
+  processNfcTagRef.current = processNfcTag;
 
-  // Kimlik Okuma (step 2) ekranında NFC destekleniyorsa: sürekli dinle, kimliği her yaklaştırdığında otomatik oku.
-  // NFC izni (iOS) ilk requestTechnology çağrısında sistem tarafından istenecek.
+  // Kimlik Okuma (step 2): registerTagEvent + DiscoverTag ile kimlik yaklaştığında otomatik oku (Android/iOS event tabanlı).
   useEffect(() => {
     if (step !== 2 || !nfcSupported) {
       setNfcListening(false);
@@ -214,57 +216,44 @@ export default function CheckInScreen({ navigation, route }) {
     }
 
     nfcSessionCancelledRef.current = false;
-    nfcTechRequestedRef.current = false;
 
-    const runAutoNfcLoop = async () => {
-      const NfcTech = NfcManager.NfcTech;
-      if (!NfcTech) return;
-      const tech = NfcTech.IsoDep ?? NfcTech.NfcA ?? NfcTech.Ndef;
-      setNfcListening(true);
-      logger.log('NFC auto-listening started (step 2), loop until tag or cancel');
-
-      while (!nfcSessionCancelledRef.current) {
-        try {
-          await NfcManager.requestTechnology(tech);
-          if (nfcSessionCancelledRef.current) break;
-          nfcTechRequestedRef.current = true;
-          const tag = await NfcManager.getTag();
-          if (nfcSessionCancelledRef.current) break;
-          logger.log('NFC tag read (auto)', { tagId: tag?.id });
-          await processNfcTag(tag, { cancelAfter: true });
-          // Başarılı okumada processNfcTag setStep(3) yapar, cleanup tetiklenir, döngüden çıkarız.
-          if (nfcSessionCancelledRef.current) break;
-        } catch (error) {
-          if (nfcSessionCancelledRef.current) break;
-          const msg = error?.message || '';
-          if (!msg.includes('cancel') && !msg.includes('Cancel')) {
-            logger.warn('NFC auto-read error', error?.message);
-          }
-        } finally {
-          if (nfcTechRequestedRef.current) {
-            try {
-              await NfcManager.cancelTechnologyRequest();
-            } catch (e) {
-              logger.warn('NFC cancelTechnologyRequest', e?.message);
-            }
-            nfcTechRequestedRef.current = false;
-          }
-        }
-        // Kısa bekleme sonrası tekrar dinle (kimlik yaklaştırıldığında hemen okur)
-        if (!nfcSessionCancelledRef.current) {
-          await new Promise((r) => setTimeout(r, 400));
-        }
+    const onTagDiscover = (tag) => {
+      if (nfcSessionCancelledRef.current) return;
+      if (nfcProcessingRef.current) return;
+      nfcProcessingRef.current = true;
+      logger.log('NFC tag discovered (event)', { tagId: tag?.id });
+      const fn = processNfcTagRef.current;
+      if (fn) {
+        fn(tag, { cancelAfter: false }).finally(() => {
+          nfcProcessingRef.current = false;
+        });
+      } else {
+        nfcProcessingRef.current = false;
       }
-
-      setNfcListening(false);
     };
 
-    runAutoNfcLoop();
+    const startListening = async () => {
+      try {
+        setNfcListening(true);
+        NfcManager.setEventListener(NfcEvents.DiscoverTag, onTagDiscover);
+        await NfcManager.registerTagEvent({
+          invalidateAfterFirstRead: false,
+          alertMessage: 'Kimliği telefonun arkasına yaklaştırın',
+        });
+        logger.log('NFC registerTagEvent started (step 2), yaklaştırınca otomatik oku');
+      } catch (e) {
+        logger.warn('NFC registerTagEvent failed, falling back to manual only', e?.message);
+        setNfcListening(false);
+      }
+    };
+
+    startListening();
 
     return () => {
       nfcSessionCancelledRef.current = true;
       setNfcListening(false);
-      NfcManager.cancelTechnologyRequest().catch(() => {});
+      NfcManager.setEventListener(NfcEvents.DiscoverTag, null);
+      NfcManager.unregisterTagEvent().catch(() => {});
     };
   }, [step, nfcSupported]);
 

@@ -41,10 +41,10 @@ Gerçek KBS API’ye istek için backend’de ilgili URL’ler tanımlı olmalı
 
 | Değişken | Açıklama |
 |----------|----------|
-| **JANDARMA_KBS_URL** | Jandarma KBS web servis base URL’i. Boşsa mock kullanılır. |
+| **JANDARMA_KBS_URL** | Jandarma KBS web servis base URL’i. Örnek: `https://vatandas.jandarma.gov.tr/KBS_Tesis_Servis/SrvShsYtkTml.svc`. Boşsa mock kullanılır. |
 | **POLIS_KBS_URL** | Polis (EGM) KBS web servis base URL’i. Boşsa mock kullanılır. |
 
-Her iki URL de boşsa tüm KBS istekleri mock’tan döner.
+Her iki URL de boşsa tüm KBS istekleri mock’tan döner. **KBS tarafı çoğu zaman sunucu IP kısıtlaması (whitelist) uygular;** backend’in dışarı çıkış IP’sini (egress) KBS’ye beyan etmeniz gerekir. Egress IP’yi doğrulamak için: `GET https://BACKEND_URL/debug/egress-ip` (VPS kullanıyorsanız bkz. `docs/VPS_KBS_SABIT_IP.md`).
 
 ---
 
