@@ -38,12 +38,14 @@ async function authenticateTesisOrSupabase(req, res, next) {
       const { data: { user }, error: userError } = await supabaseAdmin.auth.getUser(token);
       if (userError) {
         const msg = userError.message || '';
-        const isExpired = msg.includes('expired') || msg.includes('invalid') || msg.includes('jwt');
+        // Sadece gerçekten süresi dolmuş Supabase token için 401 dön. "signature is invalid" / "unable to parse"
+        // = token Supabase değil (örn. backend JWT) → legacy JWT'ye düşmeli, 401 değil.
+        const isSupabaseExpired = msg.includes('expired') && (msg.includes('jwt') || msg.includes('token'));
         console.warn('[authTesisOrSupabase] Supabase getUser failed:', msg);
-        if (isExpired) {
+        if (isSupabaseExpired) {
           return errorResponse(req, res, 401, 'TOKEN_EXPIRED', 'Oturum süresi doldu. Lütfen tekrar giriş yapın.');
         }
-        // Supabase dışı token (örn. backend JWT) olabilir; legacy JWT denenir
+        // Supabase dışı token (backend JWT) olabilir; legacy JWT denenir
       }
       if (!userError && user) {
         let profileRows, profileError;
