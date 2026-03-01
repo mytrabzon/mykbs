@@ -6,26 +6,25 @@ import { theme } from '../../theme';
 export default function ScanHelpSheet({ visible, onClose }) {
   return (
     <Modal visible={visible} transparent animationType="slide">
-      <View style={styles.overlay}>
-        <View style={styles.sheet}>
+      <TouchableOpacity style={styles.overlay} activeOpacity={1} onPress={onClose}>
+        <TouchableOpacity style={styles.sheet} activeOpacity={1} onPress={(e) => e.stopPropagation()}>
           <View style={styles.header}>
             <Text style={styles.title}>Okuma ipuçları</Text>
-            <TouchableOpacity onPress={onClose} hitSlop={16}>
-              <Ionicons name="close" size={28} color={theme.colors.textPrimary} />
+            <TouchableOpacity onPress={onClose} hitSlop={16} style={styles.closeBtn}>
+              <Ionicons name="close" size={24} color={theme.colors.textSecondary} />
             </TouchableOpacity>
           </View>
-          <View style={styles.list}>
-            <Item icon="flash-outline" text="Karanlıkta: Flaş (torch) açın; ekrandaki flaş düğmesini kullanın" />
-            <Item icon="sunny-outline" text="Aydınlıkta: Doğrudan güneş/yansıma MRZ üzerine gelmesin" />
-            <Item icon="document-text-outline" text="Belgeyi düz tutun, MRZ çizgileri net görünsün" />
-            <Item icon="scan-outline" text="Çerçeve MRZ alanını tam içine alsın" />
-            <Item icon="hand-left-outline" text="Gölge veya parmak MRZ üzerine düşmesin" />
+          <View style={styles.card}>
+            <Item icon="flash-outline" text="Karanlıkta flaş kullanın." />
+            <Item icon="sunny-outline" text="Yansıma MRZ üzerine gelmesin." />
+            <Item icon="document-text-outline" text="Belgeyi düz tutun, çizgiler net görünsün." />
+            <Item icon="scan-outline" text="Çerçeve MRZ alanını içine alsın." />
           </View>
           <TouchableOpacity style={styles.button} onPress={onClose}>
             <Text style={styles.buttonText}>Tamam</Text>
           </TouchableOpacity>
-        </View>
-      </View>
+        </TouchableOpacity>
+      </TouchableOpacity>
     </Modal>
   );
 }
@@ -33,20 +32,41 @@ export default function ScanHelpSheet({ visible, onClose }) {
 function Item({ icon, text }) {
   return (
     <View style={styles.item}>
-      <Ionicons name={icon} size={24} color={theme.colors.primary} />
+      <View style={styles.itemIconWrap}>
+        <Ionicons name={icon} size={20} color={theme.colors.primary} />
+      </View>
       <Text style={styles.itemText}>{text}</Text>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
-  sheet: { backgroundColor: theme.colors.surface, borderTopLeftRadius: 16, borderTopRightRadius: 16, padding: theme.spacing.lg, paddingBottom: theme.spacing.xl + 24 },
+  overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'flex-end' },
+  sheet: {
+    backgroundColor: theme.colors.surface,
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    padding: theme.spacing.lg,
+    paddingBottom: theme.spacing.xl + 24,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -4 },
+    shadowOpacity: 0.12,
+    shadowRadius: 12,
+    elevation: 8,
+  },
   header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: theme.spacing.lg },
-  title: { fontSize: theme.typography.fontSize.xl, fontWeight: theme.typography.fontWeight.bold, color: theme.colors.textPrimary },
+  title: { fontSize: 18, fontWeight: '700', color: theme.colors.textPrimary, letterSpacing: 0.2 },
+  closeBtn: { padding: 4 },
+  card: {
+    backgroundColor: theme.colors.background || '#F5F5F5',
+    borderRadius: 12,
+    padding: theme.spacing.md,
+    marginBottom: theme.spacing.lg,
+  },
   list: { marginBottom: theme.spacing.lg },
-  item: { flexDirection: 'row', alignItems: 'center', marginBottom: theme.spacing.base },
-  itemText: { marginLeft: theme.spacing.base, fontSize: theme.typography.fontSize.base, color: theme.colors.textSecondary, flex: 1 },
-  button: { ...theme.styles.button.primary },
-  buttonText: { color: '#fff', fontSize: theme.typography.fontSize.base, fontWeight: theme.typography.fontWeight.semibold },
+  item: { flexDirection: 'row', alignItems: 'center', marginBottom: theme.spacing.sm },
+  itemIconWrap: { width: 36, height: 36, borderRadius: 18, backgroundColor: 'rgba(0,0,0,0.06)', alignItems: 'center', justifyContent: 'center' },
+  itemText: { marginLeft: theme.spacing.base, fontSize: 15, color: theme.colors.textSecondary, flex: 1, fontWeight: '500' },
+  button: { backgroundColor: theme.colors.primary, paddingVertical: 14, borderRadius: 12, alignItems: 'center' },
+  buttonText: { color: '#fff', fontSize: 16, fontWeight: '600' },
 });

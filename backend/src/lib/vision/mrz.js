@@ -79,14 +79,16 @@ function normalizeYYMMDD(yymmdd) {
 
 function normalizeMrzLines(raw) {
   const one = (raw || '').trim().toUpperCase().replace(/\s/g, '');
-  if (one.length >= 86 && one.length <= 90 && one.length !== 90 && /^[A-Z0-9<]+$/.test(one)) {
-    const a = 44;
-    return [one.slice(0, a).padEnd(44, '<'), one.slice(a).padEnd(44, '<')];
-  }
+  // TD1 (kimlik): 3x30 — 86-94 karakter (88 dahil) önce kimlik olarak dene; pasaport 88 için TD3 aşağıda tryBoth için.
   if (one.length >= 86 && one.length <= 94 && /^[A-Z0-9<]+$/.test(one)) {
     const a = 30;
     const b = 60;
     return [one.slice(0, a).padEnd(30, '<'), one.slice(a, b).padEnd(30, '<'), one.slice(b).padEnd(30, '<')];
+  }
+  // TD3 (pasaport): 2x44 — 80-85 veya 95+ (tek blok olarak)
+  if (one.length >= 80 && one.length <= 96 && /^[A-Z0-9<]+$/.test(one)) {
+    const a = 44;
+    return [one.slice(0, a).padEnd(44, '<'), one.slice(a).padEnd(44, '<')];
   }
   if (one.length >= 70 && one.length <= 74 && /^[A-Z0-9<]+$/.test(one)) {
     return [one.slice(0, 36).padEnd(36, '<'), one.slice(36, 72).padEnd(36, '<')];
@@ -212,12 +214,35 @@ function parseTD1(lines) {
   };
 }
 
+/** 86-90 karakter tek blok: önce 3x30 (TD1), başarısızsa 2x44 (TD3) dene (kimlik ve pasaport aynı uzunlukta olabilir). */
+function parseMrzRawAmbiguous(one) {
+  if (!one || one.length < 86 || one.length > 90) return null;
+  const asTd1 = [
+    one.slice(0, 30).padEnd(30, '<'),
+    one.slice(30, 60).padEnd(30, '<'),
+    one.slice(60).padEnd(30, '<'),
+  ];
+  const asTd3 = [one.slice(0, 44).padEnd(44, '<'), one.slice(44).padEnd(44, '<')];
+  const p1 = parseTD1(asTd1);
+  const p3 = parseTD3(asTd3);
+  if (p1 && p1.checks && p1.checks.compositeCheck) return p1;
+  if (p3 && p3.checks && p3.checks.compositeCheck) return p3;
+  if (p1) return p1;
+  if (p3) return p3;
+  return null;
+}
+
 /**
  * Parse MRZ raw string into fields + checks.
  * @returns {{ fields: object, checks: { passportNoCheck, birthCheck, expiryCheck, compositeCheck } } | null}
  */
 function parseMrzRaw(mrzRaw) {
   if (!mrzRaw || typeof mrzRaw !== 'string') return null;
+  const one = mrzRaw.trim().toUpperCase().replace(/\s/g, '');
+  if (one.length >= 86 && one.length <= 90 && /^[A-Z0-9<]+$/.test(one)) {
+    const ambiguous = parseMrzRawAmbiguous(one);
+    if (ambiguous) return ambiguous;
+  }
   const lines = normalizeMrzLines(mrzRaw);
   if (lines.length >= 2 && lines[0].length >= 38) return parseTD3(lines);
   if (lines.length >= 2 && lines[0].length >= 34 && lines[0].length <= 36) return parseTD2(lines);

@@ -9,6 +9,7 @@ import {
   Alert,
   Linking,
   Modal,
+  Image,
 } from 'react-native';
 import Constants from 'expo-constants';
 import { useNavigation } from '@react-navigation/native';
@@ -59,6 +60,7 @@ export default function AyarlarScreen() {
   const [kbsServerIp, setKbsServerIp] = useState(null);
   const [okutulanBelgeler, setOkutulanBelgeler] = useState([]);
   const [okutulanBelgelerLoading, setOkutulanBelgelerLoading] = useState(false);
+  const [okutulanBelgeDetail, setOkutulanBelgeDetail] = useState(null);
 
   const loadOkutulanBelgeler = async () => {
     setOkutulanBelgelerLoading(true);
@@ -404,9 +406,11 @@ export default function AyarlarScreen() {
             <Text style={[styles.infoText, { color: colors.textSecondary }]}>Henüz kayıt yok.</Text>
           ) : (
             okutulanBelgeler.slice(0, 30).map((b) => (
-              <View
+              <TouchableOpacity
                 key={b.id}
                 style={[styles.okutulanBelgeRow, { borderBottomColor: colors.border }]}
+                onPress={() => setOkutulanBelgeDetail(b)}
+                activeOpacity={0.7}
               >
                 <View style={styles.okutulanBelgeMain}>
                   <Text style={[styles.okutulanBelgeName, { color: colors.textPrimary }]}>
@@ -419,7 +423,8 @@ export default function AyarlarScreen() {
                     {b.createdAt ? new Date(b.createdAt).toLocaleDateString('tr-TR') : ''}
                   </Text>
                 </View>
-              </View>
+                <Ionicons name="chevron-forward" size={20} color={colors.textSecondary} />
+              </TouchableOpacity>
             ))
           )}
         </View>
@@ -626,6 +631,71 @@ export default function AyarlarScreen() {
           </Text>
         </View>
 
+        <Modal visible={!!okutulanBelgeDetail} transparent animationType="fade">
+          <TouchableOpacity
+            style={styles.modalOverlay}
+            activeOpacity={1}
+            onPress={() => setOkutulanBelgeDetail(null)}
+          >
+            <TouchableOpacity
+              style={[styles.modalContent, styles.okutulanDetailModal, { backgroundColor: colors.surface }]}
+              activeOpacity={1}
+              onPress={(e) => e.stopPropagation()}
+            >
+              <View style={styles.okutulanDetailHeader}>
+                <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>Belge detayı (KBS bildirim bilgileri)</Text>
+                <TouchableOpacity onPress={() => setOkutulanBelgeDetail(null)} hitSlop={16}>
+                  <Ionicons name="close" size={28} color={colors.textSecondary} />
+                </TouchableOpacity>
+              </View>
+              {okutulanBelgeDetail && (
+                <ScrollView style={styles.okutulanDetailScroll} showsVerticalScrollIndicator={false}>
+                  {okutulanBelgeDetail.photoUrl && (() => {
+                    const baseUrl = getApiBaseUrl();
+                    const photoUri = baseUrl ? `${baseUrl.replace(/\/$/, '')}${okutulanBelgeDetail.photoUrl}` : null;
+                    return photoUri ? (
+                      <View style={styles.okutulanDetailPhotoWrap}>
+                        <Image source={{ uri: photoUri }} style={styles.okutulanDetailPhoto} resizeMode="cover" />
+                      </View>
+                    ) : null;
+                  })()}
+                  <View style={styles.okutulanDetailFields}>
+                    <Text style={[styles.label, { color: colors.textPrimary }]}>Ad</Text>
+                    <Text style={[styles.infoText, { color: colors.textSecondary, marginBottom: spacing.sm }]}>{okutulanBelgeDetail.ad || '—'}</Text>
+                    <Text style={[styles.label, { color: colors.textPrimary }]}>Soyad</Text>
+                    <Text style={[styles.infoText, { color: colors.textSecondary, marginBottom: spacing.sm }]}>{okutulanBelgeDetail.soyad || '—'}</Text>
+                    <Text style={[styles.label, { color: colors.textPrimary }]}>Belge türü</Text>
+                    <Text style={[styles.infoText, { color: colors.textSecondary, marginBottom: spacing.sm }]}>
+                      {okutulanBelgeDetail.belgeTuru === 'kimlik' ? 'Kimlik' : 'Pasaport'}
+                    </Text>
+                    <Text style={[styles.label, { color: colors.textPrimary }]}>
+                      {okutulanBelgeDetail.belgeTuru === 'kimlik' ? 'Kimlik no' : 'Pasaport no'}
+                    </Text>
+                    <Text style={[styles.infoText, { color: colors.textSecondary, marginBottom: spacing.sm }]}>
+                      {okutulanBelgeDetail.kimlikNo || okutulanBelgeDetail.pasaportNo || okutulanBelgeDetail.belgeNo || '—'}
+                    </Text>
+                    <Text style={[styles.label, { color: colors.textPrimary }]}>Doğum tarihi</Text>
+                    <Text style={[styles.infoText, { color: colors.textSecondary, marginBottom: spacing.sm }]}>
+                      {okutulanBelgeDetail.dogumTarihi || '—'}
+                    </Text>
+                    <Text style={[styles.label, { color: colors.textPrimary }]}>Uyruk</Text>
+                    <Text style={[styles.infoText, { color: colors.textSecondary, marginBottom: spacing.sm }]}>
+                      {okutulanBelgeDetail.uyruk || '—'}
+                    </Text>
+                    <Text style={[styles.label, { color: colors.textPrimary }]}>Kayıt tarihi</Text>
+                    <Text style={[styles.infoText, { color: colors.textSecondary }]}>
+                      {okutulanBelgeDetail.createdAt ? new Date(okutulanBelgeDetail.createdAt).toLocaleString('tr-TR') : '—'}
+                    </Text>
+                  </View>
+                  <Button variant="secondary" onPress={() => setOkutulanBelgeDetail(null)} style={{ marginTop: spacing.md }}>
+                    Kapat
+                  </Button>
+                </ScrollView>
+              )}
+            </TouchableOpacity>
+          </TouchableOpacity>
+        </Modal>
+
         <Modal visible={changeModalVisible} transparent animationType="fade">
           <View style={styles.modalOverlay}>
             <View style={[styles.modalContent, { backgroundColor: colors.surface }]}>
@@ -738,6 +808,20 @@ const styles = StyleSheet.create({
   },
   contactLabel: { fontSize: typography.text.body.fontSize, marginBottom: 4 },
   contactLink: { fontSize: typography.text.body.fontSize },
+  okutulanDetailModal: { maxHeight: '85%' },
+  okutulanDetailScroll: { maxHeight: 400 },
+  okutulanDetailHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing.md },
+  okutulanDetailPhotoWrap: {
+    alignSelf: 'center',
+    width: 140,
+    height: 180,
+    borderRadius: 8,
+    overflow: 'hidden',
+    backgroundColor: '#f0f0f0',
+    marginBottom: spacing.lg,
+  },
+  okutulanDetailPhoto: { width: '100%', height: '100%' },
+  okutulanDetailFields: { marginBottom: spacing.sm },
   menuRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -747,6 +831,8 @@ const styles = StyleSheet.create({
   },
   menuRowText: { fontSize: typography.text.body.fontSize },
   okutulanBelgeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
     paddingVertical: spacing.sm,
     borderBottomWidth: 1,
   },

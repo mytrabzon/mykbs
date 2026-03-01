@@ -105,26 +105,26 @@ function extractMrzLinesFromOcr(text) {
   return candidates.filter((l) => l.length >= 22 && l.length <= 46);
 }
 
-/** OCR çıktısından MRZ benzeri satırları bul (TD1: 3x30 kimlik, TD2: 2x36, TD3: 2x44 pasaport). Esnek uzunluk kabul. */
+/** OCR çıktısından MRZ benzeri satırları bul (TD1: 3x30 kimlik, TD2: 2x36, TD3: 2x44 pasaport). Kimlik (3x30) öncelikli. */
 function extractMrzFromOcr(text) {
   if (!text || typeof text !== 'string') return '';
+  const lines = extractMrzLinesFromOcr(text);
+  if (lines.length >= 3 && lines.every((l) => l.length >= 24 && l.length <= 33)) {
+    return lines.slice(0, 3).map((l) => padMrzLine(l, 30)).join('\n');
+  }
+  if (lines.length >= 3 && lines.some((l) => l.length >= 26 && l.length <= 32)) {
+    const take = lines.filter((l) => l.length >= 26 && l.length <= 32).slice(0, 3);
+    if (take.length >= 3) return take.map((l) => padMrzLine(l, 30)).join('\n');
+  }
   const normalized = normalizeOcrTextForMrz(text);
   const one = normalized.trim();
   if (one.length >= 82 && one.length <= 95 && /^[A-Z0-9<]+$/.test(one)) {
-    const n = one.length;
-    if (n >= 85 && n <= 95) {
-      const a = n >= 90 ? 30 : Math.floor(n / 3);
-      const s1 = padMrzLine(one.slice(0, a), 30);
-      const s2 = padMrzLine(one.slice(a, a * 2), 30);
-      const s3 = padMrzLine(one.slice(a * 2, n), 30);
-      return s1 + '\n' + s2 + '\n' + s3;
-    }
-    if (n >= 82 && n <= 84) {
-      const a = 42;
-      const s1 = padMrzLine(one.slice(0, a), 44);
-      const s2 = padMrzLine(one.slice(a, n), 44);
-      return s1 + '\n' + s2;
-    }
+    const a = 30;
+    const b = 60;
+    const s1 = padMrzLine(one.slice(0, a), 30);
+    const s2 = padMrzLine(one.slice(a, b), 30);
+    const s3 = padMrzLine(one.slice(b), 30);
+    return s1 + '\n' + s2 + '\n' + s3;
   }
   if (one.length >= 80 && one.length <= 96 && /^[A-Z0-9<]+$/.test(one)) {
     const a = 44;
@@ -136,14 +136,6 @@ function extractMrzFromOcr(text) {
     const s1 = padMrzLine(one.slice(0, 36), 36);
     const s2 = padMrzLine(one.slice(36, 72), 36);
     return s1 + '\n' + s2;
-  }
-  const lines = extractMrzLinesFromOcr(text);
-  if (lines.length >= 3 && lines.every((l) => l.length >= 24 && l.length <= 33)) {
-    return lines.slice(0, 3).map((l) => padMrzLine(l, 30)).join('\n');
-  }
-  if (lines.length >= 3 && lines.some((l) => l.length >= 26 && l.length <= 32)) {
-    const take = lines.filter((l) => l.length >= 26 && l.length <= 32).slice(0, 3);
-    if (take.length >= 3) return take.map((l) => padMrzLine(l, 30)).join('\n');
   }
   if (lines.length >= 2 && lines.every((l) => l.length >= 36 && l.length <= 46)) {
     return lines.slice(0, 2).map((l) => padMrzLine(l, 44)).join('\n');
@@ -791,11 +783,11 @@ function parseIdentityDocument(text) {
 /** MRZ ham string → belge no, tarihler, isim, ülke (TD1/TD2/TD3) */
 function normalizeMrzLinesBackend(raw) {
   const one = (raw || '').trim().toUpperCase().replace(/\s/g, '');
-  if (one.length >= 86 && one.length <= 90 && one.length !== 90 && /^[A-Z0-9<]+$/.test(one)) {
-    return [one.slice(0, 44).padEnd(44, '<'), one.slice(44).padEnd(44, '<')];
-  }
   if (one.length >= 86 && one.length <= 94 && /^[A-Z0-9<]+$/.test(one)) {
     return [one.slice(0, 30).padEnd(30, '<'), one.slice(30, 60).padEnd(30, '<'), one.slice(60).padEnd(30, '<')];
+  }
+  if (one.length >= 80 && one.length <= 96 && /^[A-Z0-9<]+$/.test(one)) {
+    return [one.slice(0, 44).padEnd(44, '<'), one.slice(44).padEnd(44, '<')];
   }
   if (one.length >= 70 && one.length <= 74 && /^[A-Z0-9<]+$/.test(one)) {
     return [one.slice(0, 36).padEnd(36, '<'), one.slice(36, 72).padEnd(36, '<')];
