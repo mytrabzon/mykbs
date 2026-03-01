@@ -1,9 +1,9 @@
 {
   "name": "mykbs-mobile",
-  "version": "1.0.0",
+  "version": "1.0.2",
   "main": "node_modules/expo/AppEntry.js",
   "scripts": {
-    "postinstall": "node scripts/ensure-patch-package-state.js && node -e \"try{require('child_process').execSync('npx patch-package',{stdio:'inherit'})}catch(e){console.warn('patch-package skipped')}\"",
+    "postinstall": "node scripts/ensure-patch-package-state.js && npx patch-package",
     "start": "expo start",
     "start:dev": "expo start --dev-client",
     "start:dev:clear": "expo start --dev-client --clear",
