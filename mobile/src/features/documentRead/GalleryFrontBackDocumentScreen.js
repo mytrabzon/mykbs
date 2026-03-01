@@ -34,6 +34,22 @@ const resizeUri = async (uri) => {
   return uri;
 };
 
+/** Galeriden content:// URI okunamıyorsa önce cache'e kopyala (Android). */
+const readUriAsBase64 = async (uri) => {
+  try {
+    return await FileSystem.readAsStringAsync(uri, { encoding: FileSystem.EncodingType.Base64 });
+  } catch (readErr) {
+    if (uri.startsWith('content://') || uri.startsWith('file://')) {
+      const cachePath = `${FileSystem.cacheDirectory}gallery_fb_${Date.now()}_${Math.random().toString(36).slice(2)}.jpg`;
+      await FileSystem.copyAsync({ from: uri, to: cachePath });
+      const base64 = await FileSystem.readAsStringAsync(cachePath, { encoding: FileSystem.EncodingType.Base64 });
+      await FileSystem.deleteAsync(cachePath, { idempotent: true });
+      return base64;
+    }
+    throw readErr;
+  }
+};
+
 export default function GalleryFrontBackDocumentScreen({ navigation, route }) {
   const { colors } = useTheme();
   const docType = route?.params?.docType || 'kimlik';
@@ -73,8 +89,8 @@ export default function GalleryFrontBackDocumentScreen({ navigation, route }) {
     setLoading(true);
     try {
       const [frontBase64, backBase64] = await Promise.all([
-        FileSystem.readAsStringAsync(frontUri, { encoding: FileSystem.EncodingType.Base64 }),
-        FileSystem.readAsStringAsync(backUri, { encoding: FileSystem.EncodingType.Base64 }),
+        readUriAsBase64(frontUri),
+        readUriAsBase64(backUri),
       ]);
       logger.info('[Galeri ön+arka] Gönderiliyor', { frontLen: frontBase64?.length ?? 0, backLen: backBase64?.length ?? 0 });
       const res = await api.post('/ocr/document-front-back', { frontBase64, backBase64 });
@@ -84,8 +100,13 @@ export default function GalleryFrontBackDocumentScreen({ navigation, route }) {
     } catch (e) {
       const msg = e?.message || String(e);
       const resMsg = e?.response?.data?.message || e?.response?.data?.error;
+      const isNetwork = /network|fetch|bağlantı|connection|failed|sunucu/i.test(msg) || (e?.message && !e?.response);
       logger.error('[Galeri ön+arka] API hatası', { message: msg, responseMessage: resMsg });
-      Toast.show({ type: 'error', text1: 'Okuma başarısız', text2: resMsg || msg || 'Belge okunamadı.' });
+      Toast.show({
+        type: 'error',
+        text1: isNetwork ? 'Bağlantı hatası' : 'Okuma başarısız',
+        text2: isNetwork ? 'Backend\'e ulaşılamadı. İnternet ve giriş kontrol edin.' : (resMsg || msg || 'Belge okunamadı. Net fotoğraflar seçin.'),
+      });
     } finally {
       setLoading(false);
     }

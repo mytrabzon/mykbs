@@ -114,26 +114,27 @@ export default function CheckInScreen({ navigation, route }) {
   const checkNFC = async () => {
     try {
       logger.log('Checking NFC support');
-      
-      // Expo Go'da NFC desteklenmez, development build gerektirir
-      // Bu yüzden hata yakalayıp kullanıcıya bilgi veriyoruz
       let supported = false;
       try {
         supported = await NfcManager.isSupported();
         logger.log('NFC support check result', { supported });
-        
         if (supported) {
           await NfcManager.start();
           logger.log('NFC Manager started');
+          // Android: NFC açık mı kontrol et (kapalıysa registerTagEvent/requestTechnology çalışmaz)
+          if (NfcManager.isEnabled && typeof NfcManager.isEnabled === 'function') {
+            const enabled = await NfcManager.isEnabled();
+            if (!enabled) {
+              logger.warn('NFC supported but disabled');
+              Toast.show({ type: 'info', text1: 'NFC kapalı', text2: 'Ayarlardan NFC\'yi açın.' });
+            }
+          }
         }
       } catch (nfcError) {
         logger.warn('NFC check failed (expected in Expo Go)', nfcError.message);
         supported = false;
       }
-      
       setNfcSupported(supported);
-      
-      // NFC desteklenmiyorsa kullanıcıya bilgi ver
       if (!supported) {
         logger.log('NFC not supported, camera will be used instead');
       }

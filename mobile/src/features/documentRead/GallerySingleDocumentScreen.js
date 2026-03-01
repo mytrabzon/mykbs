@@ -44,7 +44,19 @@ export default function GallerySingleDocumentScreen({ navigation, route }) {
     }
     setLoading(true);
     try {
-      const base64 = await FileSystem.readAsStringAsync(uri, { encoding: FileSystem.EncodingType.Base64 });
+      let base64;
+      try {
+        base64 = await FileSystem.readAsStringAsync(uri, { encoding: FileSystem.EncodingType.Base64 });
+      } catch (readErr) {
+        if (uri.startsWith('content://') || uri.startsWith('file://')) {
+          const cachePath = `${FileSystem.cacheDirectory}gallery_doc_${Date.now()}.jpg`;
+          await FileSystem.copyAsync({ from: uri, to: cachePath });
+          base64 = await FileSystem.readAsStringAsync(cachePath, { encoding: FileSystem.EncodingType.Base64 });
+          await FileSystem.deleteAsync(cachePath, { idempotent: true });
+        } else {
+          throw readErr;
+        }
+      }
       logger.info('[Galeri belge] Base64 hazır', { base64Len: base64?.length ?? 0 });
       const res = await api.post('/ocr/document-base64', { imageBase64: base64 });
       const data = res?.data;
@@ -53,8 +65,13 @@ export default function GallerySingleDocumentScreen({ navigation, route }) {
     } catch (e) {
       const msg = e?.message || String(e);
       const resMsg = e?.response?.data?.message || e?.response?.data?.error;
+      const isNetwork = /network|fetch|bağlantı|connection|failed|sunucu/i.test(msg) || (e?.message && !e?.response);
       logger.error('[Galeri belge] API hatası', { message: msg, responseMessage: resMsg, status: e?.response?.status, stack: e?.stack?.slice(0, 400) });
-      Toast.show({ type: 'error', text1: 'Okuma başarısız', text2: msg || resMsg || 'Belge okunamadı.' });
+      Toast.show({
+        type: 'error',
+        text1: isNetwork ? 'Bağlantı hatası' : 'Okuma başarısız',
+        text2: isNetwork ? 'Backend\'e ulaşılamadı. İnternet ve giriş yapıldığından emin olun.' : (resMsg || msg || 'Belge okunamadı. Net bir fotoğraf seçin.'),
+      });
     } finally {
       setLoading(false);
     }

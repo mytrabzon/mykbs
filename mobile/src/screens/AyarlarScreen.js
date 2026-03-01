@@ -193,8 +193,13 @@ export default function AyarlarScreen() {
         Toast.show({ type: 'error', text1: 'Hata', text2: response.data.message });
       }
     } catch (e) {
-      Toast.show({ type: 'error', text1: 'Hata', text2: 'Test başarısız' });
-      setTestResult({ success: false, message: e?.response?.data?.message || 'Test başarısız' });
+      const msg = e?.response?.data?.message || e?.message || '';
+      const isNetwork = /network|fetch|bağlantı|connection|failed/i.test(msg) || (e?.message && !e?.response);
+      const userMsg = isNetwork
+        ? 'Backend\'e ulaşılamadı. EXPO_PUBLIC_BACKEND_URL ve interneti kontrol edin.'
+        : (msg || 'Test başarısız');
+      Toast.show({ type: 'error', text1: isNetwork ? 'Bağlantı hatası' : 'Hata', text2: userMsg });
+      setTestResult({ success: false, message: userMsg });
     } finally {
       setTestLoading(false);
     }

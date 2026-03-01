@@ -602,6 +602,25 @@ export const api = {
         }
         throw new Error('Belge okuma için sunucu adresi ve giriş gerekli.');
       }
+      if (pathname === '/ocr/document-front-back' || pathname === 'ocr/document-front-back') {
+        const backendUrl = getBackendUrl();
+        const payload = body as { frontBase64?: string; backBase64?: string };
+        if (backendUrl && token && payload && typeof payload.frontBase64 === 'string' && typeof payload.backBase64 === 'string') {
+          const r = await fetchWithLog(`${backendUrl}/api/ocr/document-front-back`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+            body: JSON.stringify({ frontBase64: payload.frontBase64, backBase64: payload.backBase64 }),
+          });
+          const data = await r.json().catch(() => ({}));
+          if (!r.ok) {
+            throw Object.assign(new Error((data as { message?: string })?.message || 'Belge okunamadı'), {
+              response: { status: r.status, data },
+            });
+          }
+          return toResponse(data as DocumentScanResponse);
+        }
+        throw new Error('Belge okuma için sunucu adresi, giriş ve ön/arka görsel gerekli.');
+      }
       if (pathname === '/okutulan-belgeler' || pathname === 'okutulan-belgeler') {
         const backendUrl = getBackendUrl();
         if (!backendUrl || !token) throw Object.assign(new Error('Giriş gerekli'), { response: { status: 401, data: {} } });
@@ -677,25 +696,29 @@ export const api = {
       }
       if (pathname === '/tesis/kbs/test' || pathname === 'tesis/kbs/test') {
         const backendUrl = getBackendUrl();
-        if (backendUrl && token) {
-          const body = (payload && typeof payload === 'object' && !Array.isArray(payload))
-            ? { kbsTuru: (payload as { kbsTuru?: string })?.kbsTuru, kbsTesisKodu: (payload as { kbsTesisKodu?: string })?.kbsTesisKodu, kbsWebServisSifre: (payload as { kbsWebServisSifre?: string })?.kbsWebServisSifre }
-            : {};
-          const r = await fetchWithLog(`${backendUrl}/api/tesis/kbs/test`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-            body: JSON.stringify(body),
+        if (!backendUrl) {
+          throw Object.assign(new Error('KBS testi için backend adresi gerekli. EXPO_PUBLIC_BACKEND_URL tanımlayın.'), {
+            response: { status: 503, data: { message: 'EXPO_PUBLIC_BACKEND_URL tanımlı değil.' } },
           });
-          const data = await r.json().catch(() => ({}));
-          if (!r.ok) {
-            throw Object.assign(new Error((data as { message?: string })?.message || 'KBS test başarısız'), {
-              response: { status: r.status, data },
-            });
-          }
-          return toResponse(data);
         }
-        const res = await callFn('settings_kbs_test', {}, token);
-        return toResponse(res);
+        if (!token) {
+          throw Object.assign(new Error('Giriş gerekli'), { response: { status: 401, data: { message: 'Token yok' } } });
+        }
+        const body = (payload && typeof payload === 'object' && !Array.isArray(payload))
+          ? { kbsTuru: (payload as { kbsTuru?: string })?.kbsTuru, kbsTesisKodu: (payload as { kbsTesisKodu?: string })?.kbsTesisKodu, kbsWebServisSifre: (payload as { kbsWebServisSifre?: string })?.kbsWebServisSifre }
+          : {};
+        const r = await fetchWithLog(`${backendUrl}/api/tesis/kbs/test`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+          body: JSON.stringify(body),
+        });
+        const data = await r.json().catch(() => ({}));
+        if (!r.ok) {
+          throw Object.assign(new Error((data as { message?: string })?.message || 'KBS test başarısız'), {
+            response: { status: r.status, data },
+          });
+        }
+        return toResponse(data);
       }
       if (pathname === '/tesis/kbs/talebi' || pathname === 'tesis/kbs/talebi') {
         const backendUrl = getBackendUrl();

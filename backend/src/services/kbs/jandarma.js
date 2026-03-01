@@ -8,13 +8,17 @@ class JandarmaKBS {
     this.tesisKodu = tesisKodu;
     this.webServisSifre = webServisSifre;
     this.ipAdresleri = ipAdresleri;
-    this.baseURL = process.env.JANDARMA_KBS_URL || 'https://jandarma-kbs-api.example.com';
+    // JANDARMA_KBS_URL env zorunlu; boşsa example.com fallback DNS hatası (ENOTFOUND) verir, kullanma.
+    this.baseURL = (process.env.JANDARMA_KBS_URL || '').trim() || '';
   }
 
   /**
    * Bağlantı testi
    */
   async testBaglanti() {
+    if (!this.baseURL) {
+      return { success: false, message: 'JANDARMA_KBS_URL ortam değişkeni tanımlı değil. .env veya sunucu ayarlarında gerçek KBS adresini ekleyin.' };
+    }
     try {
       const response = await axios.post(
         `${this.baseURL}/test`,
@@ -36,22 +40,24 @@ class JandarmaKBS {
         return { success: false, message: response.data.message || 'Bağlantı hatası' };
       }
     } catch (error) {
+      const code = error.code || '';
+      const status = error.response?.status;
+      const responseData = error.response?.data;
+      const url = `${this.baseURL}/test`;
+      console.warn('[JandarmaKBS] testBaglanti failed', { code, status, url, message: error.message });
       if (error.response) {
-        const status = error.response.status;
         const message = error.response.data?.message || error.message;
-        
-        if (status === 401) {
-          return { success: false, message: 'Web servis şifresi hatalı' };
-        } else if (status === 403) {
-          return { success: false, message: 'Bu IP yetkili değil' };
-        } else if (status === 503 || error.code === 'ECONNREFUSED') {
-          return { success: false, message: 'KBS servisi yanıt vermiyor' };
-        }
-        
+        if (status === 401) return { success: false, message: 'Web servis şifresi hatalı' };
+        if (status === 403) return { success: false, message: 'Bu IP yetkili değil' };
+        if (status === 404) return { success: false, message: 'KBS endpoint bulunamadı (404). Servis SOAP/WCF ise REST yerine SOAP client gerekir.' };
+        if (status === 405) return { success: false, message: 'KBS yöntem kabul etmiyor (405). Servis SOAP ise REST yerine SOAP client gerekir.' };
+        if (status === 503 || code === 'ECONNREFUSED') return { success: false, message: 'KBS servisi yanıt vermiyor' };
         return { success: false, message: message || 'Bağlantı hatası' };
       }
-      
-      return { success: false, message: 'KBS servisi yanıt vermiyor' };
+      if (code === 'ETIMEDOUT' || code === 'ECONNABORTED') return { success: false, message: 'KBS zaman aşımı (sunucu veya ağ). IP whitelist ve firewall kontrol edin.' };
+      if (code === 'ECONNREFUSED') return { success: false, message: 'KBS bağlantı reddedildi' };
+      if (code === 'ENOTFOUND') return { success: false, message: 'KBS sunucu adresi çözülemedi (DNS)' };
+      return { success: false, message: `KBS hatası: ${error.message || 'Yanıt yok'}` };
     }
   }
 
@@ -59,6 +65,9 @@ class JandarmaKBS {
    * Misafir bildirimi gönder
    */
   async bildirimGonder(misafirData) {
+    if (!this.baseURL) {
+      return { success: false, durum: 'hatali', hataMesaji: 'JANDARMA_KBS_URL ortam değişkeni tanımlı değil.' };
+    }
     try {
       const payload = {
         tesisKodu: this.tesisKodu,
@@ -103,10 +112,18 @@ class JandarmaKBS {
         };
       }
     } catch (error) {
+      const code = error.code || '';
+      const status = error.response?.status;
+      const msg = error.response?.data?.message || error.message || 'KBS bağlantı hatası';
+      if (status === 404 || status === 405) {
+        console.warn('[JandarmaKBS] bildirimGonder: servis SOAP/WCF olabilir, REST path yok', { status, url: `${this.baseURL}/bildirim` });
+      } else {
+        console.warn('[JandarmaKBS] bildirimGonder failed', { code, status, message: error.message });
+      }
       return {
         success: false,
         durum: 'hatali',
-        hataMesaji: error.response?.data?.message || error.message || 'KBS bağlantı hatası',
+        hataMesaji: msg,
         yanit: error.response?.data
       };
     }
@@ -116,6 +133,9 @@ class JandarmaKBS {
    * Çıkış bildirimi gönder
    */
   async cikisBildir(misafirData) {
+    if (!this.baseURL) {
+      return { success: false, hataMesaji: 'JANDARMA_KBS_URL ortam değişkeni tanımlı değil.' };
+    }
     try {
       const payload = {
         tesisKodu: this.tesisKodu,

@@ -8,13 +8,17 @@ class PolisKBS {
     this.tesisKodu = tesisKodu;
     this.webServisSifre = webServisSifre;
     this.ipAdresleri = ipAdresleri;
-    this.baseURL = process.env.POLIS_KBS_URL || 'https://polis-kbs-api.example.com';
+    // POLIS_KBS_URL env; boşsa example.com fallback kullanma (ENOTFOUND önlenir).
+    this.baseURL = (process.env.POLIS_KBS_URL || '').trim() || '';
   }
 
   /**
    * Bağlantı testi
    */
   async testBaglanti() {
+    if (!this.baseURL) {
+      return { success: false, message: 'POLIS_KBS_URL ortam değişkeni tanımlı değil. .env veya sunucu ayarlarında gerçek KBS adresini ekleyin.' };
+    }
     try {
       const response = await axios.post(
         `${this.baseURL}/test`,
@@ -59,6 +63,9 @@ class PolisKBS {
    * Misafir bildirimi gönder
    */
   async bildirimGonder(misafirData) {
+    if (!this.baseURL) {
+      return { success: false, durum: 'hatali', hataMesaji: 'POLIS_KBS_URL ortam değişkeni tanımlı değil.' };
+    }
     try {
       const payload = {
         tesisKodu: this.tesisKodu,
@@ -116,6 +123,9 @@ class PolisKBS {
    * Çıkış bildirimi gönder
    */
   async cikisBildir(misafirData) {
+    if (!this.baseURL) {
+      return { success: false, hataMesaji: 'POLIS_KBS_URL ortam değişkeni tanımlı değil.' };
+    }
     try {
       const payload = {
         tesisKodu: this.tesisKodu,
@@ -153,6 +163,9 @@ class PolisKBS {
    * Kullanıcı farklı sistemden geçince "KBS bilgilerini yazınca" mevcut misafirleri çekip sistemimize aktarabilir.
    */
   async misafirListesiGetir() {
+    if (!this.baseURL) {
+      return { success: false, message: 'POLIS_KBS_URL ortam değişkeni tanımlı değil.', misafirler: [] };
+    }
     try {
       const response = await axios.post(
         `${this.baseURL}/misafirler`,
@@ -211,6 +224,9 @@ class PolisKBS {
    * Oda değişikliği bildirimi
    */
   async odaDegistir(misafirData, yeniOdaNumarasi) {
+    if (!this.baseURL) {
+      return { success: false, hataMesaji: 'POLIS_KBS_URL ortam değişkeni tanımlı değil.' };
+    }
     try {
       const payload = {
         tesisKodu: this.tesisKodu,
