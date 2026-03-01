@@ -21,13 +21,13 @@ try {
 
 export default {
   expo: {
-    name: "MyKBS",
+    name: "KBS Prime",
     slug: "mykbs",
     owner: "luvolive",
     scheme: "mykbs",
-    version: "1.0.0",
+    version: "1.0.2",
     orientation: "portrait",
-    // icon: "./assets/icon.png", // Asset dosyası oluşturulana kadar yorum satırı
+    icon: "./assets/icon.png",
     userInterfaceStyle: "light",
     splash: {
       // image: "./assets/splash.png", // Asset dosyası oluşturulana kadar yorum satırı
@@ -38,9 +38,10 @@ export default {
       "**/*"
     ],
     ios: {
-      supportsTablet: true,
+      supportsTablet: false,
       bundleIdentifier: "com.litxtech.mykbs",
       infoPlist: {
+        UIDeviceFamily: [1],
         ITSAppUsesNonExemptEncryption: false,
         NSCameraUsageDescription: "Kimlik ve pasaport bilgilerinin doğrulanması amacıyla belge görüntüsünün taranabilmesi için kamera erişimi gereklidir. Alınan görüntüler yalnızca yasal bildirim süreci kapsamında işlenir.",
         NSPhotoLibraryUsageDescription: "Kimlik veya pasaport görsellerinin sistem üzerinden yüklenebilmesi için fotoğraf arşivine erişim gereklidir. Yüklenen veriler yalnızca yasal bildirim ve kayıt işlemleri için kullanılır.",
@@ -50,12 +51,12 @@ export default {
       }
     },
     android: {
-      // adaptiveIcon: {
-      //   foregroundImage: "./assets/adaptive-icon.png", // Asset dosyası oluşturulana kadar yorum satırı
-      //   backgroundColor: "#ffffff"
-      // },
+      adaptiveIcon: {
+        foregroundImage: "./assets/icon.png",
+        backgroundColor: "#ffffff"
+      },
       package: "com.litxtech.mykbs",
-      versionCode: 1,
+      versionCode: 2,
       permissions: [
         "android.permission.NFC",
         "android.permission.CAMERA",
@@ -89,7 +90,13 @@ export default {
       [
         "react-native-nfc-manager",
         {
-          nfcPermission: "Kimlik okumak için NFC izni gerekli"
+          nfcPermission: "Kimlik okumak için NFC izni gerekli",
+          // iOS: Pasaport/kimlik çipi (ISO 7816) okumak için AID listesi gerekli; yoksa çip okuma açılmaz.
+          selectIdentifiers: [
+            "A0000002471001", // e-Pasaport (ICAO)
+            "A0000002472001",
+            "00000000000000"  // Bazı kimlik kartları
+          ]
         }
       ],
       [
@@ -101,6 +108,10 @@ export default {
             targetSdkVersion: 35,
             buildToolsVersion: "35.0.0",
             minSdkVersion: 24
+          },
+          // iOS: New Arch kapalı — react-native-iap RCT-Folly bulunamıyor hatasını önler (EAS prebuild)
+          ios: {
+            newArchEnabled: false
           }
         }
       ]
@@ -118,7 +129,7 @@ export default {
       supabaseUrl: process.env.EXPO_PUBLIC_SUPABASE_URL || "https://iuxnpxszfvyrdifchwvr.supabase.co",
       supabaseAnonKey: process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || "",
       backendMode: process.env.EXPO_PUBLIC_BACKEND_MODE || "supabase",
-      EXPO_PUBLIC_SUPABASE_FUNCTIONS_URL: process.env.EXPO_PUBLIC_SUPABASE_FUNCTIONS_URL || null,
+      EXPO_PUBLIC_SUPABASE_FUNCTIONS_URL: process.env.EXPO_PUBLIC_SUPABASE_FUNCTIONS_URL || "",
       EXPO_PUBLIC_USE_TRPC: process.env.EXPO_PUBLIC_USE_TRPC === "true",
       // KBS backend (Node) – tanımlıysa health + checkin buraya gider
       backendUrl: process.env.EXPO_PUBLIC_BACKEND_URL || "",
