@@ -468,6 +468,8 @@ export const AuthProvider = ({ children }) => {
         supabaseToken: token,
         lastTab,
         setLastTab,
+        /** Tek kaynak: Giriş yapılmış mı? (token veya user varsa true – Instagram/TikTok tarzı sorunsuz kullanım) */
+        isLoggedIn: !!(token || user),
         isAuthenticated: !!token && !!user,
         isLoading,
         recoverySessionPending,
@@ -480,6 +482,8 @@ export const AuthProvider = ({ children }) => {
         aktivasyon,
         setPin,
         logout,
+        /** API istekleri için kullanılan token (backend JWT veya Supabase JWT). Giriş kontrolü için isLoggedIn kullanın. */
+        getApiToken: () => token,
         getSupabaseToken,
         setSupabaseToken,
         refreshMe,

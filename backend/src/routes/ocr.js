@@ -176,7 +176,10 @@ function fixLineDigitPositions(line, digitRanges) {
       const c = arr[i];
       if (c === 'O' || c === 'Q') arr[i] = '0';
       else if (c === 'I' || c === 'L' || c === '|') arr[i] = '1';
-      else if (c === 'S' && i >= 13 && i < 20) arr[i] = '5';
+      else if (c === 'S') arr[i] = '5';
+      else if (c === 'B') arr[i] = '8';
+      else if (c === 'Z') arr[i] = '2';
+      // S/B/Z sadece rakam beklenen aralıklarda (tarih vb.); 0-10 belge no, 13-20 doğum, 21-28 son geçerlilik
     }
   }
   return arr.join('');
@@ -274,6 +277,7 @@ async function runMrzPipeline(filePath) {
     const worker = await Tesseract.createWorker('eng', 1, { logger: () => {} });
 
     const preprocessVariants = [
+      { fn: (p) => preprocessForKimlikMrz(p, { contrast: 0.45 }), name: 'kimlikLow' },
       { fn: (p) => preprocessForKimlikMrz(p, { contrast: 0.55 }), name: 'kimlik' },
       { fn: (p) => preprocessForKimlikMrz(p, { contrast: 0.65 }), name: 'kimlikMid' },
       { fn: (p) => preprocessForKimlikMrz(p, { contrast: 0.8 }), name: 'kimlikHi' },
@@ -306,8 +310,11 @@ async function runMrzPipeline(filePath) {
           let fixed = raw;
           let parsed = parseMrzRaw(raw);
           if (!parsed) {
-            fixed = fixMrzOcrErrorsBackend(raw);
-            parsed = parseMrzRaw(fixed);
+            for (let pass = 0; pass < 3; pass++) {
+              fixed = fixMrzOcrErrorsBackend(fixed || raw);
+              parsed = parseMrzRaw(fixed);
+              if (parsed) break;
+            }
           } else if (parsed.checks && !parsed.checks.compositeCheck) {
             fixed = fixMrzOcrErrorsBackend(raw);
             const reparsed = parseMrzRaw(fixed);
@@ -326,6 +333,9 @@ async function runMrzPipeline(filePath) {
       }
       return false;
     }
+
+    // Önce tam görüntüyü dene (net olmasa bile en iyi sonucu almak için)
+    await tryImage(filePath);
 
     for (const frac of bottomFractions) {
       const cropPath = path.join(dir, `crop_bottom_${frac}.jpg`);
@@ -365,7 +375,8 @@ async function runMrzPipeline(filePath) {
     cleanup();
   }
 
-  const ok = !!(best.raw && (best.payload || best.score >= 50));
+  // Parse edilebilen her sonucu "en iyi çaba" olarak kabul et; kullanıcı gerekirse düzeltir
+  const ok = !!(best.raw && best.payload);
   return {
     ok,
     mrzRaw: best.raw || undefined,
@@ -376,18 +387,15 @@ async function runMrzPipeline(filePath) {
   };
 }
 
-/** MRZ bulunamadığında kullanıcıya gösterilecek sebep metni (pasaport/kimlik fark etmez). */
+/** MRZ bulunamadığında kullanıcıya gösterilecek sebep metni. Sistem en iyi sonucu almaya çalıştı. */
 function buildMrzFailureReason(mrzResult, fallbackAlsoFailed) {
   const attempts = (mrzResult && mrzResult.attemptsUsed) || 0;
-  const score = (mrzResult && mrzResult.score) || 0;
   const parts = [];
+  parts.push('Sistem en iyi sonucu almaya çalıştı.');
   if (attempts > 0) {
-    parts.push(`${attempts} farklı okuma denemesi yapıldı, MRZ satırı tespit edilemedi.`);
+    parts.push(`${attempts} farklı okuma denemesi yapıldı; MRZ satırı tespit edilemedi.`);
   }
-  if (score > 0 && score < 50) {
-    parts.push('Okunan metin MRZ formatına uymuyor (kimlik/pasaport arka yüzündeki 2 veya 3 satırlık bant).');
-  }
-  parts.push('Lütfen: (1) Belgenin arka yüzündeki MRZ bandı tam ve net görünsün, (2) Işık yeterli olsun veya fener kullanın, (3) Görüntü bulanık veya kesik olmasın.');
+  parts.push('Gerekirse alanları manuel girin veya MRZ bandı daha net görünecek şekilde tekrar çekin.');
   return parts.join(' ');
 }
 
@@ -511,20 +519,31 @@ router.post('/document-base64', authenticateTesisOrSupabase, express.json({ limi
   const logPrefix = '[document-base64]';
   try {
     if (!base64 || typeof base64 !== 'string') {
-      console.warn(logPrefix, 'body.imageBase64 yok veya string değil');
+      console.warn(logPrefix, "Storage'a yazılmadı: body.imageBase64 yok veya string değil. Neden: istek gövdesinde imageBase64 alanı eksik veya geçersiz tipte.");
       return res.status(400).json({ message: 'imageBase64 gerekli' });
     }
-    const buf = Buffer.from(base64, 'base64');
+    let buf;
+    try {
+      buf = Buffer.from(base64, 'base64');
+    } catch (decodeErr) {
+      console.warn(logPrefix, "Storage'a yazılmadı: base64 decode hatası. Neden:", decodeErr.message, "- Geçersiz base64 karakter veya format (data:image/... prefix bırakılmış olabilir).");
+      return res.status(400).json({ message: 'Geçersiz görüntü (base64 format hatası)' });
+    }
     if (buf.length === 0) {
-      console.warn(logPrefix, 'base64 decode sonrası buffer boş');
+      console.warn(logPrefix, "Storage'a yazılmadı: base64 decode sonrası buffer boş. Neden: base64 string geçerli ama decode edilmiş veri 0 byte (boş görsel).");
       return res.status(400).json({ message: 'Geçersiz görüntü' });
     }
-    console.log(logPrefix, 'görsel kaydediliyor', { bufLen: buf.length });
     if (!fs.existsSync(KIMLIK_UPLOAD_DIR)) {
       fs.mkdirSync(KIMLIK_UPLOAD_DIR, { recursive: true });
     }
     filePath = path.join(KIMLIK_UPLOAD_DIR, `base64_${Date.now()}_${Math.random().toString(36).slice(2, 8)}.jpg`);
-    fs.writeFileSync(filePath, buf);
+    try {
+      fs.writeFileSync(filePath, buf);
+      console.log(logPrefix, "Storage'a yazıldı:", filePath, { bufLen: buf.length });
+    } catch (writeErr) {
+      console.error(logPrefix, "Storage yazma hatası:", writeErr.message, "- path:", filePath);
+      return res.status(500).json({ message: 'Görsel kaydedilemedi', error: writeErr.message });
+    }
     console.log(logPrefix, 'runMrzPipeline başlıyor');
     const mrzResult = await runMrzPipeline(filePath);
     console.log(logPrefix, 'runMrzPipeline bitti', { ok: mrzResult.ok, hasMrzRaw: !!mrzResult.mrzRaw, score: mrzResult.score, attemptsUsed: mrzResult.attemptsUsed });
@@ -554,6 +573,74 @@ router.post('/document-base64', authenticateTesisOrSupabase, express.json({ limi
     if (filePath && fs.existsSync(filePath)) {
       try { fs.unlinkSync(filePath); } catch (_) {}
     }
+  }
+});
+
+/** Galeriden ön + arka yüz: iki görsel base64. Arka yüzden MRZ, ön yüzden OCR; birleştirilmiş tam veri döner. */
+router.post('/document-front-back', authenticateTesisOrSupabase, express.json({ limit: '16mb' }), async (req, res) => {
+  const frontBase64 = req.body?.frontBase64;
+  const backBase64 = req.body?.backBase64;
+  let frontPath = null;
+  let backPath = null;
+  const logPrefix = '[document-front-back]';
+  try {
+    if (!frontBase64 || !backBase64 || typeof frontBase64 !== 'string' || typeof backBase64 !== 'string') {
+      console.warn(logPrefix, "Storage'a yazılmadı: frontBase64 ve backBase64 gerekli. Neden: istek gövdesinde biri veya ikisi eksik/geçersiz tip.");
+      return res.status(400).json({ message: 'frontBase64 ve backBase64 gerekli' });
+    }
+    let frontBuf;
+    let backBuf;
+    try {
+      frontBuf = Buffer.from(frontBase64, 'base64');
+      backBuf = Buffer.from(backBase64, 'base64');
+    } catch (decodeErr) {
+      console.warn(logPrefix, "Storage'a yazılmadı: base64 decode hatası. Neden:", decodeErr.message, "- Ön veya arka görsel geçersiz base64.");
+      return res.status(400).json({ message: 'Geçersiz görsel (base64 format hatası)' });
+    }
+    if (frontBuf.length === 0 || backBuf.length === 0) {
+      console.warn(logPrefix, "Storage'a yazılmadı: base64 decode sonrası buffer boş. Neden: ön veya arka decode 0 byte.", { frontLen: frontBuf.length, backLen: backBuf.length });
+      return res.status(400).json({ message: 'Geçersiz görsel (base64)' });
+    }
+    if (!fs.existsSync(KIMLIK_UPLOAD_DIR)) fs.mkdirSync(KIMLIK_UPLOAD_DIR, { recursive: true });
+    const id = `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+    frontPath = path.join(KIMLIK_UPLOAD_DIR, `front_${id}.jpg`);
+    backPath = path.join(KIMLIK_UPLOAD_DIR, `back_${id}.jpg`);
+    try {
+      fs.writeFileSync(frontPath, frontBuf);
+      fs.writeFileSync(backPath, backBuf);
+      console.log(logPrefix, "Storage'a yazıldı: ön ve arka", { frontPath, backPath, frontLen: frontBuf.length, backLen: backBuf.length });
+    } catch (writeErr) {
+      console.error(logPrefix, "Storage yazma hatası:", writeErr.message, "- ön/arka path:", frontPath, backPath);
+      [frontPath, backPath].forEach((p) => { if (p && fs.existsSync(p)) { try { fs.unlinkSync(p); } catch (_) {} } });
+      return res.status(500).json({ message: 'Görsel kaydedilemedi', error: writeErr.message });
+    }
+    console.log(logPrefix, 'MRZ arka yüzde aranıyor');
+    const mrzResult = await runMrzPipeline(backPath);
+    const mrzRaw = mrzResult.mrzRaw || null;
+    let mrzPayload = mrzResult.payload || null;
+    if (!mrzPayload && mrzRaw) mrzPayload = parseMrzToPayload(mrzRaw);
+    const mrzFailureReason = !mrzRaw ? buildMrzFailureReason(mrzResult, false) : null;
+    console.log(logPrefix, 'Ön yüz OCR başlıyor');
+    const { data: { text: frontText } } = await Tesseract.recognize(frontPath, 'eng+ara+tur', { logger: () => {} });
+    const front = parseIdentityDocument(frontText);
+    const merged = mergeMrzAndFront(mrzPayload, front);
+    console.log(logPrefix, 'tamamlandı', { hasMrz: !!mrzRaw, mergedKeys: Object.keys(merged || {}) });
+    res.json({
+      success: true,
+      rawText: frontText,
+      mrz: mrzRaw || null,
+      mrzPayload: mrzPayload || null,
+      mrzFailureReason: mrzFailureReason || undefined,
+      front,
+      merged,
+    });
+  } catch (error) {
+    console.error(logPrefix, 'hata:', error.message);
+    res.status(500).json({ message: 'Belge okunamadı', error: error.message });
+  } finally {
+    [frontPath, backPath].forEach((p) => {
+      if (p && fs.existsSync(p)) { try { fs.unlinkSync(p); } catch (_) {} }
+    });
   }
 });
 

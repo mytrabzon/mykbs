@@ -25,7 +25,7 @@ export default function AdminSidebar() {
       <div className="admin-sidebar-inner">
         <Link href="/" className="admin-sidebar-logo">
           <span className="admin-sidebar-logo-dot" />
-          MyKBS
+          KBS Prime
         </Link>
         <nav className="admin-sidebar-nav">
           {navItems.map(({ href, label, icon }) => {

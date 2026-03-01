@@ -6,8 +6,8 @@ import { Toaster } from 'react-hot-toast'
 const syne = Syne({ subsets: ['latin'], weight: ['500', '600', '700', '800'] })
 
 export const metadata: Metadata = {
-  title: 'MyKBS Admin Panel',
-  description: 'MyKBS Admin Yönetim Paneli'
+  title: 'KBS Prime Admin Panel',
+  description: 'KBS Prime Admin Yönetim Paneli'
 }
 
 export default function RootLayout({

@@ -4,7 +4,7 @@
  * - Mevcut telefon veya e-posta değiştirilebilir.
  * - Yeni değer girilir → koda gönderilir → profil ekranında açılan kod yazma bölümüne girilip onaylanır.
  */
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   View,
   Text,
@@ -20,6 +20,8 @@ import { useNavigation } from '@react-navigation/native';
 import { useTheme } from '../context/ThemeContext';
 import { useAuth } from '../context/AuthContext';
 import { supabase } from '../lib/supabase/supabase';
+import { getApiBaseUrl, isSupabaseConfigured } from '../config/api';
+import { backendHealth } from '../services/backendHealth';
 import Toast from 'react-native-toast-message';
 import { Ionicons } from '@expo/vector-icons';
 import AppHeader from '../components/AppHeader';
@@ -60,6 +62,25 @@ export default function ProfilIletisimScreen() {
   const [loading, setLoading] = useState(false);
   const [sendingCode, setSendingCode] = useState(false);
   const inputRefs = useRef([]);
+  const [backendStatus, setBackendStatus] = useState({ configured: false, isOnline: null, error: null });
+  const [supabaseStatus, setSupabaseStatus] = useState({ configured: false, isOnline: null, error: null });
+
+  useEffect(() => {
+    const backendUrl = getApiBaseUrl();
+    const supabaseCfg = isSupabaseConfigured();
+    setBackendStatus((prev) => ({ ...prev, configured: !!backendUrl }));
+    setSupabaseStatus((prev) => ({ ...prev, configured: supabaseCfg }));
+    const updateBackend = (status) => setBackendStatus({ configured: !!backendUrl, isOnline: status.isOnline, error: status.error });
+    const updateSupabase = (status) => setSupabaseStatus({ configured: status.configured, isOnline: status.isOnline, error: status.error });
+    backendHealth.checkHealth().then(updateBackend);
+    if (supabaseCfg) backendHealth.checkSupabaseHealth().then(updateSupabase);
+    const unsubBackend = backendHealth.onStatusChange(updateBackend);
+    const unsubSupabase = backendHealth.onSupabaseStatusChange(updateSupabase);
+    return () => {
+      if (typeof unsubBackend === 'function') unsubBackend();
+      if (typeof unsubSupabase === 'function') unsubSupabase();
+    };
+  }, []);
 
   const pendingEmail = step === 'enter_code' && target === 'email' ? newEmail : null;
   const pendingPhone = step === 'enter_code' && target === 'phone' ? newPhone : null;
@@ -222,6 +243,12 @@ export default function ProfilIletisimScreen() {
         onBack={() => (step !== 'list' ? cancelFlow() : navigation.goBack())}
         onNotification={() => navigation.navigate('Bildirimler')}
         onProfile={() => navigation.navigate('Ayarlar')}
+        backendConfigured={backendStatus.configured}
+        backendOnline={backendStatus.isOnline}
+        backendError={backendStatus.error}
+        supabaseConfigured={supabaseStatus.configured}
+        supabaseOnline={supabaseStatus.isOnline}
+        supabaseError={supabaseStatus.error}
       />
       <KeyboardAvoidingView
         style={styles.flex}

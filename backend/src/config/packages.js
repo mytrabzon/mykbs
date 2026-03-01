@@ -7,9 +7,9 @@ const TRIAL_DAYS = 3;
 const TRIAL_CREDITS = 100;
 
 const PACKAGES = {
-  starter: { credits: 250, priceTL: 399, label: 'Starter' },
-  pro: { credits: 1000, priceTL: 1199, label: 'Pro', badge: 'En Çok Tercih Edilen' },
-  business: { credits: 3000, priceTL: 2999, label: 'Business' },
+  starter: { credits: 250, priceTL: 399.99, label: 'Starter' },
+  pro: { credits: 1000, priceTL: 1299.99, label: 'Pro', badge: 'En Çok Tercih Edilen' },
+  business: { credits: 3000, priceTL: 2999.99, label: 'Business' },
   enterprise: { credits: 10000, priceTL: 9999, label: 'Enterprise' },
 };
 

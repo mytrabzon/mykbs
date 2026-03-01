@@ -1,10 +1,9 @@
-import 'react-native-gesture-handler';
 import React, { useCallback, useEffect, useState } from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { getApiBaseUrl } from './src/config/api';
 import { dataService } from './src/services/dataService';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
-import { createStackNavigator } from '@react-navigation/stack';
+import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
 import Toast from 'react-native-toast-message';
@@ -14,7 +13,6 @@ import AppHeader from './src/components/AppHeader';
 import { logger } from './src/utils/logger';
 import { getIsAdminPanelUser } from './src/utils/adminAuth';
 import { backendHealth } from './src/services/backendHealth';
-import { registerPushToken } from './src/services/pushNotifications';
 import { BackHandler, Alert, Platform, View, Text, StyleSheet, TouchableOpacity, Linking, FlatList, RefreshControl, ActivityIndicator } from 'react-native';
 import { supabase } from './src/lib/supabase/supabase';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -49,6 +47,7 @@ import NfcIntroScreen from './src/features/kyc/NfcIntroScreen';
 import DocumentHubScreen from './src/features/documentRead/DocumentHubScreen';
 import FrontDocumentScanScreen from './src/features/documentRead/FrontDocumentScanScreen';
 import GallerySingleDocumentScreen from './src/features/documentRead/GallerySingleDocumentScreen';
+import GalleryFrontBackDocumentScreen from './src/features/documentRead/GalleryFrontBackDocumentScreen';
 import GalleryBatchDocumentScreen from './src/features/documentRead/GalleryBatchDocumentScreen';
 import DocumentResultScreen from './src/features/documentRead/DocumentResultScreen';
 import DocumentBatchResultScreen from './src/features/documentRead/DocumentBatchResultScreen';
@@ -228,6 +227,27 @@ const styles = StyleSheet.create({
   misafirlerLoading: { flex: 1, justifyContent: 'center', alignItems: 'center', gap: 12 },
   misafirlerLoadingText: { fontSize: 14 },
   mrzTabIconWrap: { width: 48, height: 48, borderRadius: 24, alignItems: 'center', justifyContent: 'center', marginTop: -20 },
+  ipadBlock: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#F1F5F9',
+    padding: 32,
+  },
+  ipadBlockTitle: {
+    fontSize: 22,
+    fontWeight: '700',
+    color: '#0F172A',
+    textAlign: 'center',
+    marginTop: 20,
+  },
+  ipadBlockText: {
+    fontSize: 16,
+    color: '#64748B',
+    textAlign: 'center',
+    marginTop: 12,
+    lineHeight: 24,
+  },
 });
 
 // Context (useAuth used in MisafirlerScreen, RaporlarScreen)
@@ -239,7 +259,7 @@ import PaywallModal from './src/components/PaywallModal';
 import TrialWelcomeBanner from './src/components/TrialWelcomeBanner';
 
 const Tab = createBottomTabNavigator();
-const Stack = createStackNavigator();
+const Stack = createNativeStackNavigator();
 
 const MAIN_TAB_NAMES = ['Odalar', 'Misafirler', 'MRZ', 'Raporlar', 'DahaFazla'];
 
@@ -468,6 +488,7 @@ function AppNavigator() {
             <Stack.Screen name="DocumentHub" component={DocumentHubScreen} />
             <Stack.Screen name="FrontDocumentScan" component={FrontDocumentScanScreen} />
             <Stack.Screen name="GallerySingleDocument" component={GallerySingleDocumentScreen} />
+            <Stack.Screen name="GalleryFrontBackDocument" component={GalleryFrontBackDocumentScreen} />
             <Stack.Screen name="GalleryBatchDocument" component={GalleryBatchDocumentScreen} />
             <Stack.Screen name="DocumentResult" component={DocumentResultScreen} />
             <Stack.Screen name="DocumentBatchResult" component={DocumentBatchResultScreen} />
@@ -482,14 +503,18 @@ function AppNavigator() {
   );
 }
 
-function PushRegistration() {
-  const { isAuthenticated, token } = useAuth();
-  useEffect(() => {
-    if (isAuthenticated && token) {
-      registerPushToken(async () => token).catch(() => {});
-    }
-  }, [isAuthenticated, token]);
-  return null;
+// Push token kaydı lobide (OdalarScreen) bildirim izni verildikten sonra yapılır.
+
+const isIpad = Platform.OS === 'ios' && Platform.isPad;
+
+function IpadBlockScreen() {
+  return (
+    <View style={styles.ipadBlock}>
+      <Ionicons name="phone-portrait-outline" size={64} color="#94A3B8" />
+      <Text style={styles.ipadBlockTitle}>Bu uygulama iPad'de desteklenmemektedir</Text>
+      <Text style={styles.ipadBlockText}>KBS Prime yalnızca iPhone ile kullanılabilir. Lütfen bir iPhone cihazında açın.</Text>
+    </View>
+  );
 }
 
 export default function App() {
@@ -555,12 +580,15 @@ export default function App() {
     };
   }, []);
 
+  if (isIpad) {
+    return <IpadBlockScreen />;
+  }
+
   return (
     <ErrorBoundary>
       <ThemeProvider>
         <AuthProvider>
           <CreditsProvider>
-            <PushRegistration />
             <AppNavigator />
             <Toast />
           </CreditsProvider>

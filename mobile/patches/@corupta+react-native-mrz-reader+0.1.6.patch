@@ -1,0 +1,65 @@
+diff --git a/node_modules/@corupta/react-native-mrz-reader/android/src/main/java/com/mrzreader/view/CameraPreviewView.kt b/node_modules/@corupta/react-native-mrz-reader/android/src/main/java/com/mrzreader/view/CameraPreviewView.kt
+index 8e20be8..b0fbfc2 100644
+--- a/node_modules/@corupta/react-native-mrz-reader/android/src/main/java/com/mrzreader/view/CameraPreviewView.kt
++++ b/node_modules/@corupta/react-native-mrz-reader/android/src/main/java/com/mrzreader/view/CameraPreviewView.kt
+@@ -20,6 +20,8 @@ import androidx.lifecycle.LifecycleOwner
+ import com.facebook.react.bridge.ReactContext
+ import com.facebook.react.modules.core.DeviceEventManagerModule
+ import com.mrzreader.analyzer.MrzReaderAnalyzer
++import android.os.Handler
++import android.os.Looper
+ import kotlinx.coroutines.CoroutineScope
+ import kotlinx.coroutines.Dispatchers
+ import kotlinx.coroutines.launch
+@@ -50,6 +52,8 @@ class CameraPreviewView @JvmOverloads constructor(
+ 
+   private var lastTouchX: Float = 0f
+   private var lastTouchY: Float = 0f
++  private var startCameraRetryCount = 0
++  private val startCameraMaxRetries = 10
+ 
+   init {
+     surfaceTextureListener = this
+@@ -171,6 +175,24 @@ class CameraPreviewView @JvmOverloads constructor(
+       ).build()
+ 
+     cameraProviderFuture.addListener({
++      val activity = reactContext.currentActivity
++      val display = this.display
++      if (activity == null || display == null) {
++        if (startCameraRetryCount < startCameraMaxRetries) {
++          startCameraRetryCount++
++          Handler(Looper.getMainLooper()).postDelayed({ startCamera() }, 150)
++        }
++        return@addListener
++      }
++      if (!::surfaceProvider.isInitialized) {
++        if (startCameraRetryCount < startCameraMaxRetries) {
++          startCameraRetryCount++
++          Handler(Looper.getMainLooper()).postDelayed({ startCamera() }, 150)
++        }
++        return@addListener
++      }
++      startCameraRetryCount = 0
++
+       cameraProvider = cameraProviderFuture.get()
+ 
+       val preview = Preview.Builder()
+@@ -181,7 +203,7 @@ class CameraPreviewView @JvmOverloads constructor(
+         }
+ 
+       val imageAnalysis = ImageAnalysis.Builder()
+-        .setTargetRotation(this.display!!.rotation)
++        .setTargetRotation(display.rotation)
+         .setOutputImageFormat(ImageAnalysis.OUTPUT_IMAGE_FORMAT_YUV_420_888)
+         .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
+         .setResolutionSelector(resolutionSelector)
+@@ -193,7 +215,7 @@ class CameraPreviewView @JvmOverloads constructor(
+       try {
+         cameraProvider!!.unbindAll()
+         camera = cameraProvider!!.bindToLifecycle(
+-          reactContext.currentActivity!! as LifecycleOwner,
++          activity as LifecycleOwner,
+           cameraSelector,
+           preview,
+           imageAnalysis

@@ -1,6 +1,6 @@
 /**
- * Tesis/KBS route'ları için çift auth: önce Supabase JWT, olmazsa legacy JWT (Prisma).
- * Mobil (Supabase token) ve eski istemciler (JWT_SECRET token) aynı endpoint'leri kullanabilir.
+ * Tesis/KBS route'ları için çift auth: önce backend JWT (Prisma), olmazsa Supabase JWT.
+ * Telefon/e-posta + şifre = backend JWT → Supabase'e hiç istek atılmaz, hata çıkmaz.
  * Supabase: req.authSource='supabase', req.user, req.branchId, req.branch.
  * Legacy: req.authSource='prisma', req.user (Prisma kullanici), req.tesis.
  */
@@ -30,22 +30,60 @@ async function authenticateTesisOrSupabase(req, res, next) {
     return errorResponse(req, res, 401, 'INVALID_TOKEN', 'Token bulunamadı');
   }
 
+  // 1) Önce backend JWT (telefon/e-posta + şifre ile giriş) — çoğu istek bu. Supabase çağrısı yok, hata yok.
+  try {
+    const decoded = jwt.decode(token);
+    if (decoded && decoded.userId && decoded.tesisId) {
+      const kullanici = await prisma.kullanici.findUnique({
+        where: { id: decoded.userId },
+        include: { tesis: true }
+      });
+      if (kullanici && kullanici.tesis) {
+        try {
+          jwt.verify(token, process.env.JWT_SECRET);
+        } catch (verifyErr) {
+          const msg = verifyErr?.message || '';
+          if (msg.includes('expired')) {
+            return errorResponse(req, res, 401, 'TOKEN_EXPIRED', 'Oturum süresi doldu. Lütfen tekrar giriş yapın.');
+          }
+          throw new Error('legacy_verify_failed');
+        }
+        req.authSource = 'prisma';
+        req.user = kullanici;
+        req.tesis = kullanici.tesis;
+        req.branch = null;
+        req.branchId = null;
+        return next();
+      }
+      if (kullanici && !kullanici.tesis) {
+        console.warn('[authTesisOrSupabase] Legacy JWT: kullanici var ama tesis yok, userId=', kullanici.id);
+        return errorResponse(req, res, 409, 'BRANCH_NOT_ASSIGNED', 'Tesis bilgisi bulunamadı. Yöneticinize başvurun.');
+      }
+    }
+  } catch (e) {
+    if (e?.message !== 'legacy_verify_failed') {
+      const msg = e?.message || '';
+      if (msg.includes('girisOnaylandi') && (msg.includes('does not exist') || msg.includes('no such column'))) {
+        console.error('[authTesisOrSupabase] Veritabanı migration eksik. npx prisma migrate deploy çalıştırın.');
+        return errorResponse(req, res, 503, 'SCHEMA_ERROR', 'Veritabanı güncellemesi gerekli. Lütfen yöneticiye bildirin.');
+      }
+    }
+  }
+
+  // 2) Supabase token (OTP / kod ile giriş) — sadece backend JWT değilse dene
   const isStubToken = typeof token === 'string' && token.startsWith('stub_token');
   if (isStubToken) {
-    // Mobil placeholder; Supabase'e gönderme (403 bad_jwt alınır). Direkt legacy JWT dene.
+    // stub_token → Supabase'e gönderme, legacy verify zaten yukarıda denendi
   } else if (supabaseAdmin) {
     try {
       const { data: { user }, error: userError } = await supabaseAdmin.auth.getUser(token);
       if (userError) {
         const msg = userError.message || '';
-        // Sadece gerçekten süresi dolmuş Supabase token için 401 dön. "signature is invalid" / "unable to parse"
-        // = token Supabase değil (örn. backend JWT) → legacy JWT'ye düşmeli, 401 değil.
         const isSupabaseExpired = msg.includes('expired') && (msg.includes('jwt') || msg.includes('token'));
-        console.warn('[authTesisOrSupabase] Supabase getUser failed:', msg);
         if (isSupabaseExpired) {
           return errorResponse(req, res, 401, 'TOKEN_EXPIRED', 'Oturum süresi doldu. Lütfen tekrar giriş yapın.');
         }
-        // Supabase dışı token (backend JWT) olabilir; legacy JWT denenir
+        console.warn('[authTesisOrSupabase] Supabase getUser failed:', msg);
       }
       if (!userError && user) {
         let profileRows, profileError;
@@ -148,34 +186,7 @@ async function authenticateTesisOrSupabase(req, res, next) {
     }
   }
 
-  // 2) Legacy JWT (Prisma) — stub_token veya Supabase eşleşmezse
-  try {
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    const kullanici = await prisma.kullanici.findUnique({
-      where: { id: decoded.userId },
-      include: { tesis: true }
-    });
-    if (kullanici && kullanici.tesis) {
-      req.authSource = 'prisma';
-      req.user = kullanici;
-      req.tesis = kullanici.tesis;
-      req.branch = null;
-      req.branchId = null;
-      return next();
-    }
-    if (kullanici && !kullanici.tesis) {
-      console.warn('[authTesisOrSupabase] Legacy JWT: kullanici var ama tesis yok, userId=', kullanici.id);
-      return errorResponse(req, res, 409, 'BRANCH_NOT_ASSIGNED', 'Tesis bilgisi bulunamadı. Yöneticinize başvurun.');
-    }
-  } catch (e) {
-    const msg = e?.message || '';
-    if (msg.includes('girisOnaylandi') && (msg.includes('does not exist') || msg.includes('no such column'))) {
-      console.error('[authTesisOrSupabase] Veritabanı migration eksik. npx prisma migrate deploy çalıştırın.');
-      return errorResponse(req, res, 503, 'SCHEMA_ERROR', 'Veritabanı güncellemesi gerekli. Lütfen yöneticiye bildirin.');
-    }
-    /* legacy auth failed */
-  }
-
+  // 3) Hiçbiri eşleşmedi
   // Sadece local/dev: NODE_ENV !== 'production' + localhost veya x-dev-bypass header
   if (isBypassAllowed(req) && supabaseAdmin) {
     try {

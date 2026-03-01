@@ -151,12 +151,12 @@ export default function LoginScreen({ route }) {
 
         <View style={[styles.formCard, { backgroundColor: colors.surface }]}>
           <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>
-            {loginMode === 'pin' ? 'Tesis kodu ve PIN ile Giriş' : 'Hesap ile Giriş'}
+            {loginMode === 'pin' ? 'Tesis kodu ve PIN ile Giriş' : 'Telefon veya e-posta ile Giriş'}
           </Text>
           <Text style={[styles.sectionSubtitle, { color: colors.textSecondary }]}>
             {loginMode === 'pin'
               ? 'Tesis kodunuz ve PIN ile giriş yapın. İlk girişte admin onayı gerekebilir.'
-              : 'Telefon numaranız veya e-posta adresiniz ve şifrenizle giriş yapın.'}
+              : 'Telefon numaranız veya e-posta ve şifrenizi yazın; doğrudan giriş yapabilirsiniz. Kod (SMS/e-posta) gerekmez.'}
           </Text>
 
           {pendingApprovalMessage ? (
@@ -247,13 +247,6 @@ export default function LoginScreen({ route }) {
                 Giriş Yap
               </Button>
               <TouchableOpacity
-                style={styles.smsLinkWrap}
-                onPress={() => navigation.navigate('OTPVerify', { islemTipi: 'giris' })}
-                disabled={loading}
-              >
-                <Text style={[styles.smsLinkText, { color: colors.primary }]}>Kod ile giriş (SMS veya e-posta)</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
                 style={[styles.smsLinkWrap, { marginTop: spacing.xs }]}
                 onPress={() => { setLoginMode('pin'); setPendingApprovalMessage(null); }}
                 disabled={loading}
@@ -279,6 +272,9 @@ export default function LoginScreen({ route }) {
           <View style={[styles.footer, { borderTopColor: colors.border }]}>
             <TouchableOpacity onPress={() => navigation.navigate('ForgotPassword')}>
               <Text style={[styles.footerLink, { color: colors.primary }]}>Şifremi unuttum</Text>
+            </TouchableOpacity>
+            <TouchableOpacity onPress={() => navigation.navigate('OTPVerify', { islemTipi: 'giris' })} style={styles.footerLinkWrap}>
+              <Text style={[styles.footerLinkSecondary, { color: colors.textSecondary }]}>Kod ile giriş (SMS/e-posta)</Text>
             </TouchableOpacity>
             <Text style={[styles.footerSupport, { color: colors.textSecondary }]}>
               Destek:{' '}
@@ -323,7 +319,7 @@ const styles = StyleSheet.create({
   container: { flex: 1 },
   scrollContent: { flexGrow: 1, paddingBottom: spacing['3xl'] },
   hero: {
-    paddingTop: spacing['4xl'] + 8,
+    paddingTop: (spacing['4xl'] ?? 56) + 8,
     paddingBottom: spacing.xl,
     alignItems: 'center',
     borderBottomLeftRadius: 20,
@@ -412,6 +408,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   footerLink: { fontSize: typography.text.body.fontSize, fontWeight: '600' },
+  footerLinkWrap: { marginTop: spacing.sm },
+  footerLinkSecondary: { fontSize: typography.text.caption.fontSize },
   footerSupport: {
     fontSize: typography.text.caption.fontSize,
     marginTop: spacing.xs,

@@ -35,7 +35,13 @@ import {
   RoomDetailSheet,
   FABHalfSheet,
 } from '../components/home';
+import PermissionCard from '../components/PermissionCard';
 import { getIsAdminPanelUser } from '../utils/adminAuth';
+import {
+  getNotificationPermissionStatusAsync,
+  requestNotificationPermissionAsync,
+  registerPushToken,
+} from '../services/pushNotifications';
 
 // Lobi CANLI noktası — nabız animasyonu
 function LiveDotPulse() {
@@ -73,11 +79,22 @@ export default function OdalarScreen() {
   const flatListRef = useRef(null);
   const loadTimeoutRef = useRef(null);
   const filtreRef = useRef(filtre);
+  const [notificationPermissionStatus, setNotificationPermissionStatus] = useState(null);
+  const [notificationCardDismissed, setNotificationCardDismissed] = useState(false);
   useEffect(() => {
     filtreRef.current = filtre;
   }, [filtre]);
 
   const loading = initialLoading || filterLoading;
+
+  // Lobide bildirim izin durumunu al; kart göstermek için (Geri ile kapatılır, tekrar lobiye gelince kart tekrar çıkar)
+  useFocusEffect(
+    useCallback(() => {
+      setNotificationCardDismissed(false);
+      if (!token) return;
+      getNotificationPermissionStatusAsync().then(setNotificationPermissionStatus);
+    }, [token])
+  );
 
   // Arka planda tesis/odalar yenilendiğinde ekranı güncelle (stale-while-revalidate)
   useEffect(() => {
@@ -738,6 +755,20 @@ export default function OdalarScreen() {
         showsVerticalScrollIndicator={false}
         ListHeaderComponent={
           <>
+            {token && notificationPermissionStatus && notificationPermissionStatus !== 'granted' && !notificationCardDismissed && (
+              <PermissionCard
+                icon="notifications-outline"
+                title="Bildirimlere izin verin"
+                description="Oda ve KBS güncellemelerini anında almak için bildirimlere izin verebilirsiniz. İstediğiniz zaman bu kartı kapatıp sonra tekrar açabilirsiniz."
+                onAllow={async () => {
+                  const status = await requestNotificationPermissionAsync();
+                  setNotificationPermissionStatus(status);
+                  if (status === 'granted') await registerPushToken(() => token);
+                }}
+                onDismiss={() => setNotificationCardDismissed(true)}
+                dismissLabel="Şimdi değil"
+              />
+            )}
             <KPICarousel
               ozet={ozet}
               odalarCountByFilter={odalarCountByFilter}

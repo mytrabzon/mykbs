@@ -17,6 +17,7 @@ const DOC_TYPES = [
 
 const ACTIONS = [
   { key: 'front', label: 'Kamera ile ön yüz', desc: 'Ön yüz fotoğrafı – ad, soyad, TC, tarih', icon: 'document-text', route: 'FrontDocumentScan', tip: 'Ön yüzü çerçeve içine alıp net çekin; ışık yeterli olsun.' },
+  { key: 'galleryFrontBack', label: 'Galeriden ön + arka yüz', desc: 'Ön ve arka yüzü ayrı seçip tam veri al', icon: 'documents', route: 'GalleryFrontBackDocument', tip: 'Önce ön yüz (fotoğraf+bilgiler), sonra arka yüz (MRZ). Tüm bilgiler birleştirilir.' },
   { key: 'gallery', label: 'Galeriden tek belge', desc: 'Tek fotoğraf seçip okut', icon: 'image', route: 'GallerySingleDocument', tip: 'MRZ veya metin alanı görünür, keskin bir fotoğraf seçin.' },
   { key: 'batch', label: 'Galeriden toplu (5–10)', desc: '5–10 fotoğraf seçip toplu okut', icon: 'images', route: 'GalleryBatchDocument', tip: 'Toplu okutma için her belge ayrı, net fotoğraf olmalı.' },
 ];
@@ -33,6 +34,10 @@ export default function DocumentHubScreen({ navigation }) {
       }
       if (action.route === 'GallerySingleDocument') {
         navigation.navigate('GallerySingleDocument', { docType });
+        return;
+      }
+      if (action.route === 'GalleryFrontBackDocument') {
+        navigation.navigate('GalleryFrontBackDocument', { docType });
         return;
       }
       if (action.route === 'GalleryBatchDocument') {

@@ -333,10 +333,14 @@ export default function MrzScanScreen({ navigation }) {
         formData.append('image', { uri, type: 'image/jpeg', name: 'mrz.jpg' });
         const res = await api.post('/ocr/mrz', formData);
         const raw = res?.data?.raw;
+        const score = res?.data?.score;
         const qualityHints = res?.data?.qualityHints;
         const failureReason = res?.data?.failureReason;
         if (raw) {
           processMrzRaw(raw);
+          if (typeof score === 'number' && score < 80) {
+            Toast.show({ type: 'info', text1: 'Okuma tam net olmayabilir', text2: 'Lütfen bilgileri kontrol edin.' });
+          }
         } else {
           if (TorchModule && qualityHints?.suggestTorch === 'on') {
             try {
@@ -350,7 +354,7 @@ export default function MrzScanScreen({ navigation }) {
               setTorchOn(false);
             } catch (_) {}
           }
-          const reasonText = failureReason || 'MRZ alanı net görünsün, tekrar deneyin.';
+          const reasonText = failureReason || 'Sistem en iyi sonucu almaya çalıştı. Gerekirse manuel girin veya tekrar çekin.';
           Toast.show({ type: 'error', text1: 'MRZ okunamadı', text2: reasonText });
         }
       } catch (e) {
@@ -1080,7 +1084,9 @@ const styles = StyleSheet.create({
   debugPanel: { position: 'absolute', left: 12, right: 12, backgroundColor: 'rgba(0,0,0,0.88)', padding: theme.spacing.sm, borderRadius: 8 },
   debugTitle: { color: theme.colors.warning, fontWeight: '600', marginBottom: 4 },
   debugLine: { color: 'rgba(255,255,255,0.9)', fontSize: 11 },
+  docTypeWrap: { alignItems: 'center' },
   docTypeRow: { flexDirection: 'row', gap: theme.spacing.sm },
+  docTypeHint: { marginTop: 4, fontSize: 11, color: 'rgba(255,255,255,0.7)' },
   docTypeBtn: { flex: 1, paddingVertical: theme.spacing.sm, alignItems: 'center', borderRadius: 8, backgroundColor: 'rgba(255,255,255,0.2)' },
   docTypeBtnActive: { backgroundColor: theme.colors.primary },
   docTypeBtnText: { color: 'rgba(255,255,255,0.9)', fontSize: theme.typography.fontSize.sm, fontWeight: '600' },

@@ -233,7 +233,7 @@ router.post('/tesis/:tesisId/onayla', async (req, res) => {
     const girisLinki = `${process.env.APP_URL || 'https://app.mykbs.com'}/aktivasyon?kod=${tesis.tesisKodu}`;
 
     // Hoş geldiniz mesajı
-    const mesaj = `MyKBS'ye Hoş Geldiniz
+    const mesaj = `KBS Prime'a Hoş Geldiniz
 
 Başvurunuz onaylanmıştır. Uygulamaya giriş için:
 Tesis Kodu: ${tesis.tesisKodu}
@@ -241,7 +241,7 @@ Aktivasyon Şifresi: ${aktivasyonSifre}
 Giriş Linki: ${girisLinki}
 
 Bu şifre tek kullanımlıktır. İlk girişte kendi kalıcı PIN'inizi oluşturmanız istenecektir.
-MyKBS ekibi`;
+KBS Prime ekibi`;
 
     const aktivasyonBilgileri = {
       tesisKodu: tesis.tesisKodu,
@@ -302,7 +302,7 @@ router.post('/tesis/:tesisId/yeni-sifre', async (req, res) => {
 
     const girisLinki = `${process.env.APP_URL || 'https://app.mykbs.com'}/aktivasyon?kod=${tesis.tesisKodu}`;
 
-    const mesaj = `MyKBS'ye Hoş Geldiniz
+    const mesaj = `KBS Prime'a Hoş Geldiniz
 
 Başvurunuz onaylanmıştır. Uygulamaya giriş için:
 Tesis Kodu: ${tesis.tesisKodu}
@@ -310,7 +310,7 @@ Aktivasyon Şifresi: ${aktivasyonSifre}
 Giriş Linki: ${girisLinki}
 
 Bu şifre tek kullanımlıktır. İlk girişte kendi kalıcı PIN'inizi oluşturmanız istenecektir.
-MyKBS ekibi`;
+KBS Prime ekibi`;
 
     const aktivasyonBilgileri = {
       tesisKodu: tesis.tesisKodu,

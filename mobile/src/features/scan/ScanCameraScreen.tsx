@@ -108,10 +108,13 @@ export default function ScanCameraScreen({ navigation }: { navigation: any }) {
 
   if (!permission?.granted) {
     return (
-      <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
-        <Text style={{ color: colors.text }}>Kamera izni gerekli</Text>
+      <SafeAreaView style={[styles.container, styles.permissionCard, { backgroundColor: colors.background }]}>
+        <Text style={[styles.permissionTitle, { color: colors.text }]}>Kamera izni gerekli</Text>
         <TouchableOpacity onPress={requestPermission} style={[styles.btn, { backgroundColor: colors.primary }]}>
           <Text style={styles.btnText}>İzin ver</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.btnBack} onPress={() => navigation.goBack()}>
+          <Text style={[styles.btnBackText, { color: colors.textSecondary }]}>Geri</Text>
         </TouchableOpacity>
       </SafeAreaView>
     );
@@ -148,6 +151,10 @@ export default function ScanCameraScreen({ navigation }: { navigation: any }) {
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
+  permissionCard: { justifyContent: 'center', alignItems: 'center', paddingHorizontal: 24 },
+  permissionTitle: { fontSize: 18, fontWeight: '600', marginBottom: 16 },
+  btnBack: { marginTop: 16, paddingVertical: 12, paddingHorizontal: 24 },
+  btnBackText: { fontSize: 16, fontWeight: '600' },
   overlay: { position: 'absolute', left: 0, right: 0, top: 0, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16 },
   backBtn: { padding: 8 },
   hintBox: { flex: 1, marginLeft: 8, backgroundColor: 'rgba(0,0,0,0.6)', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 8 },

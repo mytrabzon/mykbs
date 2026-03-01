@@ -18,6 +18,7 @@ export default function ScanHelpSheet({ visible, onClose }) {
             <Item icon="flash-outline" text="Karanlıkta flaş kullanın." />
             <Item icon="sunny-outline" text="Yansıma MRZ üzerine gelmesin." />
             <Item icon="document-text-outline" text="Belgeyi düz tutun, çizgiler net görünsün." />
+            <Item icon="barcode-outline" text="Kimlik: 3 satır MRZ; pasaport: 2 satır MRZ." />
             <Item icon="scan-outline" text="Çerçeve MRZ alanını içine alsın." />
           </View>
           <TouchableOpacity style={styles.button} onPress={onClose}>

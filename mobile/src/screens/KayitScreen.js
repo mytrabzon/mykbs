@@ -231,7 +231,7 @@ const styles = {
   container: { flex: 1 },
   scrollContent: { flexGrow: 1, paddingBottom: spacing['3xl'] },
   hero: {
-    paddingTop: spacing['4xl'] + 8,
+    paddingTop: (spacing['4xl'] ?? 56) + 8,
     paddingBottom: spacing.xl,
     alignItems: 'center',
     borderBottomLeftRadius: 20,

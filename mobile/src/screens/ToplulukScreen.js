@@ -104,13 +104,14 @@ function PostCard({ item, colors, onPostPress, onAuthorPress, onCommentPress, ca
 }
 
 export default function ToplulukScreen({ navigation }) {
-  const { tesis, user, getSupabaseToken } = useAuth();
+  const { tesis, user, isLoggedIn, getSupabaseToken } = useAuth();
   const { colors } = useTheme();
   const [posts, setPosts] = useState([]);
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [category, setCategory] = useState('');
   const [token, setToken] = useState(null);
+  const [tokenChecked, setTokenChecked] = useState(false);
   const [hasCommunity, setHasCommunity] = useState(false);
   const [categoryModalVisible, setCategoryModalVisible] = useState(false);
 
@@ -118,6 +119,7 @@ export default function ToplulukScreen({ navigation }) {
     const t = await getSupabaseToken();
     setToken(t);
     setHasCommunity(!!t);
+    setTokenChecked(true);
   }, [getSupabaseToken]);
 
   const loadPosts = useCallback(async (isRefresh = false) => {
@@ -170,7 +172,7 @@ export default function ToplulukScreen({ navigation }) {
 
   const onRefresh = () => loadPosts(true);
 
-  if (!user) {
+  if (!isLoggedIn) {
     return (
       <View style={[styles.screenContainer, { backgroundColor: colors.background }]}>
         <AppHeader
@@ -184,6 +186,25 @@ export default function ToplulukScreen({ navigation }) {
             icon="people-outline"
             title="Topluluk"
             message="Paylaşım ve topluluk özellikleri için giriş yapın."
+          />
+        </View>
+      </View>
+    );
+  }
+  if (tokenChecked && !token) {
+    return (
+      <View style={[styles.screenContainer, { backgroundColor: colors.background }]}>
+        <AppHeader
+          title="Topluluk"
+          minimal
+          onNotification={() => navigation.navigate('Bildirimler')}
+          onProfile={() => navigation.navigate('ProfilDuzenle')}
+        />
+        <View style={styles.emptyWrap}>
+          <EmptyState
+            icon="people-outline"
+            title="Topluluk"
+            message="Paylaşım için e-posta veya telefon ile giriş yapın."
           />
         </View>
       </View>

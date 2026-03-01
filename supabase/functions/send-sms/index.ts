@@ -16,7 +16,7 @@ function normalizePhone(phone: string): string {
 async function sendNetgsm(phone: string, text: string): Promise<{ success: boolean; error?: string }> {
   const usercode = Deno.env.get('NETGSM_USERCODE')
   const password = Deno.env.get('NETGSM_PASSWORD')
-  const msgheader = Deno.env.get('NETGSM_MSGHEADER') || 'MYKBS'
+  const msgheader = Deno.env.get('NETGSM_MSGHEADER') || 'KBS Prime'
   if (!usercode || !password) return { success: false, error: 'NETGSM_USERCODE/PASSWORD yok' }
 
   const no = normalizePhone(phone)
@@ -65,7 +65,7 @@ serve(async (req) => {
       )
     }
 
-    const smsText = message || (otp ? `MyKBS giriş kodunuz: ${otp}\n\nBu kodu kimseyle paylaşmayın. Kod 5 dakika geçerlidir.` : '')
+    const smsText = message || (otp ? `KBS Prime giriş kodunuz: ${otp}\n\nBu kodu kimseyle paylaşmayın. Kod 5 dakika geçerlidir.` : '')
     const messageId = `edge_${Date.now()}`
 
     console.log('=== SMS ===')

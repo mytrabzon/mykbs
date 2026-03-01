@@ -16,7 +16,7 @@ import * as communityApi from '../services/communityApi';
 import Toast from 'react-native-toast-message';
 
 export default function BildirimlerScreen({ navigation }) {
-  const { tesis, user, getSupabaseToken } = useAuth();
+  const { tesis, user, isLoggedIn, getSupabaseToken } = useAuth();
   const { colors } = useTheme();
   const [list, setList] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -101,7 +101,7 @@ export default function BildirimlerScreen({ navigation }) {
       </View>
     );
   }
-  if (!user) {
+  if (!isLoggedIn) {
     return (
       <View style={[styles.screenContainer, { backgroundColor: colors.background }]}>
         <AppHeader

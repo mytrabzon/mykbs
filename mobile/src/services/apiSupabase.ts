@@ -417,7 +417,18 @@ export const api = {
         return toResponse(res);
       }
       if (pathname === '/auth/giris/otp-iste' || pathname === 'auth/giris/otp-iste') {
-        const res = await callFn('auth_request_otp', payload, null);
+        const backendUrl = getBackendUrl();
+        if (backendUrl) {
+          const r = await fetchWithLog(`${backendUrl}/api/auth/giris/otp-iste`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+          });
+          const data = await r.json().catch(() => ({}));
+          if (!r.ok) throw Object.assign(new Error((data as { message?: string }).message || 'SMS gönderilemedi'), { response: { status: r.status, data } });
+          return toResponse(data);
+        }
+        const res = await callFn('auth_request_otp', payload, { requireAuth: false });
         return toResponse(res);
       }
       if (pathname === '/auth/giris/otp-dogrula' || pathname === 'auth/giris/otp-dogrula') {
@@ -445,6 +456,17 @@ export const api = {
         return toResponse(res);
       }
       if (pathname === '/auth/kayit' || pathname === 'auth/kayit') {
+        const backendUrl = getBackendUrl();
+        if (backendUrl) {
+          const r = await fetchWithLog(`${backendUrl}/api/auth/kayit`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+          });
+          const data = await r.json().catch(() => ({}));
+          if (!r.ok) throw Object.assign(new Error((data as { message?: string }).message || 'Kayıt başarısız'), { response: { status: r.status, data } });
+          return toResponse(data);
+        }
         const res = await callFn('auth_request_otp', payload, null);
         return toResponse(res);
       }

@@ -35,16 +35,33 @@ router.post('/', express.json({ limit: '6mb' }), async (req, res) => {
     const soyad = String(body.soyad || '').trim();
     if (!ad || !soyad) return errorResponse(req, res, 400, 'MISSING_FIELDS', 'Ad ve soyad zorunludur.');
 
+    const logPrefix = '[okutulan-belgeler]';
     let photoUrl = null;
     if (body.photoBase64 && typeof body.photoBase64 === 'string') {
       const base64 = body.photoBase64.replace(/^data:image\/\w+;base64,/, '');
-      const buf = Buffer.from(base64, 'base64');
-      if (buf.length > 0 && buf.length <= 5 * 1024 * 1024) {
+      let buf;
+      try {
+        buf = Buffer.from(base64, 'base64');
+      } catch (decodeErr) {
+        console.warn(logPrefix, "Storage'a yazılmadı: base64 decode hatası. Neden:", decodeErr.message, "- photoBase64 geçersiz format.");
+      }
+      if (buf && buf.length > 0 && buf.length <= 5 * 1024 * 1024) {
         if (!fs.existsSync(UPLOAD_DIR)) fs.mkdirSync(UPLOAD_DIR, { recursive: true });
         const filename = `${tesisId.slice(0, 12)}_${Date.now()}.jpg`;
         const filePath = path.join(UPLOAD_DIR, filename);
-        fs.writeFileSync(filePath, buf);
-        photoUrl = `/uploads/okutulan-belgeler/${filename}`;
+        try {
+          fs.writeFileSync(filePath, buf);
+          photoUrl = `/uploads/okutulan-belgeler/${filename}`;
+          console.log(logPrefix, "Storage'a yazıldı:", filePath, { bufLen: buf.length });
+        } catch (writeErr) {
+          console.error(logPrefix, "Storage yazma hatası:", writeErr.message, "- path:", filePath);
+        }
+      } else if (buf) {
+        if (buf.length === 0) {
+          console.warn(logPrefix, "Storage'a yazılmadı: base64 decode sonrası buffer boş. Neden: photoBase64 decode 0 byte.");
+        } else {
+          console.warn(logPrefix, "Storage'a yazılmadı: dosya boyutu limit aşımı. Neden: max 5MB, gelen:", Math.round(buf.length / 1024), 'KB');
+        }
       }
     }
 

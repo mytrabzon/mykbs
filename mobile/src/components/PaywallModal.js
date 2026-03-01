@@ -1,24 +1,59 @@
 import React, { useState } from 'react';
-import { View, Text, Modal, TouchableOpacity, StyleSheet, ScrollView, Pressable, ActivityIndicator, Alert } from 'react-native';
+import {
+  View,
+  Text,
+  Modal,
+  TouchableOpacity,
+  StyleSheet,
+  ScrollView,
+  Pressable,
+  ActivityIndicator,
+  Alert,
+  Dimensions,
+} from 'react-native';
 import { useTheme } from '../context/ThemeContext';
 import { Ionicons } from '@expo/vector-icons';
-import { PAYWALL_PACKAGES, CREDITS_DEPLETED_MESSAGE, TRIAL_END_MESSAGE } from '../constants/packages';
+import {
+  PAYWALL_PACKAGES,
+  CREDITS_DEPLETED_MESSAGE,
+  TRIAL_END_MESSAGE,
+} from '../constants/packages';
 import { api } from '../services/api';
 import { getApiErrorMessage } from '../services/apiSupabase';
 
+const { width: SCREEN_WIDTH } = Dimensions.get('window');
+const CARD_GAP = 12;
+const HORIZONTAL_PADDING = 20;
+const SHEET_MAX = Math.min(SCREEN_WIDTH, 440);
+const CONTENT_WIDTH = SHEET_MAX - HORIZONTAL_PADDING * 2;
+const CARD_WIDTH = (CONTENT_WIDTH - CARD_GAP) / 2;
+
 /**
- * 0 kredi veya deneme süresi bitince: "Bildirim hakkın doldu. Devam etmek için paket seç."
- * "Satın Al" ile sipariş oluşturulur; ödeme bilgisi iletilecek.
+ * Bildirim paketleri — modern paywall (menü veya kredi bitince).
  */
 export default function PaywallModal({ visible, onClose, reason = 'no_credits' }) {
-  const { colors } = useTheme();
+  const { colors, isDark } = useTheme();
   const [loading, setLoading] = useState(false);
-  const [success, setSuccess] = useState(null); // { siparisNo }
+  const [loadingPackageId, setLoadingPackageId] = useState(null);
+  const [success, setSuccess] = useState(null);
 
-  const message = reason === 'trial_ended' ? TRIAL_END_MESSAGE : CREDITS_DEPLETED_MESSAGE;
+  const fromMenu = reason === 'menu';
+  const message =
+    reason === 'trial_ended' ? TRIAL_END_MESSAGE : CREDITS_DEPLETED_MESSAGE;
+  const title = success
+    ? 'Siparişiniz alındı'
+    : fromMenu
+      ? 'Bildirim paketleri'
+      : 'Bildirim hakkın doldu';
+  const subtitleText = success
+    ? `Sipariş no: ${success.siparisNo}. Ödeme bilgisi e-posta veya SMS ile iletilecektir. (${success.tutarTL} ₺)`
+    : fromMenu
+      ? 'İhtiyacına uygun paketi seç'
+      : message;
 
   const handleSatınAl = async (pkg) => {
     setLoading(true);
+    setLoadingPackageId(pkg.id);
     setSuccess(null);
     try {
       const { data } = await api.post('/siparis', { paket: pkg.id });
@@ -28,6 +63,7 @@ export default function PaywallModal({ visible, onClose, reason = 'no_credits' }
       Alert.alert('Sipariş alınamadı', msg);
     } finally {
       setLoading(false);
+      setLoadingPackageId(null);
     }
   };
 
@@ -43,79 +79,136 @@ export default function PaywallModal({ visible, onClose, reason = 'no_credits' }
       animationType="fade"
       onRequestClose={handleClose}
     >
-      <Pressable style={styles.overlay} onPress={handleClose}>
-        <Pressable style={[styles.box, { backgroundColor: colors.surface }]} onPress={(e) => e.stopPropagation()}>
-          <View style={styles.header}>
-            <Text style={[styles.title, { color: colors.textPrimary }]}>
-              {success ? 'Siparişiniz alındı' : 'Bildirim hakkın doldu'}
-            </Text>
-            <Text style={[styles.subtitle, { color: colors.textSecondary }]}>
-              {success
-                ? `Sipariş no: ${success.siparisNo}. Ödeme bilgisi e-posta veya SMS ile iletilecektir. (${success.tutarTL} ₺)`
-                : message}
-            </Text>
-            <TouchableOpacity onPress={handleClose} style={styles.closeBtn} hitSlop={12}>
-              <Ionicons name="close" size={24} color={colors.textSecondary} />
+      <View style={styles.overlay}>
+        <Pressable style={StyleSheet.absoluteFill} onPress={handleClose} />
+        <View
+          style={[
+            styles.sheet,
+            {
+              backgroundColor: colors.surface,
+              shadowColor: isDark ? 'transparent' : '#0F172A',
+            },
+          ]}
+        >
+          {/* Üst çizgi */}
+          <View style={[styles.sheetAccent, { backgroundColor: colors.primary }]} />
+
+          <View style={styles.headerRow}>
+            <View style={styles.headerTextWrap}>
+              <View style={[styles.iconCircle, { backgroundColor: colors.primarySoft }]}>
+                <Ionicons name="notifications" size={22} color={colors.primary} />
+              </View>
+              <View style={styles.headerTitles}>
+                <Text style={[styles.title, { color: colors.textPrimary }]}>{title}</Text>
+                <Text style={[styles.subtitle, { color: colors.textSecondary }]} numberOfLines={2}>
+                  {subtitleText}
+                </Text>
+              </View>
+            </View>
+            <TouchableOpacity
+              onPress={handleClose}
+              style={[styles.closeBtn, { backgroundColor: colors.borderLight || colors.border }]}
+              hitSlop={12}
+            >
+              <Ionicons name="close" size={20} color={colors.textSecondary} />
             </TouchableOpacity>
           </View>
 
           {success ? (
-            <View style={styles.successFooter}>
-              <TouchableOpacity style={[styles.cta, { backgroundColor: colors.primary }]} onPress={handleClose} activeOpacity={0.8}>
-                <Text style={styles.ctaText}>Tamam</Text>
+            <View style={styles.successBlock}>
+              <View style={[styles.successIconWrap, { backgroundColor: colors.successSoft }]}>
+                <Ionicons name="checkmark-circle" size={48} color={colors.success} />
+              </View>
+              <Text style={[styles.successTitle, { color: colors.textPrimary }]}>
+                Siparişiniz alındı
+              </Text>
+              <Text style={[styles.successSub, { color: colors.textSecondary }]}>
+                Sipariş no: {success.siparisNo}
+              </Text>
+              <Text style={[styles.successSub, { color: colors.textSecondary }]}>
+                {success.tutarTL} ₺ — Ödeme bilgisi e-posta veya SMS ile iletilecektir.
+              </Text>
+              <TouchableOpacity
+                style={[styles.ctaPrimary, { backgroundColor: colors.primary }]}
+                onPress={handleClose}
+                activeOpacity={0.85}
+              >
+                <Text style={styles.ctaPrimaryText}>Tamam</Text>
               </TouchableOpacity>
             </View>
           ) : (
-            <ScrollView style={styles.cardsScroll} contentContainerStyle={styles.cardsContent} showsVerticalScrollIndicator={false}>
-              {PAYWALL_PACKAGES.map((pkg) => {
-                const isPro = pkg.id === 'pro';
-                const isLoading = loading;
-                return (
-                  <View
-                    key={pkg.id}
-                    style={[
-                      styles.card,
-                      { backgroundColor: colors.surfaceCard, borderColor: colors.border },
-                      isPro && styles.cardPro,
-                      isPro && { borderColor: colors.primary, shadowColor: colors.primary },
-                    ]}
-                  >
-                    {pkg.badge ? (
-                      <View style={[styles.badge, { backgroundColor: colors.primary }]}>
-                        <Text style={styles.badgeText}>{pkg.badge}</Text>
-                      </View>
-                    ) : null}
-                    <Text style={[styles.cardLabel, { color: colors.textPrimary }]}>{pkg.label}</Text>
-                    <Text style={[styles.cardCredits, { color: colors.textPrimary }]}>
-                      {pkg.credits.toLocaleString('tr-TR')} Bildirim
-                    </Text>
-                    <Text style={[styles.cardPrice, { color: colors.primary }]}>
-                      {pkg.priceTL.toLocaleString('tr-TR')} ₺
-                    </Text>
-                    {isPro ? (
-                      <Text style={[styles.unitPrice, { color: colors.textSecondary }]}>
-                        Birim: {(pkg.priceTL / pkg.credits).toFixed(2)} ₺/bildirim
-                      </Text>
-                    ) : null}
-                    <TouchableOpacity
-                      style={[styles.cta, { backgroundColor: colors.primary, opacity: isLoading ? 0.7 : 1 }]}
+            <ScrollView
+              style={styles.scroll}
+              contentContainerStyle={styles.scrollContent}
+              showsVerticalScrollIndicator={false}
+            >
+              <View style={styles.grid}>
+                {PAYWALL_PACKAGES.map((pkg) => {
+                  const isPro = pkg.id === 'pro';
+                  const isThisLoading = loading && loadingPackageId === pkg.id;
+                  const anyLoading = loading;
+                  return (
+                    <Pressable
+                      key={pkg.id}
                       onPress={() => handleSatınAl(pkg)}
-                      disabled={isLoading}
-                      activeOpacity={0.8}
+                      disabled={anyLoading}
+                      style={({ pressed }) => [
+                        styles.card,
+                        {
+                          backgroundColor: isPro
+                            ? (colors.primarySoft || colors.surfaceCard)
+                            : colors.surfaceCard,
+                          borderColor: isPro ? colors.primary : colors.border,
+                          borderWidth: isPro ? 2 : 1,
+                          opacity: pressed ? 0.92 : 1,
+                          transform: [{ scale: pressed ? 0.98 : 1 }],
+                        },
+                      ]}
                     >
-                      {isLoading ? (
-                        <ActivityIndicator color="#FFF" size="small" />
-                      ) : (
-                        <Text style={styles.ctaText}>Satın Al</Text>
-                      )}
-                    </TouchableOpacity>
-                  </View>
-                );
-              })}
+                      {pkg.badge ? (
+                        <View style={[styles.badge, { backgroundColor: colors.primary }]}>
+                          <Text style={styles.badgeText}>{pkg.badge}</Text>
+                        </View>
+                      ) : null}
+                      <Text style={[styles.cardName, { color: colors.textPrimary }]} numberOfLines={1}>
+                        {pkg.label}
+                      </Text>
+                      <Text style={[styles.cardCredits, { color: colors.textSecondary }]}>
+                        {pkg.credits.toLocaleString('tr-TR')} bildirim
+                      </Text>
+                      <View style={styles.cardPriceRow}>
+                        <Text style={[styles.cardPrice, { color: colors.primary }]}>
+                          {pkg.priceTL.toLocaleString('tr-TR')} ₺
+                        </Text>
+                        {isPro && (
+                          <Text style={[styles.unitPrice, { color: colors.textSecondary }]}>
+                            {(pkg.priceTL / pkg.credits).toFixed(2)} ₺/adet
+                          </Text>
+                        )}
+                      </View>
+                      <View
+                        style={[
+                          styles.ctaWrap,
+                          {
+                            backgroundColor: colors.primary,
+                            opacity: isThisLoading ? 0.8 : 1,
+                          },
+                        ]}
+                      >
+                        {isThisLoading ? (
+                          <ActivityIndicator color="#FFF" size="small" />
+                        ) : (
+                          <Text style={styles.ctaText}>Satın al</Text>
+                        )}
+                      </View>
+                    </Pressable>
+                  );
+                })}
+              </View>
             </ScrollView>
           )}
-        </Pressable>
-      </Pressable>
+        </View>
+      </View>
     </Modal>
   );
 }
@@ -123,102 +216,182 @@ export default function PaywallModal({ visible, onClose, reason = 'no_credits' }
 const styles = StyleSheet.create({
   overlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.5)',
-    justifyContent: 'center',
+    backgroundColor: 'rgba(15, 23, 42, 0.5)',
+    justifyContent: 'flex-end',
     alignItems: 'center',
-    padding: 20,
   },
-  box: {
+  sheet: {
     width: '100%',
-    maxWidth: 400,
-    maxHeight: '85%',
-    borderRadius: 20,
+    maxWidth: 440,
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+    maxHeight: '88%',
     overflow: 'hidden',
+    shadowOffset: { width: 0, height: -8 },
+    shadowOpacity: 0.08,
+    shadowRadius: 24,
+    elevation: 24,
   },
-  header: {
-    padding: 20,
-    paddingTop: 24,
-    paddingRight: 44,
+  sheetAccent: {
+    height: 4,
+    width: 48,
+    alignSelf: 'center',
+    borderRadius: 2,
+    marginTop: 12,
   },
-  closeBtn: {
-    position: 'absolute',
-    top: 16,
-    right: 16,
+  headerRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    paddingHorizontal: HORIZONTAL_PADDING,
+    paddingTop: 8,
+    paddingBottom: 16,
+    paddingRight: 12,
+  },
+  headerTextWrap: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 14,
+  },
+  iconCircle: {
+    width: 44,
+    height: 44,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  headerTitles: {
+    flex: 1,
   },
   title: {
-    fontSize: 20,
+    fontSize: 22,
     fontWeight: '700',
-    marginBottom: 8,
+    letterSpacing: -0.4,
+    marginBottom: 4,
   },
   subtitle: {
     fontSize: 15,
     lineHeight: 22,
+    opacity: 0.9,
   },
-  cardsScroll: {
-    maxHeight: 360,
+  closeBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  cardsContent: {
-    padding: 16,
-    paddingTop: 0,
-    gap: 12,
+  scroll: {
+    maxHeight: 400,
+  },
+  scrollContent: {
+    paddingHorizontal: HORIZONTAL_PADDING,
+    paddingBottom: 28,
+  },
+  grid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
   },
   card: {
-    borderRadius: 16,
-    borderWidth: 2,
-    padding: 18,
-    marginBottom: 12,
+    width: CARD_WIDTH,
+    borderRadius: 20,
+    padding: 16,
+    marginBottom: CARD_GAP,
     position: 'relative',
-  },
-  cardPro: {
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.25,
-    shadowRadius: 12,
-    elevation: 8,
+    minHeight: 180,
   },
   badge: {
     position: 'absolute',
-    top: -10,
+    top: -8,
+    left: 12,
+    right: 12,
     alignSelf: 'center',
-    paddingHorizontal: 12,
-    paddingVertical: 4,
-    borderRadius: 12,
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    borderRadius: 10,
+    alignItems: 'center',
   },
   badgeText: {
     color: '#FFF',
-    fontSize: 12,
-    fontWeight: '600',
+    fontSize: 10,
+    fontWeight: '700',
+    letterSpacing: 0.2,
   },
-  cardLabel: {
+  cardName: {
     fontSize: 18,
-    fontWeight: '600',
+    fontWeight: '700',
+    letterSpacing: -0.3,
     marginTop: 4,
   },
   cardCredits: {
-    fontSize: 15,
+    fontSize: 13,
     marginTop: 4,
+    fontWeight: '500',
+    opacity: 0.85,
+  },
+  cardPriceRow: {
+    marginTop: 12,
+    marginBottom: 12,
   },
   cardPrice: {
     fontSize: 22,
-    fontWeight: '700',
-    marginTop: 8,
+    fontWeight: '800',
+    letterSpacing: -0.5,
   },
   unitPrice: {
-    fontSize: 12,
+    fontSize: 11,
     marginTop: 2,
+    opacity: 0.8,
   },
-  cta: {
-    marginTop: 14,
+  ctaWrap: {
     paddingVertical: 12,
-    borderRadius: 12,
+    borderRadius: 14,
     alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: 44,
   },
   ctaText: {
     color: '#FFF',
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: '600',
   },
-  successFooter: {
-    padding: 20,
-    paddingTop: 0,
+  successBlock: {
+    paddingHorizontal: HORIZONTAL_PADDING,
+    paddingBottom: 32,
+    alignItems: 'center',
+  },
+  successIconWrap: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 20,
+  },
+  successTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    marginBottom: 8,
+  },
+  successSub: {
+    fontSize: 15,
+    lineHeight: 22,
+    textAlign: 'center',
+    marginBottom: 4,
+  },
+  ctaPrimary: {
+    marginTop: 24,
+    paddingVertical: 14,
+    paddingHorizontal: 32,
+    borderRadius: 14,
+    minWidth: 160,
+    alignItems: 'center',
+  },
+  ctaPrimaryText: {
+    color: '#FFF',
+    fontSize: 16,
+    fontWeight: '600',
   },
 });

@@ -15,7 +15,6 @@ import Constants from 'expo-constants';
 import { useNavigation } from '@react-navigation/native';
 import { useTheme } from '../context/ThemeContext';
 import { useAuth } from '../context/AuthContext';
-import { useCredits } from '../context/CreditsContext';
 import { api } from '../services/api';
 import { supabase } from '../lib/supabase/supabase';
 import { dataService } from '../services/dataService';
@@ -31,7 +30,6 @@ export default function AyarlarScreen() {
   const navigation = useNavigation();
   const { colors } = useTheme();
   const { logout, tesis, user, setTesis, token } = useAuth();
-  const { triggerPaywall } = useCredits();
   const [tesisDetail, setTesisDetail] = useState(null);
   const [tesisAdiEdit, setTesisAdiEdit] = useState('');
   const [tesisAdiSaving, setTesisAdiSaving] = useState(false);
@@ -455,21 +453,6 @@ export default function AyarlarScreen() {
           <Text style={[styles.infoText, { color: colors.textSecondary }]}>
             Kota: {tesis?.kullanilanKota} / {tesis?.kota}
           </Text>
-        </View>
-
-        <View style={[styles.section, { backgroundColor: colors.surface }]}>
-          <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>Paket & Bildirim Kotası</Text>
-          <Text style={[styles.infoText, { color: colors.textSecondary }]}>
-            Mevcut paket: <Text style={{ fontWeight: '600', color: colors.textPrimary }}>{tesis?.paket ?? '—'}</Text>
-            {' · '}Kullanılan: {tesis?.kullanilanKota ?? 0} / {tesis?.kota ?? 0} bildirim
-          </Text>
-          <Button
-            variant="primary"
-            onPress={() => triggerPaywall('no_credits')}
-            style={{ marginTop: spacing.md }}
-          >
-            Paketleri görüntüle / Yükselt
-          </Button>
         </View>
 
         <View style={[styles.section, { backgroundColor: colors.surface }]}>

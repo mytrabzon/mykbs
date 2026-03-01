@@ -1,14 +1,16 @@
 /**
- * "Daha Fazla" menü — Topluluk, Ayarlar, Admin (yetkili kullanıcıda)
+ * "Daha Fazla" menü — Paket satın al, Topluluk, Ayarlar, Admin (yetkili kullanıcıda)
  */
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../context/ThemeContext';
+import { useCredits } from '../context/CreditsContext';
 import { spacing, typography } from '../theme';
 
 const MENU_ITEMS = [
+  { key: 'PaketSatınAl', label: 'Paket satın al', icon: 'pricetag-outline', action: 'paywall' },
   { key: 'Topluluk', label: 'Topluluk', icon: 'chatbubbles-outline', route: 'Topluluk' },
   { key: 'Ayarlar', label: 'Ayarlar', icon: 'settings-outline', route: 'Ayarlar' },
   { key: 'AdminPanel', label: 'Admin Panel', icon: 'shield-outline', route: 'AdminPanel' },
@@ -17,7 +19,18 @@ const MENU_ITEMS = [
 export default function DahaFazlaScreen() {
   const navigation = useNavigation();
   const { colors } = useTheme();
+  const { triggerPaywall } = useCredits();
   const items = MENU_ITEMS;
+
+  const onItemPress = (item) => {
+    if (item.action === 'paywall') {
+      triggerPaywall('menu');
+      return;
+    }
+    if (item.route) {
+      navigation.navigate(item.route);
+    }
+  };
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
@@ -29,7 +42,7 @@ export default function DahaFazlaScreen() {
           <TouchableOpacity
             key={item.key}
             style={[styles.row, { backgroundColor: colors.surface, borderColor: colors.border }]}
-            onPress={() => navigation.navigate(item.route)}
+            onPress={() => onItemPress(item)}
             activeOpacity={0.7}
           >
             <View style={[styles.iconWrap, { backgroundColor: colors.primarySoft }]}>

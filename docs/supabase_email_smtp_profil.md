@@ -7,7 +7,7 @@ Profil ekranında "E-posta bağla" veya "E-posta değiştir" kullandığınızda
 - **Supabase Dashboard** → projeniz → **Authentication** → **SMTP Settings**
 - **Custom SMTP** etkin ve alanlar dolu olmalı:
   - **Sender email** (From): Örn. `no-reply@yourdomain.com` — SMTP hesabınızda tanımlı bir adres olmalı
-  - **Sender name**: Örn. "MyKBS"
+  - **Sender name**: Örn. "KBS Prime"
   - **Host, Port, User, Password**: Sağlayıcınıza göre (Gmail, SendGrid, Brevo, Resend, Mailtrap vb.)
 
 Varsayılan Supabase e-postası **sadece proje ekibindeki e-posta adreslerine** mail gönderir; diğer adreslere "Email address not authorized" hatası verir.

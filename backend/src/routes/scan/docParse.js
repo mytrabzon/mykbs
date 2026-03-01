@@ -22,6 +22,7 @@ router.post('/doc/parse', authenticateTesisOrSupabase, express.json({ limit: '8m
 
   try {
     if (!imageBase64 || typeof imageBase64 !== 'string') {
+      console.warn('[scan doc/parse] Storage\'a yazılmadı: imageBase64 yok veya string değil.');
       return res.status(400).json({ ok: false, errorCode: 'missing_image', message: 'imageBase64 gerekli' });
     }
 
@@ -61,7 +62,7 @@ router.post('/doc/parse', authenticateTesisOrSupabase, express.json({ limit: '8m
     logScanEvent(corr, 'parse_done', safeDocMeta(fields, 'unknown_front'));
     res.json({ ok: confidence >= 50, confidence: Math.min(100, confidence), fields });
   } catch (error) {
-    console.error('[scan] doc/parse error:', error);
+    console.error('[scan] doc/parse error:', error.message, '- Storage\'a yazılamadı veya OCR hatası.');
     logScanEvent(corr, 'error', { errorCode: 'server_error', message: error.message });
     res.status(500).json({
       ok: false,

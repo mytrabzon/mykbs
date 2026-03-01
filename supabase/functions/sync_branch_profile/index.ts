@@ -89,7 +89,7 @@ Deno.serve(async (req: Request) => {
     } else {
       const { data: newOrg, error: orgErr } = await supabase
         .from('organizations')
-        .insert({ name: 'MyKBS' })
+        .insert({ name: 'KBS Prime' })
         .select('id')
         .single();
       if (orgErr || !newOrg) {

@@ -167,14 +167,21 @@ export function fixMrzOcrErrors(raw) {
   return lines.join('\n');
 }
 
-/** Ham MRZ'ı satırlara böl; tek satırda birleşik gelen TD1 (90) / TD2 (72) / TD3 (88) formatını ayır */
+/** Ham MRZ'ı satırlara böl. TD1 kimlik: 3x30 (86-94 karakter tek blok); TD3 pasaport: 2x44 (88); TD2: 2x36 (72). */
 function normalizeMrzLines(raw) {
   const one = raw.trim().toUpperCase().replace(/\s/g, '');
-  if (one.length === 90 && /^[A-Z0-9<]+$/.test(one)) {
-    return [one.slice(0, 30), one.slice(30, 60), one.slice(60, 90)];
+  // Kimlik (TD1): 3 satır × 30 karakter — küçük kartlarda 3 satır MRZ (88 pasaport ile çakışmasın)
+  if (one.length >= 86 && one.length <= 94 && one.length !== 88 && /^[A-Z0-9<]+$/.test(one)) {
+    const s1 = one.slice(0, 30).padEnd(30, '<');
+    const s2 = one.slice(30, 60).padEnd(30, '<');
+    const s3 = one.slice(60).padEnd(30, '<');
+    return [s1, s2, s3];
   }
-  if (one.length === 88 && /^[A-Z0-9<]+$/.test(one)) {
-    return [one.slice(0, 44), one.slice(44, 88)];
+  // Pasaport (TD3): 2 satır × 44 karakter
+  if (one.length >= 80 && one.length <= 96 && /^[A-Z0-9<]+$/.test(one)) {
+    const s1 = one.slice(0, 44).padEnd(44, '<');
+    const s2 = one.slice(44).padEnd(44, '<');
+    return [s1, s2];
   }
   if (one.length === 72 && /^[A-Z0-9<]+$/.test(one)) {
     return [one.slice(0, 36), one.slice(36, 72)];

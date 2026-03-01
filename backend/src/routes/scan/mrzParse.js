@@ -18,6 +18,7 @@ router.post('/mrz/parse', authenticateTesisOrSupabase, express.json({ limit: '8m
 
   try {
     if (!imageBase64 || typeof imageBase64 !== 'string') {
+      console.warn('[scan mrz/parse] Storage\'a yazılmadı: imageBase64 yok veya string değil.');
       return res.status(400).json({ ok: false, errorCode: 'missing_image', message: 'imageBase64 gerekli' });
     }
 
@@ -38,7 +39,7 @@ router.post('/mrz/parse', authenticateTesisOrSupabase, express.json({ limit: '8m
 
     res.json(response);
   } catch (error) {
-    console.error('[scan] mrz/parse error:', error);
+    console.error('[scan] mrz/parse error:', error.message, '- Storage\'a yazılamadı veya pipeline hatası.');
     res.status(500).json({
       ok: false,
       confidence: 0,

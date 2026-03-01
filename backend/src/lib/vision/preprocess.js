@@ -56,14 +56,30 @@ async function preprocessForPhotocopyMrz(filePath) {
  * @param {string} [tempDir] - Directory for temp file (optional; if not set, returns buffer in memory is not implemented - we write to temp)
  * @returns {Promise<{ filePath: string }>} Path to preprocessed image
  */
+const PREPROCESS_LOG = '[preprocessFromBase64]';
 async function preprocessFromBase64(imageBase64, tempDir) {
-  const buf = Buffer.from(imageBase64, 'base64');
-  if (buf.length === 0) throw new Error('Invalid image: empty buffer');
+  let buf;
+  try {
+    buf = Buffer.from(imageBase64, 'base64');
+  } catch (decodeErr) {
+    console.warn(PREPROCESS_LOG, "Storage'a yazılmadı: base64 decode hatası. Neden:", decodeErr.message);
+    throw new Error('Geçersiz görüntü (base64 format hatası): ' + decodeErr.message);
+  }
+  if (!buf || buf.length === 0) {
+    console.warn(PREPROCESS_LOG, "Storage'a yazılmadı: base64 decode sonrası buffer boş.");
+    throw new Error('Invalid image: empty buffer');
+  }
   const dir = tempDir || require('os').tmpdir();
   const filename = `scan_${Date.now()}_${Math.random().toString(36).slice(2, 10)}.jpg`;
   const filePath = path.join(dir, filename);
   fs.mkdirSync(dir, { recursive: true });
-  fs.writeFileSync(filePath, buf);
+  try {
+    fs.writeFileSync(filePath, buf);
+    console.log(PREPROCESS_LOG, "Storage'a yazıldı:", filePath, { bufLen: buf.length });
+  } catch (writeErr) {
+    console.error(PREPROCESS_LOG, "Storage yazma hatası:", writeErr.message, "path:", filePath);
+    throw new Error('Görsel kaydedilemedi: ' + writeErr.message);
+  }
   await preprocessForOcr(filePath);
   return { filePath };
 }

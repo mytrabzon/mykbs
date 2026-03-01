@@ -4,21 +4,17 @@
  * Doküman: docs/IAP_APPLE_GOOGLE_AYARLARI.md
  */
 
-/** Uygulama paket id'si (starter, pro, business, enterprise) → mağaza product id */
+/** Uygulama satın alınabilir paketleri: sadece starter, pro, business. */
 export const IAP_PRODUCT_IDS = {
-  // Apple (App Store Connect) — Bundle ID tabanlı öneri
   apple: {
     starter: 'com.litxtech.mykbs.paket.starter',
     pro: 'com.litxtech.mykbs.paket.pro',
     business: 'com.litxtech.mykbs.paket.business',
-    enterprise: 'com.litxtech.mykbs.paket.enterprise',
   },
-  // Google (Play Console In-app products)
   google: {
     starter: 'mykbs_paket_starter',
     pro: 'mykbs_paket_pro',
     business: 'mykbs_paket_business',
-    enterprise: 'mykbs_paket_enterprise',
   },
 };
 

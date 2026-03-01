@@ -11,8 +11,34 @@
  * getSupabaseToken() ile alınan JWT kullanılır (backend login sonrası supabase_access_token dönebilir).
  */
 import { callFn, EdgeFunctionError } from '../lib/supabase/functions';
+import { getApiBaseUrl } from '../config/api';
+import { api } from './apiSupabase';
 
+/**
+ * Me / profil bilgisi. Backend yapılandırılmışsa GET /auth/me kullanır (Supabase Edge /me 401 vermez).
+ * Edge "me" sadece Supabase Auth JWT kabul eder; backend JWT ile 401 döner.
+ */
 export async function getMe(supabaseToken) {
+  const backendUrl = getApiBaseUrl();
+  if (backendUrl) {
+    try {
+      const res = await api.get('/auth/me');
+      const { kullanici, tesis } = res?.data || {};
+      if (!kullanici) return null;
+      return {
+        user_id: String(kullanici.id ?? kullanici.uid ?? ''),
+        branch_id: tesis?.id ?? null,
+        role: kullanici.role || 'user',
+        display_name: kullanici.display_name ?? kullanici.adSoyad ?? null,
+        title: kullanici.title ?? null,
+        avatar_url: kullanici.avatar_url ?? null,
+        is_admin: !!kullanici.is_admin,
+      };
+    } catch (e) {
+      if (e?.response?.status === 401) throw e;
+      return null;
+    }
+  }
   return callFn('me', {}, supabaseToken);
 }
 

@@ -7,9 +7,9 @@ export const TRIAL_DAYS = 3;
 export const TRIAL_CREDITS = 100;
 
 export const PACKAGES = [
-  { id: 'starter', credits: 250, priceTL: 399, label: 'Starter' },
-  { id: 'pro', credits: 1000, priceTL: 1199, label: 'Pro', badge: 'En Çok Tercih Edilen' },
-  { id: 'business', credits: 3000, priceTL: 2999, label: 'Business' },
+  { id: 'starter', credits: 250, priceTL: 399.99, label: 'Starter' },
+  { id: 'pro', credits: 1000, priceTL: 1299.99, label: 'Pro', badge: 'En Çok Tercih Edilen' },
+  { id: 'business', credits: 3000, priceTL: 2999.99, label: 'Business' },
   { id: 'enterprise', credits: 10000, priceTL: 9999, label: 'Enterprise' },
 ];
 

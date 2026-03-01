@@ -77,7 +77,7 @@ Deno.serve(async (req: Request) => {
     const anonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
     const formattedPhone = formatPhone(telefon);
     const otp = String(Math.floor(100000 + Math.random() * 900000));
-    const message = `MyKBS giriş kodunuz: ${otp}\n\nBu kodu kimseyle paylaşmayın. Kod 5 dakika geçerlidir.`;
+    const message = `KBS Prime giriş kodunuz: ${otp}\n\nBu kodu kimseyle paylaşmayın. Kod 5 dakika geçerlidir.`;
 
     const sendSmsUrl = `${supabaseUrl}/functions/v1/send-sms`;
     await fetch(sendSmsUrl, {

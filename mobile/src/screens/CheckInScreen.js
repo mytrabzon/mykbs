@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -14,11 +14,13 @@ import {
 import * as ImagePicker from 'expo-image-picker';
 import NfcManager from 'react-native-nfc-manager';
 import { api } from '../services/api';
+import { showKimlikBildirimInProgress, dismissKimlikBildirimNotification } from '../services/pushNotifications';
 import Toast from 'react-native-toast-message';
 import { logger } from '../utils/logger';
 import { Ionicons, MaterialIcons } from '@expo/vector-icons';
 import { theme } from '../theme';
 import { useCredits } from '../context/CreditsContext';
+import PermissionCard from '../components/PermissionCard';
 import { useFocusEffect } from '@react-navigation/native';
 
 export default function CheckInScreen({ navigation, route }) {
@@ -38,6 +40,12 @@ export default function CheckInScreen({ navigation, route }) {
   });
   const [nfcSupported, setNfcSupported] = useState(false);
   const [loading, setLoading] = useState(false);
+  /** Kimlik Okuma (step 2) ekranında otomatik NFC dinlemesi aktif mi */
+  const [nfcListening, setNfcListening] = useState(false);
+  /** Step 2'de kamera kullanılacaksa izin verilmediyse bu kart gösterilir; Geri ile kapatılır, tekrar Okut'ta çıkar */
+  const [showCameraPermissionCard, setShowCameraPermissionCard] = useState(false);
+  const nfcSessionCancelledRef = useRef(false);
+  const nfcTechRequestedRef = useRef(false);
 
   useEffect(() => {
     logger.log('CheckInScreen mounted');
@@ -157,38 +165,19 @@ export default function CheckInScreen({ navigation, route }) {
     }
   };
 
-  const handleNFCRead = async () => {
-    let techRequested = false;
+  /** NFC tag verisini API'ye gönderip formu günceller; hem manuel Okut hem otomatik okuma kullanır */
+  const processNfcTag = async (tag, options = {}) => {
+    const { cancelAfter = false } = options;
     try {
-      logger.log('NFC read started');
-      // Pasaport / kimlik çipi IsoDep (ISO 14443-4) kullanır; NDEF sadece basit etiketler içindir
-      const NfcTech = NfcManager.NfcTech;
-      if (!NfcTech) {
-        throw new Error('NFC bu cihazda desteklenmiyor.');
-      }
-      const tech = NfcTech.IsoDep ?? NfcTech.NfcA ?? NfcTech.Ndef;
-      await NfcManager.requestTechnology(tech);
-      techRequested = true;
-      const tag = await NfcManager.getTag();
-      logger.log('NFC tag read', { tagId: tag?.id, tech });
-
       logger.api('POST', '/nfc/okut', { nfcData: tag });
-      const response = await api.post('/nfc/okut', {
-        nfcData: tag,
-      });
-
-      logger.api('POST', '/nfc/okut', null, {
-        status: response?.status,
-        success: response?.data?.success,
-      });
+      const response = await api.post('/nfc/okut', { nfcData: tag });
+      logger.api('POST', '/nfc/okut', null, { status: response?.status, success: response?.data?.success });
 
       if (response?.data?.success && response?.data?.parsed) {
         logger.log('NFC read successful, updating form data');
-        setFormData((prev) => ({
-          ...prev,
-          ...response.data.parsed,
-        }));
+        setFormData((prev) => ({ ...prev, ...response.data.parsed }));
         setStep(3);
+        Toast.show({ type: 'success', text1: 'Kimlik okundu', text2: 'Bilgiler dolduruldu.' });
       } else {
         logger.warn('NFC read failed or no parsed data', response?.data);
         Toast.show({
@@ -197,6 +186,91 @@ export default function CheckInScreen({ navigation, route }) {
           text2: 'Veri çıkarılamadı. MRZ veya manuel giriş kullanın.',
         });
       }
+    } catch (error) {
+      logger.error('NFC process error', error);
+      const msg = error?.message || '';
+      Toast.show({
+        type: 'error',
+        text1: 'NFC Hatası',
+        text2: msg.includes('cancel') ? 'Okuma iptal edildi.' : (msg || 'Kimlik okunamadı. MRZ veya kamera deneyin.'),
+      });
+    } finally {
+      if (cancelAfter) {
+        try {
+          NfcManager.cancelTechnologyRequest();
+        } catch (e) {
+          logger.warn('NFC cancelTechnologyRequest', e?.message);
+        }
+      }
+    }
+  };
+
+  // Kimlik Okuma (step 2) ekranında NFC destekleniyorsa: kimlik okutulmadan önce oturum aç, yaklaşınca otomatik oku.
+  // NFC izni (iOS) ilk requestTechnology çağrısında sistem tarafından istenecek.
+  useEffect(() => {
+    if (step !== 2 || !nfcSupported) {
+      setNfcListening(false);
+      return;
+    }
+
+    nfcSessionCancelledRef.current = false;
+    nfcTechRequestedRef.current = false;
+
+    const runAutoNfc = async () => {
+      const NfcTech = NfcManager.NfcTech;
+      if (!NfcTech) return;
+      const tech = NfcTech.IsoDep ?? NfcTech.NfcA ?? NfcTech.Ndef;
+      try {
+        setNfcListening(true);
+        logger.log('NFC auto-listening started (step 2)');
+        await NfcManager.requestTechnology(tech);
+        if (nfcSessionCancelledRef.current) return;
+        nfcTechRequestedRef.current = true;
+        const tag = await NfcManager.getTag();
+        if (nfcSessionCancelledRef.current) return;
+        logger.log('NFC tag read (auto)', { tagId: tag?.id });
+        await processNfcTag(tag, { cancelAfter: true });
+      } catch (error) {
+        if (nfcSessionCancelledRef.current) return;
+        const msg = error?.message || '';
+        if (!msg.includes('cancel') && !msg.includes('Cancel')) {
+          logger.warn('NFC auto-read error', error?.message);
+        }
+      } finally {
+        if (nfcTechRequestedRef.current) {
+          try {
+            await NfcManager.cancelTechnologyRequest();
+          } catch (e) {
+            logger.warn('NFC cancelTechnologyRequest', e?.message);
+          }
+        }
+        setNfcListening(false);
+      }
+    };
+
+    runAutoNfc();
+
+    return () => {
+      nfcSessionCancelledRef.current = true;
+      setNfcListening(false);
+      NfcManager.cancelTechnologyRequest().catch(() => {});
+    };
+  }, [step, nfcSupported]);
+
+  const handleNFCRead = async () => {
+    let techRequested = false;
+    try {
+      logger.log('NFC read started (manual)');
+      const NfcTech = NfcManager.NfcTech;
+      if (!NfcTech) {
+        throw new Error('NFC bu cihazda desteklenmiyor.');
+      }
+      const tech = NfcTech.IsoDep ?? NfcTech.NfcA ?? NfcTech.Ndef;
+      await NfcManager.requestTechnology(tech);
+      techRequested = true;
+      const tag = await NfcManager.getTag();
+      logger.log('NFC tag read', { tagId: tag?.id });
+      await processNfcTag(tag, { cancelAfter: false });
     } catch (error) {
       logger.error('NFC read error', error);
       const msg = error?.message || '';
@@ -220,18 +294,20 @@ export default function CheckInScreen({ navigation, route }) {
   const handleCameraRead = async () => {
     try {
       logger.log('Camera read started');
-      // Kamera izni iste
-      logger.log('Requesting camera permission');
-      const { status } = await ImagePicker.requestCameraPermissionsAsync();
-      logger.log('Camera permission status', { status });
-      
-      if (status !== 'granted') {
-        logger.warn('Camera permission denied');
-        Alert.alert('İzin Gerekli', 'Kamera izni gerekli');
+      const { status: existing } = await ImagePicker.getCameraPermissionsAsync();
+      if (existing !== 'granted') {
+        setShowCameraPermissionCard(true);
         return;
       }
+      await launchCameraForCheckIn();
+    } catch (error) {
+      logger.error('Camera check error', error);
+      Toast.show({ type: 'error', text1: 'Hata', text2: 'Kamera kontrol edilemedi' });
+    }
+  };
 
-      // Fotoğraf çek
+  const launchCameraForCheckIn = async () => {
+    try {
       logger.log('Launching camera');
       const result = await ImagePicker.launchCameraAsync({
         mediaTypes: ImagePicker.MediaTypeOptions.Images,
@@ -308,6 +384,7 @@ export default function CheckInScreen({ navigation, route }) {
   };
 
   const handleCheckIn = async () => {
+    let kimlikNotifId = null;
     try {
       logger.button('CheckIn Button', 'clicked');
       logger.log('CheckIn initiated', { 
@@ -339,6 +416,9 @@ export default function CheckInScreen({ navigation, route }) {
       }
 
       setLoading(true);
+      try {
+        kimlikNotifId = await showKimlikBildirimInProgress();
+      } catch (_) {}
       const payload = {
         odaId: selectedOda.id,
         room_number: selectedOda.odaNumarasi,
@@ -352,7 +432,6 @@ export default function CheckInScreen({ navigation, route }) {
         misafirTipi: formData.misafirTipi || undefined
       };
       logger.api('POST', '/misafir/checkin', payload);
-      
       const response = await api.post('/misafir/checkin', payload);
 
       logger.api('POST', '/misafir/checkin', null, { 
@@ -387,6 +466,9 @@ export default function CheckInScreen({ navigation, route }) {
         });
       }
     } finally {
+      if (typeof kimlikNotifId === 'string') {
+        dismissKimlikBildirimNotification(kimlikNotifId).catch(() => {});
+      }
       setLoading(false);
     }
   };
@@ -512,6 +594,22 @@ export default function CheckInScreen({ navigation, route }) {
             </Text>
           </View>
 
+          {showCameraPermissionCard && (
+            <PermissionCard
+              icon="camera-outline"
+              title="Kamera izni gerekli"
+              description="Kimlik fotoğrafı çekmek için kamera erişimine izin verin. İstemezseniz aşağıdan manuel giriş yapabilirsiniz."
+              onAllow={async () => {
+                const { status } = await ImagePicker.requestCameraPermissionsAsync();
+                setShowCameraPermissionCard(false);
+                if (status === 'granted') await launchCameraForCheckIn();
+                else Toast.show({ type: 'info', text1: 'İzin verilmedi', text2: 'Kamerayı kullanmak için ayarlardan izin verebilirsiniz.' });
+              }}
+              onDismiss={() => setShowCameraPermissionCard(false)}
+              dismissLabel="Geri"
+            />
+          )}
+
           <View style={styles.readerContainer}>
             <View style={styles.readerIconContainer}>
               {nfcSupported ? (
@@ -531,9 +629,18 @@ export default function CheckInScreen({ navigation, route }) {
             
             <Text style={styles.readerDescription}>
               {nfcSupported
-                ? 'Kimliğinizi telefonun arka kısmına yaklaştırın'
+                ? (nfcListening
+                    ? 'Kimliği telefonun arka kısmına yaklaştırın — otomatik okunacak'
+                    : 'Kimliği yaklaştırın veya aşağıdaki düğmeyle okuyun. İlk kullanımda NFC izni istenebilir.')
                 : 'Kimliğinizin ön yüzünün fotoğrafını çekin'}
             </Text>
+
+            {nfcSupported && nfcListening && (
+              <View style={[styles.nfcListeningBadge, { backgroundColor: theme.colors.primary + '20' }]}>
+                <Ionicons name="nfc" size={18} color={theme.colors.primary} />
+                <Text style={[styles.nfcListeningText, { color: theme.colors.primary }]}>Dinleniyor…</Text>
+              </View>
+            )}
 
             <TouchableOpacity 
               style={[styles.okutButton, nfcSupported ? styles.okutButtonNFC : styles.okutButtonCamera]}
@@ -546,7 +653,7 @@ export default function CheckInScreen({ navigation, route }) {
                 style={styles.okutButtonIcon}
               />
               <Text style={styles.okutButtonText}>
-                {nfcSupported ? 'NFC ile Okut' : 'Kamera ile Okut'}
+                {nfcSupported ? (nfcListening ? 'Yeniden oku' : 'NFC ile Okut') : 'Kamera ile Okut'}
               </Text>
             </TouchableOpacity>
 
@@ -1030,6 +1137,20 @@ const styles = StyleSheet.create({
     fontSize: theme.typography.fontSize.sm,
     color: theme.colors.warningDark,
     flex: 1,
+  },
+  nfcListeningBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'center',
+    paddingVertical: theme.spacing.sm,
+    paddingHorizontal: theme.spacing.base,
+    borderRadius: theme.spacing.borderRadius.base,
+    gap: theme.spacing.sm,
+    marginTop: theme.spacing.sm,
+  },
+  nfcListeningText: {
+    fontSize: theme.typography.fontSize.sm,
+    fontWeight: '600',
   },
   documentPhotoWrap: {
     alignSelf: 'center',

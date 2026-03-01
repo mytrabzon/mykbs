@@ -21,11 +21,14 @@ try {
 
 export default {
   expo: {
+    // iOS crash (RCTThirdPartyComponentsProvider nil) önlemi: New Architecture kapalı.
+    // SDK 54'te varsayılan true; false yapmazsan Fabric kayıt crash'i olur.
+    newArchEnabled: false,
     name: "KBS Prime",
     slug: "mykbs",
     owner: "luvolive",
     scheme: "mykbs",
-    version: "1.0.2",
+    version: "1.0.3",
     orientation: "portrait",
     icon: "./assets/icon.png",
     userInterfaceStyle: "light",
@@ -55,8 +58,10 @@ export default {
         foregroundImage: "./assets/icon.png",
         backgroundColor: "#ffffff"
       },
+      // FCM (push) için: mobile/google-services.json ekleyin; detay: mobile/docs/PUSH_ANDROID_FCM.md
+      ...(fs.existsSync(path.join(__dirname, "google-services.json")) && { googleServicesFile: "./google-services.json" }),
       package: "com.litxtech.mykbs",
-      versionCode: 2,
+      versionCode: 3,
       permissions: [
         "android.permission.NFC",
         "android.permission.CAMERA",

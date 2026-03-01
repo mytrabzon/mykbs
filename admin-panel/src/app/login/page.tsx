@@ -71,7 +71,7 @@ export default function LoginPage() {
         <div className="kbs-bg-grid" />
       </div>
       <div className="kbs-login-card">
-        <h1 className="kbs-login-title">MyKBS Admin</h1>
+        <h1 className="kbs-login-title">KBS Prime Admin</h1>
         <div className="kbs-login-tabs">
           <button type="button" onClick={() => setMode('secret')} className={`kbs-login-tab ${mode === 'secret' ? 'active' : ''}`}>Şifre</button>
           <button type="button" onClick={() => setMode('supabase')} className={`kbs-login-tab ${mode === 'supabase' ? 'active' : ''}`}>Supabase</button>

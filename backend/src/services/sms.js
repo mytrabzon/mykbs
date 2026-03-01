@@ -110,7 +110,7 @@ class SMSService {
    * @param {string} otp - 6 haneli OTP kodu
    */
   async sendOTP(phone, otp) {
-    const message = `MyKBS giriş kodunuz: ${otp}\n\nBu kodu kimseyle paylaşmayın. Kod 5 dakika geçerlidir.`;
+    const message = `KBS Prime giriş kodunuz: ${otp}\n\nBu kodu kimseyle paylaşmayın. Kod 5 dakika geçerlidir.`;
     
     // Test modunda OTP kodunu console'a yaz
     if (this.testMode) {
@@ -129,7 +129,7 @@ class SMSService {
    * @param {object} bilgiler - Kayıt bilgileri
    */
   async sendRegistrationSMS(phone, bilgiler) {
-    const message = `MyKBS'ye hoş geldiniz!\n\nTesis Kodu: ${bilgiler.tesisKodu}\n\nGiriş için telefon numaranızı kullanabilirsiniz.`;
+    const message = `KBS Prime'a hoş geldiniz!\n\nTesis Kodu: ${bilgiler.tesisKodu}\n\nGiriş için telefon numaranızı kullanabilirsiniz.`;
     return await this.sendSMS(phone, message);
   }
 }

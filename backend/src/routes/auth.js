@@ -334,7 +334,7 @@ router.post('/kayit', async (req, res) => {
     }
     try {
       if (formattedPhone) {
-        await smsService.sendSMS(formattedPhone, "MyKBS'ye hoş geldiniz! Tesis: " + tesis.tesisAdi + ". Giriş: telefon/e-posta ve şifreniz.");
+        await smsService.sendSMS(formattedPhone, "KBS Prime'a hoş geldiniz! Tesis: " + tesis.tesisAdi + ". Giriş: telefon/e-posta ve şifreniz.");
       }
     } catch (e) {
       console.warn('Kayıt SMS gönderilemedi:', e?.message);
@@ -631,9 +631,12 @@ router.post('/giris/yeni', async (req, res) => {
       return res.status(404).json({ message: 'Kullanıcı bulunamadı' });
     }
 
-    // Şifre kontrolü
+    // Şifre kontrolü — hesapta şifre yoksa (örn. sadece OTP ile kayıt olunduysa) net mesaj
     if (!kullanici.sifre) {
-      return res.status(401).json({ message: 'Şifre ile giriş yapılamaz. Lütfen OTP ile giriş yapın.' });
+      return res.status(401).json({
+        message: 'Bu hesapta şifre tanımlı değil. "Kod ile giriş" kullanın veya "Şifremi unuttum" ile şifre oluşturun.',
+        code: 'PASSWORD_NOT_SET',
+      });
     }
 
     const sifreDogru = await bcrypt.compare(sifreTrim, kullanici.sifre);
@@ -1653,70 +1656,142 @@ router.patch('/profile', authenticateTesisOrSupabase, async (req, res) => {
   const { errorResponse: errRes } = require('../lib/errorResponse');
   try {
     const body = req.body || {};
-    const display_name = typeof body.display_name === 'string' ? body.display_name.trim() || null : undefined;
-    const title = typeof body.title === 'string' ? body.title.trim() || null : undefined;
+    const bodyKeys = Object.keys(body);
+    console.log('[auth] PATCH /profile istek geldi:', {
+      bodyKeys,
+      hasOwnProperty_display_name: body.hasOwnProperty('display_name'),
+      hasOwnProperty_title: body.hasOwnProperty('title'),
+      authSource: req.authSource,
+      userId: req.user?.id,
+    });
+
+    // Ad/soyad ve ünvan: key gönderildiyse (string veya null) güncelle; hiç gönderilmediyse undefined (güncelleme yok)
+    const display_name = body.hasOwnProperty('display_name')
+      ? (typeof body.display_name === 'string' ? body.display_name.trim() || null : null)
+      : undefined;
+    const title = body.hasOwnProperty('title')
+      ? (typeof body.title === 'string' ? body.title.trim() || null : null)
+      : undefined;
     const avatar_url = typeof body.avatar_url === 'string' ? body.avatar_url.trim() || null : undefined;
     const avatar_base64 = typeof body.avatar_base64 === 'string' ? body.avatar_base64.replace(/^data:image\/[^;]+;base64,/i, '').replace(/\s/g, '') : null;
+
+    console.log('[auth] PATCH /profile ayrıştırılmış (avatar_base64 uzunluk):', {
+      display_name_gelen: body.display_name != null ? String(body.display_name).slice(0, 80) : body.display_name,
+      display_name_isleme: display_name != null ? String(display_name).slice(0, 80) : display_name,
+      title_gelen: body.title != null ? String(body.title).slice(0, 80) : body.title,
+      title_isleme: title != null ? String(title).slice(0, 80) : title,
+      hasAvatarUrl: !!body.avatar_url,
+      avatar_base64_length: avatar_base64 ? avatar_base64.length : 0,
+      authSource: req.authSource,
+    });
 
     if (req.authSource === 'supabase') {
       const userId = req.user.id;
       const branchId = req.branchId;
       if (!branchId) return errRes(req, res, 400, 'BRANCH_MISSING', 'Şube bilgisi yok.');
       let finalAvatarUrl = avatar_url;
-      if (avatar_base64 && avatar_base64.length > 0 && supabaseAdmin) {
-        try {
-          const buf = Buffer.from(avatar_base64, 'base64');
-          const path = `supabase-${userId}.jpg`;
-          const { error: upErr } = await supabaseAdmin.storage.from('avatars').upload(path, buf, { contentType: 'image/jpeg', upsert: true });
-          if (!upErr) {
-            const { data: urlData } = supabaseAdmin.storage.from('avatars').getPublicUrl(path);
-            finalAvatarUrl = urlData.publicUrl;
+      if (avatar_base64 && avatar_base64.length > 0) {
+        if (!supabaseAdmin) {
+          console.warn('[auth] PATCH /profile: Profil resmi kaydedilmedi. Neden: Supabase admin client yok (SUPABASE_SERVICE_ROLE_KEY kontrol edin).');
+        } else {
+          try {
+            const buf = Buffer.from(avatar_base64, 'base64');
+            if (buf.length === 0) {
+              console.warn('[auth] PATCH /profile: Profil resmi kaydedilmedi. Neden: base64 decode sonrası buffer boş.');
+            } else {
+              const path = `supabase-${userId}.jpg`;
+              const { error: upErr } = await supabaseAdmin.storage.from('avatars').upload(path, buf, { contentType: 'image/jpeg', upsert: true });
+              if (!upErr) {
+                const { data: urlData } = supabaseAdmin.storage.from('avatars').getPublicUrl(path);
+                finalAvatarUrl = urlData.publicUrl;
+              } else {
+                console.warn('[auth] PATCH /profile: Profil resmi storage\'a yüklenemedi. Neden:', upErr?.message || upErr);
+              }
+            }
+          } catch (e) {
+            console.warn('[auth] PATCH /profile: Profil resmi yükleme hatası:', e?.message);
           }
-        } catch (e) {
-          console.warn('[auth] profile avatar upload (supabase)', e?.message);
         }
       }
       const updates = {};
       if (display_name !== undefined) updates.display_name = display_name;
       if (title !== undefined) updates.title = title;
       if (finalAvatarUrl !== undefined) updates.avatar_url = finalAvatarUrl;
-      if (Object.keys(updates).length === 0) return res.json({ success: true });
-      const { error } = await supabaseAdmin.from('user_profiles').update(updates).eq('user_id', userId).eq('branch_id', branchId);
+      if (Object.keys(updates).length === 0) {
+        console.log('[auth] PATCH /profile: güncellenecek alan yok (updates boş) — display_name/title/avatar_url hiçbiri gönderilmemiş veya aynı kaldı');
+        return res.json({ success: true });
+      }
+      console.log('[auth] PATCH /profile supabase update (değerler):', {
+        userId,
+        branchId,
+        updateKeys: Object.keys(updates),
+        display_name: updates.display_name != null ? String(updates.display_name).slice(0, 60) : updates.display_name,
+        title: updates.title != null ? String(updates.title).slice(0, 60) : updates.title,
+        avatar_url: updates.avatar_url ? '(dolu)' : updates.avatar_url,
+      });
+      const { data: updateData, error } = await supabaseAdmin.from('user_profiles').update(updates).eq('user_id', userId).eq('branch_id', branchId).select('user_id, display_name, title, avatar_url');
       if (error) {
-        console.error('[auth] profile update supabase', error);
+        console.error('[auth] PATCH /profile supabase update hatası:', { message: error.message, code: error.code, details: error.details });
         return errRes(req, res, 500, 'UPDATE_FAILED', 'Profil güncellenemedi.');
       }
+      console.log('[auth] PATCH /profile supabase update başarılı:', updateData != null ? { rows: updateData.length, first: updateData[0] } : 'no rows');
       return res.json({ success: true });
     }
 
     if (req.authSource === 'prisma') {
       const kullaniciId = req.user.id;
       let finalAvatarUrl = avatar_url;
-      if (avatar_base64 && avatar_base64.length > 0 && supabaseAdmin) {
-        try {
-          const buf = Buffer.from(avatar_base64, 'base64');
-          const path = `legacy-${kullaniciId}.jpg`;
-          const { error: upErr } = await supabaseAdmin.storage.from('avatars').upload(path, buf, { contentType: 'image/jpeg', upsert: true });
-          if (!upErr) {
-            const { data: urlData } = supabaseAdmin.storage.from('avatars').getPublicUrl(path);
-            finalAvatarUrl = urlData.publicUrl;
+      if (avatar_base64 && avatar_base64.length > 0) {
+        if (!supabaseAdmin) {
+          console.warn('[auth] PATCH /profile: Profil resmi kaydedilmedi (legacy). Neden: Supabase admin client yok.');
+        } else {
+          try {
+            const buf = Buffer.from(avatar_base64, 'base64');
+            if (buf.length === 0) {
+              console.warn('[auth] PATCH /profile: Profil resmi kaydedilmedi (legacy). Neden: base64 decode sonrası buffer boş.');
+            } else {
+              const path = `legacy-${kullaniciId}.jpg`;
+              const { error: upErr } = await supabaseAdmin.storage.from('avatars').upload(path, buf, { contentType: 'image/jpeg', upsert: true });
+              if (!upErr) {
+                const { data: urlData } = supabaseAdmin.storage.from('avatars').getPublicUrl(path);
+                finalAvatarUrl = urlData.publicUrl;
+              } else {
+                console.warn('[auth] PATCH /profile: Profil resmi storage\'a yüklenemedi (legacy). Neden:', upErr?.message || upErr);
+              }
+            }
+          } catch (e) {
+            console.warn('[auth] PATCH /profile: Profil resmi yükleme hatası (legacy):', e?.message);
           }
-        } catch (e) {
-          console.warn('[auth] profile avatar upload (legacy)', e?.message);
         }
       }
       const updates = {};
       if (display_name !== undefined) updates.displayName = display_name;
       if (title !== undefined) updates.title = title;
       if (finalAvatarUrl !== undefined) updates.avatarUrl = finalAvatarUrl;
-      if (Object.keys(updates).length === 0) return res.json({ success: true });
-      await prisma.kullanici.update({ where: { id: kullaniciId }, data: updates });
+      if (Object.keys(updates).length === 0) {
+        console.log('[auth] PATCH /profile (prisma): güncellenecek alan yok — display_name/title/avatarUrl hiçbiri gönderilmemiş veya aynı kaldı');
+        return res.json({ success: true });
+      }
+      console.log('[auth] PATCH /profile prisma update (değerler):', {
+        kullaniciId,
+        updateKeys: Object.keys(updates),
+        displayName: updates.displayName != null ? String(updates.displayName).slice(0, 60) : updates.displayName,
+        title: updates.title != null ? String(updates.title).slice(0, 60) : updates.title,
+        avatarUrl: updates.avatarUrl ? '(dolu)' : updates.avatarUrl,
+      });
+      const updated = await prisma.kullanici.update({ where: { id: kullaniciId }, data: updates, select: { id: true, displayName: true, title: true, avatarUrl: true } });
+      console.log('[auth] PATCH /profile prisma update başarılı:', { id: updated.id, displayName: updated.displayName, title: updated.title, hasAvatarUrl: !!updated.avatarUrl });
       return res.json({ success: true });
     }
 
+    console.warn('[auth] PATCH /profile: authSource ne supabase ne prisma:', req.authSource);
     return errRes(req, res, 400, 'AUTH_SOURCE', 'Profil güncellemesi desteklenmiyor.');
   } catch (e) {
-    console.error('[auth] PATCH /profile', e);
+    console.error('[auth] PATCH /profile hata (detay):', {
+      message: e?.message,
+      code: e?.code,
+      stack: e?.stack?.slice(0, 300),
+    });
     return errRes(req, res, 500, 'UNHANDLED_ERROR', e?.message || 'Profil güncellenemedi.');
   }
 });
@@ -1732,17 +1807,24 @@ router.get('/profile', authenticateTesisOrSupabase, async (req, res) => {
       const branchId = req.branchId;
       if (!branchId || !supabaseAdmin) return errRes(req, res, 400, 'BRANCH_MISSING', 'Şube bilgisi yok.');
       const { data: row, error } = await supabaseAdmin.from('user_profiles').select('display_name, title, avatar_url').eq('user_id', userId).eq('branch_id', branchId).maybeSingle();
-      if (error) return errRes(req, res, 500, 'DB_ERROR', 'Profil okunamadı.');
-      return res.json({ display_name: row?.display_name ?? null, title: row?.title ?? null, avatar_url: row?.avatar_url ?? null });
+      if (error) {
+        console.error('[auth] GET /profile supabase select hatası:', { userId, branchId, message: error.message });
+        return errRes(req, res, 500, 'DB_ERROR', 'Profil okunamadı.');
+      }
+      const payload = { display_name: row?.display_name ?? null, title: row?.title ?? null, avatar_url: row?.avatar_url ?? null };
+      console.log('[auth] GET /profile supabase yanıt:', { userId, ...payload });
+      return res.json(payload);
     }
     if (req.authSource === 'prisma') {
       const k = await prisma.kullanici.findUnique({ where: { id: req.user.id }, select: { displayName: true, title: true, avatarUrl: true, adSoyad: true } });
       if (!k) return errRes(req, res, 404, 'NOT_FOUND', 'Kullanıcı bulunamadı.');
-      return res.json({
+      const payload = {
         display_name: k.displayName ?? k.adSoyad,
         title: k.title ?? null,
         avatar_url: k.avatarUrl ?? null
-      });
+      };
+      console.log('[auth] GET /profile prisma yanıt:', { kullaniciId: req.user.id, ...payload });
+      return res.json(payload);
     }
     return errRes(req, res, 400, 'AUTH_SOURCE', 'Profil okunamıyor.');
   } catch (e) {

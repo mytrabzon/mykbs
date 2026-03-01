@@ -39,7 +39,7 @@ const CATEGORIES = [
 export default function PaylasimEkleScreen() {
   const navigation = useNavigation();
   const { colors } = useTheme();
-  const { tesis, getSupabaseToken } = useAuth();
+  const { tesis, isLoggedIn, getSupabaseToken } = useAuth();
   const [title, setTitle] = useState('');
   const [body, setBody] = useState('');
   const [category, setCategory] = useState('general');
@@ -91,7 +91,11 @@ export default function PaylasimEkleScreen() {
     }
     const token = await getSupabaseToken();
     if (!token) {
-      Toast.show({ type: 'error', text1: 'Giriş gerekli', text2: 'Çıkış yapıp tekrar giriş yapın; aynı tesis bilgileriyle profil ve paylaşım kullanılır.' });
+      Toast.show({
+        type: 'error',
+        text1: isLoggedIn ? 'Topluluk paylaşımı' : 'Giriş gerekli',
+        text2: isLoggedIn ? 'Paylaşım için e-posta veya telefon ile giriş yapın.' : 'Giriş yapıp tekrar deneyin.',
+      });
       return;
     }
     setLoading(true);

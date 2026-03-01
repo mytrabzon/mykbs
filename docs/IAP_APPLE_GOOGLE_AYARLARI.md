@@ -1,6 +1,6 @@
 # Apple & Google Play İçi Uygulama Satın Alma (IAP) – Ayarlar ve Bundle ID’ler
 
-Bu dokümanda MyKBS uygulaması için **Apple App Store** ve **Google Play** üzerinden paket satışı (IAP) için gereken **bundle identifier / package name** ve mağaza ayarları özetlenmiştir.
+Bu dokümanda KBS Prime uygulaması için **Apple App Store** ve **Google Play** üzerinden paket satışı (IAP) için gereken **bundle identifier / package name** ve mağaza ayarları özetlenmiştir.
 
 ---
 
@@ -51,7 +51,16 @@ Uygulama içinde kullandığınız paket `id`’leri ile mağaza Product ID’le
 | business | `com.litxtech.mykbs.paket.business` |
 | enterprise | `com.litxtech.mykbs.paket.enterprise` |
 
-- Her ürün için **Reference Name**, **Price (Tier)** ve gerekirse **Localization** girin.
+- **Type:** Consumable doğru (kredi paketi tekrar satın alınabilir). **Missing Metadata** için her ürünü açıp **App Store Localization** bölümünde **Display Name** ve **Description**, ayrıca **Pricing** ile fiyat atayın. Önerilen metinler:
+
+| Product ID | Display Name | Description |
+|------------|--------------|-------------|
+| com.litxtech.mykbs.paket.starter | Starter – 250 Bildirim | 250 oda bildirimi kredisi. Konaklama tesisinizde misafir giriş/çıkış bildirimleri için kullanılır. |
+| com.litxtech.mykbs.paket.pro | Pro – 1000 Bildirim | 1000 oda bildirimi kredisi. Konaklama tesisinizde misafir giriş/çıkış bildirimleri için kullanılır. |
+| com.litxtech.mykbs.paket.business | Business – 3000 Bildirim | 3000 oda bildirimi kredisi. Konaklama tesisinizde misafir giriş/çıkış bildirimleri için kullanılır. |
+| com.litxtech.mykbs.paket.enterprise | Enterprise – 10000 Bildirim | 10000 oda bildirimi kredisi. Konaklama tesisinizde misafir giriş/çıkış bildirimleri için kullanılır. |
+
+Fiyat referansı: Starter 399,99 ₺, Pro 1.299,99 ₺, Business 2.999,99 ₺, Enterprise 9.999 ₺. Her ürün için **Reference Name**, **Price (Tier)** ve **Localization** tamamlandığında "Missing Metadata" kaybolur.
 - **In-App Purchase**, Apple’da ayrı bir “capability” değil; **App ID** (wildcard olmayan) ile uygulama yayınlandığında kullanılabilir. EAS Build ile `com.litxtech.mykbs` ile build alıyorsanız ekstra entitlement dosyası zorunlu değildir.
 
 ### 2.4 EAS Build (iOS)

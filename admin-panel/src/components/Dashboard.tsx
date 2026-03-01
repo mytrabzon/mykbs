@@ -206,7 +206,7 @@ export default function Dashboard({ embedLayout = false }: DashboardProps) {
         <div className="kbs-nav-inner">
           <Link href="/" className="kbs-logo">
             <span className="kbs-logo-dot" />
-            MyKBS
+            KBS Prime
           </Link>
           <div className="kbs-nav-links">
             <Link href="/tesisler" className="kbs-nav-link">Tesisler</Link>

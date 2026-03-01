@@ -28,7 +28,7 @@ Aşağıdaki alanları doldurun:
 | Alan | Açıklama | Örnek |
 |------|----------|--------|
 | **Sender email** | Gönderen adres (From) | `no-reply@mykbs.com` veya Gmail adresiniz |
-| **Sender name** | Gönderen adı | `MyKBS` |
+| **Sender name** | Gönderen adı | `KBS Prime` |
 | **Host** | SMTP sunucusu | `smtp.gmail.com` (Gmail) veya `smtp.sendgrid.net` vb. |
 | **Port** | Port | `587` (TLS) veya `465` (SSL) |
 | **Username** | SMTP kullanıcı adı | Gmail: e-posta adresiniz |
