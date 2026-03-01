@@ -205,7 +205,7 @@ export default function CheckInScreen({ navigation, route }) {
     }
   };
 
-  // Kimlik Okuma (step 2) ekranında NFC destekleniyorsa: kimlik okutulmadan önce oturum aç, yaklaşınca otomatik oku.
+  // Kimlik Okuma (step 2) ekranında NFC destekleniyorsa: sürekli dinle, kimliği her yaklaştırdığında otomatik oku.
   // NFC izni (iOS) ilk requestTechnology çağrısında sistem tarafından istenecek.
   useEffect(() => {
     if (step !== 2 || !nfcSupported) {
@@ -216,39 +216,50 @@ export default function CheckInScreen({ navigation, route }) {
     nfcSessionCancelledRef.current = false;
     nfcTechRequestedRef.current = false;
 
-    const runAutoNfc = async () => {
+    const runAutoNfcLoop = async () => {
       const NfcTech = NfcManager.NfcTech;
       if (!NfcTech) return;
       const tech = NfcTech.IsoDep ?? NfcTech.NfcA ?? NfcTech.Ndef;
-      try {
-        setNfcListening(true);
-        logger.log('NFC auto-listening started (step 2)');
-        await NfcManager.requestTechnology(tech);
-        if (nfcSessionCancelledRef.current) return;
-        nfcTechRequestedRef.current = true;
-        const tag = await NfcManager.getTag();
-        if (nfcSessionCancelledRef.current) return;
-        logger.log('NFC tag read (auto)', { tagId: tag?.id });
-        await processNfcTag(tag, { cancelAfter: true });
-      } catch (error) {
-        if (nfcSessionCancelledRef.current) return;
-        const msg = error?.message || '';
-        if (!msg.includes('cancel') && !msg.includes('Cancel')) {
-          logger.warn('NFC auto-read error', error?.message);
-        }
-      } finally {
-        if (nfcTechRequestedRef.current) {
-          try {
-            await NfcManager.cancelTechnologyRequest();
-          } catch (e) {
-            logger.warn('NFC cancelTechnologyRequest', e?.message);
+      setNfcListening(true);
+      logger.log('NFC auto-listening started (step 2), loop until tag or cancel');
+
+      while (!nfcSessionCancelledRef.current) {
+        try {
+          await NfcManager.requestTechnology(tech);
+          if (nfcSessionCancelledRef.current) break;
+          nfcTechRequestedRef.current = true;
+          const tag = await NfcManager.getTag();
+          if (nfcSessionCancelledRef.current) break;
+          logger.log('NFC tag read (auto)', { tagId: tag?.id });
+          await processNfcTag(tag, { cancelAfter: true });
+          // Başarılı okumada processNfcTag setStep(3) yapar, cleanup tetiklenir, döngüden çıkarız.
+          if (nfcSessionCancelledRef.current) break;
+        } catch (error) {
+          if (nfcSessionCancelledRef.current) break;
+          const msg = error?.message || '';
+          if (!msg.includes('cancel') && !msg.includes('Cancel')) {
+            logger.warn('NFC auto-read error', error?.message);
+          }
+        } finally {
+          if (nfcTechRequestedRef.current) {
+            try {
+              await NfcManager.cancelTechnologyRequest();
+            } catch (e) {
+              logger.warn('NFC cancelTechnologyRequest', e?.message);
+            }
+            nfcTechRequestedRef.current = false;
           }
         }
-        setNfcListening(false);
+        // Kısa bekleme sonrası tekrar dinle (kimlik yaklaştırıldığında hemen okur)
+        if (!nfcSessionCancelledRef.current) {
+          await new Promise((r) => setTimeout(r, 400));
+        }
       }
+
+      setNfcListening(false);
     };
 
-    runAutoNfc();
+    runAutoNfcLoop();
 
     return () => {
       nfcSessionCancelledRef.current = true;
