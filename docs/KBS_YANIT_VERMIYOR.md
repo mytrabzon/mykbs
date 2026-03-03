@@ -9,10 +9,8 @@ Resmi **Jandarma KBS** adresi (`https://vatandas.jandarma.gov.tr/KBS_Tesis_Servi
 ## 2. Ne yapıldı (kod tarafı)
 
 - **Hata mesajları netleştirildi:** Timeout, 404, 405, ECONNREFUSED, DNS için ayrı mesajlar (örn. “Servis SOAP/WCF ise REST yerine SOAP client gerekir”).
-- **Debug endpoint eklendi:** `GET /debug/kbs-ping`  
-  - `JANDARMA_KBS_URL` tanımlı mı kontrol eder.  
-  - Servis adresine `?wsdl` ile GET atar; erişim var mı, HTTP kodu ne dönüyor görürsünüz.  
-  - SOAP kullanılması gerektiğine dair ipucu döner.
+- **Gerçek bağlantı testi (SOAP):** "KBS Bağlantı testi" artık Jandarma SOAP servisine **ParametreListele** ile istek atar; IP + tesis kodu + şifre doğrulanır.
+- **Debug:** `GET /debug/kbs-ping`, `GET /debug/egress-ip` (whitelist IP).
 
 ---
 

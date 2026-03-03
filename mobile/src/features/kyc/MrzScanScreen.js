@@ -141,18 +141,52 @@ export default function MrzScanScreen({ navigation }) {
   const insets = useSafeAreaInsets();
   const [permission, requestPermission] = useCameraPermissions();
 
+  // İkinci girişte siyah ekran önlemi: kamera mount'unu kısa geciktir (native kameranın serbest kalması için)
+  const [cameraReadyToShow, setCameraReadyToShow] = useState(false);
+  const isFirstFocusRef = useRef(true);
+
   useFocusEffect(
     useCallback(() => {
-      scanStartTimeRef.current = Date.now();
+      mounted.current = true;
+      hasLeftScreenRef.current = false;
+      setIsExiting(false);
       setIsScreenFocused(true);
-      setCameraKey((k) => k + 1);
       acceptedRawRef.current = '';
       mrzLockedRef.current = false;
       setMrzLocked(false);
       setScanMode(DocType.ID);
       setFailCount(0);
       setLastMrzChecksReason('');
+      setInstantPayload(null);
+      setMergedPayload(null);
+      setFrontImageUri(null);
+      setMrzCheckFailed(false);
+      scanStartTimeRef.current = Date.now();
+
+      const isFirstFocus = isFirstFocusRef.current;
+      if (isFirstFocus) {
+        isFirstFocusRef.current = false;
+        setCameraReadyToShow(false);
+        setCameraKey((k) => k + 1);
+        const t = setTimeout(() => setCameraReadyToShow(true), 150);
+        return () => {
+          clearTimeout(t);
+          hasLeftScreenRef.current = true;
+          setIsScreenFocused(false);
+          if (TorchModule) {
+            try {
+              TorchModule.switchState(false);
+            } catch (e) {}
+          }
+        };
+      }
+      setCameraReadyToShow(false);
+      const timer = setTimeout(() => {
+        setCameraKey((k) => k + 1);
+        setCameraReadyToShow(true);
+      }, 400);
       return () => {
+        clearTimeout(timer);
         hasLeftScreenRef.current = true;
         setIsScreenFocused(false);
         if (TorchModule) {
@@ -714,11 +748,12 @@ export default function MrzScanScreen({ navigation }) {
     return () => clearInterval(t);
   }, [MrzReaderView, mrzLocked]);
 
-  const selectedDocType = Platform.OS === 'ios'
-    ? DocType.Passport
-    : (mrzLockedRef.current ? lockedDocTypeRef.current : scanMode);
+  const selectedDocType = mrzLockedRef.current ? lockedDocTypeRef.current : scanMode;
   selectedDocTypeRef.current = selectedDocType;
-  const useUnifiedFlow = USE_UNIFIED_MRZ_FLOW;
+  // iOS: native reader sadece Pasaport. Kimlik (ID) seçiliyse her zaman Kamera/Galeri + backend kullan;
+  // backend TD1 (3 satır MRZ) destekliyor, böylece kimlik kartları güvenilir okunur.
+  const docTypeForReader = Platform.OS === 'ios' ? DocType.Passport : selectedDocType;
+  const useUnifiedFlow = USE_UNIFIED_MRZ_FLOW || (selectedDocType === DocType.ID);
 
   const { width: screenWidth } = Dimensions.get('window');
   const frameWidth = screenWidth * 0.9;
@@ -762,6 +797,16 @@ export default function MrzScanScreen({ navigation }) {
 
   if (!isScreenFocused || isExiting) {
     return <View style={[styles.container, { backgroundColor: '#000', flex: 1 }]} />;
+  }
+
+  // Native kameranın serbest kalması için kısa gecikme (ikinci girişte siyah ekran önlemi)
+  if (MrzReaderView && !USE_UNIFIED_MRZ_FLOW && !showCameraFallback && !cameraReadyToShow) {
+    return (
+      <View style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
+        <ActivityIndicator size="large" color="#fff" />
+        <Text style={[styles.mrzPickHint, { marginTop: 16, textAlign: 'center' }]}>Kamera hazırlanıyor…</Text>
+      </View>
+    );
   }
 
   if (instantPayload != null && !showFrontCamera) {
@@ -907,9 +952,13 @@ export default function MrzScanScreen({ navigation }) {
           <View style={styles.iconBtn} />
         </View>
         <View style={styles.mrzPickContainer}>
-          <Text style={styles.mrzPickTitle}>Belgeyi tarayın</Text>
+          <Text style={styles.mrzPickTitle}>
+            {selectedDocType === DocType.ID ? 'Kimlik kartı oku' : 'Belgeyi tarayın'}
+          </Text>
           <Text style={styles.mrzPickHint}>
-            Pasaport veya kimlik (ön/arka). Kamera ile çekin veya galeriden seçin — backend MRZ/OCR okur.
+            {selectedDocType === DocType.ID
+              ? 'Kimliğin arka yüzündeki 3 satır MRZ alanını çerçeveleyip çekin veya galeriden seçin.'
+              : 'Pasaport veya kimlik (ön/arka). Kamera ile çekin veya galeriden seçin — backend MRZ/OCR okur.'}
           </Text>
           {ocrLoading ? (
             <View style={styles.mrzPickLoading}>
@@ -918,6 +967,27 @@ export default function MrzScanScreen({ navigation }) {
             </View>
           ) : (
             <>
+              <View style={styles.docTypeWrap} pointerEvents="box-none">
+                <View style={styles.docTypeRow}>
+                  <TouchableOpacity
+                    style={[styles.docTypeBtn, selectedDocType === DocType.Passport && styles.docTypeBtnActive]}
+                    onPress={() => setScanMode(DocType.Passport)}
+                    activeOpacity={0.8}
+                  >
+                    <Ionicons name="document-text-outline" size={20} color={selectedDocType === DocType.Passport ? '#fff' : 'rgba(255,255,255,0.9)'} />
+                    <Text style={[styles.docTypeBtnText, selectedDocType === DocType.Passport && styles.docTypeBtnTextActive]}>Pasaport</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.docTypeBtn, selectedDocType === DocType.ID && styles.docTypeBtnActive]}
+                    onPress={() => setScanMode(DocType.ID)}
+                    activeOpacity={0.8}
+                  >
+                    <Ionicons name="card-outline" size={20} color={selectedDocType === DocType.ID ? '#fff' : 'rgba(255,255,255,0.9)'} />
+                    <Text style={[styles.docTypeBtnText, selectedDocType === DocType.ID && styles.docTypeBtnTextActive]}>Kimlik</Text>
+                  </TouchableOpacity>
+                </View>
+                <Text style={styles.docTypeHint}>Pasaport: 2 satır MRZ · Kimlik: 3 satır MRZ (arka yüz)</Text>
+              </View>
               <TouchableOpacity
                 style={styles.mrzPickPrimaryBtn}
                 onPress={handleTakePhotoWithSystemCamera}
@@ -944,9 +1014,9 @@ export default function MrzScanScreen({ navigation }) {
   return (
     <View style={styles.container}>
       <MrzReaderView
-        key={`mrz-cam-${cameraKey}`}
+        key={`mrz-cam-${cameraKey}-${docTypeForReader}`}
         style={StyleSheet.absoluteFill}
-        docType={selectedDocType}
+        docType={docTypeForReader}
         cameraSelector={CameraSelector.Back}
         onMRZRead={handleMRZRead}
       />
@@ -959,13 +1029,19 @@ export default function MrzScanScreen({ navigation }) {
             <View style={styles.docTypeRow}>
               <TouchableOpacity
                 style={[styles.docTypeBtn, selectedDocType === DocType.Passport && styles.docTypeBtnActive]}
-                onPress={() => setMrzDocType(DocType.Passport)}
+                onPress={() => {
+                  setMrzDocType(DocType.Passport);
+                  setScanMode(DocType.Passport);
+                }}
               >
                 <Text style={[styles.docTypeBtnText, selectedDocType === DocType.Passport && styles.docTypeBtnTextActive]}>Pasaport</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={[styles.docTypeBtn, selectedDocType === DocType.ID && styles.docTypeBtnActive]}
-                onPress={() => setMrzDocType(DocType.ID)}
+                onPress={() => {
+                  setMrzDocType(DocType.ID);
+                  setScanMode(DocType.ID);
+                }}
               >
                 <Text style={[styles.docTypeBtnText, selectedDocType === DocType.ID && styles.docTypeBtnTextActive]}>Kimlik</Text>
               </TouchableOpacity>

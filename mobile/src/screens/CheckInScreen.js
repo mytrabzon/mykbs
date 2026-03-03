@@ -44,6 +44,9 @@ export default function CheckInScreen({ navigation, route }) {
   const [nfcListening, setNfcListening] = useState(false);
   /** Step 2'de kamera kullanılacaksa izin verilmediyse bu kart gösterilir; Geri ile kapatılır, tekrar Okut'ta çıkar */
   const [showCameraPermissionCard, setShowCameraPermissionCard] = useState(false);
+  /** Step 3'te "Sadece kaydet" yapıldıktan sonra gösterilen başarı alanı */
+  const [savedOnly, setSavedOnly] = useState(false);
+  const [savingOkutulan, setSavingOkutulan] = useState(false);
   const nfcSessionCancelledRef = useRef(false);
   const nfcTechRequestedRef = useRef(false);
   const nfcProcessingRef = useRef(false);
@@ -82,7 +85,7 @@ export default function CheckInScreen({ navigation, route }) {
           misafirTipi: (doc.misafirTipi || '').trim() || prev.misafirTipi,
         }));
         setDocumentPhotoUri(route.params?.photoUri || null);
-        setStep(3);
+        setStep(3); // 3 = Ne yapmak istiyorsunuz? (Gönder / Sadece kaydet)
         navigation.setParams({ documentPayload: undefined, photoUri: undefined, selectedOda: undefined });
         return;
       }
@@ -106,7 +109,7 @@ export default function CheckInScreen({ navigation, route }) {
         uyruk: (p.nationality || 'TÜRK').trim(),
       }));
       setDocumentPhotoUri(route.params?.photoUri || null);
-      setStep(3);
+      setStep(3); // 3 = seçim ekranı (Gönder / Sadece kaydet)
       navigation.setParams({ mrzPayload: undefined, selectedOda: undefined, photoUri: undefined });
     }, [route.params?.mrzPayload, route.params?.documentPayload, route.params?.photoUri, route.params?.selectedOda, navigation])
   );
@@ -179,7 +182,8 @@ export default function CheckInScreen({ navigation, route }) {
       if (response?.data?.success && response?.data?.parsed) {
         logger.log('NFC read successful, updating form data');
         setFormData((prev) => ({ ...prev, ...response.data.parsed }));
-        setStep(3);
+        setStep(3); // Seçim: Gönder veya Sadece kaydet
+        setSavedOnly(false);
         Toast.show({ type: 'success', text1: 'Kimlik okundu', text2: 'Bilgiler dolduruldu.' });
       } else {
         logger.warn('NFC read failed or no parsed data', response?.data);
@@ -342,11 +346,12 @@ export default function CheckInScreen({ navigation, route }) {
 
         if (response.data.success) {
           logger.log('OCR successful, updating form data');
-          setFormData({
-            ...formData,
+          setFormData((prev) => ({
+            ...prev,
             ...response.data.parsed
-          });
-          setStep(3); // Bilgi onay ekranına geç
+          }));
+          setStep(3); // Seçim: Gönder veya Sadece kaydet
+          setSavedOnly(false);
         } else {
           logger.warn('OCR failed', response.data);
         }
@@ -664,7 +669,7 @@ export default function CheckInScreen({ navigation, route }) {
                 try {
                   logger.button('Manuel Giriş Button', 'clicked');
                   logger.log('Manual entry selected');
-                  setStep(3);
+                  setStep(4); // Manuel giriş doğrudan forma gider
                 } catch (error) {
                   logger.error('Manual entry error', error);
                 }
@@ -681,8 +686,118 @@ export default function CheckInScreen({ navigation, route }) {
                   NFC desteği için development build gereklidir. Şu anda kamera kullanılıyor.
                 </Text>
               </View>
-            )}
+          )}
+        </View>
+      </ScrollView>
+    </View>
+  );
+  }
+
+  // Step 3: İki sistem — Check-in'e gönder veya Sadece kaydet
+  const handleSadeceKaydet = async () => {
+    if (!formData.ad?.trim() || !formData.soyad?.trim()) {
+      Toast.show({ type: 'error', text1: 'Eksik bilgi', text2: 'Ad ve soyad gerekli.' });
+      return;
+    }
+    const num = (formData.kimlikNo || formData.pasaportNo || '').trim();
+    const isTc = /^\d{11}$/.test(num);
+    const body = {
+      belgeTuru: isTc ? 'kimlik' : 'pasaport',
+      ad: formData.ad.trim(),
+      soyad: formData.soyad.trim(),
+      kimlikNo: isTc ? num : null,
+      pasaportNo: !isTc ? num : null,
+      belgeNo: num || null,
+      dogumTarihi: (formData.dogumTarihi || '').trim() || null,
+      uyruk: (formData.uyruk || 'TÜRK').trim(),
+    };
+    setSavingOkutulan(true);
+    try {
+      await api.post('/okutulan-belgeler', body);
+      setSavedOnly(true);
+      Toast.show({ type: 'success', text1: 'Kaydedildi', text2: 'Kaydedilenler sayfasından görüntüleyebilirsiniz.' });
+    } catch (e) {
+      Toast.show({ type: 'error', text1: 'Kayıt başarısız', text2: e?.response?.data?.message || 'Tekrar deneyin.' });
+    } finally {
+      setSavingOkutulan(false);
+    }
+  };
+
+  if (step === 3) {
+    return (
+      <View style={styles.container}>
+        <StatusBar barStyle="dark-content" backgroundColor={theme.colors.background} />
+        <View style={styles.header}>
+          <TouchableOpacity style={styles.backButton} onPress={() => setStep(2)}>
+            <Ionicons name="arrow-back" size={24} color={theme.colors.textPrimary} />
+          </TouchableOpacity>
+          <Text style={styles.headerTitle}>Ne yapmak istiyorsunuz?</Text>
+          <View style={styles.headerPlaceholder} />
+        </View>
+        <ScrollView style={styles.scrollView} contentContainerStyle={styles.content}>
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>
+              <Ionicons name="id-card-outline" size={20} color={theme.colors.primary} /> Okunan kimlik
+            </Text>
+            <Text style={styles.sectionSubtitle}>
+              {formData.ad} {formData.soyad}
+              {(formData.kimlikNo || formData.pasaportNo) && ` · ${(formData.kimlikNo || formData.pasaportNo).slice(0, 4)}****`}
+            </Text>
           </View>
+
+          {savedOnly ? (
+            <View style={[styles.formCard, styles.successCard]}>
+              <View style={styles.successIconWrap}>
+                <Ionicons name="checkmark-circle" size={48} color={theme.colors.success || '#22c55e'} />
+              </View>
+              <Text style={styles.successTitle}>Kaydedildi</Text>
+              <Text style={styles.successSubtitle}>Bu kimlik kaydedilenler listesine eklendi.</Text>
+              <TouchableOpacity
+                style={[styles.primaryActionButton, styles.tekrarDeneButton]}
+                onPress={() => { setSavedOnly(false); setStep(2); }}
+                activeOpacity={0.8}
+              >
+                <Ionicons name="scan-outline" size={22} color={theme.colors.primary} />
+                <Text style={styles.primaryActionButtonText}>Tekrar oku</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.secondaryActionButton]}
+                onPress={() => navigation.navigate('Kaydedilenler')}
+                activeOpacity={0.8}
+              >
+                <Ionicons name="list-outline" size={20} color={theme.colors.primary} />
+                <Text style={styles.secondaryActionButtonText}>Kaydedilenler sayfasına git</Text>
+              </TouchableOpacity>
+            </View>
+          ) : (
+            <>
+              <TouchableOpacity
+                style={[styles.primaryActionButton, styles.sendActionButton]}
+                onPress={() => setStep(4)}
+                activeOpacity={0.8}
+              >
+                <Ionicons name="paper-plane-outline" size={22} color="#fff" />
+                <Text style={[styles.primaryActionButtonText, { color: '#fff' }]}>Check-in'e gönder</Text>
+              </TouchableOpacity>
+              <Text style={styles.choiceHint}>Oda seçip bilgileri onaylayarak KBS'ye gönderin. İsterseniz toplu okutup aynı odaya hepsini gönderebilirsiniz.</Text>
+              <TouchableOpacity
+                style={[styles.secondaryActionButton, styles.saveOnlyButton]}
+                onPress={handleSadeceKaydet}
+                disabled={savingOkutulan}
+                activeOpacity={0.8}
+              >
+                {savingOkutulan ? (
+                  <Text style={styles.secondaryActionButtonText}>Kaydediliyor...</Text>
+                ) : (
+                  <>
+                    <Ionicons name="bookmark-outline" size={20} color={theme.colors.primary} />
+                    <Text style={styles.secondaryActionButtonText}>Sadece kaydet</Text>
+                  </>
+                )}
+              </TouchableOpacity>
+              <Text style={styles.choiceHint}>Kimliği sadece kaydeder; check-in veya KBS gönderimi yapılmaz. Kaydedilenler sayfasından görüntüleyebilirsiniz.</Text>
+            </>
+          )}
         </ScrollView>
       </View>
     );
@@ -696,7 +811,7 @@ export default function CheckInScreen({ navigation, route }) {
       <View style={styles.header}>
         <TouchableOpacity
           style={styles.backButton}
-          onPress={() => setStep(2)}
+          onPress={() => setStep(3)}
         >
           <Ionicons name="arrow-back" size={24} color={theme.colors.textPrimary} />
         </TouchableOpacity>
@@ -1291,5 +1406,18 @@ const styles = StyleSheet.create({
     fontWeight: theme.typography.fontWeight.semibold,
     color: theme.colors.white,
   },
+  // Step 3 (seçim / kaydedildi)
+  successCard: { alignItems: 'center', paddingVertical: theme.spacing['2xl'] },
+  successIconWrap: { marginBottom: theme.spacing.base },
+  successTitle: { fontSize: theme.typography.fontSize.xl, fontWeight: theme.typography.fontWeight.bold, color: theme.colors.textPrimary, marginBottom: theme.spacing.xs },
+  successSubtitle: { fontSize: theme.typography.fontSize.base, color: theme.colors.textSecondary, marginBottom: theme.spacing.xl },
+  primaryActionButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: theme.spacing.sm, paddingVertical: theme.spacing.lg, paddingHorizontal: theme.spacing.xl, borderRadius: theme.spacing.borderRadius.lg, width: '100%', marginBottom: theme.spacing.base, ...theme.spacing.shadow?.base || {} },
+  primaryActionButtonText: { fontSize: theme.typography.fontSize.base, fontWeight: theme.typography.fontWeight.semibold },
+  tekrarDeneButton: { backgroundColor: theme.colors.primary + '18', borderWidth: 2, borderColor: theme.colors.primary },
+  sendActionButton: { backgroundColor: theme.colors.primary },
+  secondaryActionButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: theme.spacing.sm, paddingVertical: theme.spacing.base, paddingHorizontal: theme.spacing.lg, borderRadius: theme.spacing.borderRadius.base, width: '100%', marginBottom: theme.spacing.sm, borderWidth: 1, borderColor: theme.colors.border },
+  secondaryActionButtonText: { fontSize: theme.typography.fontSize.base, fontWeight: theme.typography.fontWeight.medium, color: theme.colors.primary },
+  saveOnlyButton: { marginTop: theme.spacing.lg },
+  choiceHint: { fontSize: theme.typography.fontSize.sm, color: theme.colors.textSecondary, textAlign: 'center', paddingHorizontal: theme.spacing.lg, marginBottom: theme.spacing.base },
 });
 

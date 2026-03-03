@@ -60,7 +60,7 @@ export default function MrzResultScreen({ route, navigation }) {
     try {
       await api.post('/okutulan-belgeler', body);
       setSavedToOkutulan(true);
-      Toast.show({ type: 'success', text1: 'Kaydedildi', text2: 'Ayarlar > Okutulan kimlikler bölümünde görüntüleyebilirsiniz.' });
+      Toast.show({ type: 'success', text1: 'Kaydedildi', text2: 'Kaydedilenler sayfasından görüntüleyebilirsiniz.' });
     } catch (e) {
       Toast.show({ type: 'error', text1: 'Kayıt başarısız', text2: e?.response?.data?.message || 'Tekrar deneyin.' });
     } finally {
@@ -119,9 +119,16 @@ export default function MrzResultScreen({ route, navigation }) {
       <TouchableOpacity style={[styles.button, styles.primary]} onPress={handleConfirm} disabled={!validation.valid}>
         <Text style={styles.buttonText}>Onayla ve devam et</Text>
       </TouchableOpacity>
-      <TouchableOpacity style={styles.buttonSecondary} onPress={handleRetry}>
-        <Text style={styles.buttonSecondaryText}>Tekrar tara</Text>
+      <TouchableOpacity style={styles.tekrarTaraButton} onPress={handleRetry} activeOpacity={0.8}>
+        <Ionicons name="scan-outline" size={22} color={theme.colors.primary} />
+        <Text style={styles.tekrarTaraButtonText}>Tekrar tara</Text>
       </TouchableOpacity>
+      {savedToOkutulan && (
+        <TouchableOpacity style={styles.buttonSecondary} onPress={() => navigation.navigate('Kaydedilenler')}>
+          <Ionicons name="list-outline" size={20} color={theme.colors.primary} />
+          <Text style={styles.buttonSecondaryText}>Kaydedilenler sayfasına git</Text>
+        </TouchableOpacity>
+      )}
     </ScrollView>
   );
 }
@@ -154,7 +161,21 @@ const styles = StyleSheet.create({
   button: { ...theme.styles.button.primary, marginBottom: theme.spacing.sm },
   primary: {},
   buttonText: { color: '#fff', fontSize: theme.typography.fontSize.base, fontWeight: theme.typography.fontWeight.semibold },
-  buttonSecondary: { ...theme.styles.button.outline, marginTop: theme.spacing.xs },
+  buttonSecondary: { ...theme.styles.button.outline, marginTop: theme.spacing.xs, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 },
   buttonSecondaryText: { color: theme.colors.primary, fontSize: theme.typography.fontSize.base },
   buttonSave: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 },
+  tekrarTaraButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+    marginTop: theme.spacing.base,
+    paddingVertical: theme.spacing.base,
+    paddingHorizontal: theme.spacing.lg,
+    borderRadius: theme.spacing.borderRadius?.button ?? 14,
+    borderWidth: 2,
+    borderColor: theme.colors.primary,
+    backgroundColor: theme.colors.primary + '18',
+  },
+  tekrarTaraButtonText: { fontSize: theme.typography.fontSize.base, fontWeight: theme.typography.fontWeight.semibold, color: theme.colors.primary },
 });

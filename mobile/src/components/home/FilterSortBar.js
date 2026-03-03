@@ -1,13 +1,11 @@
 /**
- * Filtre çubuğu (chip'ler) + Sıralama
- * Tümü / Boş / Dolu / Temizlik / Bakım / Çıkışa Yakın / Hatalı
- * Sırala: Kat / Oda no / Check-out saat / Temizlik öncelik
+ * Filtre çubuğu — tek satır yatay kaydırmalı, çerçeveli chip'ler
  */
 import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../context/ThemeContext';
-import { spacing, typography } from '../../theme';
+import { spacing } from '../../theme';
 
 const FILTERS = [
   { key: 'tumu', label: 'Tümü', icon: 'grid-outline' },
@@ -19,13 +17,6 @@ const FILTERS = [
   { key: 'hatali', label: 'Hatalı', icon: 'warning-outline' },
 ];
 
-const SORT_OPTIONS = [
-  { key: 'kat', label: 'Kat' },
-  { key: 'odaNo', label: 'Oda no' },
-  { key: 'checkout', label: 'Check-out saat' },
-  { key: 'temizlikOncelik', label: 'Temizlik öncelik' },
-];
-
 export default function FilterSortBar({
   selectedFilter,
   onFilterChange,
@@ -35,109 +26,75 @@ export default function FilterSortBar({
   onToggleSortMenu,
 }) {
   const { colors } = useTheme();
-  const sortLabel = SORT_OPTIONS.find((s) => s.key === sortKey)?.label || 'Sırala';
 
   return (
-    <View style={[styles.wrap, { borderBottomColor: colors.border }]}>
-      <View style={styles.filtersRow}>
-        <View style={styles.chipsWrap}>
-          {FILTERS.map((f) => {
-            const isSelected = selectedFilter === f.key;
-            return (
-              <TouchableOpacity
-                key={f.key}
-                style={[
-                  styles.chip,
-                  {
-                    backgroundColor: isSelected ? colors.primary : colors.surface,
-                    borderColor: isSelected ? colors.primary : colors.border,
-                  },
-                ]}
-                onPress={() => onFilterChange?.(f.key)}
-                activeOpacity={0.7}
+    <View style={[styles.wrap, { borderColor: colors.border }]}>
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={styles.chipsScroll}
+      >
+        {FILTERS.map((f) => {
+          const isSelected = selectedFilter === f.key;
+          return (
+            <TouchableOpacity
+              key={f.key}
+              style={[
+                styles.chip,
+                {
+                  backgroundColor: isSelected ? colors.primary : colors.surface,
+                  borderColor: isSelected ? colors.primary : colors.border,
+                },
+              ]}
+              onPress={() => onFilterChange?.(f.key)}
+              activeOpacity={0.7}
+            >
+              <Ionicons
+                name={f.icon}
+                size={11}
+                color={isSelected ? colors.textInverse : colors.textSecondary}
+                style={styles.chipIcon}
+              />
+              <Text
+                style={[styles.chipText, { color: isSelected ? colors.textInverse : colors.textSecondary }]}
+                numberOfLines={1}
               >
-                <Ionicons
-                  name={f.icon}
-                  size={14}
-                  color={isSelected ? colors.textInverse : colors.textSecondary}
-                  style={styles.chipIcon}
-                />
-                <Text
-                  style={[
-                    styles.chipText,
-                    { color: isSelected ? colors.textInverse : colors.textSecondary },
-                  ]}
-                  numberOfLines={1}
-                >
-                  {f.label}
-                </Text>
-              </TouchableOpacity>
-            );
-          })}
-        </View>
-      </View>
-      <View style={[styles.sortRow, { borderTopColor: colors.border }]}>
-        <TouchableOpacity
-          style={[styles.sortButton, { backgroundColor: colors.gray50, borderColor: colors.border }]}
-          onPress={onToggleSortMenu}
-        >
-          <Ionicons name="swap-vertical" size={16} color={colors.textSecondary} />
-          <Text style={[styles.sortLabel, { color: colors.textPrimary }]}>{sortLabel}</Text>
-        </TouchableOpacity>
-      </View>
+                {f.label}
+              </Text>
+            </TouchableOpacity>
+          );
+        })}
+      </ScrollView>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   wrap: {
-    paddingHorizontal: spacing.screenPadding,
-    paddingBottom: 8,
-    borderBottomWidth: 1,
+    borderWidth: 1,
+    borderRadius: 10,
+    overflow: 'hidden',
+    paddingVertical: 4,
+    paddingLeft: 4,
   },
-  filtersRow: {
+  chipsScroll: {
     flexDirection: 'row',
-    alignItems: 'center',
-  },
-  chipsWrap: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-    paddingVertical: 8,
+    gap: 6,
+    paddingRight: spacing.screenPadding,
   },
   chip: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 6,
-    paddingHorizontal: 12,
-    borderRadius: 999,
+    paddingVertical: 3,
+    paddingHorizontal: 8,
+    borderRadius: 8,
     borderWidth: 1,
   },
   chipIcon: {
-    marginRight: 4,
+    marginRight: 3,
   },
   chipText: {
-    fontSize: 12,
-    fontWeight: '500',
-    maxWidth: 90,
-  },
-  sortRow: {
-    flexDirection: 'row',
-    justifyContent: 'flex-end',
-    paddingTop: 8,
-    borderTopWidth: 1,
-  },
-  sortButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 6,
-    paddingHorizontal: 12,
-    borderRadius: 999,
-    borderWidth: 1,
-    gap: 6,
-  },
-  sortLabel: {
-    fontSize: 12,
-    fontWeight: '500',
+    fontSize: 10,
+    fontWeight: '600',
   },
 });

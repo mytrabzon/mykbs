@@ -1,21 +1,10 @@
 /**
- * Komuta Şeridi — sticky üst bölüm
- * Sol: Otel adı + mini durum (Bugün: X giriş, Y çıkış)
- * Orta: Tarih seçici (Bugün / Yarın / Takvim)
- * Sağ: Bildirim + Profil
- * Alt: global arama (oda no / misafir adı / rezervasyon kodu)
- * Scroll'da compact moda geçer (padding küçülür)
+ * Komuta Şeridi — kompakt üst bölüm
+ * Satır 1: Tesis adı | Tarih (Bugün/Yarın/Takvim) | Bildirim | Profil
+ * Satır 2 (header tam altı): bottomContent — çerçeveli filtre/KPI/aksiyon butonları
  */
-import React, { useState } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  TouchableOpacity,
-  TextInput,
-  Animated,
-  Platform,
-} from 'react-native';
+import React from 'react';
+import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../context/ThemeContext';
@@ -30,53 +19,37 @@ const DATE_OPTIONS = [
 export default function HomeCommandStrip({
   tesis,
   ozet,
-  scrollY = new Animated.Value(0),
   onNotification,
   onProfile,
-  onSearch,
   onDateChange,
   selectedDateKey = 'bugun',
   commandMode,
   onCommandModeChange,
+  /** Profil/bildirim satırının hemen altında render edilir — çerçeveli buton şeridi */
+  bottomContent,
 }) {
   const insets = useSafeAreaInsets();
   const { colors } = useTheme();
-  const [searchQuery, setSearchQuery] = useState('');
-
-  const miniStatus =
-    ozet && ozet.toplamOda != null
-      ? `Bugün: ${ozet.bugunGiris ?? 0} giriş, ${ozet.bugunCikis ?? 0} çıkış`
-      : '';
-
-  const handleSearchSubmit = () => {
-    onSearch?.(searchQuery.trim());
-  };
 
   return (
     <View
       style={[
         styles.wrap,
         {
-          paddingTop: insets.top + 8,
-          paddingBottom: 12,
+          paddingTop: insets.top + 4,
+          paddingBottom: bottomContent ? 0 : 6,
           backgroundColor: colors.surface,
+          borderBottomWidth: bottomContent ? 0 : 1,
           borderBottomColor: colors.border,
         },
       ]}
     >
-      {/* Üst satır: Sol (otel + mini) | Orta (tarih) | Sağ (ikonlar) */}
-      <View style={styles.row}>
+      <View style={[styles.row, { minHeight: 40 }]}>
         <View style={styles.left}>
           <Text style={[styles.tesisName, { color: colors.textPrimary }]} numberOfLines={1}>
             {tesis?.tesisAdi || tesis?.adi || 'Tesis'}
           </Text>
-          {miniStatus ? (
-            <Text style={[styles.miniStatus, { color: colors.textSecondary }]} numberOfLines={1}>
-              {miniStatus}
-            </Text>
-          ) : null}
         </View>
-
         <View style={styles.dateRow}>
           {DATE_OPTIONS.map((opt) => (
             <TouchableOpacity
@@ -84,8 +57,9 @@ export default function HomeCommandStrip({
               style={[
                 styles.dateChip,
                 {
-                  backgroundColor: selectedDateKey === opt.key ? colors.primary : colors.gray50,
+                  backgroundColor: selectedDateKey === opt.key ? colors.primary : colors.surface,
                   borderColor: selectedDateKey === opt.key ? colors.primary : colors.border,
+                  borderWidth: 1,
                 },
               ]}
               onPress={() => onDateChange?.(opt.key)}
@@ -102,129 +76,95 @@ export default function HomeCommandStrip({
             </TouchableOpacity>
           ))}
         </View>
-
         <View style={styles.right}>
           {onCommandModeChange != null && (
             <TouchableOpacity
               onPress={() => onCommandModeChange(!commandMode)}
-              style={[styles.commandModeBtn, { backgroundColor: commandMode ? colors.primary : colors.gray50 }]}
+              style={[styles.commandModeBtn, { backgroundColor: commandMode ? colors.primary : colors.surface, borderColor: colors.border, borderWidth: 1 }]}
             >
-              <Ionicons name="grid-outline" size={18} color={commandMode ? colors.textInverse : colors.textSecondary} />
+              <Ionicons name="grid-outline" size={16} color={commandMode ? colors.textInverse : colors.textSecondary} />
             </TouchableOpacity>
           )}
           {onNotification != null && (
-            <TouchableOpacity
-              onPress={onNotification}
-              style={styles.iconBtn}
-              hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
-            >
-              <Ionicons name="notifications-outline" size={22} color={colors.textSecondary} />
+            <TouchableOpacity onPress={onNotification} style={[styles.iconBtn, styles.iconBtnFramed, { borderColor: colors.border }]} hitSlop={8}>
+              <Ionicons name="notifications-outline" size={20} color={colors.textSecondary} />
             </TouchableOpacity>
           )}
           {onProfile != null && (
-            <TouchableOpacity
-              onPress={onProfile}
-              style={styles.iconBtn}
-              hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
-            >
-              <Ionicons name="person-circle-outline" size={24} color={colors.textSecondary} />
+            <TouchableOpacity onPress={onProfile} style={[styles.iconBtn, styles.iconBtnFramed, { borderColor: colors.border }]} hitSlop={8}>
+              <Ionicons name="person-circle-outline" size={22} color={colors.textSecondary} />
             </TouchableOpacity>
           )}
         </View>
       </View>
-
-      {/* Global arama */}
-      <View style={[styles.searchWrap, { backgroundColor: colors.gray50, borderColor: colors.border }]}>
-        <Ionicons name="search-outline" size={18} color={colors.textSecondary} />
-        <TextInput
-          style={[styles.searchInput, { color: colors.textPrimary }]}
-          placeholder="Oda no, misafir adı, rezervasyon kodu..."
-          placeholderTextColor={colors.textDisabled}
-          value={searchQuery}
-          onChangeText={setSearchQuery}
-          onSubmitEditing={handleSearchSubmit}
-          returnKeyType="search"
-        />
-        {searchQuery.length > 0 && (
-          <TouchableOpacity onPress={() => setSearchQuery('')} hitSlop={8}>
-            <Ionicons name="close-circle" size={18} color={colors.textSecondary} />
-          </TouchableOpacity>
-        )}
-      </View>
+      {bottomContent ? (
+        <View style={[styles.toolbarWrap, { backgroundColor: colors.gray50, borderBottomColor: colors.border }]}>
+          {bottomContent}
+        </View>
+      ) : null}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   wrap: {
-    borderBottomWidth: 1,
     paddingHorizontal: spacing.screenPadding,
   },
   row: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    minHeight: 44,
   },
   left: {
     flex: 1,
     minWidth: 0,
-    marginRight: 8,
+    marginRight: 6,
   },
   tesisName: {
-    fontSize: typography.text.h2.fontSize,
+    fontSize: 17,
     fontWeight: typography.fontWeight.semibold,
-  },
-  miniStatus: {
-    fontSize: typography.text.caption.fontSize,
-    marginTop: 2,
   },
   dateRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
+    gap: 3,
   },
   dateChip: {
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 999,
-    borderWidth: 1,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
   },
   dateChipText: {
-    fontSize: 12,
-    fontWeight: '500',
+    fontSize: 11,
+    fontWeight: '600',
   },
   right: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginLeft: 8,
+    marginLeft: 6,
   },
   iconBtn: {
     padding: 4,
-    marginLeft: 4,
+    marginLeft: 2,
+  },
+  iconBtnFramed: {
+    borderWidth: 1,
+    borderRadius: 8,
+    padding: 4,
   },
   commandModeBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 10,
+    width: 32,
+    height: 32,
+    borderRadius: 8,
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 4,
   },
-  searchWrap: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    height: 40,
-    borderRadius: 12,
-    borderWidth: 1,
-    paddingHorizontal: 12,
-    marginTop: 10,
-    gap: 8,
-  },
-  searchInput: {
-    flex: 1,
-    fontSize: typography.text.body.fontSize,
-    paddingVertical: 0,
-    ...(Platform.OS === 'web' ? {} : { paddingHorizontal: 0 }),
+  toolbarWrap: {
+    borderBottomWidth: 1,
+    paddingVertical: 6,
+    paddingHorizontal: 0,
+    marginHorizontal: -spacing.screenPadding,
+    paddingHorizontal: spacing.screenPadding,
   },
 });

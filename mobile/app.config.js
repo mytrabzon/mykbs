@@ -119,7 +119,9 @@ export default {
             newArchEnabled: false
           }
         }
-      ]
+      ],
+      // EAS iOS: RNIap "Unable to find specification for RCT-Folly" — Podfile'a RCT-Folly podspec yolu ekler
+      "./plugins/withIosRctFollyPod.js"
     ],
     extra: {
       // EAS Build proje ID (eas init ile oluşturuldu)

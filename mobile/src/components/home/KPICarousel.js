@@ -113,7 +113,12 @@ export default function KPICarousel({
               {
                 backgroundColor: colors.surface,
                 borderColor: isSelected ? colors.primary : colors.border,
-                borderWidth: isSelected ? 2 : 1,
+                borderWidth: 2,
+                shadowColor: isSelected ? colors.primary : '#000',
+                shadowOffset: { width: 0, height: 1 },
+                shadowOpacity: isSelected ? 0.2 : 0.06,
+                shadowRadius: 4,
+                elevation: isSelected ? 3 : 2,
               },
             ]}
             onPress={() => {
@@ -123,7 +128,7 @@ export default function KPICarousel({
             activeOpacity={0.7}
           >
             <View style={[styles.iconWrap, { backgroundColor: bg }]}>
-              <Ionicons name={card.icon} size={18} color={iconColor} />
+              <Ionicons name={card.icon} size={14} color={iconColor} />
             </View>
             <Text style={[styles.value, { color: colors.textPrimary }]}>
               {value}
@@ -139,36 +144,36 @@ export default function KPICarousel({
   );
 }
 
-const CARD_WIDTH = 76;
+const CARD_WIDTH = 56;
 const styles = StyleSheet.create({
   scrollContent: {
-    paddingHorizontal: spacing.screenPadding,
-    paddingVertical: 12,
-    gap: 8,
-    paddingRight: spacing.screenPadding + 16,
+    paddingHorizontal: 4,
+    paddingVertical: 4,
+    gap: 6,
+    paddingRight: spacing.screenPadding + 8,
   },
   card: {
     width: CARD_WIDTH,
-    borderRadius: 16,
-    padding: 10,
+    borderRadius: 10,
+    padding: 6,
     alignItems: 'center',
-    minHeight: 72,
+    minHeight: 48,
   },
   iconWrap: {
-    width: 32,
-    height: 32,
-    borderRadius: 10,
+    width: 24,
+    height: 24,
+    borderRadius: 6,
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 6,
-  },
-  value: {
-    fontSize: 18,
-    fontWeight: '700',
     marginBottom: 2,
   },
+  value: {
+    fontSize: 13,
+    fontWeight: '700',
+    marginBottom: 0,
+  },
   label: {
-    fontSize: 11,
-    fontWeight: '500',
+    fontSize: 9,
+    fontWeight: '600',
   },
 });

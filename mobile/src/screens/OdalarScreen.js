@@ -567,13 +567,13 @@ export default function OdalarScreen() {
   const getStatusColor = useCallback((durum) => {
     switch (durum) {
       case 'bos':
-        return theme.colors.success;
+        return theme.colors.success;      // Yeşil — hazır
       case 'dolu':
-        return theme.colors.error;
+        return theme.colors.primary;       // İndigo — dolu
       case 'temizlik':
-        return theme.colors.warning;
+        return theme.colors.accent;       // Mavi — temizlik
       case 'bakim':
-        return theme.colors.gray600;
+        return theme.colors.warning;      // Turuncu — bakım
       default:
         return theme.colors.gray400;
     }
@@ -654,7 +654,7 @@ export default function OdalarScreen() {
 
   const keyExtractor = useCallback((item) => item.id.toString(), []);
 
-  const CARD_ROW_HEIGHT = commandMode ? 92 : 116;
+  const CARD_ROW_HEIGHT = commandMode ? 82 : 96;
   const getItemLayout = useCallback((data, index) => ({
     length: CARD_ROW_HEIGHT,
     offset: CARD_ROW_HEIGHT * Math.floor(index / 2),
@@ -719,10 +719,11 @@ export default function OdalarScreen() {
     );
   }
 
+  const screenBg = colors.background === '#0F172A' ? colors.background : '#EDF0F7';
   return (
-    <View style={[styles.container, { backgroundColor: colors.background }]}>
-      <StatusBar barStyle={colors.background === '#0F172A' ? 'light-content' : 'dark-content'} backgroundColor={colors.surface} />
-      {/* Komuta Şeridi — sticky üst */}
+    <View style={[styles.container, { backgroundColor: screenBg }]}>
+      <StatusBar barStyle={screenBg === '#0F172A' ? 'light-content' : 'dark-content'} backgroundColor={colors.surface} />
+      {/* Komuta Şeridi — header + toolbar (profil/bildirim altında çerçeveli butonlar) */}
       <HomeCommandStrip
         tesis={tesis}
         ozet={ozet}
@@ -732,6 +733,36 @@ export default function OdalarScreen() {
         selectedDateKey={selectedDateKey}
         commandMode={commandMode}
         onCommandModeChange={setCommandMode}
+        bottomContent={
+          <View style={styles.headerToolbar}>
+            <FilterSortBar
+              selectedFilter={filtre}
+              onFilterChange={(key) => { logger.button('Filtre', key); setFiltre(key); }}
+              sortKey={sortKey}
+              onSortChange={setSortKey}
+              onToggleSortMenu={() => {}}
+            />
+            <View style={styles.toolbarRow2}>
+              <View style={styles.toolbarKpiWrap}>
+                <KPICarousel
+                  ozet={ozet}
+                  odalarCountByFilter={odalarCountByFilter}
+                  onCardPress={setFiltre}
+                  selectedFilter={filtre}
+                />
+              </View>
+              <View style={styles.toolbarActionsWrap}>
+                <QuickActionsStrip
+                  onAction={({ type, route }) => {
+                    if (route === 'CheckIn') navigation.navigate('MrzScan', { fromCheckIn: true });
+                    else if (route) navigation.navigate(route);
+                  }}
+                  isCompact={commandMode}
+                />
+              </View>
+            </View>
+          </View>
+        }
       />
 
       <FlatList
@@ -769,26 +800,6 @@ export default function OdalarScreen() {
                 dismissLabel="Şimdi değil"
               />
             )}
-            <KPICarousel
-              ozet={ozet}
-              odalarCountByFilter={odalarCountByFilter}
-              onCardPress={setFiltre}
-              selectedFilter={filtre}
-            />
-            <QuickActionsStrip
-              onAction={({ type, route }) => {
-                if (route === 'CheckIn') navigation.navigate('MrzScan', { fromCheckIn: true });
-                else if (route) navigation.navigate(route);
-              }}
-              isCompact={commandMode}
-            />
-            <FilterSortBar
-              selectedFilter={filtre}
-              onFilterChange={(key) => { logger.button('Filtre', key); setFiltre(key); }}
-              sortKey={sortKey}
-              onSortChange={setSortKey}
-              onToggleSortMenu={() => {}}
-            />
             {liveUpdates.length > 0 && (
               <View style={[styles.lobbyLiveContainer, { backgroundColor: colors.surface, borderColor: colors.border }]}>
                 <View style={styles.lobbyLiveHeader}>
@@ -812,6 +823,12 @@ export default function OdalarScreen() {
                 </ScrollView>
               </View>
             )}
+            <View style={[styles.odalarSectionHeader, { borderBottomColor: colors.border }]}>
+              <Text style={[styles.odalarSectionTitle, { color: colors.textPrimary }]}>Odalar</Text>
+              <Text style={[styles.odalarSectionCount, { color: colors.textSecondary }]}>
+                {displayOdalar.length} oda
+              </Text>
+            </View>
           </>
         }
         ListEmptyComponent={
@@ -1020,16 +1037,48 @@ const styles = StyleSheet.create({
   list: {
     paddingHorizontal: theme.spacing.screenPadding,
     paddingBottom: 120,
-    paddingTop: 4,
+    paddingTop: 2,
+  },
+  headerToolbar: {
+    gap: 6,
+  },
+  toolbarRow2: {
+    flexDirection: 'row',
+    alignItems: 'stretch',
+    gap: 8,
+  },
+  toolbarKpiWrap: {
+    flex: 1,
+    minWidth: 0,
+  },
+  toolbarActionsWrap: {
+    flex: 1,
+    minWidth: 0,
+  },
+  odalarSectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: theme.spacing.screenPadding,
+    paddingVertical: 8,
+    borderBottomWidth: 1,
+    marginBottom: 4,
+  },
+  odalarSectionTitle: {
+    fontSize: theme.typography.fontSize.lg,
+    fontWeight: theme.typography.fontWeight.semibold,
+  },
+  odalarSectionCount: {
+    fontSize: theme.typography.fontSize.sm,
   },
   odaCardWrapper: {
     flex: 1,
     marginHorizontal: 4,
-    marginBottom: 8,
+    marginBottom: 6,
     maxWidth: (Dimensions.get('window').width - theme.spacing.screenPadding * 2 - 16) / 2,
   },
   odaColumnWrapper: {
-    marginBottom: 4,
+    marginBottom: 2,
   },
   emptyContainer: {
     alignItems: 'center',

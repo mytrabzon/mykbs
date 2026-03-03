@@ -1,5 +1,36 @@
 const axios = require('axios');
 
+/** XML içinde kullanılacak metinleri escape et */
+function escapeXml(s) {
+  if (s == null || s === '') return '';
+  return String(s)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&apos;');
+}
+
+/**
+ * Jandarma KBS SOAP servisi – bağlantı testi için ParametreListele SOAP isteği.
+ * Resmi servis: https://vatandas.jandarma.gov.tr/KBS_Tesis_Servis/SrvShsYtkTml.svc (SOAP/WCF)
+ */
+function buildParametreListeleSoapEnvelope(tesisKodu, webServisSifre) {
+  const t = escapeXml(tesisKodu);
+  const s = escapeXml(webServisSifre);
+  return [
+    '<?xml version="1.0" encoding="utf-8"?>',
+    '<soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/" xmlns:tns="http://tempuri.org/">',
+    '  <soap:Body>',
+    '    <tns:ParametreListele>',
+    '      <tns:TesisKodu>' + t + '</tns:TesisKodu>',
+    '      <tns:Sifre>' + s + '</tns:Sifre>',
+    '    </tns:ParametreListele>',
+    '  </soap:Body>',
+    '</soap:Envelope>'
+  ].join('\n');
+}
+
 /**
  * Jandarma KBS entegrasyon servisi
  */
@@ -13,44 +44,64 @@ class JandarmaKBS {
   }
 
   /**
-   * Bağlantı testi
+   * Gerçek bağlantı testi: Jandarma KBS SOAP servisine ParametreListele ile istek atar.
+   * IP erişimi + tesis kodu + web servis şifresi doğrulanır.
    */
   async testBaglanti() {
     if (!this.baseURL) {
       return { success: false, message: 'JANDARMA_KBS_URL ortam değişkeni tanımlı değil. .env veya sunucu ayarlarında gerçek KBS adresini ekleyin.' };
     }
+    const soapAction = 'http://tempuri.org/ISrvShsYtkTml/ParametreListele';
+    const body = buildParametreListeleSoapEnvelope(this.tesisKodu, this.webServisSifre);
     try {
-      const response = await axios.post(
-        `${this.baseURL}/test`,
-        {
-          tesisKodu: this.tesisKodu,
-          webServisSifre: this.webServisSifre
+      const response = await axios.post(this.baseURL, body, {
+        timeout: 15000,
+        headers: {
+          'Content-Type': 'text/xml; charset=utf-8',
+          'SOAPAction': soapAction
         },
-        {
-          timeout: 10000,
-          headers: {
-            'Content-Type': 'application/json'
-          }
-        }
-      );
+        validateStatus: () => true
+      });
 
-      if (response.data.success) {
-        return { success: true, message: 'Bağlantı başarılı' };
-      } else {
-        return { success: false, message: response.data.message || 'Bağlantı hatası' };
+      const status = response.status;
+      const data = response.data;
+
+      if (status !== 200) {
+        if (status === 401) return { success: false, message: 'Web servis şifresi hatalı' };
+        if (status === 403) return { success: false, message: 'Bu IP yetkili değil. Backend çıkış IP\'sini (GET /debug/egress-ip) Jandarma KBS whitelist\'e ekleyin.' };
+        if (status === 404 || status === 405) return { success: false, message: 'KBS endpoint bulunamadı veya yöntem kabul etmiyor. Servis adresini kontrol edin.' };
+        if (status === 500) {
+          const faultMsg = parseSoapFaultMessage(data);
+          return { success: false, message: faultMsg || 'KBS sunucusu hata döndü (500). Tesis kodu ve şifreyi kontrol edin.' };
+        }
+        return { success: false, message: `KBS yanıt: HTTP ${status}` };
       }
+
+      const fault = parseSoapFault(data);
+      if (fault) {
+        return { success: false, message: fault };
+      }
+
+      const basarili = parseParametreListeleSuccess(data);
+      if (basarili === true) {
+        return { success: true, message: 'KBS bağlantısı ve tesis bilgileri doğrulandı.' };
+      }
+      if (basarili === false) {
+        const msg = parseParametreListeleMessage(data);
+        return { success: false, message: msg || 'Tesis kodu veya web servis şifresi hatalı.' };
+      }
+
+      return { success: true, message: 'KBS sunucusuna erişildi. Yanıt formatı beklenenden farklı olabilir.' };
     } catch (error) {
       const code = error.code || '';
       const status = error.response?.status;
-      const responseData = error.response?.data;
-      const url = `${this.baseURL}/test`;
+      const url = this.baseURL;
       console.warn('[JandarmaKBS] testBaglanti failed', { code, status, url, message: error.message });
       if (error.response) {
         const message = error.response.data?.message || error.message;
         if (status === 401) return { success: false, message: 'Web servis şifresi hatalı' };
-        if (status === 403) return { success: false, message: 'Bu IP yetkili değil' };
-        if (status === 404) return { success: false, message: 'KBS endpoint bulunamadı (404). Servis SOAP/WCF ise REST yerine SOAP client gerekir.' };
-        if (status === 405) return { success: false, message: 'KBS yöntem kabul etmiyor (405). Servis SOAP ise REST yerine SOAP client gerekir.' };
+        if (status === 403) return { success: false, message: 'Bu IP yetkili değil. GET /debug/egress-ip ile IP\'yi Jandarma KBS whitelist\'e ekleyin.' };
+        if (status === 404 || status === 405) return { success: false, message: 'KBS endpoint bulunamadı (404/405). Servis adresini kontrol edin.' };
         if (status === 503 || code === 'ECONNREFUSED') return { success: false, message: 'KBS servisi yanıt vermiyor' };
         return { success: false, message: message || 'Bağlantı hatası' };
       }
@@ -262,6 +313,43 @@ class JandarmaKBS {
       };
     }
   }
+}
+
+function parseSoapFault(xmlStr) {
+  const str = typeof xmlStr === 'string' ? xmlStr : (xmlStr && typeof xmlStr === 'object' ? '' : String(xmlStr));
+  if (!str) return null;
+  const faultMatch = str.match(/<faultstring[^>]*>([^<]*)<\/faultstring>/i) ||
+    str.match(/<soap:Fault>[\s\S]*?<faultstring[^>]*>([^<]*)<\/faultstring>/i) ||
+    str.match(/<Reason>[\s\S]*?<Text[^>]*>([^<]*)<\/Text>/i);
+  return faultMatch ? faultMatch[1].trim() : null;
+}
+
+function parseSoapFaultMessage(xmlStr) {
+  const fault = parseSoapFault(xmlStr);
+  if (fault) return fault;
+  const str = typeof xmlStr === 'string' ? xmlStr : String(xmlStr || '');
+  const detailMatch = str.match(/<detail[^>]*>([\s\S]*?)<\/detail>/i);
+  if (detailMatch) {
+    const inner = detailMatch[1].replace(/<[^>]+>/g, ' ').trim();
+    if (inner.length > 0 && inner.length < 300) return inner;
+  }
+  return null;
+}
+
+function parseParametreListeleSuccess(xmlStr) {
+  const str = typeof xmlStr === 'string' ? xmlStr : String(xmlStr || '');
+  if (!str) return null;
+  if (/<Basarili>true<\/Basarili>/i.test(str) || /<basarili>true<\/basarili>/i.test(str)) return true;
+  if (/<Basarili>false<\/Basarili>/i.test(str) || /<basarili>false<\/basarili>/i.test(str)) return false;
+  if (/ParametreListeleResponse/i.test(str) && !/<soap:Fault>/i.test(str)) return true;
+  return null;
+}
+
+function parseParametreListeleMessage(xmlStr) {
+  const str = typeof xmlStr === 'string' ? xmlStr : String(xmlStr || '');
+  if (!str) return null;
+  const mesajMatch = str.match(/<Mesaj[^>]*>([^<]*)<\/Mesaj>/i) || str.match(/<mesaj[^>]*>([^<]*)<\/mesaj>/i);
+  return mesajMatch ? mesajMatch[1].trim() : null;
 }
 
 module.exports = JandarmaKBS;

@@ -899,6 +899,27 @@ export const api = {
         await wrapError(e);
       }
     }
+    const odaDeleteMatch = path.match(/^\/?oda\/([^/]+)$/);
+    if (odaDeleteMatch) {
+      const backendUrl = getBackendUrl();
+      if (!backendUrl) {
+        const err = new Error('Sunucu adresi tanımlı değil') as Error & { response?: { status: number; data: unknown } };
+        err.response = { status: 503, data: { message: 'EXPO_PUBLIC_BACKEND_URL tanımlayın.' } };
+        throw err;
+      }
+      if (!token) {
+        const err = new Error('Giriş gerekli') as Error & { response?: { status: number; data: unknown } };
+        err.response = { status: 401, data: { message: 'Token bulunamadı' } };
+        throw err;
+      }
+      const r = await fetchWithLog(`${backendUrl}/api/oda/${odaDeleteMatch[1]}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await r.json().catch(() => ({}));
+      if (!r.ok) throw Object.assign(new Error((data as { message?: string })?.message || 'Oda silinemedi'), { response: { status: r.status, data } });
+      return toResponse(data);
+    }
     logger.warn('[apiSupabase] Unmapped DELETE', path);
     return toResponse({});
   },

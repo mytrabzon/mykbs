@@ -392,6 +392,20 @@ router.post('/kbs/test', async (req, res) => {
       }
     }
 
+    // Backend'de ilgili KBS URL boşsa mock modundayız; testi geçir, "yanıt vermiyor" hatası verme
+    const kbsUrl = (tesisLike.kbsTuru === 'jandarma'
+      ? (process.env.JANDARMA_KBS_URL || '').trim()
+      : tesisLike.kbsTuru === 'polis'
+        ? (process.env.POLIS_KBS_URL || '').trim()
+        : '');
+    if (!kbsUrl) {
+      return res.json({
+        success: true,
+        message: 'Mock modunda. KBS bağlantı testi atlandı; check-in bildirimleri mock olarak işlenecek. Gerçek KBS için backend\'de JANDARMA_KBS_URL veya POLIS_KBS_URL tanımlayın.',
+        mock: true,
+      });
+    }
+
     const kbsService = createKBSService(tesisLike);
     const testResult = await kbsService.testBaglanti();
 

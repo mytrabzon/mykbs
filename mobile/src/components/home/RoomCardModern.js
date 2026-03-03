@@ -72,18 +72,33 @@ export default function RoomCardModern({
     }
   };
 
+  // Canlı durum renkleri — daha doygun
+  const stripColor = statusColor;
+  const cardShadow = {
+    shadowColor: stripColor || '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.18,
+    shadowRadius: 8,
+    elevation: 5,
+  };
+
   return (
     <TouchableOpacity
       style={[
         styles.card,
         compact && styles.cardCompact,
-        { backgroundColor: colors.surface, borderColor: colors.border },
+        {
+          backgroundColor: colors.surface,
+          borderColor: colors.border,
+          borderWidth: 1,
+          ...cardShadow,
+        },
       ]}
       activeOpacity={0.85}
       onPress={() => onPress(item)}
     >
-      {/* Sol ince durum şeridi */}
-      <View style={[styles.statusStrip, { backgroundColor: statusColor }]} />
+      {/* Sol durum şeridi — kalın, canlı renk */}
+      <View style={[styles.statusStrip, { backgroundColor: stripColor }]} />
 
       <View style={styles.content}>
         <View style={styles.topRow}>
@@ -119,17 +134,15 @@ const styles = StyleSheet.create({
   card: {
     flex: 1,
     flexDirection: 'row',
-    borderRadius: 16,
-    borderWidth: 1,
+    borderRadius: 14,
     overflow: 'hidden',
-    minHeight: 100,
-    ...theme.spacing.shadow.sm,
+    minHeight: 88,
   },
   cardCompact: {
-    minHeight: 80,
+    minHeight: 76,
   },
   statusStrip: {
-    width: 4,
+    width: 5,
     alignSelf: 'stretch',
   },
   content: {

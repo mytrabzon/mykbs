@@ -25,6 +25,7 @@ import KayitScreen from './src/screens/KayitScreen';
 import BasvuruScreen from './src/screens/BasvuruScreen';
 import OdalarScreen from './src/screens/OdalarScreen';
 import CheckInScreen from './src/screens/CheckInScreen';
+import KaydedilenlerScreen from './src/screens/KaydedilenlerScreen';
 import AyarlarScreen from './src/screens/AyarlarScreen';
 import OdaDetayScreen from './src/screens/OdaDetayScreen';
 import AdminPanelScreen from './src/screens/AdminPanelScreen';
@@ -256,8 +257,6 @@ import { ThemeProvider, useTheme } from './src/context/ThemeContext';
 import { CreditsProvider, useCredits } from './src/context/CreditsContext';
 import CreditsBanner from './src/components/CreditsBanner';
 import PaywallModal from './src/components/PaywallModal';
-import TrialWelcomeBanner from './src/components/TrialWelcomeBanner';
-
 const Tab = createBottomTabNavigator();
 const Stack = createNativeStackNavigator();
 
@@ -283,7 +282,6 @@ function MainTabs() {
 
   return (
     <View style={styles.mainTabsWrap}>
-      <TrialWelcomeBanner />
       <CreditsBanner />
       <Tab.Navigator
       lazy={false}
@@ -470,6 +468,7 @@ function AppNavigator() {
           <>
             <Stack.Screen name="Main" component={MainTabs} />
             <Stack.Screen name="CheckIn" component={CheckInScreen} />
+            <Stack.Screen name="Kaydedilenler" component={KaydedilenlerScreen} />
             <Stack.Screen name="OdaDetay" component={OdaDetayScreen} />
             <Stack.Screen name="AddRoom" component={AddRoomScreen} />
             <Stack.Screen name="PostDetay" component={PostDetayScreen} />
