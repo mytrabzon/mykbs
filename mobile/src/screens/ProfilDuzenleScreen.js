@@ -10,7 +10,7 @@ import {
   Image,
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
-import * as FileSystem from 'expo-file-system';
+import * as FileSystem from 'expo-file-system/legacy';
 import { useNavigation } from '@react-navigation/native';
 import { useTheme } from '../context/ThemeContext';
 import { useAuth } from '../context/AuthContext';
@@ -37,6 +37,7 @@ export default function ProfilDuzenleScreen() {
   const { user, tesis, isLoggedIn, getSupabaseToken } = useAuth();
   const [displayName, setDisplayName] = useState(() => (user?.adSoyad || '').trim());
   const [title, setTitle] = useState('');
+  const [telefon, setTelefon] = useState('');
   const [avatarUrl, setAvatarUrl] = useState(null);
   const [localAvatarUri, setLocalAvatarUri] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -82,6 +83,7 @@ export default function ProfilDuzenleScreen() {
               setTitle(me.title || '');
               setAvatarUrl(me.avatar_url || null);
             } else if (user?.adSoyad) setDisplayName((user.adSoyad || '').trim());
+            if (user?.telefon && user.telefon !== '-') setTelefon(user.telefon.replace(/^\+\d*/, '').replace(/\D/g, '').replace(/^0?/, '') || '');
           }
         } else {
           const res = await withTimeout(api.get('/auth/profile'), 6000).catch((e) => {
@@ -90,12 +92,14 @@ export default function ProfilDuzenleScreen() {
           });
           const data = res?.data || {};
           if (!cancelled) {
-            console.log('[ProfilDuzenle] Profil yüklendi (backend):', { display_name: data.display_name?.slice(0, 40), title: data.title?.slice(0, 40), hasAvatar: !!data.avatar_url });
-            if (data.display_name != null || data.title != null || data.avatar_url != null) {
+            console.log('[ProfilDuzenle] Profil yüklendi (backend):', { display_name: data.display_name?.slice(0, 40), title: data.title?.slice(0, 40), hasAvatar: !!data.avatar_url, telefon: data.telefon ? '(var)' : null });
+            if (data.display_name != null || data.title != null || data.avatar_url != null || data.telefon != null) {
               setDisplayName((data.display_name || user?.adSoyad || '').trim());
               setTitle(data.title || '');
               setAvatarUrl(data.avatar_url || null);
+              if (data.telefon) setTelefon(data.telefon.replace(/^\+\d*/, '').replace(/\D/g, '').replace(/^0?/, '') || '');
             } else if (user?.adSoyad) setDisplayName((user.adSoyad || '').trim());
+            if ((user?.telefon && user.telefon !== '-') && !data.telefon) setTelefon(user.telefon.replace(/^\+\d*/, '').replace(/\D/g, '').replace(/^0?/, '') || '');
           }
         }
       } catch (_) {
@@ -167,6 +171,7 @@ export default function ProfilDuzenleScreen() {
       const body = {
         display_name: displayName.trim() || null,
         title: title.trim() || null,
+        telefon: telefon.trim() ? telefon.trim().replace(/\D/g, '') : '',
         avatar_url: avatarUrl || null,
       };
       if (localAvatarUri) {
@@ -291,11 +296,11 @@ export default function ProfilDuzenleScreen() {
               <Ionicons name="camera" size={16} color="#fff" />
             </View>
           </TouchableOpacity>
-          {(user?.telefon || user?.email) ? (
+          {(user?.email || (user?.telefon && user.telefon !== '-')) ? (
             <View style={styles.accountRow}>
-              <Text style={[styles.label, { color: colors.textSecondary }]}>Hesap (giriş bilgisi)</Text>
+              <Text style={[styles.label, { color: colors.textSecondary }]}>Hesap (giriş: e-posta)</Text>
               <Text style={[styles.accountValue, { color: colors.textSecondary }]} numberOfLines={1}>
-                {[user.telefon, user.email].filter(Boolean).join(' · ')}
+                {user?.email || user?.telefon}
               </Text>
             </View>
           ) : null}
@@ -314,6 +319,15 @@ export default function ProfilDuzenleScreen() {
             onChangeText={setTitle}
             placeholder="Örn. Resepsiyon, Ön Büro Müdürü..."
             placeholderTextColor={colors.textSecondary}
+          />
+          <Text style={[styles.label, { color: colors.textSecondary }]}>Telefon (isteğe bağlı)</Text>
+          <TextInput
+            style={[styles.input, { backgroundColor: colors.background, color: colors.textPrimary, borderColor: colors.border }]}
+            value={telefon}
+            onChangeText={(t) => setTelefon(t.replace(/\D/g, '').slice(0, 11))}
+            placeholder="5XX XXX XX XX"
+            placeholderTextColor={colors.textSecondary}
+            keyboardType="phone-pad"
           />
         </View>
         <TouchableOpacity

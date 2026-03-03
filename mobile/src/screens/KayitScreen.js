@@ -1,6 +1,6 @@
 /**
- * Yeni kayıt ekranı (tek adım).
- * Ad soyad, telefon, e-posta, şifre, otel adı, oda sayısı, ortalama bildirim.
+ * Yeni kayıt ekranı (e-posta ile).
+ * Ad soyad, e-posta, şifre, otel adı, oda sayısı, ortalama bildirim. Telefon isteğe bağlı olarak profilde eklenebilir.
  * Kayıt sonrası kullanıcı uygulamayı kullanabilir; KBS için Ayarlar'dan tesis kodu ve şifre ile onaya gönderir.
  */
 import React, { useState } from 'react';
@@ -30,7 +30,6 @@ export default function KayitScreen() {
   const { loginWithToken } = useAuth();
 
   const [adSoyad, setAdSoyad] = useState('');
-  const [telefon, setTelefon] = useState('');
   const [email, setEmail] = useState('');
   const [sifre, setSifre] = useState('');
   const [sifreTekrar, setSifreTekrar] = useState('');
@@ -41,17 +40,10 @@ export default function KayitScreen() {
   const [showPassword, setShowPassword] = useState(false);
   const [showPasswordRepeat, setShowPasswordRepeat] = useState(false);
 
-  const formatPhone = (t) => t.replace(/[^\d]/g, '').slice(0, 10);
-
   const handleKayit = async () => {
     const ad = (adSoyad || '').trim();
     if (ad.length < 2) {
       Toast.show({ type: 'error', text1: 'Ad Soyad', text2: 'En az 2 karakter girin' });
-      return;
-    }
-    const tel = (telefon || '').replace(/\D/g, '');
-    if (tel.length < 10) {
-      Toast.show({ type: 'error', text1: 'Telefon', text2: '10 haneli telefon girin' });
       return;
     }
     const em = (email || '').trim().toLowerCase();
@@ -83,7 +75,6 @@ export default function KayitScreen() {
     try {
       const res = await api.post('/auth/kayit', {
         adSoyad: ad,
-        telefon: telefon.trim(),
         email: em,
         sifre,
         sifreTekrar,
@@ -110,7 +101,6 @@ export default function KayitScreen() {
   const odaNum = parseInt(odaSayisi, 10) || 0;
   const valid =
     adSoyad.trim().length >= 2 &&
-    telefon.replace(/\D/g, '').length >= 10 &&
     isValidEmail(email) &&
     sifre.length >= 6 &&
     sifre === sifreTekrar &&
@@ -133,7 +123,7 @@ export default function KayitScreen() {
             <MaterialIcons name="hotel" size={36} color={colors.primary} />
           </View>
           <Text style={styles.heroTitle}>Kayıt Ol</Text>
-          <Text style={styles.heroSub}>Ad soyad, telefon, e-posta, şifre ve otel bilgilerinizi girin</Text>
+          <Text style={styles.heroSub}>Ad soyad, e-posta, şifre ve otel bilgilerinizi girin</Text>
         </View>
 
         <View style={[styles.formCard, { backgroundColor: colors.surface }]}>
@@ -143,13 +133,6 @@ export default function KayitScreen() {
             onChangeText={setAdSoyad}
             placeholder="Adınız ve soyadınız"
             autoCapitalize="words"
-          />
-          <Input
-            label="Telefon"
-            value={telefon}
-            onChangeText={(t) => setTelefon(formatPhone(t))}
-            placeholder="5XX XXX XX XX"
-            keyboardType="phone-pad"
           />
           <Input
             label="E-posta"

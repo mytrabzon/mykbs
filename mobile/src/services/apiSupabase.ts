@@ -657,7 +657,7 @@ export const api = {
           const uri = imagePart?.uri;
           if (uri) {
             try {
-              const FileSystem = require('expo-file-system').default;
+              const FileSystem = require('expo-file-system/legacy').default;
               const base64 = await FileSystem.readAsStringAsync(uri, {
                 encoding: FileSystem.EncodingType.Base64,
               });

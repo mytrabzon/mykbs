@@ -235,8 +235,12 @@ router.post('/kayit', async (req, res) => {
     if (!adSoyad || String(adSoyad).trim().length < 2) {
       return res.status(400).json({ message: 'Ad soyad en az 2 karakter olmalıdır' });
     }
-    if (!telefon || String(telefon).trim().length < 10) {
-      return res.status(400).json({ message: 'Telefon numarası giriniz' });
+    // Telefon isteğe bağlı; kayıt sadece e-posta ile yapılır. Telefon profilde eklenebilir.
+    const formattedPhone = (telefon && String(telefon).trim().length >= 10)
+      ? normalizePhone(telefon)
+      : '';
+    if (formattedPhone === '' && telefon && String(telefon).trim().length > 0) {
+      return res.status(400).json({ message: 'Geçerli bir telefon numarası giriniz veya boş bırakın' });
     }
     if (!email || String(email).trim().length < 5) {
       return res.status(400).json({ message: 'E-posta adresi giriniz' });
@@ -259,21 +263,21 @@ router.post('/kayit', async (req, res) => {
       return res.status(400).json({ message: 'Oda sayısı 1–10000 arası olmalıdır' });
     }
 
-    const formattedPhone = normalizePhone(telefon);
-    if (!formattedPhone) {
-      return res.status(400).json({ message: 'Geçersiz telefon numarası' });
-    }
+    // Telefon yoksa DB zorunlu alan için placeholder (e-posta ile kayıt)
+    const phoneForDb = formattedPhone || '-';
 
     const existingEmail = await prisma.kullanici.findFirst({ where: { email: emailNorm } });
     if (existingEmail) {
       return res.status(400).json({ message: 'Bu e-posta adresi zaten kayıtlı' });
     }
-    const variants = phoneVariants(formattedPhone);
-    const existingPhone = await prisma.kullanici.findFirst({
-      where: variants.length ? { OR: variants.map((t) => ({ telefon: t })) } : { telefon: formattedPhone },
-    });
-    if (existingPhone) {
-      return res.status(400).json({ message: 'Bu telefon numarası zaten kayıtlı' });
+    if (formattedPhone) {
+      const variants = phoneVariants(formattedPhone);
+      const existingPhone = await prisma.kullanici.findFirst({
+        where: variants.length ? { OR: variants.map((t) => ({ telefon: t })) } : { telefon: formattedPhone },
+      });
+      if (existingPhone) {
+        return res.status(400).json({ message: 'Bu telefon numarası zaten kayıtlı' });
+      }
     }
 
     let tesisKodu;
@@ -293,7 +297,7 @@ router.post('/kayit', async (req, res) => {
         kota,
         tesisAdi: String(tesisAdi).trim(),
         yetkiliAdSoyad: String(adSoyad).trim(),
-        telefon: formattedPhone,
+        telefon: phoneForDb,
         email: emailNorm,
         il: (il && String(il).trim()) || '',
         ilce: (ilce && String(ilce).trim()) || '',
@@ -310,7 +314,7 @@ router.post('/kayit', async (req, res) => {
       data: {
         tesisId: tesis.id,
         adSoyad: String(adSoyad).trim(),
-        telefon: formattedPhone,
+        telefon: phoneForDb,
         email: emailNorm,
         sifre: hashedSifre,
         rol: 'sahip',
@@ -326,7 +330,7 @@ router.post('/kayit', async (req, res) => {
           adSoyad: String(adSoyad).trim(),
           tesisAdi: tesis.tesisAdi,
           tesisKodu: tesis.tesisKodu,
-          telefon: formattedPhone,
+          telefon: phoneForDb !== '-' ? phoneForDb : undefined,
         });
       }
     } catch (e) {
@@ -334,7 +338,7 @@ router.post('/kayit', async (req, res) => {
     }
     try {
       if (formattedPhone) {
-        await smsService.sendSMS(formattedPhone, "KBS Prime'a hoş geldiniz! Tesis: " + tesis.tesisAdi + ". Giriş: telefon/e-posta ve şifreniz.");
+        await smsService.sendSMS(formattedPhone, "KBS Prime'a hoş geldiniz! Tesis: " + tesis.tesisAdi + ". Giriş: e-posta ve şifreniz.");
       }
     } catch (e) {
       console.warn('Kayıt SMS gönderilemedi:', e?.message);
@@ -1666,13 +1670,19 @@ router.patch('/profile', authenticateTesisOrSupabase, async (req, res) => {
       userId: req.user?.id,
     });
 
-    // Ad/soyad ve ünvan: key gönderildiyse (string veya null) güncelle; hiç gönderilmediyse undefined (güncelleme yok)
+    // Ad/soyad, ünvan, telefon: key gönderildiyse güncelle
     const display_name = body.hasOwnProperty('display_name')
       ? (typeof body.display_name === 'string' ? body.display_name.trim() || null : null)
       : undefined;
     const title = body.hasOwnProperty('title')
       ? (typeof body.title === 'string' ? body.title.trim() || null : null)
       : undefined;
+    let telefon_value = undefined;
+    if (body.hasOwnProperty('telefon')) {
+      const raw = typeof body.telefon === 'string' ? body.telefon.trim() : '';
+      telefon_value = raw.length >= 10 ? normalizePhone(raw) || '-' : (raw === '' ? '-' : undefined);
+      if (telefon_value === undefined) telefon_value = '-';
+    }
     const avatar_url = typeof body.avatar_url === 'string' ? body.avatar_url.trim() || null : undefined;
     const avatar_base64 = typeof body.avatar_base64 === 'string' ? body.avatar_base64.replace(/^data:image\/[^;]+;base64,/i, '').replace(/\s/g, '') : null;
 
@@ -1768,9 +1778,10 @@ router.patch('/profile', authenticateTesisOrSupabase, async (req, res) => {
       const updates = {};
       if (display_name !== undefined) updates.displayName = display_name;
       if (title !== undefined) updates.title = title;
+      if (telefon_value !== undefined) updates.telefon = telefon_value;
       if (finalAvatarUrl !== undefined) updates.avatarUrl = finalAvatarUrl;
       if (Object.keys(updates).length === 0) {
-        console.log('[auth] PATCH /profile (prisma): güncellenecek alan yok — display_name/title/avatarUrl hiçbiri gönderilmemiş veya aynı kaldı');
+        console.log('[auth] PATCH /profile (prisma): güncellenecek alan yok — display_name/title/telefon/avatarUrl hiçbiri gönderilmemiş veya aynı kaldı');
         return res.json({ success: true });
       }
       console.log('[auth] PATCH /profile prisma update (değerler):', {
@@ -1778,9 +1789,10 @@ router.patch('/profile', authenticateTesisOrSupabase, async (req, res) => {
         updateKeys: Object.keys(updates),
         displayName: updates.displayName != null ? String(updates.displayName).slice(0, 60) : updates.displayName,
         title: updates.title != null ? String(updates.title).slice(0, 60) : updates.title,
+        hasTelefon: updates.telefon != null,
         avatarUrl: updates.avatarUrl ? '(dolu)' : updates.avatarUrl,
       });
-      const updated = await prisma.kullanici.update({ where: { id: kullaniciId }, data: updates, select: { id: true, displayName: true, title: true, avatarUrl: true } });
+      const updated = await prisma.kullanici.update({ where: { id: kullaniciId }, data: updates, select: { id: true, displayName: true, title: true, avatarUrl: true, telefon: true } });
       console.log('[auth] PATCH /profile prisma update başarılı:', { id: updated.id, displayName: updated.displayName, title: updated.title, hasAvatarUrl: !!updated.avatarUrl });
       return res.json({ success: true });
     }
@@ -1817,12 +1829,13 @@ router.get('/profile', authenticateTesisOrSupabase, async (req, res) => {
       return res.json(payload);
     }
     if (req.authSource === 'prisma') {
-      const k = await prisma.kullanici.findUnique({ where: { id: req.user.id }, select: { displayName: true, title: true, avatarUrl: true, adSoyad: true } });
+      const k = await prisma.kullanici.findUnique({ where: { id: req.user.id }, select: { displayName: true, title: true, avatarUrl: true, adSoyad: true, telefon: true } });
       if (!k) return errRes(req, res, 404, 'NOT_FOUND', 'Kullanıcı bulunamadı.');
       const payload = {
         display_name: k.displayName ?? k.adSoyad,
         title: k.title ?? null,
-        avatar_url: k.avatarUrl ?? null
+        avatar_url: k.avatarUrl ?? null,
+        telefon: (k.telefon && k.telefon !== '-') ? k.telefon : null
       };
       console.log('[auth] GET /profile prisma yanıt:', { kullaniciId: req.user.id, ...payload });
       return res.json(payload);

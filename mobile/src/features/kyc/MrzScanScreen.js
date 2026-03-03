@@ -10,7 +10,7 @@ import { theme } from '../../theme';
 import { parseMrz, fixMrzOcrErrors } from '../../lib/mrz';
 import { logger } from '../../utils/logger';
 import { api } from '../../services/apiSupabase';
-import * as FileSystem from 'expo-file-system';
+import * as FileSystem from 'expo-file-system/legacy';
 /** Okutulan belgeyi backend'e kaydet (arka planda; hata sessiz). */
 async function saveOkutulanBelgeAsync(payload, photoUri) {
   try {
@@ -97,7 +97,8 @@ function getFailureReasonMessage(checksReason, failCount) {
 }
 
 // false = MRZ ekranına girince önce kamera (native okuyucu) açılır; native yoksa Kamera ile çek / Galeriden seç butonları.
-const USE_UNIFIED_MRZ_FLOW = false;
+/** true = girişte doğrudan kamera açılır, pasaport/kimlik otomatik algılanır (seçenek butonları yok). */
+const USE_UNIFIED_MRZ_FLOW = true;
 
 export default function MrzScanScreen({ navigation }) {
   const route = useRoute();
@@ -138,6 +139,7 @@ export default function MrzScanScreen({ navigation }) {
   const hasLeftScreenRef = useRef(false);
   const scanStartTimeRef = useRef(0);
   const frontCameraRef = useRef(null);
+  const mrzCameraRef = useRef(null);
   const insets = useSafeAreaInsets();
   const [permission, requestPermission] = useCameraPermissions();
 
@@ -941,7 +943,25 @@ export default function MrzScanScreen({ navigation }) {
     );
   }
 
+  // Girişte doğrudan kamera: pasaport/kimlik otomatik algılanır, seçenek butonları yok.
   if (!MrzReaderView || useUnifiedFlow) {
+    const handleDirectMrzCapture = async () => {
+      if (!mrzCameraRef.current || ocrLoading) return;
+      if (!permission?.granted) {
+        const { granted } = await requestPermission();
+        if (!granted) {
+          Toast.show({ type: 'error', text1: 'Kamera izni gerekli' });
+          return;
+        }
+        return;
+      }
+      try {
+        const photo = await mrzCameraRef.current.takePictureAsync({ quality: 0.95, base64: false });
+        if (photo?.uri) await uploadImageForMrz(photo.uri);
+      } catch (e) {
+        Toast.show({ type: 'error', text1: 'Fotoğraf alınamadı', text2: e?.message });
+      }
+    };
     return (
       <SafeAreaView style={styles.container} edges={['top']}>
         <View style={styles.header}>
@@ -951,62 +971,36 @@ export default function MrzScanScreen({ navigation }) {
           <Text style={styles.title}>MRZ Tara</Text>
           <View style={styles.iconBtn} />
         </View>
-        <View style={styles.mrzPickContainer}>
-          <Text style={styles.mrzPickTitle}>
-            {selectedDocType === DocType.ID ? 'Kimlik kartı oku' : 'Belgeyi tarayın'}
-          </Text>
-          <Text style={styles.mrzPickHint}>
-            {selectedDocType === DocType.ID
-              ? 'Kimliğin arka yüzündeki 3 satır MRZ alanını çerçeveleyip çekin veya galeriden seçin.'
-              : 'Pasaport veya kimlik (ön/arka). Kamera ile çekin veya galeriden seçin — backend MRZ/OCR okur.'}
-          </Text>
-          {ocrLoading ? (
-            <View style={styles.mrzPickLoading}>
-              <ActivityIndicator size="large" color="#fff" />
-              <Text style={styles.mrzPickLoadingText}>Okunuyor…</Text>
-            </View>
-          ) : (
-            <>
-              <View style={styles.docTypeWrap} pointerEvents="box-none">
-                <View style={styles.docTypeRow}>
-                  <TouchableOpacity
-                    style={[styles.docTypeBtn, selectedDocType === DocType.Passport && styles.docTypeBtnActive]}
-                    onPress={() => setScanMode(DocType.Passport)}
-                    activeOpacity={0.8}
-                  >
-                    <Ionicons name="document-text-outline" size={20} color={selectedDocType === DocType.Passport ? '#fff' : 'rgba(255,255,255,0.9)'} />
-                    <Text style={[styles.docTypeBtnText, selectedDocType === DocType.Passport && styles.docTypeBtnTextActive]}>Pasaport</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={[styles.docTypeBtn, selectedDocType === DocType.ID && styles.docTypeBtnActive]}
-                    onPress={() => setScanMode(DocType.ID)}
-                    activeOpacity={0.8}
-                  >
-                    <Ionicons name="card-outline" size={20} color={selectedDocType === DocType.ID ? '#fff' : 'rgba(255,255,255,0.9)'} />
-                    <Text style={[styles.docTypeBtnText, selectedDocType === DocType.ID && styles.docTypeBtnTextActive]}>Kimlik</Text>
-                  </TouchableOpacity>
-                </View>
-                <Text style={styles.docTypeHint}>Pasaport: 2 satır MRZ · Kimlik: 3 satır MRZ (arka yüz)</Text>
+        {!permission?.granted ? (
+          <View style={styles.mrzPickContainer}>
+            <Text style={styles.mrzPickHint}>Kamera izni gerekli</Text>
+            <TouchableOpacity style={styles.mrzPickPrimaryBtn} onPress={requestPermission} activeOpacity={0.8}>
+              <Ionicons name="camera" size={36} color="#fff" />
+              <Text style={styles.mrzPickPrimaryBtnText}>İzin ver</Text>
+            </TouchableOpacity>
+          </View>
+        ) : (
+          <View style={StyleSheet.absoluteFill}>
+            <CameraView ref={mrzCameraRef} style={StyleSheet.absoluteFill} facing="back" />
+            {ocrLoading ? (
+              <View style={[StyleSheet.absoluteFill, styles.mrzPickLoading, { justifyContent: 'center', alignItems: 'center' }]}>
+                <ActivityIndicator size="large" color="#fff" />
+                <Text style={styles.mrzPickLoadingText}>Okunuyor…</Text>
               </View>
-              <TouchableOpacity
-                style={styles.mrzPickPrimaryBtn}
-                onPress={handleTakePhotoWithSystemCamera}
-                activeOpacity={0.8}
-              >
-                <Ionicons name="camera" size={36} color="#fff" />
-                <Text style={styles.mrzPickPrimaryBtnText}>Kamera ile çek</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.mrzPickSecondaryBtn}
-                onPress={handlePickImage}
-                activeOpacity={0.8}
-              >
-                <Ionicons name="images-outline" size={28} color="#fff" />
-                <Text style={styles.mrzPickSecondaryBtnText}>Galeriden seç</Text>
-              </TouchableOpacity>
-            </>
-          )}
-        </View>
+            ) : (
+              <View style={styles.directMrzOverlay} pointerEvents="box-none">
+                <Text style={styles.directMrzHint}>Pasaport veya kimlik — MRZ alanını çerçeveleyip çekin (otomatik algılanır)</Text>
+                <TouchableOpacity style={styles.directMrzCaptureBtn} onPress={handleDirectMrzCapture} activeOpacity={0.8}>
+                  <Ionicons name="camera" size={40} color="#fff" />
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.directMrzGalleryBtn} onPress={handlePickImage} activeOpacity={0.8}>
+                  <Ionicons name="images-outline" size={22} color="rgba(255,255,255,0.9)" />
+                  <Text style={styles.directMrzGalleryText}>Galeriden seç</Text>
+                </TouchableOpacity>
+              </View>
+            )}
+          </View>
+        )}
       </SafeAreaView>
     );
   }
@@ -1203,6 +1197,11 @@ const styles = StyleSheet.create({
   autoScanBadgeText: { color: '#fff', fontSize: theme.typography.fontSize.sm, fontWeight: '600' },
   cameraFallbackLink: { marginTop: 12, paddingVertical: 8, paddingHorizontal: 12 },
   cameraFallbackLinkText: { color: 'rgba(255,255,255,0.9)', fontSize: 13, textDecorationLine: 'underline' },
+  directMrzOverlay: { position: 'absolute', bottom: 0, left: 0, right: 0, alignItems: 'center', paddingVertical: 28, paddingHorizontal: 20, backgroundColor: 'rgba(0,0,0,0.5)' },
+  directMrzHint: { color: 'rgba(255,255,255,0.95)', fontSize: theme.typography.fontSize.sm, textAlign: 'center', marginBottom: 20, paddingHorizontal: 16 },
+  directMrzCaptureBtn: { width: 72, height: 72, borderRadius: 36, backgroundColor: theme.colors.primary, alignItems: 'center', justifyContent: 'center', marginBottom: 16 },
+  directMrzGalleryBtn: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 10, paddingHorizontal: 16 },
+  directMrzGalleryText: { color: 'rgba(255,255,255,0.9)', fontSize: theme.typography.fontSize.sm, fontWeight: '600' },
 });
 
 const whiteResultStyles = StyleSheet.create({

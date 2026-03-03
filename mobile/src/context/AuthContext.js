@@ -376,7 +376,7 @@ export const AuthProvider = ({ children }) => {
       if (error) {
         const msg = (error.message || '').toLowerCase();
         if (msg.includes('invalid') && msg.includes('credential')) {
-          return { success: false, message: 'Bu e-posta ile giriş yapılmıyor. Telefon ile kayıt olduysanız yukarıdaki "Kod Gönder" ile şifre sıfırlayabilirsiniz.' };
+          return { success: false, message: 'Bu e-posta adresi ile kayıtlı hesap bulunamadı. Kayıt olurken kullandığınız e-postayı girin.' };
         }
         return { success: false, message: error.message };
       }
