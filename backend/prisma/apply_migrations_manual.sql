@@ -12,6 +12,10 @@ ALTER TABLE "Kullanici" ADD COLUMN IF NOT EXISTS "girisOnaylandi" BOOLEAN NOT NU
 ALTER TABLE "Kullanici" ADD COLUMN IF NOT EXISTS "girisTalepAt" TIMESTAMP(3);
 UPDATE "Kullanici" SET "girisOnaylandi" = true WHERE "girisOnaylandi" = false;
 
+-- 2b) Kullanici: hesap silme talebi (7 gün içinde kalıcı silinir)
+ALTER TABLE "Kullanici" ADD COLUMN IF NOT EXISTS "deletion_requested_at" TIMESTAMP(3);
+CREATE INDEX IF NOT EXISTS "Kullanici_deletion_requested_at_idx" ON "Kullanici"("deletion_requested_at");
+
 -- 3) Siparis tablosu (yoksa oluştur)
 CREATE TABLE IF NOT EXISTS "Siparis" (
     "id" TEXT NOT NULL,

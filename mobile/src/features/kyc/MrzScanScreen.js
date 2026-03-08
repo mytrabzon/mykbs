@@ -143,24 +143,55 @@ export default function MrzScanScreen({ navigation }) {
   const insets = useSafeAreaInsets();
   const [permission, requestPermission] = useCameraPermissions();
 
-  // İzin henüz çözülmemişse (null) ekrana girince bir kez iste; böylece kamera açılır
-  useEffect(() => {
-    if (!MrzReaderView || !USE_UNIFIED_MRZ_FLOW) return;
-    if (permission === null) {
-      requestPermission().catch(() => {});
-    }
-  }, [permission, requestPermission]);
+  // İzin ekrana girildiği anda (MRZ kartı tıklanır tıklanmaz) sistem dialogu çıksın – useFocusEffect ile anında tetikle
+  const hasRequestedPermissionRef = useRef(false);
+  useFocusEffect(
+    useCallback(() => {
+      if (!USE_UNIFIED_MRZ_FLOW) return;
+      if (permission?.granted) return;
+      if (hasRequestedPermissionRef.current) return;
+      hasRequestedPermissionRef.current = true;
+      requestPermission().catch((e) => logger.warn('MRZ kamera izni isteği hatası', e?.message));
+      return () => { hasRequestedPermissionRef.current = false; };
+    }, [USE_UNIFIED_MRZ_FLOW, permission?.granted, requestPermission])
+  );
 
-  // İzin verildikten sonra kamera bileşenini kısa gecikmeyle mount et (siyah ekran önlemi)
+  // İzin sonrası kısa gecikme: Kamera hemen mount edilirse siyah ekran oluyor. Timer ref ile tutuluyor ki permission referansı değişince cleanup silmesin.
   const [mrzCameraMountReady, setMrzCameraMountReady] = useState(false);
+  const cameraReadyTimerRef = useRef(null);
   useEffect(() => {
     if (!permission?.granted) {
+      if (cameraReadyTimerRef.current) {
+        clearTimeout(cameraReadyTimerRef.current);
+        cameraReadyTimerRef.current = null;
+      }
       setMrzCameraMountReady(false);
       return;
     }
-    const t = setTimeout(() => setMrzCameraMountReady(true), 400);
-    return () => clearTimeout(t);
+    setMrzCameraMountReady(false);
+    cameraReadyTimerRef.current = setTimeout(() => {
+      cameraReadyTimerRef.current = null;
+      setMrzCameraMountReady(true);
+    }, 350);
+    return () => {
+      if (cameraReadyTimerRef.current) {
+        clearTimeout(cameraReadyTimerRef.current);
+        cameraReadyTimerRef.current = null;
+      }
+    };
   }, [permission?.granted]);
+
+  // Ekrana her girişte (geri dönünce) unified flow için gecikmeyi tetikle
+  const permissionGrantedRef = useRef(permission?.granted);
+  permissionGrantedRef.current = permission?.granted;
+  useFocusEffect(
+    useCallback(() => {
+      if (!USE_UNIFIED_MRZ_FLOW || !permissionGrantedRef.current) return;
+      setMrzCameraMountReady(false);
+      const id = setTimeout(() => setMrzCameraMountReady(true), 350);
+      return () => clearTimeout(id);
+    }, [USE_UNIFIED_MRZ_FLOW])
+  );
 
   // İkinci girişte siyah ekran önlemi: kamera mount'unu kısa geciktir (native kameranın serbest kalması için)
   const [cameraReadyToShow, setCameraReadyToShow] = useState(false);
@@ -194,6 +225,7 @@ export default function MrzScanScreen({ navigation }) {
           clearTimeout(t);
           hasLeftScreenRef.current = true;
           setIsScreenFocused(false);
+          setMrzCameraMountReady(false);
           if (TorchModule) {
             try {
               TorchModule.switchState(false);
@@ -202,14 +234,17 @@ export default function MrzScanScreen({ navigation }) {
         };
       }
       setCameraReadyToShow(false);
+      setMrzCameraMountReady(false);
       const timer = setTimeout(() => {
         setCameraKey((k) => k + 1);
         setCameraReadyToShow(true);
+        setMrzCameraMountReady(true);
       }, 400);
       return () => {
         clearTimeout(timer);
         hasLeftScreenRef.current = true;
         setIsScreenFocused(false);
+        setMrzCameraMountReady(false);
         if (TorchModule) {
           try {
             TorchModule.switchState(false);
@@ -997,12 +1032,7 @@ export default function MrzScanScreen({ navigation }) {
           <Text style={styles.title}>MRZ Tara</Text>
           <View style={styles.iconBtn} />
         </View>
-        {permission === null ? (
-          <View style={styles.mrzPickContainer}>
-            <ActivityIndicator size="large" color="#fff" />
-            <Text style={[styles.mrzPickHint, { marginTop: 16 }]}>Kamera hazırlanıyor…</Text>
-          </View>
-        ) : !permission?.granted ? (
+        {!permission?.granted ? (
           <View style={styles.mrzPickContainer}>
             <Text style={styles.mrzPickHint}>Kamera izni gerekli. MRZ tarayabilmek için izin verin.</Text>
             <TouchableOpacity style={styles.mrzPickPrimaryBtn} onPress={async () => { const r = await requestPermission(); if (!r?.granted) Toast.show({ type: 'error', text1: 'İzin reddedildi', text2: 'Ayarlar\'dan kamera iznini açabilirsiniz.' }); }} activeOpacity={0.8}>
@@ -1011,14 +1041,18 @@ export default function MrzScanScreen({ navigation }) {
             </TouchableOpacity>
           </View>
         ) : !mrzCameraMountReady ? (
-          <View style={styles.mrzPickContainer}>
+          <View style={[styles.mrzPickContainer, { flex: 1 }]} pointerEvents="box-none">
             <ActivityIndicator size="large" color="#fff" />
             <Text style={[styles.mrzPickHint, { marginTop: 16 }]}>Kamera açılıyor…</Text>
+            <TouchableOpacity style={[styles.mrzPickPrimaryBtn, { marginTop: 24 }]} onPress={goBack} activeOpacity={0.8}>
+              <Ionicons name="arrow-back" size={24} color="#fff" />
+              <Text style={styles.mrzPickPrimaryBtnText}>Geri</Text>
+            </TouchableOpacity>
           </View>
         ) : (
-          <View style={[StyleSheet.absoluteFill, styles.mrzCameraWrap]}>
+          <View style={[StyleSheet.absoluteFill, styles.mrzCameraWrap]} collapsable={false}>
             <CameraView
-              key={`mrz-cam-${cameraKey}-${mrzCameraMountReady}`}
+              key={`mrz-cam-${cameraKey}`}
               ref={mrzCameraRef}
               style={StyleSheet.absoluteFill}
               facing="back"

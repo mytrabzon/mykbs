@@ -1635,6 +1635,9 @@ router.get('/me', authenticateTesisOrSupabase, async (req, res) => {
       if (appRole?.role === 'admin') role = 'admin';
     }
 
+    const deletionRequestedAt = kullanici.deletion_requested_at ? kullanici.deletion_requested_at.toISOString() : null;
+    const deletionAt = deletionRequestedAt ? new Date(new Date(deletionRequestedAt).getTime() + 7 * 24 * 60 * 60 * 1000).toISOString() : null;
+
     res.json({
       kullanici: {
         id: kullanici.id,
@@ -1656,7 +1659,10 @@ router.get('/me', authenticateTesisOrSupabase, async (req, res) => {
       },
       tesis: kullanici.tesis,
       privacyPolicyAcceptedAt: true,
-      termsOfServiceAcceptedAt: true
+      termsOfServiceAcceptedAt: true,
+      accountPendingDeletion: deletionRequestedAt ? true : undefined,
+      deletionRequestedAt: deletionRequestedAt || undefined,
+      deletionAt: deletionAt || undefined
     });
   } catch (error) {
     const requestId = req.requestId || '-';
@@ -1751,24 +1757,38 @@ router.post('/terms-accept', authenticateTesisOrSupabase, async (req, res) => {
 const DELETION_GRACE_DAYS = 7;
 
 /**
- * Hesap silme talebi. 7 gün içinde tüm veriler silinir; bu sürede kullanıcı giriş yapıp hesabı geri alabilir.
+ * Hesap silme talebi. E-posta/telefon/misafir/tesis farketmez; tüm hesaplar silme talebinde bulunabilir.
+ * 7 gün içinde tüm veriler silinir; bu sürede kullanıcı giriş yapıp hesabı geri alabilir.
  */
 router.post('/request-account-deletion', authenticateTesisOrSupabase, async (req, res) => {
   const { errorResponse: errRes } = require('../lib/errorResponse');
   try {
-    if (req.authSource !== 'supabase' || !req.user?.id) {
-      return errRes(req, res, 400, 'NOT_SUPPORTED', 'Bu işlem yalnızca e-posta/telefon ile giriş yapan hesaplar için geçerlidir.');
-    }
-    if (!supabaseAdmin) return errRes(req, res, 503, 'SERVICE_UNAVAILABLE', 'Servis kullanılamıyor.');
-    const userId = req.user.id;
-    const now = new Date().toISOString();
-    const { error } = await supabaseAdmin.from('profiles').update({ deletion_requested_at: now, updated_at: now }).eq('id', userId);
-    if (error) {
-      console.error('[auth] request-account-deletion error:', error);
-      return errRes(req, res, 500, 'UPDATE_FAILED', 'İşlem yapılamadı.');
-    }
+    const now = new Date();
+    const nowIso = now.toISOString();
     const deletionAt = new Date(Date.now() + DELETION_GRACE_DAYS * 24 * 60 * 60 * 1000).toISOString();
-    return res.json({ ok: true, deletionRequestedAt: now, deletionAt, message: `${DELETION_GRACE_DAYS} gün içinde hesabınız ve tüm verileriniz kalıcı olarak silinecektir. Bu sürede giriş yaparak hesabı geri alabilirsiniz.` });
+    const successPayload = { ok: true, deletionRequestedAt: nowIso, deletionAt, message: `${DELETION_GRACE_DAYS} gün içinde hesabınız ve tüm verileriniz kalıcı olarak silinecektir. Bu sürede giriş yaparak hesabı geri alabilirsiniz.` };
+
+    if (req.authSource === 'supabase' && req.user?.id) {
+      if (!supabaseAdmin) return errRes(req, res, 503, 'SERVICE_UNAVAILABLE', 'Servis kullanılamıyor.');
+      const userId = req.user.id;
+      const { error } = await supabaseAdmin.from('profiles').update({ deletion_requested_at: nowIso, updated_at: nowIso }).eq('id', userId);
+      if (error) {
+        console.error('[auth] request-account-deletion error:', error);
+        return errRes(req, res, 500, 'UPDATE_FAILED', 'İşlem yapılamadı.');
+      }
+      return res.json(successPayload);
+    }
+
+    if (req.authSource === 'prisma' && req.user?.id) {
+      const userId = req.user.id;
+      await prisma.kullanici.update({
+        where: { id: userId },
+        data: { deletion_requested_at: now, updatedAt: now }
+      });
+      return res.json(successPayload);
+    }
+
+    return errRes(req, res, 400, 'NOT_AUTHENTICATED', 'Oturum bulunamadı. Lütfen tekrar giriş yapıp deneyin.');
   } catch (e) {
     console.error('[auth] request-account-deletion error:', e);
     return require('../lib/errorResponse').errorResponse(req, res, 500, 'UNHANDLED_ERROR', e?.message || 'Bir hata oluştu.');
@@ -1776,26 +1796,39 @@ router.post('/request-account-deletion', authenticateTesisOrSupabase, async (req
 });
 
 /**
- * Hesap silme talebini iptal et (7 gün içinde).
+ * Hesap silme talebini iptal et (7 gün içinde). Supabase ve Prisma hesapları için.
  */
 router.post('/restore-account', authenticateTesisOrSupabase, async (req, res) => {
   const { errorResponse: errRes } = require('../lib/errorResponse');
   try {
-    if (req.authSource !== 'supabase' || !req.user?.id) {
-      return errRes(req, res, 400, 'NOT_SUPPORTED', 'Bu işlem yalnızca e-posta/telefon ile giriş yapan hesaplar için geçerlidir.');
+    if (req.authSource === 'supabase' && req.user?.id) {
+      if (!supabaseAdmin) return errRes(req, res, 503, 'SERVICE_UNAVAILABLE', 'Servis kullanılamıyor.');
+      const userId = req.user.id;
+      const { data: profile } = await supabaseAdmin.from('profiles').select('deletion_requested_at').eq('id', userId).maybeSingle();
+      if (!profile?.deletion_requested_at) {
+        return res.json({ ok: true, restored: false, message: 'Hesap zaten aktif.' });
+      }
+      const { error } = await supabaseAdmin.from('profiles').update({ deletion_requested_at: null, updated_at: new Date().toISOString() }).eq('id', userId);
+      if (error) {
+        console.error('[auth] restore-account error:', error);
+        return errRes(req, res, 500, 'UPDATE_FAILED', 'İşlem yapılamadı.');
+      }
+      return res.json({ ok: true, restored: true, message: 'Hesabınız geri alındı.' });
     }
-    if (!supabaseAdmin) return errRes(req, res, 503, 'SERVICE_UNAVAILABLE', 'Servis kullanılamıyor.');
-    const userId = req.user.id;
-    const { data: profile } = await supabaseAdmin.from('profiles').select('deletion_requested_at').eq('id', userId).maybeSingle();
-    if (!profile?.deletion_requested_at) {
-      return res.json({ ok: true, restored: false, message: 'Hesap zaten aktif.' });
+
+    if (req.authSource === 'prisma' && req.user?.id) {
+      const k = await prisma.kullanici.findUnique({ where: { id: req.user.id }, select: { deletion_requested_at: true } });
+      if (!k?.deletion_requested_at) {
+        return res.json({ ok: true, restored: false, message: 'Hesap zaten aktif.' });
+      }
+      await prisma.kullanici.update({
+        where: { id: req.user.id },
+        data: { deletion_requested_at: null, updatedAt: new Date() }
+      });
+      return res.json({ ok: true, restored: true, message: 'Hesabınız geri alındı.' });
     }
-    const { error } = await supabaseAdmin.from('profiles').update({ deletion_requested_at: null, updated_at: new Date().toISOString() }).eq('id', userId);
-    if (error) {
-      console.error('[auth] restore-account error:', error);
-      return errRes(req, res, 500, 'UPDATE_FAILED', 'İşlem yapılamadı.');
-    }
-    return res.json({ ok: true, restored: true, message: 'Hesabınız geri alındı.' });
+
+    return errRes(req, res, 400, 'NOT_AUTHENTICATED', 'Oturum bulunamadı.');
   } catch (e) {
     console.error('[auth] restore-account error:', e);
     return require('../lib/errorResponse').errorResponse(req, res, 500, 'UNHANDLED_ERROR', e?.message || 'Bir hata oluştu.');

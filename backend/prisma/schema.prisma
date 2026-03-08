@@ -135,15 +135,19 @@ model Kullanici {
   title             String?  // Ünvan / pozisyon
   avatarUrl         String?
 
+  // Hesap silme talebi (7 gün içinde kalıcı silinir; bu sürede geri alınabilir)
+  deletion_requested_at DateTime?
+
   tesis             Tesis    @relation(fields: [tesisId], references: [id], onDelete: Cascade)
   hotelStaffs       HotelStaff[]
 
   createdAt         DateTime  @default(now())
   updatedAt         DateTime  @updatedAt
-  
+
   @@index([tesisId])
   @@index([email])
   @@index([telefon])
+  @@index([deletion_requested_at])
 }
 
 // Oda Modeli

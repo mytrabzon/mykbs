@@ -1,9 +1,10 @@
 /**
  * POST /internal/purge-deleted-accounts — 7 gün önce silme talebinde bulunmuş hesapları kalıcı siler.
- * Railway cron (günlük) veya manuel. Header: x-worker-secret
+ * Supabase profiles + Prisma Kullanici. Railway cron (günlük) veya manuel. Header: x-worker-secret
  */
 const express = require('express');
 const { supabaseAdmin } = require('../../lib/supabaseAdmin');
+const { prisma } = require('../../lib/prisma');
 
 const router = express.Router();
 const WORKER_SECRET = process.env.WORKER_SECRET;
@@ -14,20 +15,53 @@ router.post('/purge-deleted-accounts', async (req, res) => {
   if (!WORKER_SECRET || secret !== WORKER_SECRET) {
     return res.status(401).json({ error: 'Unauthorized' });
   }
-  if (!supabaseAdmin) {
-    return res.status(503).json({ error: 'Supabase not configured' });
-  }
 
-  const cutoff = new Date(Date.now() - DELETION_GRACE_DAYS * 24 * 60 * 60 * 1000).toISOString();
+  const cutoff = new Date(Date.now() - DELETION_GRACE_DAYS * 24 * 60 * 60 * 1000);
+  const cutoffIso = cutoff.toISOString();
   const purged = [];
+  const purgedPrisma = [];
   const errors = [];
 
   try {
+    // 1) Prisma Kullanici — silme talebi 7 günden eski olanları sil (HotelStaff cascade ile silinir)
+    if (prisma) {
+      try {
+        const toDelete = await prisma.kullanici.findMany({
+          where: { deletion_requested_at: { lt: cutoff, not: null } },
+          select: { id: true }
+        });
+        for (const k of toDelete) {
+          try {
+            await prisma.kullanici.delete({ where: { id: k.id } });
+            purgedPrisma.push(k.id);
+          } catch (e) {
+            console.error('[purge-deleted-accounts] Prisma delete error:', k.id, e?.message || e);
+            errors.push({ userId: k.id, source: 'prisma', error: e?.message || String(e) });
+          }
+        }
+      } catch (e) {
+        console.error('[purge-deleted-accounts] Prisma list error:', e?.message || e);
+        errors.push({ source: 'prisma_list', error: e?.message || String(e) });
+      }
+    }
+
+    // 2) Supabase profiles
+    if (!supabaseAdmin) {
+      return res.json({
+        ok: true,
+        purged: purged.length,
+        purgedIds: purged,
+        purgedPrisma: purgedPrisma.length,
+        purgedPrismaIds: purgedPrisma,
+        errors: errors.length ? errors : undefined,
+      });
+    }
+
     const { data: profiles, error: listErr } = await supabaseAdmin
       .from('profiles')
       .select('id, deletion_requested_at')
       .not('deletion_requested_at', 'is', null)
-      .lt('deletion_requested_at', cutoff);
+      .lt('deletion_requested_at', cutoffIso);
 
     if (listErr) {
       console.error('[purge-deleted-accounts] list error:', listErr);
@@ -70,6 +104,8 @@ router.post('/purge-deleted-accounts', async (req, res) => {
       ok: true,
       purged: purged.length,
       purgedIds: purged,
+      purgedPrisma: purgedPrisma.length,
+      purgedPrismaIds: purgedPrisma,
       errors: errors.length ? errors : undefined,
     });
   } catch (e) {

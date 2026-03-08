@@ -95,9 +95,19 @@ function toResponse<T>(data: T): { data: T } {
   return { data };
 }
 
-/** Backend fetch + her request için log: full URL, status, ok/code/message */
+/** 429 ve diğer !r.ok durumlarında anlamlı mesajla hata fırlat */
+function throwIfNotOk(r: Response, data: Record<string, unknown> | null, defaultMessage: string): void {
+  if (r.ok) return;
+  const status = r.status;
+  const message =
+    status === 429
+      ? 'Çok fazla istek (429). Lütfen biraz sonra tekrar deneyin.'
+      : String((data as { message?: string })?.message ?? (data as { error?: string })?.error ?? defaultMessage);
+  throw Object.assign(new Error(message), { response: { status, data: data ?? {} } });
+}
+
+/** Backend fetch + her request için detaylı log: full URL, status, 429 ise RATE_LIMIT ve body önizleme */
 async function fetchWithLog(url: string, opts: RequestInit): Promise<Response> {
-  console.log('[REQUEST] fullUrl=', url);
   const r = await fetch(url, opts);
   r
     .clone()
@@ -107,9 +117,28 @@ async function fetchWithLog(url: string, opts: RequestInit): Promise<Response> {
       try {
         parsed = text ? JSON.parse(text) : {};
       } catch (_) {}
-      console.log('[REQUEST] status=', r.status, 'ok=', parsed?.ok, 'code=', parsed?.code, 'message=', parsed?.message);
+      const status = r.status;
+      const is429 = status === 429;
+      if (is429) {
+        const bodyPreview = (text && text.length > 0) ? text.slice(0, 200) : '(boş)';
+        console.log('[REQUEST]', {
+          fullUrl: url,
+          status,
+          rateLimit: true,
+          hint: 'Çok fazla istek - sunucu geçici sınır uyguluyor',
+          bodyPreview: bodyPreview.length < 200 ? bodyPreview : bodyPreview + '…',
+        });
+      } else {
+        console.log('[REQUEST]', {
+          fullUrl: url,
+          status,
+          ok: parsed?.ok,
+          code: parsed?.code,
+          message: parsed?.message,
+        });
+      }
     })
-    .catch(() => console.log('[REQUEST] status=', r.status, 'body=non-json'));
+    .catch(() => console.log('[REQUEST]', { fullUrl: url, status: r.status, body: 'okunamadı' }));
   return r;
 }
 
@@ -178,8 +207,8 @@ export const api = {
         } finally {
           clearTimeout(timeoutId);
         }
-        const data = await r.json().catch(() => ({}));
-        if (!r.ok) throw Object.assign(new Error((data as { message?: string })?.message || 'Bilgi alınamadı'), { response: { status: r.status, data } });
+        const data = await r.json().catch(() => ({})) as Record<string, unknown>;
+        throwIfNotOk(r, data, 'Bilgi alınamadı');
         return toResponse(data);
       }
       if (pathname === '/auth/profile' || pathname === 'auth/profile') {
@@ -193,8 +222,8 @@ export const api = {
           method: 'GET',
           headers: { Authorization: `Bearer ${token}` },
         });
-        const data = await r.json().catch(() => ({}));
-        if (!r.ok) throw Object.assign(new Error((data as { message?: string })?.message || 'Profil alınamadı'), { response: { status: r.status, data } });
+        const data = await r.json().catch(() => ({})) as Record<string, unknown>;
+        throwIfNotOk(r, data, 'Profil alınamadı');
         return toResponse(data);
       }
       if (pathname === '/tesis' || pathname === 'tesis') {
@@ -209,8 +238,8 @@ export const api = {
             method: 'GET',
             headers: { Authorization: `Bearer ${token}` },
           });
-          const data = await r.json().catch(() => ({}));
-          if (!r.ok) throw Object.assign(new Error((data as { message?: string }).message || 'Tesis alınamadı'), { response: { status: r.status, data } });
+          const data = await r.json().catch(() => ({})) as Record<string, unknown>;
+          throwIfNotOk(r, data, 'Tesis alınamadı');
           return toResponse(data as { tesis: unknown; ozet: unknown });
         }
         const res = await callFn('facilities_list', {}, token);
@@ -228,8 +257,8 @@ export const api = {
             method: 'GET',
             headers: { Authorization: `Bearer ${token}` },
           });
-          const data = await r.json().catch(() => ({}));
-          if (!r.ok) throw Object.assign(new Error((data as { message?: string }).message || 'Yetkisiz'), { response: { status: r.status, data } });
+          const data = await r.json().catch(() => ({})) as Record<string, unknown>;
+          throwIfNotOk(r, data, 'Yetkisiz');
           return toResponse(data);
         }
         const res = await callFn('settings_get', {}, token);
@@ -243,8 +272,8 @@ export const api = {
           method: 'GET',
           headers: { Authorization: `Bearer ${token}` },
         });
-        const data = await r.json().catch(() => ({}));
-        if (!r.ok) throw Object.assign(new Error((data as { message?: string })?.message || 'Durum alınamadı'), { response: { status: r.status, data } });
+        const data = await r.json().catch(() => ({})) as Record<string, unknown>;
+        throwIfNotOk(r, data, 'Durum alınamadı');
         return toResponse(data);
       }
       if (pathname === '/okutulan-belgeler' || pathname === 'okutulan-belgeler') {
@@ -257,7 +286,7 @@ export const api = {
         });
         const data = await r.json().catch(() => ({}));
         if (r.status === 404) return toResponse({ items: [], nextCursor: null });
-        if (!r.ok) throw Object.assign(new Error((data as { message?: string })?.message || 'Liste alınamadı'), { response: { status: r.status, data } });
+        throwIfNotOk(r, data as Record<string, unknown>, 'Liste alınamadı');
         return toResponse(data);
       }
       if (pathname === '/oda' || pathname === 'oda') {
@@ -560,8 +589,8 @@ export const api = {
           headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
           body: JSON.stringify(payload || {}),
         });
-        const data = await r.json().catch(() => ({}));
-        if (!r.ok) throw Object.assign(new Error((data as { message?: string })?.message || 'İşlem yapılamadı'), { response: { status: r.status, data } });
+        const data = await r.json().catch(() => ({})) as Record<string, unknown>;
+        throwIfNotOk(r, data, 'İşlem yapılamadı');
         return toResponse(data);
       }
       if (pathname === '/auth/request-account-deletion' || pathname === 'auth/request-account-deletion') {
@@ -572,8 +601,8 @@ export const api = {
           headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
           body: JSON.stringify(payload || {}),
         });
-        const data = await r.json().catch(() => ({}));
-        if (!r.ok) throw Object.assign(new Error((data as { message?: string })?.message || 'İşlem yapılamadı'), { response: { status: r.status, data } });
+        const data = await r.json().catch(() => ({})) as Record<string, unknown>;
+        throwIfNotOk(r, data, 'İşlem yapılamadı');
         return toResponse(data);
       }
       if (pathname === '/nfc/okut' || pathname === 'nfc/okut') {
@@ -902,8 +931,8 @@ export const api = {
           headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
           body: JSON.stringify(body || {}),
         });
-        const data = await r.json().catch(() => ({}));
-        if (!r.ok) throw Object.assign(new Error((data as { message?: string })?.message || 'Profil güncellenemedi'), { response: { status: r.status, data } });
+        const data = await r.json().catch(() => ({})) as Record<string, unknown>;
+        throwIfNotOk(r, data, 'Profil güncellenemedi');
         return toResponse(data);
       }
       if (pathname === '/tesis/kbs' || pathname === 'tesis/kbs') {

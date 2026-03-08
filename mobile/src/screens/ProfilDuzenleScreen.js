@@ -276,6 +276,7 @@ export default function ProfilDuzenleScreen() {
   }
 
   const showAvatar = localAvatarUri || avatarUrl;
+  const avatarDisplayUri = localAvatarUri || (avatarUrl ? `${avatarUrl}${avatarUrlTs ? `?t=${avatarUrlTs}` : ''}` : null);
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
