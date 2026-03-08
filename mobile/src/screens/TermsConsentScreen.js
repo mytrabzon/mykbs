@@ -53,10 +53,14 @@ export default function TermsConsentScreen() {
     try {
       if (isAuthenticated) {
         await acceptTerms();
+        if (navigation.isFocused?.()) {
+          if (navigation.canGoBack?.()) navigation.goBack();
+          else navigation.navigate('Main');
+        }
       } else {
         await acceptTermsLocally();
+        if (navigation.isFocused?.()) navigation.replace('Login');
       }
-      if (!isAuthenticated && navigation.isFocused?.()) navigation.replace('Login');
     } catch (e) {
       setError(e?.response?.data?.message || e?.message || 'Onay kaydedilemedi.');
     } finally {

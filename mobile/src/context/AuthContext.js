@@ -286,8 +286,12 @@ export const AuthProvider = ({ children }) => {
       try {
         const res = await api.get('/auth/me');
         if (res?.data && mounted.current) {
-          setUser(res.data.kullanici ?? res.data.user);
-          setTesis(res.data.tesis ?? res.data.tesisData);
+          const kullanici = res.data.kullanici ?? res.data.user;
+          const tesisData = res.data.tesis ?? res.data.tesisData;
+          setUser(kullanici);
+          setTesis(tesisData);
+          if (kullanici) await AsyncStorage.setItem(AUTH_STORAGE_KEYS.USER, JSON.stringify(kullanici));
+          if (tesisData) await AsyncStorage.setItem(AUTH_STORAGE_KEYS.TESIS, JSON.stringify(tesisData));
         }
       } catch (_) {}
     }
@@ -567,27 +571,35 @@ export const AuthProvider = ({ children }) => {
           setLocalTermsAcceptedAt(now);
         },
         acceptPrivacy: async () => {
+          const now = new Date().toISOString();
           try {
-            let supabaseToken = null;
+            let tokenToUse = null;
             if (supabase?.auth) {
               const { data: { session } } = await supabase.auth.getSession();
-              if (session?.expires_at && session.expires_at <= Math.floor(Date.now() / 1000) + 300) {
-                const { data: { session: refreshed } } = await supabase.auth.refreshSession();
-                supabaseToken = refreshed?.access_token ?? session?.access_token;
-              } else {
-                supabaseToken = session?.access_token;
+              if (session?.access_token) {
+                if (session?.expires_at && session.expires_at <= Math.floor(Date.now() / 1000) + 300) {
+                  const { data: { session: refreshed } } = await supabase.auth.refreshSession();
+                  tokenToUse = refreshed?.access_token ?? session?.access_token;
+                } else {
+                  tokenToUse = session?.access_token;
+                }
               }
             }
-            if (!supabaseToken) {
-              const err = new Error('Oturum bulunamadı. Lütfen çıkış yapıp tekrar giriş yapın.');
-              err.response = { status: 401, data: { code: 'INVALID_TOKEN' } };
-              throw err;
-            }
-            const res = await api.post('/auth/privacy-accept', {}, { token: supabaseToken });
+            const res = await api.post('/auth/privacy-accept', {}, tokenToUse ? { token: tokenToUse } : undefined);
             if (res?.data?.privacyPolicyAcceptedAt) {
               setPrivacyPolicyAcceptedAt(res.data.privacyPolicyAcceptedAt);
             }
           } catch (e) {
+            const status = e?.response?.status;
+            const isRateLimit = status === 429;
+            const isNetwork = !e?.response && (e?.message?.includes('Network') || e?.code === 'ECONNABORTED');
+            if (isRateLimit || isNetwork) {
+              await AsyncStorage.setItem(AUTH_STORAGE_KEYS.LOCAL_PRIVACY_ACCEPTED_AT, now);
+              setLocalPrivacyAcceptedAt(now);
+              setPrivacyPolicyAcceptedAt(now);
+              logger.warn('acceptPrivacy: rate limit/network, local consent saved', status || e?.message);
+              return;
+            }
             logger.error('acceptPrivacy error', e);
             throw e;
           }
@@ -595,27 +607,35 @@ export const AuthProvider = ({ children }) => {
         /** Kullanım şartları onayı (ISO tarih string veya true). Yoksa lobide onay ekranı gösterilir. */
         termsOfServiceAcceptedAt,
         acceptTerms: async () => {
+          const now = new Date().toISOString();
           try {
-            let supabaseToken = null;
+            let tokenToUse = null;
             if (supabase?.auth) {
               const { data: { session } } = await supabase.auth.getSession();
-              if (session?.expires_at && session.expires_at <= Math.floor(Date.now() / 1000) + 300) {
-                const { data: { session: refreshed } } = await supabase.auth.refreshSession();
-                supabaseToken = refreshed?.access_token ?? session?.access_token;
-              } else {
-                supabaseToken = session?.access_token;
+              if (session?.access_token) {
+                if (session?.expires_at && session.expires_at <= Math.floor(Date.now() / 1000) + 300) {
+                  const { data: { session: refreshed } } = await supabase.auth.refreshSession();
+                  tokenToUse = refreshed?.access_token ?? session?.access_token;
+                } else {
+                  tokenToUse = session?.access_token;
+                }
               }
             }
-            if (!supabaseToken) {
-              const err = new Error('Oturum bulunamadı. Lütfen çıkış yapıp tekrar giriş yapın.');
-              err.response = { status: 401, data: { code: 'INVALID_TOKEN' } };
-              throw err;
-            }
-            const res = await api.post('/auth/terms-accept', {}, { token: supabaseToken });
+            const res = await api.post('/auth/terms-accept', {}, tokenToUse ? { token: tokenToUse } : undefined);
             if (res?.data?.termsOfServiceAcceptedAt) {
               setTermsOfServiceAcceptedAt(res.data.termsOfServiceAcceptedAt);
             }
           } catch (e) {
+            const status = e?.response?.status;
+            const isRateLimit = status === 429;
+            const isNetwork = !e?.response && (e?.message?.includes('Network') || e?.code === 'ECONNABORTED');
+            if (isRateLimit || isNetwork) {
+              await AsyncStorage.setItem(AUTH_STORAGE_KEYS.LOCAL_TERMS_ACCEPTED_AT, now);
+              setLocalTermsAcceptedAt(now);
+              setTermsOfServiceAcceptedAt(now);
+              logger.warn('acceptTerms: rate limit/network, local consent saved', status || e?.message);
+              return;
+            }
             logger.error('acceptTerms error', e);
             throw e;
           }

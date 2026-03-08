@@ -34,11 +34,12 @@ import { typography, spacing } from '../theme';
 export default function ProfilDuzenleScreen() {
   const navigation = useNavigation();
   const { colors } = useTheme();
-  const { user, tesis, isLoggedIn, getSupabaseToken } = useAuth();
+  const { user, tesis, isLoggedIn, getSupabaseToken, refreshMe } = useAuth();
   const [displayName, setDisplayName] = useState(() => (user?.adSoyad || '').trim());
   const [title, setTitle] = useState('');
   const [telefon, setTelefon] = useState('');
   const [avatarUrl, setAvatarUrl] = useState(null);
+  const [avatarUrlTs, setAvatarUrlTs] = useState(0);
   const [localAvatarUri, setLocalAvatarUri] = useState(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -219,7 +220,10 @@ export default function ProfilDuzenleScreen() {
 
       if (backendAvailable) {
         console.log('[ProfilDuzenle] Backend PATCH /auth/profile çağrılıyor');
-        await withTimeout(api.put('/auth/profile', body), SAVE_TIMEOUT_MS, 'Kayıt zaman aşımına uğradı. İnterneti kontrol edip tekrar deneyin.');
+        const res = await withTimeout(api.put('/auth/profile', body), SAVE_TIMEOUT_MS, 'Kayıt zaman aşımına uğradı. İnterneti kontrol edip tekrar deneyin.');
+        const data = res?.data;
+        if (data?.avatar_url) setAvatarUrl(data.avatar_url);
+        if (typeof refreshMe === 'function') await refreshMe();
         console.log('[ProfilDuzenle] Backend profil kaydı tamamlandı');
       } else {
         if (!token) {
@@ -236,6 +240,11 @@ export default function ProfilDuzenleScreen() {
           communityApi.updateProfile({ display_name: body.display_name, avatar_url: finalAvatarUrl, title: body.title }, token),
           SAVE_TIMEOUT_MS
         );
+        if (finalAvatarUrl) {
+          setAvatarUrl(finalAvatarUrl);
+          setAvatarUrlTs(Date.now());
+        }
+        if (typeof refreshMe === 'function') await refreshMe();
         console.log('[ProfilDuzenle] Supabase profil kaydı tamamlandı');
       }
 
@@ -288,7 +297,7 @@ export default function ProfilDuzenleScreen() {
           <Text style={[styles.label, { color: colors.textSecondary }]}>Avatar</Text>
           <TouchableOpacity onPress={pickAvatar} style={[styles.avatarWrap, { backgroundColor: colors.background }]}>
             {showAvatar ? (
-              <Image source={{ uri: localAvatarUri || avatarUrl }} style={styles.avatar} />
+              <Image source={{ uri: avatarDisplayUri }} style={styles.avatar} />
             ) : (
               <Ionicons name="person" size={48} color={colors.textSecondary} />
             )}

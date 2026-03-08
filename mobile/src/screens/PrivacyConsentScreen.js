@@ -50,10 +50,14 @@ export default function PrivacyConsentScreen() {
     try {
       if (isAuthenticated) {
         await acceptPrivacy();
+        if (navigation.isFocused?.()) {
+          if (navigation.canGoBack?.()) navigation.goBack();
+          else navigation.navigate('Main');
+        }
       } else {
         await acceptPrivacyLocally();
+        if (navigation.isFocused?.()) navigation.replace('TermsConsent');
       }
-      if (!isAuthenticated && navigation.isFocused?.()) navigation.replace('TermsConsent');
     } catch (e) {
       setError(e?.response?.data?.message || e?.message || 'Onay kaydedilemedi.');
     } finally {

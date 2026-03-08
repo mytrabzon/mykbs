@@ -421,8 +421,13 @@ class DataService {
           headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : {},
         });
         const raw = await r.text();
-        const data: any = raw ? JSON.parse(raw) : {};
-        if (!r.ok) return;
+        if (!r.ok) return; // 429 vb. – arka planda sessizce atla, cache kullanılmaya devam eder
+        let data: any = {};
+        try {
+          data = raw ? JSON.parse(raw) : {};
+        } catch {
+          return; // JSON parse hatası (örn. rate limit düz metin yanıtı) – sessizce çık
+        }
         const odalar: OdaData[] = (data.odalar || []).map((oda: any) => ({
           id: oda.id,
           odaNumarasi: oda.odaNumarasi,
@@ -527,13 +532,27 @@ class DataService {
         try {
           data = raw ? JSON.parse(raw) : {};
         } catch (parseErr: any) {
+          // 429 ve diğer hatalarda sunucu bazen JSON yerine düz metin döner (örn. "Too many requests, please try again later.")
+          if (r.status === 429 && this.odalarCache.has(cacheKey)) {
+            const cached = this.odalarCache.get(cacheKey)!;
+            logger.warn('[odalar] 429 (rate limit), cache kullanılıyor', { filtre, count: cached.length });
+            return cached;
+          }
+          const msg = r.status === 429
+            ? (raw && raw.length < 200 ? raw : 'Çok fazla istek. Lütfen biraz sonra tekrar deneyin.')
+            : `Sunucu yanıtı okunamadı (HTTP ${r.status}).`;
           logger.error('[odalar] Node yanıt parse hatası', { step: lastStep, status: r.status, rawPreview: (raw || '').slice(0, 200), parseError: parseErr?.message });
-          throw Object.assign(new Error(`Odalar yüklenirken: Sunucu yanıtı okunamadı (HTTP ${r.status}).`), { response: { status: r.status, data: {} }, step: lastStep });
+          throw Object.assign(new Error(`Odalar yüklenirken: ${msg}`), { response: { status: r.status, data: {} }, step: lastStep });
         }
         logger.log('[odalar] Node yanıt', { step: lastStep, status: r.status, hasOdalar: Array.isArray(data?.odalar), odalarLength: data?.odalar?.length ?? 0, code: data?.code, message: data?.message });
 
         if (!r.ok) {
-          const msg = (data?.message || data?.error) || `HTTP ${r.status}`;
+          if (r.status === 429 && this.odalarCache.has(cacheKey)) {
+            const cached = this.odalarCache.get(cacheKey)!;
+            logger.warn('[odalar] 429 (rate limit), cache kullanılıyor', { filtre, count: cached.length });
+            return cached;
+          }
+          const msg = (data?.message || data?.error) || (r.status === 429 ? 'Çok fazla istek. Lütfen biraz sonra tekrar deneyin.' : `HTTP ${r.status}`);
           const code = data?.code || (r.status === 401 ? 'UNAUTHORIZED' : r.status === 403 ? 'FORBIDDEN' : 'API_ERROR');
           logger.error('[odalar] Node API hatası', { step: lastStep, status: r.status, code, message: msg });
           throw Object.assign(new Error(`Odalar yüklenirken: ${msg} (Node API, ${r.status}).`), { response: { status: r.status, data: { ...data, code } }, step: lastStep });
@@ -604,6 +623,13 @@ class DataService {
       const step = error?.step ?? lastStep;
       const status = error?.response?.status;
       const code = error?.response?.data?.code;
+      const hasCache = this.odalarCache.has(cacheKey);
+      const useCache = hasCache && this.odalarCache.get(cacheKey);
+      const is429WithCache = status === 429 && useCache;
+      if (is429WithCache) {
+        logger.warn('[odalar] 429, cache ile devam', { filtre, count: useCache.length });
+        return useCache;
+      }
       logger.error('[odalar] hata', {
         step,
         message: error?.message,
@@ -613,12 +639,9 @@ class DataService {
         stack: error?.stack?.split('\n').slice(0, 3),
       });
 
-      if (this.odalarCache.has(cacheKey)) {
-        const cached = this.odalarCache.get(cacheKey);
-        if (cached) {
-          logger.log('[odalar] hata sonrası cache fallback', { filtre, count: cached.length });
-          return cached;
-        }
+      if (hasCache && useCache) {
+        logger.log('[odalar] hata sonrası cache fallback', { filtre, count: useCache.length });
+        return useCache;
       }
 
       const friendlyMessage = error?.message || `Odalar yüklenemedi (adım: ${step}).`;

@@ -1554,6 +1554,7 @@ router.get('/me', authenticateTesisOrSupabase, async (req, res) => {
       let role = 'user';
       let privacyPolicyAcceptedAt = null;
       let termsOfServiceAcceptedAt = null;
+      let userProfileRow = null;
       if (supabaseAdmin) {
         const { data: profileRow } = await supabaseAdmin.from('profiles').select('is_admin, privacy_policy_accepted_at, terms_of_service_accepted_at, deletion_requested_at').eq('id', u.id).maybeSingle();
         is_admin = profileRow?.is_admin === true;
@@ -1563,12 +1564,21 @@ router.get('/me', authenticateTesisOrSupabase, async (req, res) => {
         const { data: appRole } = await supabaseAdmin.from('app_roles').select('role').eq('user_id', u.id).maybeSingle();
         if (appRole?.role === 'admin') role = 'admin';
         else if (is_admin) role = 'admin';
+        const branchId = req.branchId || b?.id;
+        if (branchId) {
+          const { data: upRow } = await supabaseAdmin.from('user_profiles').select('display_name, title, avatar_url').eq('user_id', u.id).eq('branch_id', branchId).maybeSingle();
+          userProfileRow = upRow;
+        }
       }
+      const adSoyadFallback = u.user_metadata?.full_name || u.user_metadata?.ad_soyad || u.email || u.phone || 'Kullanıcı';
       return res.json({
         kullanici: {
           id: u.id,
           uid: u.id,
-          adSoyad: u.user_metadata?.full_name || u.user_metadata?.ad_soyad || u.email || u.phone || 'Kullanıcı',
+          adSoyad: userProfileRow?.display_name?.trim() || adSoyadFallback,
+          display_name: userProfileRow?.display_name?.trim() || null,
+          title: userProfileRow?.title?.trim() || null,
+          avatar_url: userProfileRow?.avatar_url?.trim() || null,
           telefon: u.phone || null,
           email: u.email || null,
           rol: profileRole,
@@ -1795,13 +1805,14 @@ router.post('/restore-account', authenticateTesisOrSupabase, async (req, res) =>
 /**
  * Profil güncelle (ad, ünvan, avatar). E-posta, telefon, tesis kodu farketmez; tüm giriş türleri kullanabilir.
  * Supabase token varsa Edge kullanılır; yoksa backend bu endpoint ile günceller.
+ * PATCH ve PUT kabul edilir (mobil api.put kullanıyor).
  */
-router.patch('/profile', authenticateTesisOrSupabase, async (req, res) => {
+const updateProfile = async (req, res) => {
   const { errorResponse: errRes } = require('../lib/errorResponse');
   try {
     const body = req.body || {};
     const bodyKeys = Object.keys(body);
-    console.log('[auth] PATCH /profile istek geldi:', {
+    console.log('[auth] PATCH/PUT /profile istek geldi:', {
       bodyKeys,
       hasOwnProperty_display_name: body.hasOwnProperty('display_name'),
       hasOwnProperty_title: body.hasOwnProperty('title'),
@@ -1884,8 +1895,14 @@ router.patch('/profile', authenticateTesisOrSupabase, async (req, res) => {
         console.error('[auth] PATCH /profile supabase update hatası:', { message: error.message, code: error.code, details: error.details });
         return errRes(req, res, 500, 'UPDATE_FAILED', 'Profil güncellenemedi.');
       }
+      const row = Array.isArray(updateData) && updateData.length > 0 ? updateData[0] : null;
       console.log('[auth] PATCH /profile supabase update başarılı:', updateData != null ? { rows: updateData.length, first: updateData[0] } : 'no rows');
-      return res.json({ success: true });
+      return res.json({
+        success: true,
+        display_name: row?.display_name ?? null,
+        title: row?.title ?? null,
+        avatar_url: row?.avatar_url?.trim() || null,
+      });
     }
 
     if (req.authSource === 'prisma') {
@@ -1933,7 +1950,12 @@ router.patch('/profile', authenticateTesisOrSupabase, async (req, res) => {
       });
       const updated = await prisma.kullanici.update({ where: { id: kullaniciId }, data: updates, select: { id: true, displayName: true, title: true, avatarUrl: true, telefon: true } });
       console.log('[auth] PATCH /profile prisma update başarılı:', { id: updated.id, displayName: updated.displayName, title: updated.title, hasAvatarUrl: !!updated.avatarUrl });
-      return res.json({ success: true });
+      return res.json({
+        success: true,
+        display_name: updated.displayName ?? null,
+        title: updated.title ?? null,
+        avatar_url: updated.avatarUrl?.trim() || null,
+      });
     }
 
     console.warn('[auth] PATCH /profile: authSource ne supabase ne prisma:', req.authSource);
@@ -1946,7 +1968,9 @@ router.patch('/profile', authenticateTesisOrSupabase, async (req, res) => {
     });
     return errRes(req, res, 500, 'UNHANDLED_ERROR', e?.message || 'Profil güncellenemedi.');
   }
-});
+};
+router.patch('/profile', authenticateTesisOrSupabase, updateProfile);
+router.put('/profile', authenticateTesisOrSupabase, updateProfile);
 
 /**
  * Profil bilgisi getir (backend JWT ile; Supabase token yokken profil ekranı bunu kullanır).

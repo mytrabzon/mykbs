@@ -1,5 +1,5 @@
 /**
- * "Daha Fazla" menü — Paket satın al, Topluluk, Ayarlar, Admin (yetkili kullanıcıda)
+ * "Daha Fazla" menü — Paket satın al, Topluluk, Ayarlar, Admin (sadece yetkili hesaplarda)
  */
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
@@ -7,20 +7,24 @@ import { useNavigation } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../context/ThemeContext';
 import { useCredits } from '../context/CreditsContext';
+import { useAuth } from '../context/AuthContext';
+import { getIsAdminPanelUser } from '../utils/adminAuth';
 import { spacing, typography } from '../theme';
 
-const MENU_ITEMS = [
+const MENU_ITEMS_BASE = [
   { key: 'PaketSatınAl', label: 'Paket satın al', icon: 'pricetag-outline', action: 'paywall' },
   { key: 'Topluluk', label: 'Topluluk', icon: 'chatbubbles-outline', route: 'Topluluk' },
   { key: 'Ayarlar', label: 'Ayarlar', icon: 'settings-outline', route: 'Ayarlar' },
-  { key: 'AdminPanel', label: 'Admin Panel', icon: 'shield-outline', route: 'AdminPanel' },
+  { key: 'AdminPanel', label: 'Admin Panel', icon: 'shield-outline', route: 'AdminPanel', adminOnly: true },
 ];
 
 export default function DahaFazlaScreen() {
   const navigation = useNavigation();
   const { colors } = useTheme();
   const { triggerPaywall } = useCredits();
-  const items = MENU_ITEMS;
+  const { user } = useAuth();
+  const isAdmin = getIsAdminPanelUser(user);
+  const items = MENU_ITEMS_BASE.filter((item) => !item.adminOnly || isAdmin);
 
   const onItemPress = (item) => {
     if (item.action === 'paywall') {
