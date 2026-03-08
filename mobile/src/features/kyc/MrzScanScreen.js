@@ -143,6 +143,25 @@ export default function MrzScanScreen({ navigation }) {
   const insets = useSafeAreaInsets();
   const [permission, requestPermission] = useCameraPermissions();
 
+  // İzin henüz çözülmemişse (null) ekrana girince bir kez iste; böylece kamera açılır
+  useEffect(() => {
+    if (!MrzReaderView || !USE_UNIFIED_MRZ_FLOW) return;
+    if (permission === null) {
+      requestPermission().catch(() => {});
+    }
+  }, [permission, requestPermission]);
+
+  // İzin verildikten sonra kamera bileşenini kısa gecikmeyle mount et (siyah ekran önlemi)
+  const [mrzCameraMountReady, setMrzCameraMountReady] = useState(false);
+  useEffect(() => {
+    if (!permission?.granted) {
+      setMrzCameraMountReady(false);
+      return;
+    }
+    const t = setTimeout(() => setMrzCameraMountReady(true), 400);
+    return () => clearTimeout(t);
+  }, [permission?.granted]);
+
   // İkinci girişte siyah ekran önlemi: kamera mount'unu kısa geciktir (native kameranın serbest kalması için)
   const [cameraReadyToShow, setCameraReadyToShow] = useState(false);
   const isFirstFocusRef = useRef(true);
@@ -415,14 +434,22 @@ export default function MrzScanScreen({ navigation }) {
       setOcrLoading(true);
       logger.info('[Galeri kimlik] Başlatılıyor', { uri: uri ? uri.slice(0, 80) + '…' : '' });
       try {
+        let workUri = uri;
+        try {
+          const Manipulator = require('expo-image-manipulator');
+          if (Manipulator && typeof Manipulator.manipulateAsync === 'function') {
+            const m = await Manipulator.manipulateAsync(workUri, [{ resize: { width: 1600 } }], { compress: 0.8 });
+            if (m?.uri) workUri = m.uri;
+          }
+        } catch (_) {}
         let base64;
         try {
-          base64 = await FileSystem.readAsStringAsync(uri, { encoding: FileSystem.EncodingType.Base64 });
+          base64 = await FileSystem.readAsStringAsync(workUri, { encoding: FileSystem.EncodingType.Base64 });
         } catch (readErr) {
-          if (uri.startsWith('content://') || uri.startsWith('file://')) {
+          if (workUri.startsWith('content://') || workUri.startsWith('file://')) {
             const cachePath = `${FileSystem.cacheDirectory}mrz_${Date.now()}.jpg`;
             try {
-              await FileSystem.copyAsync({ from: uri, to: cachePath });
+              await FileSystem.copyAsync({ from: workUri, to: cachePath });
               base64 = await FileSystem.readAsStringAsync(cachePath, { encoding: FileSystem.EncodingType.Base64 });
               await FileSystem.deleteAsync(cachePath, { idempotent: true });
             } catch (copyErr) {
@@ -917,10 +944,9 @@ export default function MrzScanScreen({ navigation }) {
           <Text style={styles.title}>Ön yüzü çek</Text>
           <View style={styles.iconBtn} />
         </View>
-        <CameraView
-          ref={frontCameraRef}
-          style={StyleSheet.absoluteFill}
-        />
+        <View style={[StyleSheet.absoluteFill, styles.mrzCameraWrap]}>
+          <CameraView ref={frontCameraRef} style={StyleSheet.absoluteFill} facing="front" />
+        </View>
         <View style={styles.captureOverlay}>
           <Text style={styles.frameHint}>Belgenin ön yüzünü (fotoğraf ve bilgiler) çerçeve içine alıp çekin</Text>
           <TouchableOpacity
@@ -971,17 +997,32 @@ export default function MrzScanScreen({ navigation }) {
           <Text style={styles.title}>MRZ Tara</Text>
           <View style={styles.iconBtn} />
         </View>
-        {!permission?.granted ? (
+        {permission === null ? (
           <View style={styles.mrzPickContainer}>
-            <Text style={styles.mrzPickHint}>Kamera izni gerekli</Text>
-            <TouchableOpacity style={styles.mrzPickPrimaryBtn} onPress={requestPermission} activeOpacity={0.8}>
+            <ActivityIndicator size="large" color="#fff" />
+            <Text style={[styles.mrzPickHint, { marginTop: 16 }]}>Kamera hazırlanıyor…</Text>
+          </View>
+        ) : !permission?.granted ? (
+          <View style={styles.mrzPickContainer}>
+            <Text style={styles.mrzPickHint}>Kamera izni gerekli. MRZ tarayabilmek için izin verin.</Text>
+            <TouchableOpacity style={styles.mrzPickPrimaryBtn} onPress={async () => { const r = await requestPermission(); if (!r?.granted) Toast.show({ type: 'error', text1: 'İzin reddedildi', text2: 'Ayarlar\'dan kamera iznini açabilirsiniz.' }); }} activeOpacity={0.8}>
               <Ionicons name="camera" size={36} color="#fff" />
               <Text style={styles.mrzPickPrimaryBtnText}>İzin ver</Text>
             </TouchableOpacity>
           </View>
+        ) : !mrzCameraMountReady ? (
+          <View style={styles.mrzPickContainer}>
+            <ActivityIndicator size="large" color="#fff" />
+            <Text style={[styles.mrzPickHint, { marginTop: 16 }]}>Kamera açılıyor…</Text>
+          </View>
         ) : (
-          <View style={StyleSheet.absoluteFill}>
-            <CameraView ref={mrzCameraRef} style={StyleSheet.absoluteFill} facing="back" />
+          <View style={[StyleSheet.absoluteFill, styles.mrzCameraWrap]}>
+            <CameraView
+              key={`mrz-cam-${cameraKey}-${mrzCameraMountReady}`}
+              ref={mrzCameraRef}
+              style={StyleSheet.absoluteFill}
+              facing="back"
+            />
             {ocrLoading ? (
               <View style={[StyleSheet.absoluteFill, styles.mrzPickLoading, { justifyContent: 'center', alignItems: 'center' }]}>
                 <ActivityIndicator size="large" color="#fff" />
@@ -1129,8 +1170,11 @@ function CameraFallbackView({ onCapture, onBack, loading, permission, requestPer
   );
 }
 
+const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
+
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#000' },
+  mrzCameraWrap: { minHeight: SCREEN_HEIGHT * 0.5, width: SCREEN_WIDTH },
   mrzPickContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', paddingHorizontal: theme.spacing.xl },
   mrzPickTitle: { fontSize: theme.typography.fontSize.xl, fontWeight: '700', color: '#fff', marginBottom: theme.spacing.sm },
   mrzPickHint: { color: 'rgba(255,255,255,0.85)', fontSize: theme.typography.fontSize.sm, textAlign: 'center', marginBottom: theme.spacing.xl },

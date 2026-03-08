@@ -60,11 +60,20 @@ export default function ForgotPasswordScreen({ route }) {
           setLoading(false);
           return;
         }
-        Toast.show({ type: 'error', text1: 'Hata', text2: error.message || 'Kod gönderilemedi' });
+        console.warn('[ForgotPassword] signInWithOtp error:', error.message, error.code, error.status);
+        const msg = (error.message || '').toLowerCase();
+        const kullaniciMesaji =
+          msg.includes('sending') && msg.includes('mail')
+            ? 'E-posta servisi yapılandırılmamış. Supabase Dashboard → Auth → SMTP ayarlarını kontrol edin.'
+            : msg.includes('authorized') || msg.includes('not allowed')
+              ? 'Bu e-posta ile kod gönderilemiyor. Custom SMTP ayarlanmış mı kontrol edin.'
+              : error.message || 'Kod gönderilemedi';
+        Toast.show({ type: 'error', text1: 'Hata', text2: kullaniciMesaji });
       } else {
         Toast.show({ type: 'error', text1: 'Hata', text2: 'Şifre sıfırlama servisi kullanılamıyor' });
       }
     } catch (e) {
+      console.warn('[ForgotPassword] signInWithOtp exception:', e?.message);
       Toast.show({ type: 'error', text1: 'Hata', text2: e?.message || 'Kod gönderilemedi' });
     }
     setLoading(false);

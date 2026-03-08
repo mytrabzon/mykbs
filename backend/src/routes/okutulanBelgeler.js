@@ -23,11 +23,20 @@ function getKullaniciId(req) {
   return req.user?.id ?? req.user?.sub ?? null;
 }
 
+const GUEST_PASSPORT_LIMIT = 5;
+
 /** POST /api/okutulan-belgeler — kaydet (MRZ/check-in sonrası otomatik veya manuel) */
 router.post('/', express.json({ limit: '6mb' }), async (req, res) => {
   try {
     const tesisId = getTesisId(req);
     if (!tesisId) return errorResponse(req, res, 401, 'UNAUTHORIZED', 'Tesis bilgisi bulunamadı.');
+
+    if (req.authSource === 'supabase' && req.user?.is_anonymous) {
+      const count = await prisma.okutulanBelge.count({ where: { tesisId } });
+      if (count >= GUEST_PASSPORT_LIMIT) {
+        return errorResponse(req, res, 403, 'GUEST_LIMIT', 'Misafir hesaplar en fazla 5 pasaport/kimlik kaydedebilir. E-posta doğrulayarak limiti kaldırın.');
+      }
+    }
 
     const body = req.body || {};
     const belgeTuru = (body.belgeTuru || 'pasaport').toLowerCase() === 'kimlik' ? 'kimlik' : 'pasaport';

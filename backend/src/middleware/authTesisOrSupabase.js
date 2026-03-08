@@ -83,7 +83,15 @@ async function authenticateTesisOrSupabase(req, res, next) {
         if (isSupabaseExpired) {
           return errorResponse(req, res, 401, 'TOKEN_EXPIRED', 'Oturum süresi doldu. Lütfen tekrar giriş yapın.');
         }
-        console.warn('[authTesisOrSupabase] Supabase getUser failed:', msg);
+        let issuer = 'n/a';
+        try {
+          const parts = (token || '').split('.');
+          if (parts[1]) {
+            const p = JSON.parse(Buffer.from(parts[1], 'base64').toString());
+            issuer = p.iss || p.aud || 'n/a';
+          }
+        } catch (_) {}
+        console.warn('[authTesisOrSupabase] Supabase getUser failed:', msg, 'tokenIssuer:', issuer, 'SUPABASE_URL:', process.env.SUPABASE_URL ? 'set' : 'missing');
       }
       if (!userError && user) {
         let profileRows, profileError;
@@ -169,6 +177,37 @@ async function authenticateTesisOrSupabase(req, res, next) {
           }
         }
         if (!profile && !profileError) {
+          if (user.is_anonymous) {
+            try {
+              let orgId = null;
+              const { data: orgs } = await supabaseAdmin.from('organizations').select('id').ilike('name', 'Misafir%').limit(1);
+              if (orgs && orgs[0]) orgId = orgs[0].id;
+              if (!orgId) {
+                const { data: newOrg, error: orgErr } = await supabaseAdmin.from('organizations').insert({ name: 'Misafir Organizasyonu' }).select('id').single();
+                if (orgErr) throw orgErr;
+                orgId = newOrg?.id;
+              }
+              if (!orgId) throw new Error('Org not created');
+              const { data: newBranch, error: branchErr } = await supabaseAdmin.from('branches').insert({ organization_id: orgId, name: 'Misafir Hesap' }).select('id, name').single();
+              if (branchErr || !newBranch) throw branchErr || new Error('Branch not created');
+              const { error: profileErr } = await supabaseAdmin.from('user_profiles').insert({ user_id: user.id, branch_id: newBranch.id, role: 'staff' });
+              if (profileErr) throw profileErr;
+              const fullSelect = 'id, name, kbs_turu, kbs_tesis_kodu, kbs_web_servis_sifre, kbs_configured, kbs_endpoint_url, kbs_approved, kbs_approved_at';
+              const resBranch = await supabaseAdmin.from('branches').select(fullSelect).eq('id', newBranch.id).single();
+              const branchRow = resBranch.data || newBranch;
+              if (resBranch.error && resBranch.error.code !== '42703') throw resBranch.error;
+              req.authSource = 'supabase';
+              req.user = user;
+              req.branchId = newBranch.id;
+              req.branch = branchRow.id ? branchRow : { id: newBranch.id, name: newBranch.name, kbs_turu: null, kbs_tesis_kodu: null, kbs_configured: false, kbs_approved: false };
+              req.profileRole = 'staff';
+              req.tesis = null;
+              return next();
+            } catch (guestErr) {
+              console.error('[authTesisOrSupabase] Guest branch/profile create failed:', guestErr?.message || guestErr);
+              return errorResponse(req, res, 500, 'GUEST_SETUP_FAILED', 'Misafir hesabı oluşturulamadı. Lütfen tekrar deneyin.');
+            }
+          }
           console.warn('[authTesisOrSupabase] Supabase user geçerli ama user_profiles kaydı yok:', user.id);
           return errorResponse(req, res, 409, 'BRANCH_NOT_ASSIGNED', 'Hesabınız henüz bir şubeye bağlı değil. Yöneticinize başvurun.');
         }

@@ -40,6 +40,9 @@ import ProfilDuzenleScreen from './src/screens/ProfilDuzenleScreen';
 import ProfilIletisimScreen from './src/screens/ProfilIletisimScreen';
 import RaporlarScreen from './src/screens/RaporlarScreen';
 import DahaFazlaScreen from './src/screens/DahaFazlaScreen';
+import PrivacyConsentScreen from './src/screens/PrivacyConsentScreen';
+import TermsConsentScreen from './src/screens/TermsConsentScreen';
+import AccountDeletionPendingScreen from './src/screens/AccountDeletionPendingScreen';
 import MrzScanScreen from './src/features/kyc/MrzScanScreen';
 import MrzResultScreen from './src/features/kyc/MrzResultScreen';
 import KycSubmitScreen from './src/features/kyc/KycSubmitScreen';
@@ -56,7 +59,7 @@ import CameraTestScreen from './src/features/documentRead/CameraTestScreen';
 import ScanHome from './src/features/scan/ScanHome';
 import ScanCameraScreen from './src/features/scan/ScanCameraScreen';
 import ScanReviewScreen from './src/features/scan/ScanReviewScreen';
-import { useFocusEffect } from '@react-navigation/native';
+import { useFocusEffect, useNavigation } from '@react-navigation/native';
 
 // Misafirler sekmesi: Oteldeki mevcut kişiler (check-in yapılan misafirler) listelenir.
 function MisafirlerScreen({ navigation }) {
@@ -207,6 +210,15 @@ const styles = StyleSheet.create({
   },
   screenContainer: { flex: 1 },
   mainTabsWrap: { flex: 1 },
+  guestBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    gap: 8,
+    borderBottomWidth: 1,
+  },
+  guestBannerText: { flex: 1, fontSize: 12 },
   appLoadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', gap: 12 },
   appLoadingText: { fontSize: 16 },
   contentContainer: { flex: 1, paddingHorizontal: 20, paddingBottom: 120 },
@@ -273,6 +285,25 @@ function DahaFazlaStack() {
   );
 }
 
+function GuestBanner() {
+  const { isGuest } = useAuth();
+  const { colors } = useTheme();
+  const navigation = useNavigation();
+  if (!isGuest) return null;
+  return (
+    <TouchableOpacity
+      style={[styles.guestBanner, { backgroundColor: colors.primarySoft || colors.primary + '20', borderColor: colors.border }]}
+      onPress={() => navigation.navigate('DahaFazla', { screen: 'Ayarlar' })}
+      activeOpacity={0.8}
+    >
+      <Ionicons name="person-outline" size={18} color={colors.primary} />
+      <Text style={[styles.guestBannerText, { color: colors.text }]} numberOfLines={2}>
+        Misafir modu: En fazla 5 pasaport. KBS için Daha Fazla → Ayarlar → E-posta ekleyin.
+      </Text>
+    </TouchableOpacity>
+  );
+}
+
 function MainTabs() {
   const insets = useSafeAreaInsets();
   const { user, lastTab, setLastTab } = useAuth();
@@ -282,6 +313,7 @@ function MainTabs() {
 
   return (
     <View style={styles.mainTabsWrap}>
+      <GuestBanner />
       <CreditsBanner />
       <Tab.Navigator
       lazy={false}
@@ -399,6 +431,11 @@ function parseRecoveryParams(url) {
   return null;
 }
 
+function isRecoveryRedirectUrl(url) {
+  if (!url) return false;
+  return url.startsWith('kbsprime://auth/callback') || url.startsWith('mykbs://reset-password');
+}
+
 function AppLoadingScreen() {
   const { colors } = useTheme();
   return (
@@ -410,12 +447,20 @@ function AppLoadingScreen() {
 }
 
 function AppNavigator() {
-  const { isAuthenticated, isLoading, recoverySessionPending, clearRecoveryPending } = useAuth();
+  const { isAuthenticated, isLoading, recoverySessionPending, clearRecoveryPending, needsPrivacyConsent, needsTermsConsent, accountPendingDeletion } = useAuth();
+  const hasPrivacyAccepted = !needsPrivacyConsent;
+  const hasTermsAccepted = !needsTermsConsent;
+  const showPrivacyConsent = isAuthenticated && needsPrivacyConsent;
+  const showTermsConsent = isAuthenticated && needsTermsConsent;
+  const showAccountDeletionPending = isAuthenticated && hasPrivacyAccepted && hasTermsAccepted && !!accountPendingDeletion;
+  const showConsentBeforeLoginIos = !isAuthenticated && Platform.OS === 'ios' && (needsPrivacyConsent || needsTermsConsent);
+  const blockMainWithConsentIos = isAuthenticated && Platform.OS === 'ios' && (needsPrivacyConsent || needsTermsConsent);
+  const showConsentAsButtonAndroid = Platform.OS === 'android' && (needsPrivacyConsent || needsTermsConsent);
 
   useEffect(() => {
     if (!supabase?.auth) return;
     const handleUrl = async (url) => {
-      if (!url || !url.startsWith('mykbs://reset-password')) return;
+      if (!url || !isRecoveryRedirectUrl(url)) return;
       const params = parseRecoveryParams(url);
       if (!params) return;
       try {
@@ -447,7 +492,12 @@ function AppNavigator() {
   return (
     <NavigationContainer>
       {isAuthenticated && <CreditsOverlay />}
-      <Stack.Navigator screenOptions={{ headerShown: false }} initialRouteName={showRecovery ? 'ForgotPassword' : undefined}>
+      <Stack.Navigator
+        screenOptions={{ headerShown: false }}
+        initialRouteName={
+          showRecovery ? 'ForgotPassword' : showConsentBeforeLoginIos ? (needsPrivacyConsent ? 'PrivacyConsent' : 'TermsConsent') : undefined
+        }
+      >
         {showRecovery ? (
           <>
             <Stack.Screen name="ForgotPassword" component={ForgotPasswordScreen} initialParams={{ fromRecoveryLink: true }} />
@@ -457,16 +507,50 @@ function AppNavigator() {
             <Stack.Screen name="Basvuru" component={BasvuruScreen} />
           </>
         ) : !isAuthenticated ? (
+          showConsentBeforeLoginIos ? (
+            <>
+              <Stack.Screen name="PrivacyConsent" component={PrivacyConsentScreen} options={{ headerShown: false }} />
+              <Stack.Screen name="TermsConsent" component={TermsConsentScreen} options={{ headerShown: false }} />
+              <Stack.Screen name="Login" component={LoginScreen} />
+              <Stack.Screen name="ForgotPassword" component={ForgotPasswordScreen} />
+              <Stack.Screen name="Kayit" component={KayitScreen} />
+              <Stack.Screen name="OTPVerify" component={OTPVerifyScreen} />
+              <Stack.Screen name="Basvuru" component={BasvuruScreen} />
+            </>
+          ) : (
+            <>
+              <Stack.Screen name="Login" component={LoginScreen} />
+              <Stack.Screen name="ForgotPassword" component={ForgotPasswordScreen} />
+              <Stack.Screen name="Kayit" component={KayitScreen} />
+              <Stack.Screen name="OTPVerify" component={OTPVerifyScreen} />
+              <Stack.Screen name="Basvuru" component={BasvuruScreen} />
+              {showConsentAsButtonAndroid ? (
+                <>
+                  <Stack.Screen name="PrivacyConsent" component={PrivacyConsentScreen} options={{ headerShown: false }} />
+                  <Stack.Screen name="TermsConsent" component={TermsConsentScreen} options={{ headerShown: false }} />
+                </>
+              ) : null}
+            </>
+          )
+        ) : blockMainWithConsentIos ? (
+          needsPrivacyConsent ? (
+            <>
+              <Stack.Screen name="PrivacyConsent" component={PrivacyConsentScreen} options={{ headerShown: false }} />
+            </>
+          ) : (
+            <>
+              <Stack.Screen name="TermsConsent" component={TermsConsentScreen} options={{ headerShown: false }} />
+            </>
+          )
+        ) : showAccountDeletionPending ? (
           <>
-            <Stack.Screen name="Login" component={LoginScreen} />
-            <Stack.Screen name="ForgotPassword" component={ForgotPasswordScreen} />
-            <Stack.Screen name="Kayit" component={KayitScreen} />
-            <Stack.Screen name="OTPVerify" component={OTPVerifyScreen} />
-            <Stack.Screen name="Basvuru" component={BasvuruScreen} />
+            <Stack.Screen name="AccountDeletionPending" component={AccountDeletionPendingScreen} options={{ headerShown: false }} />
           </>
         ) : (
           <>
             <Stack.Screen name="Main" component={MainTabs} />
+            <Stack.Screen name="PrivacyConsent" component={PrivacyConsentScreen} options={{ headerShown: false }} />
+            <Stack.Screen name="TermsConsent" component={TermsConsentScreen} options={{ headerShown: false }} />
             <Stack.Screen name="CheckIn" component={CheckInScreen} />
             <Stack.Screen name="Kaydedilenler" component={KaydedilenlerScreen} />
             <Stack.Screen name="OdaDetay" component={OdaDetayScreen} />

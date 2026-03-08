@@ -21,6 +21,8 @@ import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
 import { Button, Input } from '../components/ui';
 import { typography, spacing } from '../theme';
+import { supabase } from '../lib/supabase/supabase';
+import { api } from '../services/api';
 
 const APP_PREFIX = 'mykbs';
 const STORAGE_KEYS = { TELEFON: `@${APP_PREFIX}:login:telefon` };
@@ -33,13 +35,19 @@ const isValidEmail = (v) => (v || '').trim().length >= 5 && (v || '').trim().inc
 export default function LoginScreen({ route }) {
   const navigation = useNavigation();
   const { colors } = useTheme();
-  const { loginWithPassword } = useAuth();
+  const { loginWithPassword, loginWithToken, loginAsGuest, needsPrivacyConsent, needsTermsConsent } = useAuth();
+  const [guestLoading, setGuestLoading] = useState(false);
   const [email, setEmail] = useState('');
   const [sifre, setSifre] = useState('');
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [errorDetails, setErrorDetails] = useState(null);
   const [showErrorModal, setShowErrorModal] = useState(false);
+  const [kodModu, setKodModu] = useState(false);
+  const [otpGonderildi, setOtpGonderildi] = useState(false);
+  const [otp, setOtp] = useState(['', '', '', '', '', '']);
+  const [sendCodeLoading, setSendCodeLoading] = useState(false);
+  const otpRefs = useRef([]);
 
   useEffect(() => {
     (async () => {
@@ -79,9 +87,107 @@ export default function LoginScreen({ route }) {
   };
 
   const handleKodIleGiris = () => {
+    if (!isValidEmail(email)) return;
+    setKodModu(true);
+    setOtpGonderildi(false);
+    setOtp(['', '', '', '', '', '']);
+  };
+
+  const handleKodGonder = async () => {
     const em = (email || '').trim().toLowerCase();
-    if (!isValidEmail(em)) return;
-    navigation.navigate('OTPVerify', { islemTipi: 'giris', email: em });
+    if (!isValidEmail(em) || !supabase) return;
+    setSendCodeLoading(true);
+    try {
+      const { error } = await supabase.auth.signInWithOtp({
+        email: em,
+        options: { shouldCreateUser: false },
+      });
+      if (error) {
+        console.warn('[Login] signInWithOtp error:', error.message, error.code, error.status);
+        throw error;
+      }
+      setOtpGonderildi(true);
+      Toast.show({ type: 'success', text1: 'Kod gönderildi', text2: `${em} adresine doğrulama kodu gönderildi` });
+    } catch (e) {
+      const msg = (e?.message || '').toLowerCase();
+      const kullaniciMesaji =
+        msg.includes('sending') && msg.includes('mail')
+          ? 'E-posta servisi yapılandırılmamış. Yönetici: Supabase Dashboard → Auth → SMTP ayarlarını kontrol etsin.'
+          : msg.includes('authorized') || msg.includes('not allowed')
+            ? 'Bu e-posta adresiyle kod gönderilemiyor. Custom SMTP ayarlanmış mı kontrol edin.'
+            : e?.message || 'Tekrar deneyin.';
+      Toast.show({ type: 'error', text1: 'Kod gönderilemedi', text2: kullaniciMesaji });
+    }
+    setSendCodeLoading(false);
+  };
+
+  const handleOtpChange = (text, index) => {
+    const digits = text.replace(/\D/g, '').split('');
+    const next = [...otp];
+    digits.forEach((d, i) => { if (index + i < 6) next[index + i] = d; });
+    if (digits.length > 1) {
+      const joined = next.join('');
+      for (let j = 0; j < 6; j++) next[j] = joined[j] || '';
+      otpRefs.current[5]?.focus();
+    } else {
+      next[index] = digits[0] || '';
+      if (digits[0] && index < 5) otpRefs.current[index + 1]?.focus();
+    }
+    setOtp(next);
+  };
+
+  const handleOtpKeyPress = (key, index) => {
+    if (key === 'Backspace' && !otp[index] && index > 0) {
+      const next = [...otp];
+      next[index - 1] = '';
+      setOtp(next);
+      otpRefs.current[index - 1]?.focus();
+    }
+  };
+
+  const handleKodDogrula = async () => {
+    const code = otp.join('').replace(/\D/g, '').slice(0, 6);
+    if (code.length !== 6) {
+      Toast.show({ type: 'error', text1: 'Kod', text2: '6 haneli kodu girin' });
+      return;
+    }
+    const em = (email || '').trim().toLowerCase();
+    setLoading(true);
+    try {
+      const { data, error } = await supabase.auth.verifyOtp({ email: em, token: code, type: 'email' });
+      if (error) throw error;
+      const accessToken = data?.session?.access_token;
+      if (!accessToken) throw new Error('Oturum alınamadı');
+      try {
+        const sessionRes = await api.post('/auth/giris/otp-dogrula', { access_token: accessToken });
+        const { token: t, kullanici: k, tesis: tesisData } = sessionRes.data || {};
+        if (t && k && tesisData) {
+          await loginWithToken(t, k, tesisData, accessToken);
+        } else {
+          await loginWithToken(accessToken, null, null, accessToken);
+        }
+        Toast.show({ type: 'success', text1: 'Giriş başarılı' });
+      } catch (sessionErr) {
+        await loginWithToken(accessToken, null, null, accessToken);
+        Toast.show({ type: 'success', text1: 'Giriş başarılı' });
+      }
+    } catch (e) {
+      const msg = e?.message || '';
+      const isExpired = msg.toLowerCase().includes('expired') || e?.code === 'otp_expired';
+      Toast.show({
+        type: 'error',
+        text1: isExpired ? 'Kodun süresi doldu' : 'Doğrulama başarısız',
+        text2: isExpired ? 'Yeni kod gönderip tekrar deneyin.' : (msg || 'Kod hatalı.'),
+      });
+      setOtp(['', '', '', '', '', '']);
+    }
+    setLoading(false);
+  };
+
+  const kodModuKapat = () => {
+    setKodModu(false);
+    setOtpGonderildi(false);
+    setOtp(['', '', '', '', '', '']);
   };
 
   return (
@@ -110,42 +216,94 @@ export default function LoginScreen({ route }) {
             placeholder=""
             keyboardType="email-address"
             autoCapitalize="none"
+            editable={!kodModu}
           />
-          {isValidEmail(email) && (
-            <TouchableOpacity
-              style={[styles.kodGirisBtn, { borderColor: colors.primary }]}
-              onPress={handleKodIleGiris}
-              disabled={loading}
-            >
-              <Text style={[styles.kodGirisBtnText, { color: colors.primary }]}>Kod ile giriş</Text>
-            </TouchableOpacity>
-          )}
-          <Input
-            label="Şifre"
-            value={sifre}
-            onChangeText={setSifre}
-            placeholder=""
-            secureTextEntry={!showPassword}
-            rightIcon={
-              <TouchableOpacity onPress={() => setShowPassword(!showPassword)}>
-                <Ionicons name={showPassword ? 'eye-off-outline' : 'eye-outline'} size={22} color={colors.textSecondary} />
+          {kodModu ? (
+            <>
+              <TouchableOpacity onPress={kodModuKapat} style={styles.geriRow}>
+                <Ionicons name="arrow-back" size={20} color={colors.primary} />
+                <Text style={[styles.geriText, { color: colors.primary }]}>Geri</Text>
               </TouchableOpacity>
-            }
-          />
-          <Button
-            variant="primary"
-            onPress={handleHesapLogin}
-            loading={loading}
-            disabled={
-              loading ||
-              !(email || '').trim() ||
-              !(email || '').trim().includes('@') ||
-              !(sifre || '').trim() ||
-              (sifre || '').trim().length < 6
-            }
-          >
-            Giriş Yap
-          </Button>
+              {!otpGonderildi ? (
+                <Button
+                  variant="secondary"
+                  onPress={handleKodGonder}
+                  loading={sendCodeLoading}
+                  disabled={sendCodeLoading}
+                >
+                  Kod Gönder
+                </Button>
+              ) : (
+                <>
+                  <Text style={[styles.kodAciklama, { color: colors.textSecondary }]}>
+                    {email.trim().toLowerCase()} adresine gönderilen 6 haneli kodu girin
+                  </Text>
+                  <View style={styles.otpRow}>
+                    {otp.map((digit, index) => (
+                      <TextInput
+                        key={index}
+                        ref={(r) => (otpRefs.current[index] = r)}
+                        style={[styles.otpInput, { borderColor: colors.border, color: colors.textPrimary }, digit && { borderColor: colors.primary }]}
+                        value={digit}
+                        onChangeText={(text) => handleOtpChange(text, index)}
+                        onKeyPress={({ nativeEvent }) => handleOtpKeyPress(nativeEvent.key, index)}
+                        keyboardType="number-pad"
+                        maxLength={index === 0 ? 6 : 1}
+                        selectTextOnFocus
+                        textContentType={index === 0 ? 'oneTimeCode' : 'none'}
+                      />
+                    ))}
+                  </View>
+                  <Button
+                    variant="primary"
+                    onPress={handleKodDogrula}
+                    loading={loading}
+                    disabled={loading || otp.join('').length !== 6}
+                  >
+                    Doğrula
+                  </Button>
+                </>
+              )}
+            </>
+          ) : (
+            <>
+              {isValidEmail(email) && (
+                <TouchableOpacity
+                  style={[styles.kodGirisBtn, { borderColor: colors.primary }]}
+                  onPress={handleKodIleGiris}
+                  disabled={loading}
+                >
+                  <Text style={[styles.kodGirisBtnText, { color: colors.primary }]}>Kod ile giriş</Text>
+                </TouchableOpacity>
+              )}
+              <Input
+                label="Şifre"
+                value={sifre}
+                onChangeText={setSifre}
+                placeholder=""
+                secureTextEntry={!showPassword}
+                rightIcon={
+                  <TouchableOpacity onPress={() => setShowPassword(!showPassword)}>
+                    <Ionicons name={showPassword ? 'eye-off-outline' : 'eye-outline'} size={22} color={colors.textSecondary} />
+                  </TouchableOpacity>
+                }
+              />
+              <Button
+                variant="primary"
+                onPress={handleHesapLogin}
+                loading={loading}
+                disabled={
+                  loading ||
+                  !(email || '').trim() ||
+                  !(email || '').trim().includes('@') ||
+                  !(sifre || '').trim() ||
+                  (sifre || '').trim().length < 6
+                }
+              >
+                Giriş Yap
+              </Button>
+            </>
+          )}
 
           {errorDetails && (
             <TouchableOpacity onPress={() => setShowErrorModal(true)} style={styles.errorLink}>
@@ -166,12 +324,45 @@ export default function LoginScreen({ route }) {
             </Text>
           </View>
 
+          <View style={[styles.guestRow, { borderTopColor: colors.border }]}>
+            <Text style={[styles.guestText, { color: colors.textSecondary }]}>E-posta doğrulamadan denemek için</Text>
+            <TouchableOpacity
+              onPress={async () => {
+                setGuestLoading(true);
+                try {
+                  const r = await loginAsGuest();
+                  if (r?.success) Toast.show({ type: 'success', text1: 'Misafir girişi' });
+                  else Toast.show({ type: 'error', text1: 'Hata', text2: r?.message });
+                } finally {
+                  setGuestLoading(false);
+                }
+              }}
+              disabled={guestLoading}
+              style={[styles.guestBtn, { borderColor: colors.primary }]}
+            >
+              <Text style={[styles.guestBtnText, { color: colors.primary }]}>{guestLoading ? 'Giriş yapılıyor...' : 'Misafir olarak devam et'}</Text>
+            </TouchableOpacity>
+          </View>
+
           <View style={styles.registerRow}>
             <Text style={[styles.registerText, { color: colors.textSecondary }]}>Hesabınız yok mu?</Text>
             <TouchableOpacity onPress={() => navigation.navigate('Kayit')}>
               <Text style={[styles.registerLink, { color: colors.primary }]}>Kayıt ol</Text>
             </TouchableOpacity>
           </View>
+
+          {Platform.OS === 'android' && (needsPrivacyConsent || needsTermsConsent) ? (
+            <TouchableOpacity
+              style={[styles.consentBar, { backgroundColor: colors.primary + '20', borderColor: colors.primary }]}
+              onPress={() => navigation.navigate(needsPrivacyConsent ? 'PrivacyConsent' : 'TermsConsent')}
+              activeOpacity={0.8}
+            >
+              <Ionicons name="document-text-outline" size={20} color={colors.primary} />
+              <Text style={[styles.consentBarText, { color: colors.primary }]}>
+                Gizlilik politikası ve kullanım şartları
+              </Text>
+            </TouchableOpacity>
+          ) : null}
         </View>
       </ScrollView>
 
@@ -242,6 +433,31 @@ const styles = StyleSheet.create({
     fontSize: typography.text.body.fontSize,
     fontWeight: '600',
   },
+  geriRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: spacing.md,
+    gap: spacing.xs,
+  },
+  geriText: { fontSize: typography.text.body.fontSize, fontWeight: '600' },
+  kodAciklama: {
+    fontSize: typography.text.body.fontSize,
+    marginBottom: spacing.md,
+  },
+  otpRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: spacing.lg,
+  },
+  otpInput: {
+    width: 48,
+    height: 56,
+    borderWidth: 2,
+    borderRadius: 10,
+    textAlign: 'center',
+    fontSize: 22,
+    fontWeight: '600',
+  },
   errorLink: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -262,6 +478,20 @@ const styles = StyleSheet.create({
     marginTop: spacing.xs,
     textAlign: 'center',
   },
+  guestRow: {
+    marginTop: spacing.lg,
+    paddingTop: spacing.lg,
+    borderTopWidth: 1,
+    alignItems: 'center',
+  },
+  guestText: { fontSize: typography.text.caption.fontSize, marginBottom: spacing.sm },
+  guestBtn: {
+    borderWidth: 1,
+    borderRadius: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+  },
+  guestBtnText: { fontSize: typography.text.body.fontSize, fontWeight: '600' },
   registerRow: {
     flexDirection: 'row',
     justifyContent: 'center',
@@ -271,6 +501,18 @@ const styles = StyleSheet.create({
   },
   registerText: { fontSize: typography.text.body.fontSize },
   registerLink: { fontSize: typography.text.body.fontSize, fontWeight: '600' },
+  consentBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 12,
+    borderWidth: 1,
+    gap: 8,
+    marginTop: spacing.lg,
+  },
+  consentBarText: { fontSize: 14, fontWeight: '600' },
   modalOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.5)',

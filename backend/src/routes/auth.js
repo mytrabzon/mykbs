@@ -1552,9 +1552,14 @@ router.get('/me', authenticateTesisOrSupabase, async (req, res) => {
       const profileRole = req.profileRole || 'staff';
       let is_admin = false;
       let role = 'user';
+      let privacyPolicyAcceptedAt = null;
+      let termsOfServiceAcceptedAt = null;
       if (supabaseAdmin) {
-        const { data: profileRow } = await supabaseAdmin.from('profiles').select('is_admin').eq('id', u.id).maybeSingle();
+        const { data: profileRow } = await supabaseAdmin.from('profiles').select('is_admin, privacy_policy_accepted_at, terms_of_service_accepted_at, deletion_requested_at').eq('id', u.id).maybeSingle();
         is_admin = profileRow?.is_admin === true;
+        privacyPolicyAcceptedAt = profileRow?.privacy_policy_accepted_at ?? null;
+        termsOfServiceAcceptedAt = profileRow?.terms_of_service_accepted_at ?? null;
+        const deletionRequestedAt = profileRow?.deletion_requested_at ?? null;
         const { data: appRole } = await supabaseAdmin.from('app_roles').select('role').eq('user_id', u.id).maybeSingle();
         if (appRole?.role === 'admin') role = 'admin';
         else if (is_admin) role = 'admin';
@@ -1580,7 +1585,13 @@ router.get('/me', authenticateTesisOrSupabase, async (req, res) => {
           kota: 1000,
           kullanilanKota: 0,
           kbsTuru: b.kbs_turu || null
-        }
+        },
+        privacyPolicyAcceptedAt: privacyPolicyAcceptedAt || undefined,
+        termsOfServiceAcceptedAt: termsOfServiceAcceptedAt || undefined,
+        accountPendingDeletion: deletionRequestedAt ? true : undefined,
+        deletionRequestedAt: deletionRequestedAt || undefined,
+        deletionAt: deletionRequestedAt ? new Date(new Date(deletionRequestedAt).getTime() + 7 * 24 * 60 * 60 * 1000).toISOString() : undefined,
+        isGuest: u.is_anonymous === true && !(u.email_confirmed_at === true)
       });
     }
 
@@ -1633,7 +1644,9 @@ router.get('/me', authenticateTesisOrSupabase, async (req, res) => {
         title: kullanici.title ?? null,
         avatar_url: kullanici.avatarUrl ?? null
       },
-      tesis: kullanici.tesis
+      tesis: kullanici.tesis,
+      privacyPolicyAcceptedAt: true,
+      termsOfServiceAcceptedAt: true
     });
   } catch (error) {
     const requestId = req.requestId || '-';
@@ -1650,6 +1663,132 @@ router.get('/me', authenticateTesisOrSupabase, async (req, res) => {
       return errRes(req, res, 500, 'DB_CONNECT_ERROR', 'Veritabanı geçici olarak kullanılamıyor. Lütfen tekrar deneyin.');
     }
     return errRes(req, res, 500, 'UNHANDLED_ERROR', 'Bilgi alınamadı.');
+  }
+});
+
+/**
+ * Gizlilik politikası onayı. Sadece Supabase kullanıcıları; onay sonrası lobide bir daha gösterilmez.
+ */
+router.post('/privacy-accept', authenticateTesisOrSupabase, async (req, res) => {
+  const { errorResponse: errRes } = require('../lib/errorResponse');
+  try {
+    if (req.authSource !== 'supabase' || !req.user?.id) {
+      return res.json({ ok: true, privacyPolicyAcceptedAt: new Date().toISOString() });
+    }
+    if (!supabaseAdmin) {
+      return errRes(req, res, 503, 'SERVICE_UNAVAILABLE', 'Servis şu an kullanılamıyor.');
+    }
+    const userId = req.user.id;
+    const now = new Date().toISOString();
+    const { data: updated, error: updateErr } = await supabaseAdmin
+      .from('profiles')
+      .update({ privacy_policy_accepted_at: now, updated_at: now })
+      .eq('id', userId)
+      .select('id');
+    if (!updateErr && updated && updated.length > 0) {
+      return res.json({ ok: true, privacyPolicyAcceptedAt: now });
+    }
+    const { error: insertErr } = await supabaseAdmin
+      .from('profiles')
+      .insert({ id: userId, is_admin: false, privacy_policy_accepted_at: now, updated_at: now });
+    if (insertErr) {
+      console.error('[auth] POST /privacy-accept profiles insert error:', insertErr);
+      return errRes(req, res, 500, 'UPDATE_FAILED', 'Onay kaydedilemedi.');
+    }
+    return res.json({ ok: true, privacyPolicyAcceptedAt: now });
+  } catch (e) {
+    console.error('[auth] POST /privacy-accept error:', e);
+    return errRes(req, res, 500, 'UNHANDLED_ERROR', e?.message || 'Bir hata oluştu.');
+  }
+});
+
+/**
+ * Kullanım şartları onayı. Sadece Supabase kullanıcıları; onay sonrası lobide bir daha gösterilmez.
+ */
+router.post('/terms-accept', authenticateTesisOrSupabase, async (req, res) => {
+  const { errorResponse: errRes } = require('../lib/errorResponse');
+  try {
+    if (req.authSource !== 'supabase' || !req.user?.id) {
+      return res.json({ ok: true, termsOfServiceAcceptedAt: new Date().toISOString() });
+    }
+    if (!supabaseAdmin) {
+      return errRes(req, res, 503, 'SERVICE_UNAVAILABLE', 'Servis şu an kullanılamıyor.');
+    }
+    const userId = req.user.id;
+    const now = new Date().toISOString();
+    const { data: updated, error: updateErr } = await supabaseAdmin
+      .from('profiles')
+      .update({ terms_of_service_accepted_at: now, updated_at: now })
+      .eq('id', userId)
+      .select('id');
+    if (!updateErr && updated && updated.length > 0) {
+      return res.json({ ok: true, termsOfServiceAcceptedAt: now });
+    }
+    const { error: insertErr } = await supabaseAdmin
+      .from('profiles')
+      .insert({ id: userId, is_admin: false, terms_of_service_accepted_at: now, updated_at: now });
+    if (insertErr) {
+      console.error('[auth] POST /terms-accept profiles insert error:', insertErr);
+      return errRes(req, res, 500, 'UPDATE_FAILED', 'Onay kaydedilemedi.');
+    }
+    return res.json({ ok: true, termsOfServiceAcceptedAt: now });
+  } catch (e) {
+    console.error('[auth] POST /terms-accept error:', e);
+    return errRes(req, res, 500, 'UNHANDLED_ERROR', e?.message || 'Bir hata oluştu.');
+  }
+});
+
+const DELETION_GRACE_DAYS = 7;
+
+/**
+ * Hesap silme talebi. 7 gün içinde tüm veriler silinir; bu sürede kullanıcı giriş yapıp hesabı geri alabilir.
+ */
+router.post('/request-account-deletion', authenticateTesisOrSupabase, async (req, res) => {
+  const { errorResponse: errRes } = require('../lib/errorResponse');
+  try {
+    if (req.authSource !== 'supabase' || !req.user?.id) {
+      return errRes(req, res, 400, 'NOT_SUPPORTED', 'Bu işlem yalnızca e-posta/telefon ile giriş yapan hesaplar için geçerlidir.');
+    }
+    if (!supabaseAdmin) return errRes(req, res, 503, 'SERVICE_UNAVAILABLE', 'Servis kullanılamıyor.');
+    const userId = req.user.id;
+    const now = new Date().toISOString();
+    const { error } = await supabaseAdmin.from('profiles').update({ deletion_requested_at: now, updated_at: now }).eq('id', userId);
+    if (error) {
+      console.error('[auth] request-account-deletion error:', error);
+      return errRes(req, res, 500, 'UPDATE_FAILED', 'İşlem yapılamadı.');
+    }
+    const deletionAt = new Date(Date.now() + DELETION_GRACE_DAYS * 24 * 60 * 60 * 1000).toISOString();
+    return res.json({ ok: true, deletionRequestedAt: now, deletionAt, message: `${DELETION_GRACE_DAYS} gün içinde hesabınız ve tüm verileriniz kalıcı olarak silinecektir. Bu sürede giriş yaparak hesabı geri alabilirsiniz.` });
+  } catch (e) {
+    console.error('[auth] request-account-deletion error:', e);
+    return require('../lib/errorResponse').errorResponse(req, res, 500, 'UNHANDLED_ERROR', e?.message || 'Bir hata oluştu.');
+  }
+});
+
+/**
+ * Hesap silme talebini iptal et (7 gün içinde).
+ */
+router.post('/restore-account', authenticateTesisOrSupabase, async (req, res) => {
+  const { errorResponse: errRes } = require('../lib/errorResponse');
+  try {
+    if (req.authSource !== 'supabase' || !req.user?.id) {
+      return errRes(req, res, 400, 'NOT_SUPPORTED', 'Bu işlem yalnızca e-posta/telefon ile giriş yapan hesaplar için geçerlidir.');
+    }
+    if (!supabaseAdmin) return errRes(req, res, 503, 'SERVICE_UNAVAILABLE', 'Servis kullanılamıyor.');
+    const userId = req.user.id;
+    const { data: profile } = await supabaseAdmin.from('profiles').select('deletion_requested_at').eq('id', userId).maybeSingle();
+    if (!profile?.deletion_requested_at) {
+      return res.json({ ok: true, restored: false, message: 'Hesap zaten aktif.' });
+    }
+    const { error } = await supabaseAdmin.from('profiles').update({ deletion_requested_at: null, updated_at: new Date().toISOString() }).eq('id', userId);
+    if (error) {
+      console.error('[auth] restore-account error:', error);
+      return errRes(req, res, 500, 'UPDATE_FAILED', 'İşlem yapılamadı.');
+    }
+    return res.json({ ok: true, restored: true, message: 'Hesabınız geri alındı.' });
+  } catch (e) {
+    console.error('[auth] restore-account error:', e);
+    return require('../lib/errorResponse').errorResponse(req, res, 500, 'UNHANDLED_ERROR', e?.message || 'Bir hata oluştu.');
   }
 });
 

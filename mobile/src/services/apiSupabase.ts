@@ -328,9 +328,9 @@ export const api = {
     }
   },
 
-  async post(path: string, body?: Record<string, unknown> | FormData, _config?: { headers?: Record<string, string>; timeout?: number }) {
+  async post(path: string, body?: Record<string, unknown> | FormData, _config?: { headers?: Record<string, string>; timeout?: number; token?: string | null }) {
     const pathname = path.replace(/\?.*$/, '');
-    const token = await getToken();
+    const token = _config?.token !== undefined ? _config.token : await getToken();
     const payload: Record<string, unknown> = body && !(body instanceof FormData) ? body as Record<string, unknown> : {};
 
     try {
@@ -527,6 +527,54 @@ export const api = {
       if (pathname === '/auth/basvuru' || pathname === 'auth/basvuru') {
         const res = await callFn('auth_basvuru', payload, null);
         return toResponse(res);
+      }
+      if (pathname === '/auth/privacy-accept' || pathname === 'auth/privacy-accept') {
+        const backendUrl = getBackendUrl();
+        if (!backendUrl || !token) throw Object.assign(new Error('Giriş gerekli'), { response: { status: 401, data: {} } });
+        const r = await fetchWithLog(`${backendUrl}/api/auth/privacy-accept`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+          body: JSON.stringify(payload || {}),
+        });
+        const data = await r.json().catch(() => ({}));
+        if (!r.ok) throw Object.assign(new Error((data as { message?: string })?.message || 'Onay kaydedilemedi'), { response: { status: r.status, data } });
+        return toResponse(data);
+      }
+      if (pathname === '/auth/terms-accept' || pathname === 'auth/terms-accept') {
+        const backendUrl = getBackendUrl();
+        if (!backendUrl || !token) throw Object.assign(new Error('Giriş gerekli'), { response: { status: 401, data: {} } });
+        const r = await fetchWithLog(`${backendUrl}/api/auth/terms-accept`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+          body: JSON.stringify(payload || {}),
+        });
+        const data = await r.json().catch(() => ({}));
+        if (!r.ok) throw Object.assign(new Error((data as { message?: string })?.message || 'Onay kaydedilemedi'), { response: { status: r.status, data } });
+        return toResponse(data);
+      }
+      if (pathname === '/auth/restore-account' || pathname === 'auth/restore-account') {
+        const backendUrl = getBackendUrl();
+        if (!backendUrl || !token) throw Object.assign(new Error('Giriş gerekli'), { response: { status: 401, data: {} } });
+        const r = await fetchWithLog(`${backendUrl}/api/auth/restore-account`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+          body: JSON.stringify(payload || {}),
+        });
+        const data = await r.json().catch(() => ({}));
+        if (!r.ok) throw Object.assign(new Error((data as { message?: string })?.message || 'İşlem yapılamadı'), { response: { status: r.status, data } });
+        return toResponse(data);
+      }
+      if (pathname === '/auth/request-account-deletion' || pathname === 'auth/request-account-deletion') {
+        const backendUrl = getBackendUrl();
+        if (!backendUrl || !token) throw Object.assign(new Error('Giriş gerekli'), { response: { status: 401, data: {} } });
+        const r = await fetchWithLog(`${backendUrl}/api/auth/request-account-deletion`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+          body: JSON.stringify(payload || {}),
+        });
+        const data = await r.json().catch(() => ({}));
+        if (!r.ok) throw Object.assign(new Error((data as { message?: string })?.message || 'İşlem yapılamadı'), { response: { status: r.status, data } });
+        return toResponse(data);
       }
       if (pathname === '/nfc/okut' || pathname === 'nfc/okut') {
         const backendUrl = getBackendUrl();

@@ -19,6 +19,9 @@ router.use(authenticateSupabase);
  */
 router.post('/checkin', async (req, res) => {
   try {
+    if (req.user?.is_anonymous) {
+      return errorResponse(req, res, 403, 'GUEST_EMAIL_REQUIRED', 'KBS bilgilerini doldurmak için e-posta doğrulaması gerekli. Profil > Telefon ve e-posta bağla bölümünden e-posta ekleyip doğrulayın.');
+    }
     const body = req.body || {};
     const branchId = req.branchId;
     const branch = req.branch || {};
@@ -123,6 +126,9 @@ router.post('/checkin', async (req, res) => {
  */
 router.post('/checkout/:guestId?', async (req, res) => {
   try {
+    if (req.user?.is_anonymous) {
+      return errorResponse(req, res, 403, 'GUEST_EMAIL_REQUIRED', 'KBS işlemleri için e-posta doğrulaması gerekli. Profil > E-posta ekleyin.');
+    }
     const guestId = req.params?.guestId || req.body?.guest_id || req.body?.misafirId;
     const branchId = req.branchId;
     if (!guestId) {
@@ -194,6 +200,9 @@ router.post('/checkout/:guestId?', async (req, res) => {
  */
 router.post('/room-change', async (req, res) => {
   try {
+    if (req.user?.is_anonymous) {
+      return errorResponse(req, res, 403, 'GUEST_EMAIL_REQUIRED', 'KBS işlemleri için e-posta doğrulaması gerekli. Profil > E-posta ekleyin.');
+    }
     const guestId = req.body?.guest_id || req.body?.misafirId;
     const yeniOdaNumara = req.body?.yeni_oda_numara || req.body?.yeniOdaNumarasi || req.body?.room_number;
     const branchId = req.branchId;

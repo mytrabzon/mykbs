@@ -30,6 +30,7 @@ export default function AyarlarScreen() {
   const navigation = useNavigation();
   const { colors } = useTheme();
   const { logout, tesis, user, setTesis, token } = useAuth();
+  const [deleteAccountLoading, setDeleteAccountLoading] = useState(false);
   const [tesisDetail, setTesisDetail] = useState(null);
   const [tesisAdiEdit, setTesisAdiEdit] = useState('');
   const [tesisAdiSaving, setTesisAdiSaving] = useState(false);
@@ -357,6 +358,32 @@ export default function AyarlarScreen() {
   const supportEmail = Constants.expoConfig?.extra?.EXPO_PUBLIC_SUPPORT_EMAIL || 'support@litxtech.com';
   const supportPhone = Constants.expoConfig?.extra?.EXPO_PUBLIC_SUPPORT_PHONE || '0850 304 5061';
   const supportPhoneTel = Constants.expoConfig?.extra?.EXPO_PUBLIC_SUPPORT_PHONE_TEL || 'tel:08503045061';
+
+  const handleRequestAccountDeletion = () => {
+    Alert.alert(
+      'Hesabı sil',
+      'Hesabınız 7 gün içinde kalıcı olarak silinecektir. Tüm verileriniz (belgeler, işlemler, KBS kayıtları) silinecektir. Bu süre içinde giriş yaparak hesabı geri alabilirsiniz. Silme işlemini onaylıyor musunuz?',
+      [
+        { text: 'İptal', style: 'cancel' },
+        {
+          text: 'Evet, hesabımı sil',
+          style: 'destructive',
+          onPress: async () => {
+            setDeleteAccountLoading(true);
+            try {
+              await api.post('/auth/request-account-deletion');
+              Toast.show({ type: 'info', text1: 'Talep alındı', text2: '7 gün içinde hesabınız silinecek. Bu sürede giriş yaparak geri alabilirsiniz.' });
+              await logout();
+            } catch (e) {
+              Toast.show({ type: 'error', text1: 'Hata', text2: e?.response?.data?.message || e?.message || 'İşlem yapılamadı.' });
+            } finally {
+              setDeleteAccountLoading(false);
+            }
+          },
+        },
+      ]
+    );
+  };
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
@@ -697,6 +724,21 @@ export default function AyarlarScreen() {
             </View>
           </View>
         </Modal>
+
+        <View style={[styles.section, { backgroundColor: colors.surface }]}>
+          <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>Hesap</Text>
+          <Text style={[styles.infoText, { color: colors.textSecondary, marginBottom: spacing.md }]}>
+            Hesabınızı silmek 7 gün içinde tüm verilerinizin (belgeler, işlemler, KBS kayıtları) kalıcı olarak silinmesini başlatır. Bu sürede giriş yaparak talebi iptal edebilirsiniz.
+          </Text>
+          <Button
+            variant="destructive"
+            onPress={handleRequestAccountDeletion}
+            loading={deleteAccountLoading}
+            disabled={deleteAccountLoading}
+          >
+            Hesabı sil
+          </Button>
+        </View>
 
         <View style={[styles.section, { backgroundColor: colors.surface }]}>
           <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>İletişim</Text>

@@ -72,7 +72,10 @@ export default function OTPVerifyScreen() {
             email: trimmed.toLowerCase(),
             options: { shouldCreateUser: islemTipi === 'kayit' },
           });
-          if (error) throw error;
+          if (error) {
+            logger.warn('OTPVerify signInWithOtp email error', { message: error.message, code: error.code });
+            throw error;
+          }
           usedSupabaseForOtp.current = true;
           isEmailOtpRef.current = true;
         } else {
@@ -86,7 +89,14 @@ export default function OTPVerifyScreen() {
         setCountdown(300);
         Toast.show({ type: 'success', text1: 'Kod gönderildi', text2: `${trimmed} adresine doğrulama kodu gönderildi` });
       } catch (e) {
-        Toast.show({ type: 'error', text1: 'Kod gönderilemedi', text2: e?.response?.data?.message || e?.message || 'Tekrar deneyin.' });
+        const msg = (e?.message || '').toLowerCase();
+        const kullaniciMesaji =
+          msg.includes('sending') && msg.includes('mail')
+            ? 'E-posta servisi yapılandırılmamış. Supabase Dashboard → Auth → SMTP ayarlarını kontrol edin.'
+            : msg.includes('authorized') || msg.includes('not allowed')
+              ? 'Bu e-posta ile kod gönderilemiyor. Custom SMTP ayarlanmış mı kontrol edin.'
+              : e?.message || 'Tekrar deneyin.';
+        Toast.show({ type: 'error', text1: 'Kod gönderilemedi', text2: kullaniciMesaji });
       }
       setLoading(false);
       return;
@@ -94,7 +104,7 @@ export default function OTPVerifyScreen() {
 
     const raw = phoneInput.replace(/\D/g, '');
     if (raw.length < 10) {
-      Toast.show({ type: 'error', text1: 'Geçersiz numara', text2: '10 haneli telefon numaranızı veya e-posta girin' });
+      Toast.show({ type: 'error', text1: 'Geçersiz numara', text2: 'E-posta adresinizi girin' });
       return;
     }
     setLoading(true);
@@ -128,7 +138,7 @@ export default function OTPVerifyScreen() {
       setSentToPhone(phoneInput.trim());
       setSentToEmail('');
       setCountdown(300);
-      Toast.show({ type: 'success', text1: 'SMS gönderildi', text2: `${formatPhoneDisplay(num)} numarasına kod gönderildi` });
+      Toast.show({ type: 'success', text1: 'Kod gönderildi', text2: 'Doğrulama kodu gönderildi' });
     } catch (e) {
       Toast.show({ type: 'error', text1: 'SMS gönderilemedi', text2: e?.response?.data?.message || e?.message || 'Tekrar deneyin.' });
     }
@@ -379,7 +389,7 @@ export default function OTPVerifyScreen() {
     }
     const num = telefon || phoneInput.trim().replace(/\D/g, '');
     if (!num || num.replace(/\D/g, '').length < 10) {
-      Toast.show({ type: 'error', text1: 'Numara gerekli', text2: 'Önce telefon numaranızı veya e-posta girin' });
+      Toast.show({ type: 'error', text1: 'E-posta gerekli', text2: 'Önce e-posta adresinizi girin' });
       return;
     }
     try {
@@ -403,7 +413,7 @@ export default function OTPVerifyScreen() {
         }
       }
       setCountdown(300);
-      Toast.show({ type: 'success', text1: 'SMS Gönderildi', text2: `${formatPhoneDisplay(num)} numarasına yeni kod gönderildi` });
+      Toast.show({ type: 'success', text1: 'Kod gönderildi', text2: 'Yeni doğrulama kodu gönderildi' });
       setOtp(['', '', '', '', '', '']);
       inputRefs.current[0]?.focus();
     } catch (error) {
@@ -425,12 +435,12 @@ export default function OTPVerifyScreen() {
     >
       <View style={styles.content}>
         <Text style={styles.title}>
-          {otpSent ? 'Doğrulama Kodu' : isEmail(phoneInput) ? 'E-posta Adresiniz' : 'Telefon veya E-posta'}
+          {otpSent ? 'Doğrulama Kodu' : 'E-posta Adresiniz'}
         </Text>
         {!otpSent ? (
           <>
             <Text style={styles.subtitle}>
-              Kod alacağınız 10 haneli telefon numaranızı veya e-posta adresinizi girin
+              E-posta adresinizi girin, size doğrulama kodu göndereceğiz
             </Text>
             <TextInput
               style={styles.phoneInput}
@@ -468,7 +478,7 @@ export default function OTPVerifyScreen() {
             <Text style={styles.subtitle}>
               {sentToEmail
                 ? `${sentToEmail} adresine gönderilen 6 haneli kodu giriniz`
-                : `${formatPhoneDisplay(sentToPhone)} numarasına gönderilen 6 haneli kodu giriniz`}
+                : `Gönderilen 6 haneli kodu giriniz`}
             </Text>
 
             <View style={styles.otpContainer}>

@@ -14,6 +14,8 @@ const AUTH_STORAGE_KEYS = {
   SUPABASE_TOKEN: `@${APP_PREFIX}:auth:supabase_token`,
   LAST_TAB: `@${APP_PREFIX}:auth:last_tab`,
   RECOVERY_PENDING: `@${APP_PREFIX}:auth:recovery_pending`,
+  LOCAL_PRIVACY_ACCEPTED_AT: `@${APP_PREFIX}:consent:local_privacy_at`,
+  LOCAL_TERMS_ACCEPTED_AT: `@${APP_PREFIX}:consent:local_terms_at`,
 };
 
 const AuthContext = createContext({});
@@ -22,7 +24,7 @@ const AuthContext = createContext({});
  * Token ile /auth/me çağırıp user/tesis state'ini günceller.
  * @returns {Promise<boolean>} true = kullanıcı/tesis set edildi veya zaten token geçerli; false = 401 ile oturum temizlendi (giriş başarısız).
  */
-async function fetchMeAndSetState(accessToken, setUser, setTesis, setToken, getTokenProvider) {
+async function fetchMeAndSetState(accessToken, setUser, setTesis, setToken, getTokenProvider, setPrivacyPolicyAcceptedAt, setTermsOfServiceAcceptedAt, setAccountPendingDeletion, setDeletionAt, setGuest) {
   if (!accessToken) return false;
   await AsyncStorage.setItem(AUTH_STORAGE_KEYS.TOKEN, accessToken);
   await AsyncStorage.setItem(AUTH_STORAGE_KEYS.SUPABASE_TOKEN, accessToken);
@@ -32,7 +34,7 @@ async function fetchMeAndSetState(accessToken, setUser, setTesis, setToken, getT
   setDataServiceTokenProvider(getToken);
   try {
     const res = await api.get('/auth/me');
-    const { kullanici, tesis: tesisData } = res.data || {};
+    const { kullanici, tesis: tesisData, privacyPolicyAcceptedAt, termsOfServiceAcceptedAt, accountPendingDeletion, deletionAt } = res.data || {};
     if (kullanici) {
       setUser(kullanici);
       await AsyncStorage.setItem(AUTH_STORAGE_KEYS.USER, JSON.stringify(kullanici));
@@ -40,6 +42,21 @@ async function fetchMeAndSetState(accessToken, setUser, setTesis, setToken, getT
     if (tesisData) {
       setTesis(tesisData);
       await AsyncStorage.setItem(AUTH_STORAGE_KEYS.TESIS, JSON.stringify(tesisData));
+    }
+    if (setPrivacyPolicyAcceptedAt != null && privacyPolicyAcceptedAt != null) {
+      setPrivacyPolicyAcceptedAt(privacyPolicyAcceptedAt);
+    }
+    if (setTermsOfServiceAcceptedAt != null && termsOfServiceAcceptedAt != null) {
+      setTermsOfServiceAcceptedAt(termsOfServiceAcceptedAt);
+    }
+    if (typeof setAccountPendingDeletion === 'function') {
+      setAccountPendingDeletion(!!accountPendingDeletion);
+    }
+    if (typeof setDeletionAt === 'function' && deletionAt) {
+      setDeletionAt(deletionAt);
+    }
+    if (typeof setGuest === 'function' && res.data?.isGuest != null) {
+      setGuest(!!res.data.isGuest);
     }
     return true;
   } catch (e) {
@@ -64,6 +81,13 @@ export const AuthProvider = ({ children }) => {
   const [tesis, setTesis] = useState(null);
   const [token, setToken] = useState(null);
   const [lastTab, setLastTabState] = useState(null);
+  const [privacyPolicyAcceptedAt, setPrivacyPolicyAcceptedAt] = useState(null);
+  const [termsOfServiceAcceptedAt, setTermsOfServiceAcceptedAt] = useState(null);
+  const [localPrivacyAcceptedAt, setLocalPrivacyAcceptedAt] = useState(null);
+  const [localTermsAcceptedAt, setLocalTermsAcceptedAt] = useState(null);
+  const [accountPendingDeletion, setAccountPendingDeletion] = useState(false);
+  const [deletionAt, setDeletionAt] = useState(null);
+  const [isGuest, setGuest] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [recoverySessionPending, setRecoverySessionPending] = useState(false);
   const mounted = useRef(true);
@@ -88,17 +112,25 @@ export const AuthProvider = ({ children }) => {
               setToken(refreshed.access_token);
               return refreshed.access_token;
             }
+            if (expiresAt && expiresAt <= nowSec + bufferSec) {
+              return await AsyncStorage.getItem(AUTH_STORAGE_KEYS.SUPABASE_TOKEN) || await AsyncStorage.getItem(AUTH_STORAGE_KEYS.TOKEN);
+            }
             return session.access_token;
           }
         }
       } catch (e) {
         logger.warn('getSupabaseAwareTokenProvider getSession/refresh failed, using storage', e?.message || e);
       }
-      return await AsyncStorage.getItem(AUTH_STORAGE_KEYS.TOKEN);
+      return await AsyncStorage.getItem(AUTH_STORAGE_KEYS.SUPABASE_TOKEN) || await AsyncStorage.getItem(AUTH_STORAGE_KEYS.TOKEN);
     };
   };
 
   const isAuthenticated = !!token && !!user;
+
+  const hasPrivacyAccepted = !!(privacyPolicyAcceptedAt || localPrivacyAcceptedAt);
+  const hasTermsAccepted = !!(termsOfServiceAcceptedAt || localTermsAcceptedAt);
+  const needsPrivacyConsent = !hasPrivacyAccepted;
+  const needsTermsConsent = hasPrivacyAccepted && !hasTermsAccepted;
 
   const clearAuth = async () => {
     // Önce state temizle ki ekran hemen girişe dönsün (tek tıkla çıkış)
@@ -106,6 +138,11 @@ export const AuthProvider = ({ children }) => {
     setUser(null);
     setTesis(null);
     setLastTabState(null);
+    setPrivacyPolicyAcceptedAt(null);
+    setTermsOfServiceAcceptedAt(null);
+    setAccountPendingDeletion(false);
+    setDeletionAt(null);
+    setGuest(false);
     setApiTokenProvider(null);
     setDataServiceTokenProvider(null);
     // Storage ve cache arka planda temizlensin (çıkışı yavaşlatmasın)
@@ -134,6 +171,10 @@ export const AuthProvider = ({ children }) => {
       try {
         const storedLastTab = await AsyncStorage.getItem(AUTH_STORAGE_KEYS.LAST_TAB);
         if (storedLastTab) setLastTabState(storedLastTab);
+        const localPrivacy = await AsyncStorage.getItem(AUTH_STORAGE_KEYS.LOCAL_PRIVACY_ACCEPTED_AT);
+        const localTerms = await AsyncStorage.getItem(AUTH_STORAGE_KEYS.LOCAL_TERMS_ACCEPTED_AT);
+        if (localPrivacy && mounted.current) setLocalPrivacyAcceptedAt(localPrivacy);
+        if (localTerms && mounted.current) setLocalTermsAcceptedAt(localTerms);
 
         if (supabase) {
           const { data: { session: refreshedSession }, error: refreshError } = await supabase.auth.refreshSession();
@@ -141,7 +182,7 @@ export const AuthProvider = ({ children }) => {
             ? refreshedSession
             : (await supabase.auth.getSession()).data?.session;
           if (session?.access_token && mounted.current) {
-            await fetchMeAndSetState(session.access_token, setUser, setTesis, setToken, getSupabaseAwareTokenProvider);
+            await fetchMeAndSetState(session.access_token, setUser, setTesis, setToken, getSupabaseAwareTokenProvider, setPrivacyPolicyAcceptedAt, setTermsOfServiceAcceptedAt, setAccountPendingDeletion, setDeletionAt, setGuest);
           } else {
             // Supabase oturumu yok: backend JWT (telefon+şifre girişi) ile kayıtlı token varsa doğrula
             const storedToken = await AsyncStorage.getItem(AUTH_STORAGE_KEYS.TOKEN);
@@ -159,6 +200,11 @@ export const AuthProvider = ({ children }) => {
                 if (res?.data && mounted.current) {
                   setUser(res.data.kullanici ?? res.data.user);
                   setTesis(res.data.tesis ?? res.data.tesisData ?? null);
+                  if (res.data.privacyPolicyAcceptedAt != null) setPrivacyPolicyAcceptedAt(res.data.privacyPolicyAcceptedAt);
+                  if (res.data.termsOfServiceAcceptedAt != null) setTermsOfServiceAcceptedAt(res.data.termsOfServiceAcceptedAt);
+                  if (res.data.accountPendingDeletion) setAccountPendingDeletion(true);
+                  if (res.data.deletionAt) setDeletionAt(res.data.deletionAt);
+                  if (res.data?.isGuest != null) setGuest(!!res.data.isGuest);
                   await AsyncStorage.setItem(AUTH_STORAGE_KEYS.USER, JSON.stringify(res.data.kullanici ?? res.data.user));
                   await AsyncStorage.setItem(AUTH_STORAGE_KEYS.TESIS, JSON.stringify(res.data.tesis ?? res.data.tesisData ?? null));
                 }
@@ -180,7 +226,7 @@ export const AuthProvider = ({ children }) => {
                 setRecoverySessionPending(true);
                 return;
               }
-              await fetchMeAndSetState(session.access_token, setUser, setTesis, setToken, getSupabaseAwareTokenProvider);
+              await fetchMeAndSetState(session.access_token, setUser, setTesis, setToken, getSupabaseAwareTokenProvider, setPrivacyPolicyAcceptedAt, setTermsOfServiceAcceptedAt, setAccountPendingDeletion, setDeletionAt, setGuest);
             }
           });
         } else {
@@ -232,7 +278,7 @@ export const AuthProvider = ({ children }) => {
   const refreshMe = async () => {
     const accessToken = await getSupabaseToken();
     if (accessToken) {
-      await fetchMeAndSetState(accessToken, setUser, setTesis, setToken, supabase ? getSupabaseAwareTokenProvider : undefined);
+      await fetchMeAndSetState(accessToken, setUser, setTesis, setToken, supabase ? getSupabaseAwareTokenProvider : undefined, setPrivacyPolicyAcceptedAt, setTermsOfServiceAcceptedAt, setAccountPendingDeletion, setDeletionAt, setGuest);
       return;
     }
     const backendToken = await AsyncStorage.getItem(AUTH_STORAGE_KEYS.TOKEN);
@@ -286,7 +332,7 @@ export const AuthProvider = ({ children }) => {
         await AsyncStorage.setItem(AUTH_STORAGE_KEYS.TESIS, JSON.stringify(tesisData));
       }
       if (!kullanici || !tesisData) {
-        const fetched = await fetchMeAndSetState(tokenForApi, setUser, setTesis, setToken, supabase ? getSupabaseAwareTokenProvider : undefined);
+        const fetched = await fetchMeAndSetState(tokenForApi, setUser, setTesis, setToken, supabase ? getSupabaseAwareTokenProvider : undefined, setPrivacyPolicyAcceptedAt, setTermsOfServiceAcceptedAt, setAccountPendingDeletion, setDeletionAt, setGuest);
         if (!fetched) {
           return { success: false, message: 'Bu hesap uygulamada tanımlı değil. Lütfen önce kayıt olun veya tesis kodunuzu kontrol edin.' };
         }
@@ -368,8 +414,8 @@ export const AuthProvider = ({ children }) => {
       return { success: false, message: 'Şifre sıfırlama servisi kullanılamıyor.' };
     }
     try {
-      // Şifre sıfırlama linki uygulamada açılsın (Supabase Dashboard → Auth → URL Configuration'da mykbs://reset-password ekleyin)
-      const redirectTo = 'mykbs://reset-password';
+      // Şifre sıfırlama linki uygulamada açılsın (Supabase Redirect URLs: kbsprime://auth/callback)
+      const redirectTo = 'kbsprime://auth/callback';
       const { error } = await supabase.auth.resetPasswordForEmail((emailAddress || '').trim().toLowerCase(), {
         redirectTo,
       });
@@ -478,6 +524,21 @@ export const AuthProvider = ({ children }) => {
         loginWithPassword,
         loginWithPhoneAndPassword,
         loginWithToken,
+        loginAsGuest: async () => {
+          if (!supabase?.auth) return { success: false, message: 'Misafir girişi kullanılamıyor.' };
+          try {
+            const { data, error } = await supabase.auth.signInAnonymously();
+            if (error) return { success: false, message: error.message || 'Misafir girişi yapılamadı.' };
+            if (data?.session?.access_token && mounted.current) {
+              await fetchMeAndSetState(data.session.access_token, setUser, setTesis, setToken, getSupabaseAwareTokenProvider, setPrivacyPolicyAcceptedAt, setTermsOfServiceAcceptedAt, setAccountPendingDeletion, setDeletionAt, setGuest);
+              return { success: true };
+            }
+            return { success: false, message: 'Oturum alınamadı.' };
+          } catch (e) {
+            logger.error('loginAsGuest error', e);
+            return { success: false, message: e?.message || 'Misafir girişi yapılamadı.' };
+          }
+        },
         resetPasswordForEmail,
         aktivasyon,
         setPin,
@@ -488,6 +549,93 @@ export const AuthProvider = ({ children }) => {
         setSupabaseToken,
         refreshMe,
         setTesis,
+        /** Gizlilik politikası onayı (ISO tarih string veya true). Yoksa lobide onay ekranı gösterilir. */
+        privacyPolicyAcceptedAt,
+        /** Yerel (giriş yapmadan) gizlilik onayı – sadece AsyncStorage. */
+        localPrivacyAcceptedAt,
+        localTermsAcceptedAt,
+        needsPrivacyConsent,
+        needsTermsConsent,
+        acceptPrivacyLocally: async () => {
+          const now = new Date().toISOString();
+          await AsyncStorage.setItem(AUTH_STORAGE_KEYS.LOCAL_PRIVACY_ACCEPTED_AT, now);
+          setLocalPrivacyAcceptedAt(now);
+        },
+        acceptTermsLocally: async () => {
+          const now = new Date().toISOString();
+          await AsyncStorage.setItem(AUTH_STORAGE_KEYS.LOCAL_TERMS_ACCEPTED_AT, now);
+          setLocalTermsAcceptedAt(now);
+        },
+        acceptPrivacy: async () => {
+          try {
+            let supabaseToken = null;
+            if (supabase?.auth) {
+              const { data: { session } } = await supabase.auth.getSession();
+              if (session?.expires_at && session.expires_at <= Math.floor(Date.now() / 1000) + 300) {
+                const { data: { session: refreshed } } = await supabase.auth.refreshSession();
+                supabaseToken = refreshed?.access_token ?? session?.access_token;
+              } else {
+                supabaseToken = session?.access_token;
+              }
+            }
+            if (!supabaseToken) {
+              const err = new Error('Oturum bulunamadı. Lütfen çıkış yapıp tekrar giriş yapın.');
+              err.response = { status: 401, data: { code: 'INVALID_TOKEN' } };
+              throw err;
+            }
+            const res = await api.post('/auth/privacy-accept', {}, { token: supabaseToken });
+            if (res?.data?.privacyPolicyAcceptedAt) {
+              setPrivacyPolicyAcceptedAt(res.data.privacyPolicyAcceptedAt);
+            }
+          } catch (e) {
+            logger.error('acceptPrivacy error', e);
+            throw e;
+          }
+        },
+        /** Kullanım şartları onayı (ISO tarih string veya true). Yoksa lobide onay ekranı gösterilir. */
+        termsOfServiceAcceptedAt,
+        acceptTerms: async () => {
+          try {
+            let supabaseToken = null;
+            if (supabase?.auth) {
+              const { data: { session } } = await supabase.auth.getSession();
+              if (session?.expires_at && session.expires_at <= Math.floor(Date.now() / 1000) + 300) {
+                const { data: { session: refreshed } } = await supabase.auth.refreshSession();
+                supabaseToken = refreshed?.access_token ?? session?.access_token;
+              } else {
+                supabaseToken = session?.access_token;
+              }
+            }
+            if (!supabaseToken) {
+              const err = new Error('Oturum bulunamadı. Lütfen çıkış yapıp tekrar giriş yapın.');
+              err.response = { status: 401, data: { code: 'INVALID_TOKEN' } };
+              throw err;
+            }
+            const res = await api.post('/auth/terms-accept', {}, { token: supabaseToken });
+            if (res?.data?.termsOfServiceAcceptedAt) {
+              setTermsOfServiceAcceptedAt(res.data.termsOfServiceAcceptedAt);
+            }
+          } catch (e) {
+            logger.error('acceptTerms error', e);
+            throw e;
+          }
+        },
+        accountPendingDeletion,
+        deletionAt,
+        restoreAccount: async () => {
+          try {
+            const res = await api.post('/auth/restore-account');
+            if (res?.data?.restored) {
+              setAccountPendingDeletion(false);
+              setDeletionAt(null);
+              await refreshMe();
+            }
+          } catch (e) {
+            logger.error('restoreAccount error', e);
+            throw e;
+          }
+        },
+        isGuest,
       }}
     >
       {children}

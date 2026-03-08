@@ -36,7 +36,11 @@ app.use((req, res, next) => {
 // Middleware
 app.use(helmet());
 app.use(cors({ origin: '*', allowedHeaders: ['Content-Type', 'Authorization', 'X-Request-Id', 'X-Correlation-Id'] }));
-app.use(express.json({ limit: '2mb' }));
+// Body parser: OCR base64 için 20mb, diğer API için 2mb (tek parser çalışsın diye path'e göre)
+app.use((req, res, next) => {
+  const limit = req.path.startsWith('/api/ocr') ? '20mb' : '2mb';
+  express.json({ limit })(req, res, next);
+});
 app.use(express.urlencoded({ extended: true }));
 
 // Static file serving - Upload edilen resimler için
@@ -74,8 +78,9 @@ app.use('/api', require('./routes/api/checkin'));
 // Mock KBS (POLIS_KBS_URL boşken otomatik mock; manuel test: POST /mock/kbs)
 app.use('/mock', require('./routes/mockKbs'));
 
-// Internal: KBS worker (Railway cron: POST /internal/kbs/worker, header x-worker-secret)
+// Internal: KBS worker + hesap silme purge (cron: x-worker-secret)
 app.use('/internal', require('./routes/internal/kbsWorker'));
+app.use('/internal', require('./routes/internal/purgeDeletedAccounts'));
 
 // Debug: egress IP (KBS whitelist doğrulama — VPS sabit IP)
 app.use('/debug', require('./routes/debug'));

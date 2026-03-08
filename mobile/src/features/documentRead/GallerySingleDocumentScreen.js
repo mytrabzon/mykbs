@@ -36,7 +36,7 @@ export default function GallerySingleDocumentScreen({ navigation, route }) {
     try {
       const Manipulator = require('expo-image-manipulator');
       if (Manipulator && typeof Manipulator.manipulateAsync === 'function') {
-        const m = await Manipulator.manipulateAsync(uri, [{ resize: { width: 2000 } }], { compress: 0.9 });
+        const m = await Manipulator.manipulateAsync(uri, [{ resize: { width: 1600 } }], { compress: 0.8 });
         if (m?.uri) { uri = m.uri; logger.info('[Galeri belge] Resize sonrası uri', { uri: uri?.slice(0, 80) + '…' }); }
       }
     } catch (manipErr) {
