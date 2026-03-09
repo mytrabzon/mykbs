@@ -223,7 +223,7 @@ export const api = {
           headers: { Authorization: `Bearer ${token}` },
         });
         const data = await r.json().catch(() => ({})) as Record<string, unknown>;
-        throwIfNotOk(r, data, 'Profil alınamadı');
+        throwIfNotOk(r, data, r.status === 404 ? 'Profil bulunamadı. Tekrar giriş yapın.' : 'Profil alınamadı');
         return toResponse(data);
       }
       if (pathname === '/tesis' || pathname === 'tesis') {

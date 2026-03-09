@@ -86,7 +86,12 @@ export async function uploadCommunityImage(base64, branchId, supabaseToken) {
     image_base64: base64,
     mime: 'image/jpeg',
   }, supabaseToken);
-  return res.url;
+  const url = (res && (res.url ?? res.data?.url)) ? (res.url ?? res.data?.url) : null;
+  if (!url || typeof url !== 'string') {
+    const msg = (res && (res.message ?? res.error)) || 'Resim yükleme yanıtı alınamadı.';
+    throw new EdgeFunctionError(msg, 500, 'UPLOAD_FAILED', res);
+  }
+  return url;
 }
 
 export async function updateProfile(body, supabaseToken) {

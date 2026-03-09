@@ -449,10 +449,11 @@ export default function CheckInScreen({ navigation, route }) {
       Toast.show({
         type: 'success',
         text1: 'Başarılı',
-        text2: response.data.message
+        text2: response.data.message || 'Check-in kaydedildi'
       });
 
-      navigation.goBack();
+      // Sayfa ilerlesin: ana ekrana dön ve Misafirler sekmesini aç (yeni kayıt orada görünsün)
+      navigation.navigate('Main', { screen: 'Misafirler' });
     } catch (error) {
       logger.error('CheckIn error', {
         message: error.message,

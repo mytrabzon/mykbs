@@ -266,13 +266,18 @@ export default function LoginScreen({ route }) {
           ) : (
             <>
               {isValidEmail(email) && (
-                <TouchableOpacity
-                  style={[styles.kodGirisBtn, { borderColor: colors.primary }]}
-                  onPress={handleKodIleGiris}
-                  disabled={loading}
-                >
-                  <Text style={[styles.kodGirisBtnText, { color: colors.primary }]}>Kod ile giriş</Text>
-                </TouchableOpacity>
+                <>
+                  <TouchableOpacity
+                    style={[styles.kodGirisBtn, { borderColor: colors.primary }]}
+                    onPress={handleKodIleGiris}
+                    disabled={loading}
+                  >
+                    <Text style={[styles.kodGirisBtnText, { color: colors.primary }]}>Kod ile giriş</Text>
+                  </TouchableOpacity>
+                  <Text style={[styles.kodGirisHint, { color: colors.textSecondary }]}>
+                    E-posta + şifre ile kayıt olduysanız kod gelmez; aşağıdaki şifre alanı ile giriş yapın.
+                  </Text>
+                </>
               )}
               <Input
                 label="Şifre"
@@ -430,6 +435,11 @@ const styles = StyleSheet.create({
   kodGirisBtnText: {
     fontSize: typography.text.body.fontSize,
     fontWeight: '600',
+  },
+  kodGirisHint: {
+    fontSize: typography.text.caption?.fontSize || 12,
+    marginBottom: spacing.md,
+    marginTop: -spacing.xs,
   },
   geriRow: {
     flexDirection: 'row',

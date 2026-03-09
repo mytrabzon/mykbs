@@ -62,7 +62,10 @@ async function fetchMeAndSetState(accessToken, setUser, setTesis, setToken, getT
   } catch (e) {
     const status = e?.response?.status;
     const code = e?.response?.data?.code;
-    if (status === 401) {
+    if (status === 401 || status === 404 || (status === 500 && code === 'GUEST_SETUP_FAILED')) {
+      if (status === 404) {
+        logger.warn('AuthContext fetch /me: kullanıcı bulunamadı (404), oturum temizleniyor');
+      }
       try {
         await supabase?.auth?.signOut();
       } catch (_) {}
@@ -72,7 +75,7 @@ async function fetchMeAndSetState(accessToken, setUser, setTesis, setToken, getT
       setTesis(null);
       return false;
     }
-    if (status === 409 && code === 'BRANCH_NOT_ASSIGNED') {
+    if (status === 409 && (code === 'BRANCH_NOT_ASSIGNED' || code === 'BRANCH_LOAD_FAILED')) {
       try {
         const storedUser = await AsyncStorage.getItem(AUTH_STORAGE_KEYS.USER);
         const storedTesis = await AsyncStorage.getItem(AUTH_STORAGE_KEYS.TESIS);

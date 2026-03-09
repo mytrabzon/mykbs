@@ -5,6 +5,7 @@ import {
   jsonResponse,
   errorResponse,
 } from "../_shared/auth.ts";
+import { BUCKET_COMMUNITY } from "../_shared/storage.ts";
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -47,7 +48,7 @@ serve(async (req) => {
   const path = `${body.branch_id}/${crypto.randomUUID()}.${ext}`;
 
   const { data, error } = await auth.supabase.storage
-    .from("community")
+    .from(BUCKET_COMMUNITY)
     .upload(path, buf, {
       contentType: body.mime || "image/jpeg",
       upsert: false,
@@ -56,11 +57,11 @@ serve(async (req) => {
   if (error) {
     console.error("upload_community_image error:", error);
     if (error.message?.includes("Bucket not found")) {
-      return errorResponse("community bucket bulunamadi. Dashboard'dan olusturun.", 500);
+      return errorResponse(BUCKET_COMMUNITY + " bucket bulunamadi. Migration 0024 veya Dashboard'dan olusturun.", 500);
     }
     return errorResponse(error.message, 500);
   }
 
-  const { data: urlData } = auth.supabase.storage.from("community").getPublicUrl(data.path);
+  const { data: urlData } = auth.supabase.storage.from(BUCKET_COMMUNITY).getPublicUrl(data.path);
   return jsonResponse({ url: urlData.publicUrl, path: data.path });
 });

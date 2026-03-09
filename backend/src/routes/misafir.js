@@ -81,6 +81,7 @@ router.get('/', async (req, res) => {
       misafirTipi: m.misafirTipi || null,
       girisTarihi: m.girisTarihi,
       cikisTarihi: m.cikisTarihi,
+      email: m.email || null,
       oda: m.oda,
       sonBildirim: m.bildirimler[0] || null
     }));
@@ -446,7 +447,7 @@ router.put('/:misafirId', async (req, res) => {
     }
 
     const { misafirId } = req.params;
-    const { ad, ad2, soyad, dogumTarihi, uyruk, misafirTipi } = req.body;
+    const { ad, ad2, soyad, dogumTarihi, uyruk, misafirTipi, email } = req.body;
 
     const misafir = await prisma.misafir.findFirst({
       where: {
@@ -466,6 +467,7 @@ router.put('/:misafirId', async (req, res) => {
     if (dogumTarihi !== undefined) updateData.dogumTarihi = new Date(dogumTarihi);
     if (uyruk !== undefined) updateData.uyruk = uyruk;
     if (misafirTipi !== undefined) updateData.misafirTipi = misafirTipi || null;
+    if (email !== undefined) updateData.email = email && String(email).trim() ? String(email).trim() : null;
 
     await prisma.misafir.update({
       where: { id: misafirId },

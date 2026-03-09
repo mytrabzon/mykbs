@@ -130,6 +130,14 @@ export default function MrzScanScreen({ navigation }) {
   const [isScreenFocused, setIsScreenFocused] = useState(true);
   const [savedToOkutulan, setSavedToOkutulan] = useState(false);
   const [savingOkutulan, setSavingOkutulan] = useState(false);
+  /** İzin hook gecikmesine karşı: kullanıcı "İzin ver" deyince hemen kamera alanını göster */
+  const [permissionGrantedLocal, setPermissionGrantedLocal] = useState(false);
+  /** Kamera sadece layout tamamlandıktan sonra mount edilsin (0 yükseklik = siyah ekran önlemi) */
+  const [cameraLayoutReady, setCameraLayoutReady] = useState(false);
+  /** Android'de kameranın layout'tan sonra mount edilmesi siyah ekranı azaltıyor */
+  const [cameraMountDelayDone, setCameraMountDelayDone] = useState(false);
+  const layoutFallbackTimeoutRef = useRef(null);
+  const cameraMountDelayRef = useRef(null);
   const timeoutRef = useRef(null);
   const mounted = useRef(true);
   const lastStableRawRef = useRef('');
@@ -170,6 +178,7 @@ export default function MrzScanScreen({ navigation }) {
       setCameraPreviewReady(false);
       return;
     }
+    setPermissionGrantedLocal(true);
     setMrzCameraMountReady(true);
   }, [permission?.granted]);
 
@@ -193,6 +202,8 @@ export default function MrzScanScreen({ navigation }) {
 
       setCameraOpenFailed(false);
       setCameraPreviewReady(false);
+      setCameraLayoutReady(false);
+      setCameraMountDelayDone(false);
       if (permission?.granted) setMrzCameraMountReady(true);
 
       return () => {
@@ -200,6 +211,16 @@ export default function MrzScanScreen({ navigation }) {
         setIsScreenFocused(false);
         setMrzCameraMountReady(false);
         setCameraPreviewReady(false);
+        setCameraLayoutReady(false);
+        setCameraMountDelayDone(false);
+        if (cameraMountDelayRef.current) {
+          clearTimeout(cameraMountDelayRef.current);
+          cameraMountDelayRef.current = null;
+        }
+        if (layoutFallbackTimeoutRef.current) {
+          clearTimeout(layoutFallbackTimeoutRef.current);
+          layoutFallbackTimeoutRef.current = null;
+        }
         if (cameraReadyTimeoutRef.current) {
           clearTimeout(cameraReadyTimeoutRef.current);
           cameraReadyTimeoutRef.current = null;
@@ -761,6 +782,39 @@ export default function MrzScanScreen({ navigation }) {
     };
   }, []);
 
+  // Layout bazen 0 geliyor (özellikle Android): izin varken 400ms sonra kamera alanını yine de mount et (siyah ekran önlemi)
+  useEffect(() => {
+    if (!(permission?.granted || permissionGrantedLocal) || !mrzCameraMountReady || cameraLayoutReady) return;
+    layoutFallbackTimeoutRef.current = setTimeout(() => {
+      layoutFallbackTimeoutRef.current = null;
+      if (mounted.current) setCameraLayoutReady(true);
+    }, 400);
+    return () => {
+      if (layoutFallbackTimeoutRef.current) {
+        clearTimeout(layoutFallbackTimeoutRef.current);
+        layoutFallbackTimeoutRef.current = null;
+      }
+    };
+  }, [permission?.granted, permissionGrantedLocal, mrzCameraMountReady, cameraLayoutReady]);
+
+  // Android'de CameraView'ı layout bittikten 150ms sonra mount etmek siyah ekranı azaltıyor
+  useEffect(() => {
+    if (!cameraLayoutReady) {
+      setCameraMountDelayDone(false);
+      return;
+    }
+    cameraMountDelayRef.current = setTimeout(() => {
+      cameraMountDelayRef.current = null;
+      if (mounted.current) setCameraMountDelayDone(true);
+    }, 150);
+    return () => {
+      if (cameraMountDelayRef.current) {
+        clearTimeout(cameraMountDelayRef.current);
+        cameraMountDelayRef.current = null;
+      }
+    };
+  }, [cameraLayoutReady]);
+
   // Kamera önizlemesi hazır olmazsa 8 sn sonra "Kamera açılamadı" göster (siyah ekran donması önlemi)
   useEffect(() => {
     if (!mrzCameraMountReady || !permission?.granted || cameraPreviewReady) return;
@@ -1019,43 +1073,77 @@ export default function MrzScanScreen({ navigation }) {
           <Text style={styles.title}>MRZ Tara</Text>
           <View style={styles.iconBtn} />
         </View>
-        {!permission?.granted ? (
+        {!(permission?.granted || permissionGrantedLocal) ? (
           <View style={styles.mrzPickContainer}>
             <Text style={styles.mrzPickHint}>Kamera izni gerekli. MRZ tarayabilmek için izin verin.</Text>
-            <TouchableOpacity style={styles.mrzPickPrimaryBtn} onPress={async () => { const r = await requestPermission(); if (!r?.granted) Toast.show({ type: 'error', text1: 'İzin reddedildi', text2: 'Ayarlar\'dan kamera iznini açabilirsiniz.' }); }} activeOpacity={0.8}>
+            <TouchableOpacity
+              style={styles.mrzPickPrimaryBtn}
+              onPress={async () => {
+                try {
+                  const r = await requestPermission();
+                  if (r?.granted) {
+                    setPermissionGrantedLocal(true);
+                    setMrzCameraMountReady(true);
+                  } else {
+                    Toast.show({ type: 'error', text1: 'İzin reddedildi', text2: 'Ayarlar\'dan kamera iznini açabilirsiniz.' });
+                  }
+                } catch (e) {
+                  Toast.show({ type: 'error', text1: 'Kamera izni alınamadı', text2: e?.message || 'Tekrar deneyin.' });
+                }
+              }}
+              activeOpacity={0.8}
+            >
               <Ionicons name="camera" size={36} color="#fff" />
               <Text style={styles.mrzPickPrimaryBtnText}>İzin ver</Text>
             </TouchableOpacity>
           </View>
         ) : (
-          <View style={[StyleSheet.absoluteFill, styles.mrzCameraWrap]} collapsable={false}>
-            <CameraView
-              key={`mrz-cam-${cameraKey}`}
-              ref={mrzCameraRef}
-              style={StyleSheet.absoluteFill}
-              facing="back"
-              onCameraReady={() => {
-                if (cameraReadyTimeoutRef.current) {
-                  clearTimeout(cameraReadyTimeoutRef.current);
-                  cameraReadyTimeoutRef.current = null;
+          <View
+            style={[StyleSheet.absoluteFill, styles.mrzCameraWrap]}
+            collapsable={false}
+            onLayout={(e) => {
+              const { width, height } = e.nativeEvent.layout;
+              const hasValidSize = (width > 100 && height > 50) || (height > 100 && width > 50);
+              if (hasValidSize && !cameraLayoutReady) {
+                if (layoutFallbackTimeoutRef.current) {
+                  clearTimeout(layoutFallbackTimeoutRef.current);
+                  layoutFallbackTimeoutRef.current = null;
                 }
-                setCameraPreviewReady(true);
-                setCameraOpenFailed(false);
-              }}
-              onMountError={(e) => {
-                if (cameraReadyTimeoutRef.current) {
-                  clearTimeout(cameraReadyTimeoutRef.current);
-                  cameraReadyTimeoutRef.current = null;
-                }
-                setCameraPreviewReady(false);
-                setCameraOpenFailed(true);
-                logger.warn('MRZ CameraView mount error', e?.nativeEvent?.message || e?.message);
-              }}
-            />
-            {!cameraPreviewReady && (
+                setCameraLayoutReady(true);
+              }
+            }}
+          >
+            {cameraMountDelayDone && (
+              <CameraView
+                key={`mrz-cam-${cameraKey}`}
+                ref={mrzCameraRef}
+                style={StyleSheet.absoluteFill}
+                facing="back"
+                onCameraReady={() => {
+                  if (cameraReadyTimeoutRef.current) {
+                    clearTimeout(cameraReadyTimeoutRef.current);
+                    cameraReadyTimeoutRef.current = null;
+                  }
+                  setCameraPreviewReady(true);
+                  setCameraOpenFailed(false);
+                }}
+                onMountError={(e) => {
+                  if (cameraReadyTimeoutRef.current) {
+                    clearTimeout(cameraReadyTimeoutRef.current);
+                    cameraReadyTimeoutRef.current = null;
+                  }
+                  setCameraPreviewReady(false);
+                  setCameraOpenFailed(true);
+                  logger.warn('MRZ CameraView mount error', e?.nativeEvent?.message || e?.message);
+                }}
+              />
+            )}
+            {(!cameraMountDelayDone || !cameraPreviewReady) && (
               <View style={[StyleSheet.absoluteFill, styles.mrzPickLoading, { justifyContent: 'center', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.4)' }]} pointerEvents="none">
                 <ActivityIndicator size="large" color="#fff" />
-                <Text style={styles.mrzPickLoadingText}>Kamera hazırlanıyor…</Text>
+                <Text style={styles.mrzPickLoadingText}>
+                  {!cameraLayoutReady ? 'Kamera açılıyor…' : !cameraMountDelayDone ? 'Kamera hazırlanıyor…' : 'Kamera hazırlanıyor…'}
+                </Text>
               </View>
             )}
             {cameraOpenFailed && (

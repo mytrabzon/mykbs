@@ -10,6 +10,7 @@ const { ensureSupabaseBranchAndProfile } = require('../services/supabaseSync');
 const { supabaseAdmin } = require('../lib/supabaseAdmin');
 const { supabase: supabaseAnon } = require('../services/supabase');
 const { setTrialDefaults } = require('../config/packages');
+const { BUCKET_AVATARS } = require('../config/storage');
 
 const router = express.Router();
 
@@ -1571,10 +1572,14 @@ router.post('/kayit/supabase-create', async (req, res) => {
  * role: 'user' | 'admin' — mobil Admin sekmesi görünürlüğü için.
  */
 router.get('/me', authenticateTesisOrSupabase, async (req, res) => {
+  const { errorResponse: errRes } = require('../lib/errorResponse');
   try {
     if (req.authSource === 'supabase') {
       const u = req.user;
       const b = req.branch;
+      if (!u || !b) {
+        return errRes(req, res, 409, 'BRANCH_LOAD_FAILED', 'Kullanıcı veya şube bilgisi yüklenemedi. Lütfen tekrar giriş yapın.');
+      }
       const profileRole = req.profileRole || 'staff';
       let is_admin = false;
       let role = 'user';
@@ -1927,9 +1932,9 @@ const updateProfile = async (req, res) => {
               console.warn('[auth] PATCH /profile: Profil resmi kaydedilmedi. Neden: base64 decode sonrası buffer boş.');
             } else {
               const path = `supabase-${userId}.jpg`;
-              const { error: upErr } = await supabaseAdmin.storage.from('avatars').upload(path, buf, { contentType: 'image/jpeg', upsert: true });
+              const { error: upErr } = await supabaseAdmin.storage.from(BUCKET_AVATARS).upload(path, buf, { contentType: 'image/jpeg', upsert: true });
               if (!upErr) {
-                const { data: urlData } = supabaseAdmin.storage.from('avatars').getPublicUrl(path);
+                const { data: urlData } = supabaseAdmin.storage.from(BUCKET_AVATARS).getPublicUrl(path);
                 finalAvatarUrl = urlData.publicUrl;
               } else {
                 console.warn('[auth] PATCH /profile: Profil resmi storage\'a yüklenemedi. Neden:', upErr?.message || upErr);
@@ -1984,9 +1989,9 @@ const updateProfile = async (req, res) => {
               console.warn('[auth] PATCH /profile: Profil resmi kaydedilmedi (legacy). Neden: base64 decode sonrası buffer boş.');
             } else {
               const path = `legacy-${kullaniciId}.jpg`;
-              const { error: upErr } = await supabaseAdmin.storage.from('avatars').upload(path, buf, { contentType: 'image/jpeg', upsert: true });
+              const { error: upErr } = await supabaseAdmin.storage.from(BUCKET_AVATARS).upload(path, buf, { contentType: 'image/jpeg', upsert: true });
               if (!upErr) {
-                const { data: urlData } = supabaseAdmin.storage.from('avatars').getPublicUrl(path);
+                const { data: urlData } = supabaseAdmin.storage.from(BUCKET_AVATARS).getPublicUrl(path);
                 finalAvatarUrl = urlData.publicUrl;
               } else {
                 console.warn('[auth] PATCH /profile: Profil resmi storage\'a yüklenemedi (legacy). Neden:', upErr?.message || upErr);

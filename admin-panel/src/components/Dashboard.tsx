@@ -21,6 +21,21 @@ interface DashboardStats {
   }>
 }
 
+/** Saate göre kısa karşılama metni */
+function getGreeting(): string {
+  const h = new Date().getHours()
+  if (h < 12) return 'Günaydın'
+  if (h < 18) return 'İyi günler'
+  return 'İyi akşamlar'
+}
+
+const QUICK_LINKS = [
+  { href: '/tesisler', label: 'Tesisler', icon: '🏢' },
+  { href: '/pending-users', label: 'Onay Bekleyenler', icon: '⏳' },
+  { href: '/notifications', label: 'Bildirimler', icon: '📢' },
+  { href: '/payments', label: 'Ödemeler', icon: '💳' },
+] as const
+
 const IconBuilding = () => (
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
     <path d="M3 21h18M5 21V7l8-4v18M19 21V11l-6-4M9 9v.01M9 12v.01M9 15v.01M9 18v.01" />
@@ -97,13 +112,27 @@ export default function Dashboard({ embedLayout = false }: DashboardProps) {
   const content = (
     <>
       <header className="kbs-dash-header">
+        <p className="kbs-dash-greeting">{getGreeting()}</p>
         <h1 className="kbs-dash-title">Kontrol Merkezi</h1>
-        <p className="kbs-dash-sub">Özet ve kota durumu</p>
+        <p className="kbs-dash-sub">Özet, paket dağılımı ve kota durumu</p>
       </header>
+
+      {/* Hızlı erişim */}
+      <section className="kbs-dash-quick">
+        <h2 className="kbs-dash-quick-title">Hızlı Erişim</h2>
+        <div className="kbs-dash-quick-grid">
+          {QUICK_LINKS.map(({ href, label, icon }) => (
+            <Link key={href} href={href} className="kbs-dash-quick-link">
+              <span className="kbs-dash-quick-icon" aria-hidden>{icon}</span>
+              <span>{label}</span>
+            </Link>
+          ))}
+        </div>
+      </section>
 
       {stats && (
         <section className="kbs-stats kbs-stats--compact">
-          <article className="kbs-stat-card kbs-stat-card--compact kbs-stat-card--total">
+          <article className="kbs-stat-card kbs-stat-card--compact kbs-stat-card--total kbs-stat-card--d0">
             <div className="kbs-stat-icon kbs-stat-icon--sm">
               <IconBuilding />
             </div>
@@ -112,7 +141,7 @@ export default function Dashboard({ embedLayout = false }: DashboardProps) {
               <span className="kbs-stat-value kbs-stat-value--sm">{stats.toplamTesis}</span>
             </div>
           </article>
-          <article className="kbs-stat-card kbs-stat-card--compact kbs-stat-card--active">
+          <article className="kbs-stat-card kbs-stat-card--compact kbs-stat-card--active kbs-stat-card--d1">
             <div className="kbs-stat-icon kbs-stat-icon--sm">
               <IconActivity />
             </div>
@@ -121,7 +150,7 @@ export default function Dashboard({ embedLayout = false }: DashboardProps) {
               <span className="kbs-stat-value kbs-stat-value--sm">{stats.aktifTesis}</span>
             </div>
           </article>
-          <article className="kbs-stat-card kbs-stat-card--compact kbs-stat-card--notif">
+          <article className="kbs-stat-card kbs-stat-card--compact kbs-stat-card--notif kbs-stat-card--d2">
             <div className="kbs-stat-icon kbs-stat-icon--sm">
               <IconBell />
             </div>
@@ -130,7 +159,7 @@ export default function Dashboard({ embedLayout = false }: DashboardProps) {
               <span className="kbs-stat-value kbs-stat-value--sm">{stats.gunlukBildirim}</span>
             </div>
           </article>
-          <article className="kbs-stat-card kbs-stat-card--compact kbs-stat-card--error">
+          <article className="kbs-stat-card kbs-stat-card--compact kbs-stat-card--error kbs-stat-card--d3">
             <div className="kbs-stat-icon kbs-stat-icon--sm">
               <IconAlert />
             </div>
@@ -139,6 +168,26 @@ export default function Dashboard({ embedLayout = false }: DashboardProps) {
               <span className="kbs-stat-value kbs-stat-value--sm">{stats.gunlukHata}</span>
             </div>
           </article>
+        </section>
+      )}
+
+      {/* Paket dağılımı */}
+      {stats && Object.keys(stats.paketDagilimi).length > 0 && (
+        <section className="kbs-section kbs-dash-paket">
+          <div className="kbs-card kbs-card--compact">
+            <h2 className="kbs-card-title kbs-card-title--sm">
+              <IconChart />
+              Paket Dağılımı
+            </h2>
+            <div className="kbs-dash-paket-list">
+              {Object.entries(stats.paketDagilimi).map(([paket, count]) => (
+                <div key={paket} className="kbs-dash-paket-item">
+                  <span className="kbs-dash-paket-name">{paket}</span>
+                  <span className="kbs-dash-paket-count">{count} tesis</span>
+                </div>
+              ))}
+            </div>
+          </div>
         </section>
       )}
 

@@ -205,7 +205,7 @@ async function authenticateTesisOrSupabase(req, res, next) {
               return next();
             } catch (guestErr) {
               console.error('[authTesisOrSupabase] Guest branch/profile create failed:', guestErr?.message || guestErr);
-              return errorResponse(req, res, 500, 'GUEST_SETUP_FAILED', 'Misafir hesabı oluşturulamadı. Lütfen tekrar deneyin.');
+              return errorResponse(req, res, 401, 'GUEST_SETUP_FAILED', 'Misafir hesabı oluşturulamadı. Lütfen e-posta ve şifre ile giriş yapın.');
             }
           }
           console.warn('[authTesisOrSupabase] Supabase user geçerli ama user_profiles kaydı yok:', user.id);

@@ -568,6 +568,57 @@ router.get('/tesis/:tesisId/kullanicilar', async (req, res) => {
 });
 
 /**
+ * GET /app-admin/tesis/:tesisId/misafirler — Tesisin misafirleri (giriş tarihine göre sıralı; admin tanıma / e-posta atama için)
+ */
+router.get('/tesis/:tesisId/misafirler', async (req, res) => {
+  try {
+    const { tesisId } = req.params;
+    const { cikisYapmis } = req.query;
+    const where = { tesisId };
+    if (cikisYapmis !== 'true') where.cikisTarihi = null;
+
+    const misafirler = await prisma.misafir.findMany({
+      where,
+      include: {
+        oda: { select: { id: true, odaNumarasi: true, odaTipi: true } },
+      },
+      orderBy: { girisTarihi: 'desc' },
+    });
+    res.json({ misafirler });
+  } catch (err) {
+    console.error('[appAdmin] tesis misafirler', err);
+    res.status(500).json({ message: 'Misafirler alınamadı', error: err.message });
+  }
+});
+
+/**
+ * PATCH /app-admin/tesis/:tesisId/misafirler/:misafirId — Misafire e-posta ata (admin tarafından tanıma)
+ */
+router.patch('/tesis/:tesisId/misafirler/:misafirId', async (req, res) => {
+  try {
+    const { tesisId, misafirId } = req.params;
+    const { email } = req.body;
+
+    const misafir = await prisma.misafir.findFirst({
+      where: { id: misafirId, tesisId },
+    });
+    if (!misafir) return res.status(404).json({ message: 'Misafir bulunamadı' });
+
+    const newEmail = email !== undefined && email !== null && String(email).trim() !== ''
+      ? String(email).trim()
+      : null;
+    await prisma.misafir.update({
+      where: { id: misafirId },
+      data: { email: newEmail },
+    });
+    res.json({ message: newEmail ? 'E-posta atandı' : 'E-posta kaldırıldı' });
+  } catch (err) {
+    console.error('[appAdmin] misafir email patch', err);
+    res.status(500).json({ message: 'Güncelleme başarısız', error: err.message });
+  }
+});
+
+/**
  * GET /app-admin/kullanicilar/:id — Tek Kullanıcı detay (PIN hash gösterilmez)
  */
 router.get('/kullanicilar/:id', async (req, res) => {

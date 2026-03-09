@@ -73,17 +73,24 @@ export default function ProfilDuzenleScreen() {
       try {
         const t = await getSupabaseToken();
         if (t) {
-          const me = await withTimeout(communityApi.getMe(t), 6000).catch((e) => {
+          let me = await withTimeout(communityApi.getMe(t), 6000).catch((e) => {
             console.warn('[ProfilDuzenle] getMe hatası:', e?.message);
             return null;
           });
+          if (!me && t) {
+            await new Promise((r) => setTimeout(r, 400));
+            me = await withTimeout(communityApi.getMe(t), 6000).catch(() => null);
+          }
           if (!cancelled) {
             if (me) {
               console.log('[ProfilDuzenle] Profil yüklendi (Supabase/me):', { display_name: me.display_name?.slice(0, 40), title: me.title?.slice(0, 40), hasAvatar: !!me.avatar_url });
               setDisplayName((me.display_name || user?.adSoyad || '').trim());
               setTitle(me.title || '');
               setAvatarUrl(me.avatar_url || null);
-            } else if (user?.adSoyad) setDisplayName((user.adSoyad || '').trim());
+            } else {
+              if (!user?.adSoyad) Toast.show({ type: 'error', text1: 'Profil yüklenemedi', text2: 'Lütfen sayfayı yenileyin veya tekrar giriş yapın.' });
+              else setDisplayName((user.adSoyad || '').trim());
+            }
             if (user?.telefon && user.telefon !== '-') setTelefon(user.telefon.replace(/^\+\d*/, '').replace(/\D/g, '').replace(/^0?/, '') || '');
           }
         } else {
@@ -93,18 +100,24 @@ export default function ProfilDuzenleScreen() {
           });
           const data = res?.data || {};
           if (!cancelled) {
-            console.log('[ProfilDuzenle] Profil yüklendi (backend):', { display_name: data.display_name?.slice(0, 40), title: data.title?.slice(0, 40), hasAvatar: !!data.avatar_url, telefon: data.telefon ? '(var)' : null });
             if (data.display_name != null || data.title != null || data.avatar_url != null || data.telefon != null) {
+              console.log('[ProfilDuzenle] Profil yüklendi (backend):', { display_name: data.display_name?.slice(0, 40), title: data.title?.slice(0, 40), hasAvatar: !!data.avatar_url, telefon: data.telefon ? '(var)' : null });
               setDisplayName((data.display_name || user?.adSoyad || '').trim());
               setTitle(data.title || '');
               setAvatarUrl(data.avatar_url || null);
               if (data.telefon) setTelefon(data.telefon.replace(/^\+\d*/, '').replace(/\D/g, '').replace(/^0?/, '') || '');
-            } else if (user?.adSoyad) setDisplayName((user.adSoyad || '').trim());
+            } else {
+              if (!user?.adSoyad) Toast.show({ type: 'error', text1: 'Profil yüklenemedi', text2: 'Lütfen sayfayı yenileyin veya tekrar giriş yapın.' });
+              else if (user?.adSoyad) setDisplayName((user.adSoyad || '').trim());
+            }
             if ((user?.telefon && user.telefon !== '-') && !data.telefon) setTelefon(user.telefon.replace(/^\+\d*/, '').replace(/\D/g, '').replace(/^0?/, '') || '');
           }
         }
       } catch (_) {
-        if (!cancelled && user?.adSoyad) setDisplayName((user.adSoyad || '').trim());
+        if (!cancelled) {
+          if (user?.adSoyad) setDisplayName((user.adSoyad || '').trim());
+          else Toast.show({ type: 'error', text1: 'Profil yüklenemedi', text2: 'Lütfen tekrar deneyin.' });
+        }
       } finally {
         if (!cancelled) setLoading(false);
       }

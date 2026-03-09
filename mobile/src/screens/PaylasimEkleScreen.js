@@ -135,7 +135,12 @@ export default function PaylasimEkleScreen() {
           imageUrls.push(url);
           setUploadProgress(0.05 + ((i + 1) / totalImages) * 0.7);
         } catch (e) {
-          Toast.show({ type: 'error', text1: 'Resim yüklenemedi', text2: e?.message || 'Resim verisi işlenemedi' });
+          const serverMsg = e?.data?.message ?? e?.data?.error ?? e?.message;
+          const isBucket = (serverMsg || '').toLowerCase().includes('bucket');
+          const text2 = isBucket
+            ? 'Depo ayarı eksik. Yönetici Supabase’te migration 0024’ü çalıştırmalı.'
+            : (serverMsg || 'Resim verisi işlenemedi.');
+          Toast.show({ type: 'error', text1: 'Resim yüklenemedi', text2 });
           setLoading(false);
           setUploadProgress(0);
           setUploadStatus('');
@@ -161,12 +166,16 @@ export default function PaylasimEkleScreen() {
       navigation.goBack();
     } catch (err) {
       const msg = err?.message || '';
-      const isAuth = err?.status === 401 || msg.includes('Giriş gerekli') || err?.code === 'UNAUTHORIZED';
-      Toast.show({
-        type: 'error',
-        text1: isAuth ? 'Giriş gerekli' : 'Gönderilemedi',
-        text2: isAuth ? 'Çıkış yapıp tekrar giriş yapın.' : msg,
-      });
+      const serverMsg = err?.data?.message ?? err?.data?.error ?? msg;
+      const isAuth = err?.status === 401 || msg.includes('Giriş gerekli') || msg.includes('INVALID_TOKEN') || err?.code === 'UNAUTHORIZED';
+      const isForbidden = err?.status === 403 || err?.code === 'NO_PROFILE' || (serverMsg || '').toLowerCase().includes('yetkiniz yok');
+      const text1 = isAuth ? 'Giriş gerekli' : isForbidden ? 'Yetki yok' : 'Gönderilemedi';
+      const text2 = isAuth
+        ? 'Topluluk için e-posta ile giriş yapıp tekrar deneyin veya çıkış yapıp tekrar giriş yapın.'
+        : isForbidden
+          ? (serverMsg || 'Bu tesis için paylaşım yetkiniz yok.')
+          : (serverMsg || msg);
+      Toast.show({ type: 'error', text1, text2 });
       setUploadProgress(0);
       setUploadStatus('');
     } finally {

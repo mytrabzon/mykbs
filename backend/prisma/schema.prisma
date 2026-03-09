@@ -187,6 +187,8 @@ model Misafir {
   misafirTipi       String?  // tc_vatandasi | ykn | yabanci (Jandarma/Polis bildirimi için)
   girisTarihi       DateTime @default(now())
   cikisTarihi       DateTime?
+  /** Admin tarafından tanıma: atanan e-posta (misafir bildirimi / davet için) */
+  email             String?
   
   oda               Oda      @relation(fields: [odaId], references: [id], onDelete: Cascade)
   bildirimler       Bildirim[]
@@ -196,6 +198,7 @@ model Misafir {
   
   @@index([tesisId])
   @@index([odaId])
+  @@index([email])
 }
 
 // KBS Bildirim Modeli

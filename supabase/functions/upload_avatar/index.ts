@@ -5,6 +5,7 @@ import {
   jsonResponse,
   errorResponse,
 } from "../_shared/auth.ts";
+import { BUCKET_AVATARS } from "../_shared/storage.ts";
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -49,7 +50,7 @@ serve(async (req) => {
   const path = `${auth.userId}.${ext}`;
 
   const { data, error } = await auth.supabase.storage
-    .from("avatars")
+    .from(BUCKET_AVATARS)
     .upload(path, buf, {
       contentType: body.mime || "image/jpeg",
       upsert: true,
@@ -58,11 +59,11 @@ serve(async (req) => {
   if (error) {
     console.error("upload_avatar error:", error);
     if (error.message?.includes("Bucket not found")) {
-      return errorResponse("avatars bucket bulunamadi. Dashboard'dan olusturun.", 500);
+      return errorResponse(BUCKET_AVATARS + " bucket bulunamadi. Migration 0024 veya Dashboard'dan olusturun.", 500);
     }
     return errorResponse(error.message, 500);
   }
 
-  const { data: urlData } = auth.supabase.storage.from("avatars").getPublicUrl(data.path);
+  const { data: urlData } = auth.supabase.storage.from(BUCKET_AVATARS).getPublicUrl(data.path);
   return jsonResponse({ url: urlData.publicUrl });
 });

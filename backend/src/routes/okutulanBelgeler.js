@@ -1,7 +1,8 @@
 /**
  * Okutulan kimlik/pasaport kayıtları — otomatik kayıt + ayarlarda liste.
  * POST: kaydet (body: belgeTuru, ad, soyad, kimlikNo?, pasaportNo?, belgeNo?, dogumTarihi?, uyruk?, photoBase64?)
- * GET: tesis için liste (son eklenenler önce)
+ * Resimler: Supabase Storage "documents" bucket’a (private); yoksa yerel uploads/okutulan-belgeler.
+ * GET: tesis için liste; Storage path’leri signed URL’e çevrilir.
  */
 const express = require('express');
 const path = require('path');
@@ -9,9 +10,18 @@ const fs = require('fs');
 const { prisma } = require('../lib/prisma');
 const { authenticateTesisOrSupabase } = require('../middleware/authTesisOrSupabase');
 const { errorResponse } = require('../lib/errorResponse');
+const { supabaseAdmin } = require('../lib/supabaseAdmin');
+const { BUCKET_DOCUMENTS } = require('../config/storage');
 
 const router = express.Router();
 const UPLOAD_DIR = path.join(__dirname, '../../uploads/okutulan-belgeler');
+
+/** DB’de Storage path mi (documents bucket)? */
+const isStoragePath = (photoUrl) =>
+  typeof photoUrl === 'string' && photoUrl.startsWith('okutulan-belgeler/') && !photoUrl.startsWith('/');
+
+/** Signed URL süresi (saniye) */
+const SIGNED_URL_EXPIRY = 3600;
 
 router.use(authenticateTesisOrSupabase);
 
@@ -55,15 +65,33 @@ router.post('/', express.json({ limit: '6mb' }), async (req, res) => {
         console.warn(logPrefix, "Storage'a yazılmadı: base64 decode hatası. Neden:", decodeErr.message, "- photoBase64 geçersiz format.");
       }
       if (buf && buf.length > 0 && buf.length <= 5 * 1024 * 1024) {
-        if (!fs.existsSync(UPLOAD_DIR)) fs.mkdirSync(UPLOAD_DIR, { recursive: true });
-        const filename = `${tesisId.slice(0, 12)}_${Date.now()}.jpg`;
-        const filePath = path.join(UPLOAD_DIR, filename);
-        try {
-          fs.writeFileSync(filePath, buf);
-          photoUrl = `/uploads/okutulan-belgeler/${filename}`;
-          console.log(logPrefix, "Storage'a yazıldı:", filePath, { bufLen: buf.length });
-        } catch (writeErr) {
-          console.error(logPrefix, "Storage yazma hatası:", writeErr.message, "- path:", filePath);
+        const storagePath = `okutulan-belgeler/${tesisId}/${Date.now()}_${Math.random().toString(36).slice(2, 10)}.jpg`;
+        if (supabaseAdmin) {
+          try {
+            const { error: upErr } = await supabaseAdmin.storage
+              .from(BUCKET_DOCUMENTS)
+              .upload(storagePath, buf, { contentType: 'image/jpeg', upsert: false });
+            if (!upErr) {
+              photoUrl = storagePath;
+              console.log(logPrefix, "Supabase Storage'a yazıldı:", storagePath, { bufLen: buf.length });
+            } else {
+              console.warn(logPrefix, "Supabase Storage yazılamadı, yerel diske düşüyor. Neden:", upErr?.message);
+            }
+          } catch (e) {
+            console.warn(logPrefix, "Supabase Storage hatası:", e?.message);
+          }
+        }
+        if (!photoUrl) {
+          if (!fs.existsSync(UPLOAD_DIR)) fs.mkdirSync(UPLOAD_DIR, { recursive: true });
+          const filename = `${tesisId.slice(0, 12)}_${Date.now()}.jpg`;
+          const filePath = path.join(UPLOAD_DIR, filename);
+          try {
+            fs.writeFileSync(filePath, buf);
+            photoUrl = `/uploads/okutulan-belgeler/${filename}`;
+            console.log(logPrefix, "Yerel Storage'a yazıldı:", filePath, { bufLen: buf.length });
+          } catch (writeErr) {
+            console.error(logPrefix, "Yerel Storage yazma hatası:", writeErr.message, "- path:", filePath);
+          }
         }
       } else if (buf) {
         if (buf.length === 0) {
@@ -97,7 +125,7 @@ router.post('/', express.json({ limit: '6mb' }), async (req, res) => {
   }
 });
 
-/** GET /api/okutulan-belgeler — liste (ayarlar ekranı) */
+/** GET /api/okutulan-belgeler — liste (ayarlar ekranı). Storage path’leri signed URL’e çevrilir. */
 router.get('/', async (req, res) => {
   try {
     const tesisId = getTesisId(req);
@@ -117,20 +145,35 @@ router.get('/', async (req, res) => {
     const items = hasMore ? list.slice(0, limit) : list;
     const nextCursor = hasMore ? items[items.length - 1].id : null;
 
+    const itemsWithPhotoUrl = await Promise.all(
+      items.map(async (r) => {
+        let photoUrl = r.photoUrl;
+        if (photoUrl && isStoragePath(photoUrl) && supabaseAdmin) {
+          try {
+            const { data } = await supabaseAdmin.storage
+              .from(BUCKET_DOCUMENTS)
+              .createSignedUrl(photoUrl, SIGNED_URL_EXPIRY);
+            if (data?.signedUrl) photoUrl = data.signedUrl;
+          } catch (_) {}
+        }
+        return {
+          id: r.id,
+          belgeTuru: r.belgeTuru,
+          ad: r.ad,
+          soyad: r.soyad,
+          kimlikNo: r.kimlikNo ? maskDocNo(r.kimlikNo) : null,
+          pasaportNo: r.pasaportNo ? maskDocNo(r.pasaportNo) : null,
+          belgeNo: r.belgeNo ? maskDocNo(r.belgeNo) : null,
+          dogumTarihi: r.dogumTarihi,
+          uyruk: r.uyruk,
+          photoUrl,
+          createdAt: r.createdAt,
+        };
+      })
+    );
+
     return res.json({
-      items: items.map((r) => ({
-        id: r.id,
-        belgeTuru: r.belgeTuru,
-        ad: r.ad,
-        soyad: r.soyad,
-        kimlikNo: r.kimlikNo ? maskDocNo(r.kimlikNo) : null,
-        pasaportNo: r.pasaportNo ? maskDocNo(r.pasaportNo) : null,
-        belgeNo: r.belgeNo ? maskDocNo(r.belgeNo) : null,
-        dogumTarihi: r.dogumTarihi,
-        uyruk: r.uyruk,
-        photoUrl: r.photoUrl,
-        createdAt: r.createdAt,
-      })),
+      items: itemsWithPhotoUrl,
       nextCursor,
     });
   } catch (e) {

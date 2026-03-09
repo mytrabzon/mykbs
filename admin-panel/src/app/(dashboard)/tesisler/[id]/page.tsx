@@ -185,6 +185,18 @@ export default function TesisDetayPage() {
 
       <div className="kbs-card">
         <div className="admin-tesis-users-header">
+          <h2 className="kbs-card-title">Misafir girişleri (tanıma / e-posta atama)</h2>
+          <Link href={`/tesisler/${id}/misafirler`} className="kbs-btn-primary kbs-btn-sm-alt">
+            Misafirler listesi →
+          </Link>
+        </div>
+        <p className="kbs-page-sub" style={{ marginTop: 8 }}>
+          Giriş yapan misafirlere e-posta atayarak admin tarafında tanıyabilirsiniz. Listede giriş tarihine göre sıralı gösterilir.
+        </p>
+      </div>
+
+      <div className="kbs-card">
+        <div className="admin-tesis-users-header">
           <h2 className="kbs-card-title">Tesis kullanıcıları (tesis sahipleri)</h2>
           <Link href={`/tesisler/${id}/kullanicilar`} className="kbs-btn-primary kbs-btn-sm-alt">
             Tüm kullanıcılar →
