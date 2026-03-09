@@ -1,19 +1,10 @@
 /**
- * Admin Panel erişimi: profiles.is_admin, user_profiles.role = 'admin' veya yetkili UUID listesi.
- * Sadece bu koşulları sağlayan hesaplarda admin paneli butonu görünür.
+ * Admin Panel erişimi: Sadece sunucunun döndüğü is_admin veya role = 'admin' ile belirlenir.
+ * /auth/me cevabındaki kullanici.is_admin ve kullanici.role kullanılır; böylece normal
+ * kullanıcılar asla Admin Panel butonunu görmez.
  */
-
-const ADMIN_PANEL_UIDS = [
-  'f7cfe2ef-00bd-4c70-b40d-c5b55e1c52d7',
-];
 
 export function getIsAdminPanelUser(user) {
   if (!user) return false;
-  const uid = user.uid ?? user.id;
-  return (
-    user.is_admin === true ||
-    user.rol === 'admin' ||
-    user.role === 'admin' ||
-    (typeof uid === 'string' && ADMIN_PANEL_UIDS.includes(uid))
-  );
+  return user.is_admin === true || user.role === 'admin' || user.rol === 'admin';
 }

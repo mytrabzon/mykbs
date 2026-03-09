@@ -25,22 +25,23 @@ async function requireAdminPanelUser(req, res, next) {
       return next();
     }
 
-    // 1) Önce backend JWT dene (Prisma userId)
+    // 1) Önce backend JWT dene (Prisma userId = CUID string)
     try {
       const decoded = jwt.verify(token, process.env.JWT_SECRET);
       const userId = decoded.userId;
       if (userId != null) {
-        const adminKullaniciId = process.env.ADMIN_KULLANICI_ID != null ? Number(process.env.ADMIN_KULLANICI_ID) : null;
-        if (adminKullaniciId != null && adminKullaniciId === userId) {
+        const userIdStr = String(userId);
+        const adminKullaniciIdRaw = process.env.ADMIN_KULLANICI_ID != null ? String(process.env.ADMIN_KULLANICI_ID).trim() : '';
+        if (adminKullaniciIdRaw && adminKullaniciIdRaw === userIdStr) {
           req.adminSource = 'prisma';
-          req.adminUserId = userId;
+          req.adminUserId = userIdStr;
           return next();
         }
         if (supabaseAdmin) {
-          const { data: appRole } = await supabaseAdmin.from('app_roles').select('role').eq('backend_kullanici_id', userId).maybeSingle();
+          const { data: appRole } = await supabaseAdmin.from('app_roles').select('role').eq('backend_kullanici_id', userIdStr).maybeSingle();
           if (appRole?.role === 'admin') {
             req.adminSource = 'prisma';
-            req.adminUserId = userId;
+            req.adminUserId = userIdStr;
             return next();
           }
         }

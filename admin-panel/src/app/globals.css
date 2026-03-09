@@ -1449,3 +1449,169 @@ body {
 .kbs-flex-col-gap { display: flex; flex-direction: column; gap: 0.75rem; }
 .kbs-checkbox-row { display: flex; align-items: center; gap: 8px; cursor: pointer; }
 .kbs-form-hint { font-size: 0.85rem; color: var(--kbs-text-muted); margin-bottom: 1rem; }
+
+/* ---------- Odalar sayfası (tesisler/[id]/odalar) ---------- */
+.odalar-page { max-width: 1200px; }
+.odalar-breadcrumb {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  margin-bottom: 1rem;
+  font-size: 0.9rem;
+  flex-wrap: wrap;
+}
+.odalar-breadcrumb-link {
+  color: var(--kbs-text-muted);
+  text-decoration: none;
+  transition: color 0.2s;
+}
+.odalar-breadcrumb-link:hover { color: var(--kbs-accent); }
+.odalar-breadcrumb-sep { color: var(--kbs-text-muted); opacity: 0.6; }
+.odalar-breadcrumb-current { color: var(--kbs-text); font-weight: 600; }
+.odalar-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+  flex-wrap: wrap;
+}
+.odalar-title { margin-bottom: 0.25rem; }
+.odalar-sub { margin-bottom: 0; }
+.odalar-btn-misafir {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.5rem 1rem;
+  background: var(--kbs-surface-elevated);
+  border: 1px solid var(--kbs-border);
+  border-radius: 10px;
+  color: var(--kbs-accent);
+  text-decoration: none;
+  font-size: 0.9rem;
+  font-weight: 500;
+  transition: border-color 0.2s, background 0.2s;
+}
+.odalar-btn-misafir:hover {
+  border-color: var(--kbs-accent);
+  background: var(--kbs-accent-dim);
+}
+.odalar-ozet {
+  display: flex;
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+  flex-wrap: wrap;
+}
+.odalar-ozet-card {
+  min-width: 100px;
+  padding: 0.85rem 1.25rem;
+  background: var(--kbs-surface);
+  border: 1px solid var(--kbs-border);
+  border-radius: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+.odalar-ozet-card:hover { border-color: var(--kbs-border-bright); }
+.odalar-ozet-label { font-size: 0.75rem; color: var(--kbs-text-muted); font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; }
+.odalar-ozet-value { font-size: 1.5rem; font-weight: 800; letter-spacing: -0.02em; }
+.odalar-ozet--toplam .odalar-ozet-value { color: var(--kbs-text); }
+.odalar-ozet--dolu .odalar-ozet-value { color: var(--kbs-success); }
+.odalar-ozet--bos .odalar-ozet-value { color: var(--kbs-accent); }
+.odalar-filtre {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 1.25rem;
+}
+.odalar-filtre-btn {
+  padding: 0.5rem 1rem;
+  border: 1px solid var(--kbs-border);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--kbs-text-muted);
+  font-size: 0.9rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: border-color 0.2s, background 0.2s, color 0.2s;
+}
+.odalar-filtre-btn:hover { color: var(--kbs-text); border-color: var(--kbs-border-bright); }
+.odalar-filtre-btn.active {
+  background: var(--kbs-accent-dim);
+  border-color: var(--kbs-accent);
+  color: var(--kbs-accent);
+}
+.odalar-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: 1rem;
+  list-style: none;
+}
+.odalar-card {
+  padding: 1.25rem;
+  background: var(--kbs-surface);
+  border: 1px solid var(--kbs-border);
+  border-radius: 14px;
+  transition: transform 0.2s, border-color 0.2s, box-shadow 0.2s;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+.odalar-card:hover {
+  border-color: var(--kbs-border-bright);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.15);
+}
+.odalar-card--dolu { border-left: 3px solid var(--kbs-success); }
+.odalar-card--bos { border-left: 3px solid var(--kbs-accent); }
+.odalar-card-num {
+  font-size: 1.75rem;
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  color: var(--kbs-text);
+  line-height: 1.1;
+}
+.odalar-card-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  font-size: 0.85rem;
+  color: var(--kbs-text-muted);
+}
+.odalar-card-tip { font-weight: 500; color: var(--kbs-text); }
+.odalar-card-badge {
+  display: inline-block;
+  align-self: flex-start;
+  padding: 0.25rem 0.6rem;
+  border-radius: 6px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+.odalar-card-badge[data-durum="dolu"] {
+  background: rgba(52, 211, 153, 0.2);
+  color: var(--kbs-success);
+}
+.odalar-card-badge[data-durum="bos"] {
+  background: rgba(34, 211, 238, 0.2);
+  color: var(--kbs-accent);
+}
+.odalar-card-misafir {
+  margin: 0;
+  margin-top: 0.25rem;
+  padding-top: 0.5rem;
+  border-top: 1px solid var(--kbs-border);
+  font-size: 0.85rem;
+  color: var(--kbs-text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.odalar-empty {
+  grid-column: 1 / -1;
+  padding: 2.5rem;
+  text-align: center;
+  background: var(--kbs-surface);
+  border: 1px solid var(--kbs-border);
+  border-radius: 14px;
+  color: var(--kbs-text-muted);
+}

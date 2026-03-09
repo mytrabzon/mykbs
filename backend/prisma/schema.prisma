@@ -126,9 +126,9 @@ model Kullanici {
   odaDegistirmeYetki Boolean @default(true)
   bilgiDuzenlemeYetki Boolean @default(true)
   
-  // Tesis kodu + PIN ile giriş: admin onayı gerekir (onaydan sonra yeşil, önce gri)
-  girisOnaylandi    Boolean  @default(false)
-  girisTalepAt      DateTime? // Son giriş talebi zamanı (admin listesinde göstermek için)
+  // Tesis kodu + PIN ile giriş: üye onayı kaldırıldı, yeni kayıtlar doğrudan giriş yapabilir
+  girisOnaylandi    Boolean  @default(true)
+  girisTalepAt      DateTime? // Son giriş talebi zamanı (bilgi amaçlı, onay zorunlu değil)
 
   // Profil (topluluk/görünen ad – e-posta, telefon, tesis kodu farketmez hepsi kullanabilir)
   displayName       String?

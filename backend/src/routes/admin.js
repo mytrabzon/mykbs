@@ -201,6 +201,44 @@ router.get('/tesis/:tesisId', async (req, res) => {
 });
 
 /**
+ * Tesis odaları listesi (admin panel odalar sayfası)
+ */
+router.get('/tesis/:tesisId/odalar', async (req, res) => {
+  try {
+    const { tesisId } = req.params;
+    const tesis = await prisma.tesis.findUnique({
+      where: { id: tesisId },
+      select: { id: true, tesisAdi: true, tesisKodu: true }
+    });
+    if (!tesis) {
+      return res.status(404).json({ message: 'Tesis bulunamadı' });
+    }
+    const odalar = await prisma.oda.findMany({
+      where: { tesisId },
+      include: {
+        _count: { select: { misafirler: true } },
+        misafirler: {
+          where: { cikisTarihi: null },
+          take: 1,
+          select: { id: true, ad: true, soyad: true }
+        }
+      },
+      orderBy: [{ odaNumarasi: 'asc' }]
+    });
+    const toplam = odalar.length;
+    const dolu = odalar.filter(o => o.durum === 'dolu').length;
+    res.json({
+      tesis: { id: tesis.id, tesisAdi: tesis.tesisAdi, tesisKodu: tesis.tesisKodu },
+      odalar,
+      ozet: { toplam, dolu, bos: toplam - dolu }
+    });
+  } catch (error) {
+    console.error('Tesis odaları hatası:', error);
+    res.status(500).json({ message: 'Odalar alınamadı', error: error.message });
+  }
+});
+
+/**
  * Tesis onayla ve aktivasyon bilgileri oluştur
  */
 router.post('/tesis/:tesisId/onayla', async (req, res) => {

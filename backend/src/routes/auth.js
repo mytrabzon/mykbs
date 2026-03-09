@@ -157,7 +157,8 @@ router.post('/aktivasyon', async (req, res) => {
           rol: 'sahip',
           checkInYetki: true,
           odaDegistirmeYetki: true,
-          bilgiDuzenlemeYetki: true
+          bilgiDuzenlemeYetki: true,
+          girisOnaylandi: true
         }
       });
     }
@@ -322,6 +323,7 @@ router.post('/kayit', async (req, res) => {
         checkInYetki: true,
         odaDegistirmeYetki: true,
         bilgiDuzenlemeYetki: true,
+        girisOnaylandi: true,
       },
     });
 
@@ -542,7 +544,7 @@ router.post('/kayit/dogrula', async (req, res) => {
 
     const hashedSifre = await bcrypt.hash(sifre, 10);
 
-    // Kullanıcı oluştur (sahip rolü ile)
+    // Kullanıcı oluştur (sahip rolü ile); üye onayı yok, doğrudan giriş yapabilir
     const kullanici = await prisma.kullanici.create({
       data: {
         tesisId: tesis.id,
@@ -553,7 +555,8 @@ router.post('/kayit/dogrula', async (req, res) => {
         rol: 'sahip',
         checkInYetki: true,
         odaDegistirmeYetki: true,
-        bilgiDuzenlemeYetki: true
+        bilgiDuzenlemeYetki: true,
+        girisOnaylandi: true
       }
     });
 
@@ -1062,19 +1065,7 @@ router.post('/giris', async (req, res) => {
       return res.status(401).json({ message: 'Geçersiz PIN' });
     }
 
-    // Tesis kodu + PIN girişi admin onayına tabidir; onaylanana kadar token verilmez
-    if (!kullanici.girisOnaylandi) {
-      await prisma.kullanici.update({
-        where: { id: kullanici.id },
-        data: { girisTalepAt: new Date() }
-      });
-      return res.status(200).json({
-        success: false,
-        pendingApproval: true,
-        message: 'Admin onayına sunuldu. Onaylandığı an bildirim yapabileceksin. Çok kısa sürecek.'
-      });
-    }
-
+    // Üye onayı kaldırıldı: tesis kodu + PIN ile girişte onay beklemeden token verilir
     console.log('Giriş başarılı:', { kullaniciId: kullanici.id, rol: kullanici.rol });
 
 
@@ -1528,6 +1519,7 @@ router.post('/kayit/supabase-create', async (req, res) => {
         checkInYetki: true,
         odaDegistirmeYetki: true,
         bilgiDuzenlemeYetki: true,
+        girisOnaylandi: true,
       },
     });
 
@@ -1659,8 +1651,9 @@ router.get('/me', authenticateTesisOrSupabase, async (req, res) => {
     }
 
     let role = 'user';
-    const adminKullaniciId = process.env.ADMIN_KULLANICI_ID != null ? Number(process.env.ADMIN_KULLANICI_ID) : null;
-    if (adminKullaniciId != null && adminKullaniciId === kullanici.id) role = 'admin';
+    // Kullanici.id CUID (string); ADMIN_KULLANICI_ID .env'de bu CUID veya eski sayısal id olabilir
+    const adminKullaniciIdRaw = process.env.ADMIN_KULLANICI_ID != null ? String(process.env.ADMIN_KULLANICI_ID).trim() : '';
+    if (adminKullaniciIdRaw && adminKullaniciIdRaw === String(kullanici.id)) role = 'admin';
     else if (supabaseAdmin) {
       const { data: appRole } = await supabaseAdmin.from('app_roles').select('role').eq('backend_kullanici_id', kullanici.id).maybeSingle();
       if (appRole?.role === 'admin') role = 'admin';

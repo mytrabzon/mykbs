@@ -11,6 +11,7 @@ import { parseMrz, fixMrzOcrErrors } from '../../lib/mrz';
 import { logger } from '../../utils/logger';
 import { api } from '../../services/apiSupabase';
 import * as FileSystem from 'expo-file-system/legacy';
+import { useAuth } from '../../context/AuthContext';
 /** Okutulan belgeyi backend'e kaydet (arka planda; hata sessiz). */
 async function saveOkutulanBelgeAsync(payload, photoUri) {
   try {
@@ -98,13 +99,15 @@ function getFailureReasonMessage(checksReason, failCount) {
   return 'Işık ve hizayı kontrol edin veya manuel giriş ile devam edin.';
 }
 
-// false = MRZ ekranına girince önce kamera (native okuyucu) açılır; native yoksa Kamera ile çek / Galeriden seç butonları.
-/** true = girişte doğrudan kamera açılır, pasaport/kimlik otomatik algılanır (seçenek butonları yok). */
-const USE_UNIFIED_MRZ_FLOW = true;
+// false = Direkt MRZ okuyan kamera (native canlı okuyucu) açılır; native yoksa expo-camera + Galeriden seç.
+/** true = expo-camera + çekim butonu; false = native MrzReaderView (canlı okuma), buton yok. */
+const USE_UNIFIED_MRZ_FLOW = false;
 
 export default function MrzScanScreen({ navigation }) {
   const route = useRoute();
+  const { tesis } = useAuth();
   const fromCheckIn = !!route.params?.fromCheckIn;
+  // Kamera hiçbir zaman üyelik/tesis onayına bağlı değildir; onay bekleyen kullanıcı da tarama ekranını ve kamerayı görür.
   const [timeoutWarning, setTimeoutWarning] = useState(false);
   const [failCount, setFailCount] = useState(0);
   const [ocrLoading, setOcrLoading] = useState(false);
@@ -153,17 +156,16 @@ export default function MrzScanScreen({ navigation }) {
   const insets = useSafeAreaInsets();
   const [permission, requestPermission] = useCameraPermissions();
 
-  // İzin ekrana girildiği anda (MRZ kartı tıklanır tıklanmaz) sistem dialogu çıksın – useFocusEffect ile anında tetikle
+  // İzin ekrana girildiği anda (MRZ sekmesi tıklanır tıklanmaz) kamera izni iste – üyelik onayından bağımsız.
   const hasRequestedPermissionRef = useRef(false);
   useFocusEffect(
     useCallback(() => {
-      if (!USE_UNIFIED_MRZ_FLOW) return;
       if (permission?.granted) return;
       if (hasRequestedPermissionRef.current) return;
       hasRequestedPermissionRef.current = true;
       requestPermission().catch((e) => logger.warn('MRZ kamera izni isteği hatası', e?.message));
       return () => { hasRequestedPermissionRef.current = false; };
-    }, [USE_UNIFIED_MRZ_FLOW, permission?.granted, requestPermission])
+    }, [permission?.granted, requestPermission])
   );
 
   // İzin verilir verilmez kamera mount — gecikme yok (tıklar tıklamaz açılsın)
@@ -184,6 +186,11 @@ export default function MrzScanScreen({ navigation }) {
 
   useFocusEffect(
     useCallback(() => {
+      logger.info('[MRZ] useFocusEffect: ekran odaklandı (focus gain)', {
+        permissionGranted: !!permission?.granted,
+        hasMrzReader: !!MrzReaderView,
+        platform: Platform.OS,
+      });
       mounted.current = true;
       hasLeftScreenRef.current = false;
       setIsExiting(false);
@@ -204,9 +211,14 @@ export default function MrzScanScreen({ navigation }) {
       setCameraPreviewReady(false);
       setCameraLayoutReady(false);
       setCameraMountDelayDone(false);
-      if (permission?.granted) setMrzCameraMountReady(true);
+      if (permission?.granted) {
+        setMrzCameraMountReady(true);
+        setCameraLayoutReady(true);
+        setCameraMountDelayDone(true);
+      }
 
       return () => {
+        logger.info('[MRZ] useFocusEffect: ekran odaktan çıktı (focus loss / cleanup)');
         hasLeftScreenRef.current = true;
         setIsScreenFocused(false);
         setMrzCameraMountReady(false);
@@ -235,6 +247,7 @@ export default function MrzScanScreen({ navigation }) {
   );
 
   const goBack = useCallback(() => {
+    logger.info('[MRZ] goBack tetiklendi');
     if (timeoutRef.current) {
       clearTimeout(timeoutRef.current);
       timeoutRef.current = null;
@@ -246,6 +259,7 @@ export default function MrzScanScreen({ navigation }) {
 
   useEffect(() => {
     if (!isExiting) return;
+    logger.info('[MRZ] isExiting true, navigasyon çalıştırılıyor', { canGoBack: navigation.canGoBack() });
     const t = setTimeout(() => {
       if (navigation.canGoBack()) {
         navigation.goBack();
@@ -782,37 +796,31 @@ export default function MrzScanScreen({ navigation }) {
     };
   }, []);
 
-  // Layout bazen 0 geliyor (özellikle Android): izin varken 400ms sonra kamera alanını yine de mount et (siyah ekran önlemi)
+  // İzin varken kamera alanını hemen mount et (direkt kamera karşılasın)
   useEffect(() => {
-    if (!(permission?.granted || permissionGrantedLocal) || !mrzCameraMountReady || cameraLayoutReady) return;
-    layoutFallbackTimeoutRef.current = setTimeout(() => {
-      layoutFallbackTimeoutRef.current = null;
-      if (mounted.current) setCameraLayoutReady(true);
-    }, 400);
-    return () => {
-      if (layoutFallbackTimeoutRef.current) {
-        clearTimeout(layoutFallbackTimeoutRef.current);
-        layoutFallbackTimeoutRef.current = null;
-      }
-    };
+    if (!(permission?.granted || permissionGrantedLocal) || !mrzCameraMountReady) return;
+    if (!cameraLayoutReady && mounted.current) setCameraLayoutReady(true);
   }, [permission?.granted, permissionGrantedLocal, mrzCameraMountReady, cameraLayoutReady]);
 
-  // Android'de CameraView'ı layout bittikten 150ms sonra mount etmek siyah ekranı azaltıyor
+  useFocusEffect(
+    useCallback(() => {
+      if (!(permission?.granted || permissionGrantedLocal)) return;
+      const t = setTimeout(() => {
+        if (mounted.current) {
+          setCameraLayoutReady(true);
+          setCameraMountDelayDone(true);
+        }
+      }, 50);
+      return () => clearTimeout(t);
+    }, [permission?.granted, permissionGrantedLocal])
+  );
+
   useEffect(() => {
     if (!cameraLayoutReady) {
       setCameraMountDelayDone(false);
       return;
     }
-    cameraMountDelayRef.current = setTimeout(() => {
-      cameraMountDelayRef.current = null;
-      if (mounted.current) setCameraMountDelayDone(true);
-    }, 150);
-    return () => {
-      if (cameraMountDelayRef.current) {
-        clearTimeout(cameraMountDelayRef.current);
-        cameraMountDelayRef.current = null;
-      }
-    };
+    if (mounted.current) setCameraMountDelayDone(true);
   }, [cameraLayoutReady]);
 
   // Kamera önizlemesi hazır olmazsa 8 sn sonra "Kamera açılamadı" göster (siyah ekran donması önlemi)
@@ -888,8 +896,25 @@ export default function MrzScanScreen({ navigation }) {
     }
   }, [torchOn]);
 
+  // Siyah ekranda kalmayı önle: her durumda geri butonu göster (focus/exit geçişinde de)
   if (!isScreenFocused || isExiting) {
-    return <View style={[styles.container, { backgroundColor: '#000', flex: 1 }]} />;
+    logger.info('[MRZ] Render: siyah/çıkış durumu', { isScreenFocused, isExiting });
+    return (
+      <View style={[styles.container, { backgroundColor: '#000', flex: 1 }]}>
+        <View style={[styles.overlayTop, { paddingTop: insets.top + 6 }]} pointerEvents="box-none">
+          <TouchableOpacity onPress={goBack} style={styles.overlayBackBtn} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }} activeOpacity={0.8}>
+            <Ionicons name="arrow-back" size={26} color="#fff" />
+          </TouchableOpacity>
+        </View>
+        {__DEV__ && (
+          <View style={{ position: 'absolute', bottom: 40, left: 16, right: 16 }}>
+            <Text style={{ color: '#888', fontSize: 11 }}>
+              [MRZ debug] isScreenFocused={String(isScreenFocused)} isExiting={String(isExiting)}
+            </Text>
+          </View>
+        )}
+      </View>
+    );
   }
 
   if (instantPayload != null && !showFrontCamera) {
@@ -1047,6 +1072,7 @@ export default function MrzScanScreen({ navigation }) {
 
   // Girişte doğrudan kamera: pasaport/kimlik otomatik algılanır, seçenek butonları yok.
   if (!MrzReaderView || useUnifiedFlow) {
+    logger.info('[MRZ] Expo Camera path (unified/fallback)', { hasMrzReader: !!MrzReaderView, useUnifiedFlow });
     const handleDirectMrzCapture = async () => {
       if (!mrzCameraRef.current || ocrLoading) return;
       if (!permission?.granted) {
@@ -1103,6 +1129,7 @@ export default function MrzScanScreen({ navigation }) {
             collapsable={false}
             onLayout={(e) => {
               const { width, height } = e.nativeEvent.layout;
+              logger.info('[MRZ] Kamera wrap onLayout', { width, height, cameraLayoutReady });
               const hasValidSize = (width > 100 && height > 50) || (height > 100 && width > 50);
               if (hasValidSize && !cameraLayoutReady) {
                 if (layoutFallbackTimeoutRef.current) {
@@ -1120,6 +1147,7 @@ export default function MrzScanScreen({ navigation }) {
                 style={StyleSheet.absoluteFill}
                 facing="back"
                 onCameraReady={() => {
+                  logger.info('[MRZ] CameraView onCameraReady');
                   if (cameraReadyTimeoutRef.current) {
                     clearTimeout(cameraReadyTimeoutRef.current);
                     cameraReadyTimeoutRef.current = null;
@@ -1128,22 +1156,22 @@ export default function MrzScanScreen({ navigation }) {
                   setCameraOpenFailed(false);
                 }}
                 onMountError={(e) => {
+                  const msg = e?.nativeEvent?.message || e?.message || String(e);
+                  logger.warn('[MRZ] CameraView onMountError', { message: msg, event: e?.nativeEvent });
                   if (cameraReadyTimeoutRef.current) {
                     clearTimeout(cameraReadyTimeoutRef.current);
                     cameraReadyTimeoutRef.current = null;
                   }
                   setCameraPreviewReady(false);
                   setCameraOpenFailed(true);
-                  logger.warn('MRZ CameraView mount error', e?.nativeEvent?.message || e?.message);
                 }}
               />
             )}
-            {(!cameraMountDelayDone || !cameraPreviewReady) && (
+            {/* Yükleniyor overlay'ini kamera açılamadığında gizle ki "Tekrar dene" banner'ı görünsün */}
+            {!cameraMountDelayDone && (
               <View style={[StyleSheet.absoluteFill, styles.mrzPickLoading, { justifyContent: 'center', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.4)' }]} pointerEvents="none">
                 <ActivityIndicator size="large" color="#fff" />
-                <Text style={styles.mrzPickLoadingText}>
-                  {!cameraLayoutReady ? 'Kamera açılıyor…' : !cameraMountDelayDone ? 'Kamera hazırlanıyor…' : 'Kamera hazırlanıyor…'}
-                </Text>
+                <Text style={styles.mrzPickLoadingText}>Kamera açılıyor…</Text>
               </View>
             )}
             {cameraOpenFailed && (
@@ -1170,16 +1198,15 @@ export default function MrzScanScreen({ navigation }) {
                 <ActivityIndicator size="large" color="#fff" />
                 <Text style={styles.mrzPickLoadingText}>Okunuyor…</Text>
               </View>
-            ) : cameraPreviewReady && !cameraOpenFailed ? (
+            ) : !cameraOpenFailed ? (
               <View style={styles.directMrzOverlay} pointerEvents="box-none">
-                <Text style={styles.directMrzHint}>Pasaport veya kimlik — MRZ alanını çerçeveleyip çekin (otomatik algılanır)</Text>
-                <TouchableOpacity style={styles.directMrzCaptureBtn} onPress={handleDirectMrzCapture} activeOpacity={0.8}>
-                  <Ionicons name="camera" size={40} color="#fff" />
-                </TouchableOpacity>
-                <TouchableOpacity style={styles.directMrzGalleryBtn} onPress={handlePickImage} activeOpacity={0.8}>
-                  <Ionicons name="images-outline" size={22} color="rgba(255,255,255,0.9)" />
-                  <Text style={styles.directMrzGalleryText}>Galeriden seç</Text>
-                </TouchableOpacity>
+                <Text style={styles.directMrzHint}>MRZ alanını çerçeveye alın veya galeriden fotoğraf seçin</Text>
+                <View style={styles.directMrzBottomRow}>
+                  <TouchableOpacity style={styles.directMrzGalleryBtn} onPress={handlePickImage} activeOpacity={0.8}>
+                    <Ionicons name="images-outline" size={22} color="rgba(255,255,255,0.9)" />
+                    <Text style={styles.directMrzGalleryText}>Galeriden seç</Text>
+                  </TouchableOpacity>
+                </View>
               </View>
             ) : null}
           </View>
@@ -1188,6 +1215,7 @@ export default function MrzScanScreen({ navigation }) {
     );
   }
 
+  logger.info('[MRZ] Native MrzReaderView path', { docTypeForReader });
   return (
     <View style={styles.container}>
       <MrzReaderView
@@ -1383,10 +1411,10 @@ const styles = StyleSheet.create({
   autoScanBadgeText: { color: '#fff', fontSize: theme.typography.fontSize.sm, fontWeight: '600' },
   cameraFallbackLink: { marginTop: 12, paddingVertical: 8, paddingHorizontal: 12 },
   cameraFallbackLinkText: { color: 'rgba(255,255,255,0.9)', fontSize: 13, textDecorationLine: 'underline' },
-  directMrzOverlay: { position: 'absolute', bottom: 0, left: 0, right: 0, alignItems: 'center', paddingVertical: 28, paddingHorizontal: 20, backgroundColor: 'rgba(0,0,0,0.5)' },
-  directMrzHint: { color: 'rgba(255,255,255,0.95)', fontSize: theme.typography.fontSize.sm, textAlign: 'center', marginBottom: 20, paddingHorizontal: 16 },
-  directMrzCaptureBtn: { width: 72, height: 72, borderRadius: 36, backgroundColor: theme.colors.primary, alignItems: 'center', justifyContent: 'center', marginBottom: 16 },
-  directMrzGalleryBtn: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 10, paddingHorizontal: 16 },
+  directMrzOverlay: { position: 'absolute', bottom: 0, left: 0, right: 0, paddingVertical: 20, paddingHorizontal: 16, paddingBottom: 28, backgroundColor: 'rgba(0,0,0,0.5)' },
+  directMrzHint: { color: 'rgba(255,255,255,0.95)', fontSize: theme.typography.fontSize.sm, textAlign: 'center', marginBottom: 16, paddingHorizontal: 8 },
+  directMrzBottomRow: { flexDirection: 'row', alignItems: 'center' },
+  directMrzGalleryBtn: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 10, paddingHorizontal: 12 },
   directMrzGalleryText: { color: 'rgba(255,255,255,0.9)', fontSize: theme.typography.fontSize.sm, fontWeight: '600' },
   cameraSlowBanner: { position: 'absolute', bottom: 100, left: 16, right: 16, backgroundColor: 'rgba(0,0,0,0.8)', paddingVertical: 12, paddingHorizontal: 16, borderRadius: 12 },
   cameraSlowBannerText: { color: 'rgba(255,255,255,0.95)', fontSize: theme.typography.fontSize.sm, textAlign: 'center', marginBottom: 10 },

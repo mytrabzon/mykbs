@@ -178,6 +178,9 @@ export default function TesisDetayPage() {
           Bildirim: <strong className="admin-detail-strong">{counts.bildirimler}</strong> ·
           Kullanıcı: <strong className="admin-detail-strong">{counts.kullanicilar}</strong>
         </p>
+        <p className="admin-tesis-summary-sm" style={{ marginTop: '0.5rem' }}>
+          <Link href={`/tesisler/${id}/odalar`} className="kbs-link-accent">Odalar listesi →</Link>
+        </p>
         <p className="admin-tesis-summary-sm">
           Log ve hata listesi backend API üzerinden: <code>GET /api/admin/tesis/{tesis.id}/loglar</code> ve <code>GET /api/admin/tesis/{tesis.id}/hatalar</code>
         </p>
