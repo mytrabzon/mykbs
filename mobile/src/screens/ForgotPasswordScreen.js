@@ -17,6 +17,7 @@ import { useAuth } from '../context/AuthContext';
 import { supabase } from '../lib/supabase/supabase';
 import { Button, Input } from '../components/ui';
 import { typography, spacing } from '../theme';
+import { getEmailOtpErrorMessage } from '../utils/authErrorMessage';
 
 const isValidEmail = (e) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test((e || '').trim());
 
@@ -61,20 +62,21 @@ export default function ForgotPasswordScreen({ route }) {
           return;
         }
         console.warn('[ForgotPassword] signInWithOtp error:', error.message, error.code, error.status);
-        const msg = (error.message || '').toLowerCase();
-        const kullaniciMesaji =
-          msg.includes('sending') && msg.includes('mail')
-            ? 'E-posta servisi yapılandırılmamış. Supabase Dashboard → Auth → SMTP ayarlarını kontrol edin.'
-            : msg.includes('authorized') || msg.includes('not allowed')
-              ? 'Bu e-posta ile kod gönderilemiyor. Custom SMTP ayarlanmış mı kontrol edin.'
-              : error.message || 'Kod gönderilemedi';
-        Toast.show({ type: 'error', text1: 'Hata', text2: kullaniciMesaji });
+        Toast.show({
+          type: 'error',
+          text1: 'Hata',
+          text2: getEmailOtpErrorMessage(error, { requiresExistingAccount: true }),
+        });
       } else {
         Toast.show({ type: 'error', text1: 'Hata', text2: 'Şifre sıfırlama servisi kullanılamıyor' });
       }
     } catch (e) {
       console.warn('[ForgotPassword] signInWithOtp exception:', e?.message);
-      Toast.show({ type: 'error', text1: 'Hata', text2: e?.message || 'Kod gönderilemedi' });
+      Toast.show({
+        type: 'error',
+        text1: 'Hata',
+        text2: getEmailOtpErrorMessage(e, { requiresExistingAccount: true }),
+      });
     }
     setLoading(false);
   };

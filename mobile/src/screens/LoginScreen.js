@@ -23,6 +23,7 @@ import { Button, Input } from '../components/ui';
 import { typography, spacing } from '../theme';
 import { supabase } from '../lib/supabase/supabase';
 import { api } from '../services/api';
+import { getEmailOtpErrorMessage } from '../utils/authErrorMessage';
 
 const APP_PREFIX = 'mykbs';
 const STORAGE_KEYS = { TELEFON: `@${APP_PREFIX}:login:telefon` };
@@ -109,14 +110,11 @@ export default function LoginScreen({ route }) {
       setOtpGonderildi(true);
       Toast.show({ type: 'success', text1: 'Kod gönderildi', text2: `${em} adresine doğrulama kodu gönderildi` });
     } catch (e) {
-      const msg = (e?.message || '').toLowerCase();
-      const kullaniciMesaji =
-        msg.includes('sending') && msg.includes('mail')
-          ? 'E-posta servisi yapılandırılmamış. Yönetici: Supabase Dashboard → Auth → SMTP ayarlarını kontrol etsin.'
-          : msg.includes('authorized') || msg.includes('not allowed')
-            ? 'Bu e-posta adresiyle kod gönderilemiyor. Custom SMTP ayarlanmış mı kontrol edin.'
-            : e?.message || 'Tekrar deneyin.';
-      Toast.show({ type: 'error', text1: 'Kod gönderilemedi', text2: kullaniciMesaji });
+      Toast.show({
+        type: 'error',
+        text1: 'Kod gönderilemedi',
+        text2: getEmailOtpErrorMessage(e, { requiresExistingAccount: true }),
+      });
     }
     setSendCodeLoading(false);
   };

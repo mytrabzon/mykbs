@@ -3,7 +3,7 @@
  * Ad soyad, e-posta, şifre, otel adı, oda sayısı, ortalama bildirim. Telefon isteğe bağlı olarak profilde eklenebilir.
  * Kayıt sonrası kullanıcı uygulamayı kullanabilir; KBS için Ayarlar'dan tesis kodu ve şifre ile onaya gönderir.
  */
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
   View,
   Text,
@@ -37,8 +37,13 @@ export default function KayitScreen() {
   const [odaSayisi, setOdaSayisi] = useState('10');
   const [ortalamaBildirim, setOrtalamaBildirim] = useState('100');
   const [loading, setLoading] = useState(false);
+  const [emailVerified, setEmailVerified] = useState(false);
+  const [emailVerifiedFor, setEmailVerifiedFor] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [showPasswordRepeat, setShowPasswordRepeat] = useState(false);
+
+  const normalizedEmail = useMemo(() => (email || '').trim().toLowerCase(), [email]);
+  const isCurrentEmailVerified = emailVerified && emailVerifiedFor === normalizedEmail;
 
   const handleKayit = async () => {
     const ad = (adSoyad || '').trim();
@@ -46,9 +51,13 @@ export default function KayitScreen() {
       Toast.show({ type: 'error', text1: 'Ad Soyad', text2: 'En az 2 karakter girin' });
       return;
     }
-    const em = (email || '').trim().toLowerCase();
+    const em = normalizedEmail;
     if (!em || !isValidEmail(em)) {
       Toast.show({ type: 'error', text1: 'E-posta', text2: 'Geçerli bir e-posta girin' });
+      return;
+    }
+    if (!isCurrentEmailVerified) {
+      Toast.show({ type: 'error', text1: 'E-posta doğrulanmadı', text2: 'Devam etmek için önce e-posta adresinizi doğrulayın' });
       return;
     }
     if (!sifre || sifre.length < 6) {
@@ -102,6 +111,7 @@ export default function KayitScreen() {
   const valid =
     adSoyad.trim().length >= 2 &&
     isValidEmail(email) &&
+    isCurrentEmailVerified &&
     sifre.length >= 6 &&
     sifre === sifreTekrar &&
     tesisAdi.trim().length >= 2 &&
@@ -137,11 +147,52 @@ export default function KayitScreen() {
           <Input
             label="E-posta"
             value={email}
-            onChangeText={(t) => setEmail(t.trim())}
+            onChangeText={(t) => {
+              const next = t.trim();
+              setEmail(next);
+              if (emailVerifiedFor !== next.toLowerCase()) {
+                setEmailVerified(false);
+              }
+            }}
             placeholder="ornek@email.com"
             keyboardType="email-address"
             autoCapitalize="none"
           />
+          {isValidEmail(normalizedEmail) ? (
+            <>
+              <TouchableOpacity
+                style={[
+                  styles.emailVerifyBtn,
+                  { borderColor: colors.primary, backgroundColor: isCurrentEmailVerified ? `${colors.primary}15` : 'transparent' },
+                ]}
+                onPress={() =>
+                  navigation.navigate('OTPVerify', {
+                    email: normalizedEmail,
+                    islemTipi: 'kayit_email',
+                    onSuccess: () => {
+                      setEmailVerified(true);
+                      setEmailVerifiedFor(normalizedEmail);
+                      Toast.show({ type: 'success', text1: 'E-posta doğrulandı', text2: 'Kayıt işlemini tamamlayabilirsiniz.' });
+                    },
+                  })
+                }
+              >
+                <Ionicons
+                  name={isCurrentEmailVerified ? 'checkmark-circle' : 'mail-open-outline'}
+                  size={18}
+                  color={colors.primary}
+                />
+                <Text style={[styles.emailVerifyBtnText, { color: colors.primary }]}>
+                  {isCurrentEmailVerified ? 'E-posta doğrulandı' : 'Maili doğrula'}
+                </Text>
+              </TouchableOpacity>
+              {!isCurrentEmailVerified ? (
+                <Text style={[styles.verifyHint, { color: colors.textSecondary }]}>
+                  Kayıt olmadan önce bu e-posta adresine gelen 6 haneli kodu doğrulayın.
+                </Text>
+              ) : null}
+            </>
+          ) : null}
           <Input
             label="Şifre (en az 6 karakter)"
             value={sifre}
@@ -251,6 +302,23 @@ const styles = {
     elevation: 4,
   },
   submitBtn: { marginTop: spacing.lg },
+  emailVerifyBtn: {
+    marginTop: spacing.xs,
+    marginBottom: spacing.sm,
+    borderWidth: 1,
+    borderRadius: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.xs,
+  },
+  emailVerifyBtnText: { fontSize: typography.text.body.fontSize, fontWeight: '600' },
+  verifyHint: {
+    fontSize: typography.text.caption.fontSize,
+    marginBottom: spacing.sm,
+  },
   hint: {
     fontSize: typography.text.caption.fontSize,
     marginTop: spacing.lg,

@@ -61,6 +61,7 @@ async function fetchMeAndSetState(accessToken, setUser, setTesis, setToken, getT
     return true;
   } catch (e) {
     const status = e?.response?.status;
+    const code = e?.response?.data?.code;
     if (status === 401) {
       try {
         await supabase?.auth?.signOut();
@@ -70,6 +71,22 @@ async function fetchMeAndSetState(accessToken, setUser, setTesis, setToken, getT
       setUser(null);
       setTesis(null);
       return false;
+    }
+    if (status === 409 && code === 'BRANCH_NOT_ASSIGNED') {
+      try {
+        const storedUser = await AsyncStorage.getItem(AUTH_STORAGE_KEYS.USER);
+        const storedTesis = await AsyncStorage.getItem(AUTH_STORAGE_KEYS.TESIS);
+        if (storedUser) {
+          setUser(JSON.parse(storedUser));
+        }
+        if (storedTesis) {
+          setTesis(JSON.parse(storedTesis));
+        }
+        logger.warn('AuthContext fetch /me branch not assigned; using cached auth state');
+      } catch (storageErr) {
+        logger.error('AuthContext branch-not-assigned cache restore failed', storageErr);
+      }
+      return true;
     }
     logger.error('AuthContext fetch /me failed', e);
     return true; // Diğer hatalarda token'ı tutuyoruz, kullanıcı sonra tekrar dener
@@ -182,6 +199,14 @@ export const AuthProvider = ({ children }) => {
             ? refreshedSession
             : (await supabase.auth.getSession()).data?.session;
           if (session?.access_token && mounted.current) {
+            const storedUser = await AsyncStorage.getItem(AUTH_STORAGE_KEYS.USER);
+            const storedTesis = await AsyncStorage.getItem(AUTH_STORAGE_KEYS.TESIS);
+            if (storedUser && mounted.current) {
+              setUser(JSON.parse(storedUser));
+            }
+            if (storedTesis && mounted.current) {
+              setTesis(JSON.parse(storedTesis));
+            }
             await fetchMeAndSetState(session.access_token, setUser, setTesis, setToken, getSupabaseAwareTokenProvider, setPrivacyPolicyAcceptedAt, setTermsOfServiceAcceptedAt, setAccountPendingDeletion, setDeletionAt, setGuest);
           } else {
             // Supabase oturumu yok: backend JWT (telefon+şifre girişi) ile kayıtlı token varsa doğrula

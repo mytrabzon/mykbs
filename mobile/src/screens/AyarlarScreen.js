@@ -375,7 +375,13 @@ export default function AyarlarScreen() {
               Toast.show({ type: 'info', text1: 'Talep alındı', text2: '7 gün içinde hesabınız silinecek. Bu sürede giriş yaparak geri alabilirsiniz.' });
               await logout();
             } catch (e) {
-              Toast.show({ type: 'error', text1: 'Hata', text2: e?.response?.data?.message || e?.message || 'İşlem yapılamadı.' });
+              const code = e?.response?.data?.code;
+              const msg = e?.response?.data?.message || e?.message || '';
+              const isNotSupported = code === 'NOT_SUPPORTED' || /e-posta|telefon ile giriş|yalnızca/.test(msg);
+              const text2 = isNotSupported
+                ? 'Bu işlem yalnızca e-posta veya telefon ile giriş yapan hesaplar için geçerlidir. Misafir hesaptan çıkış yaparak oturumu kapatabilirsiniz.'
+                : (msg || 'İşlem yapılamadı.');
+              Toast.show({ type: 'error', text1: 'Hata', text2 });
             } finally {
               setDeleteAccountLoading(false);
             }

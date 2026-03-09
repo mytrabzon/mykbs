@@ -536,13 +536,21 @@ router.post('/document-base64', authenticateTesisOrSupabase, express.json({ limi
     if (!fs.existsSync(KIMLIK_UPLOAD_DIR)) {
       fs.mkdirSync(KIMLIK_UPLOAD_DIR, { recursive: true });
     }
-    filePath = path.join(KIMLIK_UPLOAD_DIR, `base64_${Date.now()}_${Math.random().toString(36).slice(2, 8)}.jpg`);
+    filePath = path.join(KIMLIK_UPLOAD_DIR, `base64_${Date.now()}_${Math.random().toString(36).slice(2, 8)}.png`);
     try {
-      fs.writeFileSync(filePath, buf);
-      console.log(logPrefix, "Storage'a yazıldı:", filePath, { bufLen: buf.length });
-    } catch (writeErr) {
-      console.error(logPrefix, "Storage yazma hatası:", writeErr.message, "- path:", filePath);
-      return res.status(500).json({ message: 'Görsel kaydedilemedi', error: writeErr.message });
+      const Jimp = (await import('jimp')).default;
+      const img = await Jimp.read(buf);
+      await img.write(filePath);
+      console.log(logPrefix, "Storage'a yazıldı (Jimp normalize):", filePath, { bufLen: buf.length });
+    } catch (normalizeErr) {
+      console.warn(logPrefix, 'Jimp okuma/yazma hatası:', normalizeErr.message, '- Ham buffer .jpg olarak deneniyor.');
+      filePath = path.join(KIMLIK_UPLOAD_DIR, `base64_${Date.now()}_${Math.random().toString(36).slice(2, 8)}.jpg`);
+      try {
+        fs.writeFileSync(filePath, buf);
+      } catch (writeErr) {
+        console.error(logPrefix, "Storage yazma hatası:", writeErr.message);
+        return res.status(400).json({ message: 'Görsel formatı desteklenmiyor veya bozuk. JPEG/PNG deneyin.' });
+      }
     }
     console.log(logPrefix, 'runMrzPipeline başlıyor');
     const mrzResult = await runMrzPipeline(filePath);
@@ -551,9 +559,16 @@ router.post('/document-base64', authenticateTesisOrSupabase, express.json({ limi
     let mrzPayload = mrzResult.payload || null;
     if (!mrzPayload && mrzRaw) mrzPayload = parseMrzToPayload(mrzRaw);
     const mrzFailureReason = !mrzRaw ? buildMrzFailureReason(mrzResult, false) : null;
-    console.log(logPrefix, 'Tesseract ön yüz OCR başlıyor');
-    const { data: { text } } = await Tesseract.recognize(filePath, 'eng+ara+tur', { logger: () => {} });
-    const front = parseIdentityDocument(text);
+    let text = '';
+    let front = {};
+    try {
+      console.log(logPrefix, 'Tesseract ön yüz OCR başlıyor');
+      const { data } = await Tesseract.recognize(filePath, 'eng+ara+tur', { logger: () => {} });
+      text = data?.text || '';
+      front = parseIdentityDocument(text);
+    } catch (ocrErr) {
+      console.warn(logPrefix, 'Tesseract ön yüz OCR hatası (sunucu çökmemesi için yakalandı):', ocrErr.message);
+    }
     const merged = mergeMrzAndFront(mrzPayload, front);
     console.log(logPrefix, 'tamamlandı', { mrzRawLen: mrzRaw?.length ?? 0, mergedKeys: Object.keys(merged || {}) });
     res.json({

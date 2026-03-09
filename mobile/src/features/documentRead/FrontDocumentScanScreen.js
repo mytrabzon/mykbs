@@ -13,6 +13,8 @@ import { api } from '../../services/apiSupabase';
 export default function FrontDocumentScanScreen({ navigation, route }) {
   const docType = route?.params?.docType || 'kimlik';
   const [loading, setLoading] = useState(false);
+  const [cameraReady, setCameraReady] = useState(false);
+  const [cameraOpenFailed, setCameraOpenFailed] = useState(false);
   const [permission, requestPermission] = useCameraPermissions();
   const cameraRef = useRef(null);
 
@@ -73,10 +75,32 @@ export default function FrontDocumentScanScreen({ navigation, route }) {
         <Text style={styles.title}>Ön yüz oku</Text>
         <View style={styles.iconBtn} />
       </View>
-      <CameraView ref={cameraRef} style={StyleSheet.absoluteFill} />
+      <CameraView
+        ref={cameraRef}
+        style={StyleSheet.absoluteFill}
+        facing="back"
+        active
+        onCameraReady={() => {
+          setCameraReady(true);
+          setCameraOpenFailed(false);
+        }}
+        onMountError={(e) => {
+          setCameraReady(false);
+          setCameraOpenFailed(true);
+          Toast.show({ type: 'error', text1: 'Kamera açılamadı', text2: e?.nativeEvent?.message || 'Tekrar deneyin.' });
+        }}
+      />
+      {!cameraReady && !cameraOpenFailed ? (
+        <View style={styles.loadingOverlay}>
+          <ActivityIndicator size="large" color="#fff" />
+          <Text style={styles.hint}>Kamera hazırlanıyor…</Text>
+        </View>
+      ) : null}
       <View style={styles.overlay}>
         <View style={styles.frame} />
-        <Text style={styles.hint}>Belgenin ön yüzünü çerçeve içine alıp çekin</Text>
+        <Text style={styles.hint}>
+          {cameraOpenFailed ? 'Kamera açılamadı. Geri dönüp tekrar deneyin.' : 'Belgenin ön yüzünü çerçeve içine alıp çekin'}
+        </Text>
         <TouchableOpacity style={styles.captureBtn} onPress={captureAndUpload} disabled={loading}>
           {loading ? <ActivityIndicator color="#fff" /> : <Ionicons name="camera" size={40} color="#fff" />}
         </TouchableOpacity>
@@ -91,6 +115,7 @@ const styles = StyleSheet.create({
   title: { fontSize: theme.typography.fontSize.lg, fontWeight: '600', color: '#fff' },
   iconBtn: { padding: theme.spacing.sm },
   overlay: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'flex-end', paddingBottom: 40 },
+  loadingOverlay: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(0,0,0,0.45)' },
   frame: { position: 'absolute', top: '20%', width: '85%', aspectRatio: 1.586, borderWidth: 2, borderColor: 'rgba(255,255,255,0.7)', borderRadius: 12 },
   hint: { color: 'rgba(255,255,255,0.9)', fontSize: theme.typography.fontSize.sm, marginBottom: 24 },
   captureBtn: { width: 72, height: 72, borderRadius: 36, backgroundColor: theme.colors.primary, alignItems: 'center', justifyContent: 'center' },

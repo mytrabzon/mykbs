@@ -1788,6 +1788,13 @@ router.post('/request-account-deletion', authenticateTesisOrSupabase, async (req
       return res.json(successPayload);
     }
 
+    // Misafir / Supabase token ile gelen ama authSource farklı set edilmişse (eski deploy vb.) yine Supabase profiles dene
+    if (req.user?.id && supabaseAdmin) {
+      const userId = req.user.id;
+      const { error } = await supabaseAdmin.from('profiles').update({ deletion_requested_at: nowIso, updated_at: nowIso }).eq('id', userId);
+      if (!error) return res.json(successPayload);
+    }
+
     return errRes(req, res, 400, 'NOT_AUTHENTICATED', 'Oturum bulunamadı. Lütfen tekrar giriş yapıp deneyin.');
   } catch (e) {
     console.error('[auth] request-account-deletion error:', e);

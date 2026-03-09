@@ -367,6 +367,10 @@ class DataService {
           this.emit('tesis:updated', tesisData);
           return tesisData;
         }
+        if (r.status === 409 && (data as { code?: string })?.code === 'BRANCH_NOT_ASSIGNED') {
+          logger.log('Tesis skipped: branch not assigned yet');
+          return this.tesisCache || null;
+        }
         const errData = data as { message?: string; error?: string };
         const msg = errData?.message || errData?.error || 'Tesis alınamadı';
         throw Object.assign(new Error(msg), { response: { status: r.status, data: errData } });
@@ -395,6 +399,10 @@ class DataService {
 
       return tesisData;
     } catch (error: any) {
+      if (error?.response?.status === 409 && error?.response?.data?.code === 'BRANCH_NOT_ASSIGNED') {
+        logger.log('Returning tesis fallback for unassigned branch');
+        return this.tesisCache || null;
+      }
       logger.error('Get tesis error', error);
 
       if (this.tesisCache) {
@@ -547,6 +555,11 @@ class DataService {
         logger.log('[odalar] Node yanıt', { step: lastStep, status: r.status, hasOdalar: Array.isArray(data?.odalar), odalarLength: data?.odalar?.length ?? 0, code: data?.code, message: data?.message });
 
         if (!r.ok) {
+          if (r.status === 409 && data?.code === 'BRANCH_NOT_ASSIGNED') {
+            logger.log('[odalar] branch not assigned yet, returning empty list or cache', { filtre, hasCache: this.odalarCache.has(cacheKey) });
+            if (this.odalarCache.has(cacheKey)) return this.odalarCache.get(cacheKey)!;
+            return [];
+          }
           if (r.status === 429 && this.odalarCache.has(cacheKey)) {
             const cached = this.odalarCache.get(cacheKey)!;
             logger.warn('[odalar] 429 (rate limit), cache kullanılıyor', { filtre, count: cached.length });
@@ -629,6 +642,10 @@ class DataService {
       if (is429WithCache) {
         logger.warn('[odalar] 429, cache ile devam', { filtre, count: useCache.length });
         return useCache;
+      }
+      if (status === 409 && code === 'BRANCH_NOT_ASSIGNED') {
+        logger.log('[odalar] branch not assigned fallback', { filtre, hasCache });
+        return useCache || [];
       }
       logger.error('[odalar] hata', {
         step,

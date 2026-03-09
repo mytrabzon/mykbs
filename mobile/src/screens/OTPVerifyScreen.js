@@ -15,6 +15,7 @@ import { supabase } from '../lib/supabase/supabase';
 import Toast from 'react-native-toast-message';
 import { logger } from '../utils/logger';
 import { useAuth } from '../context/AuthContext';
+import { getEmailOtpErrorMessage } from '../utils/authErrorMessage';
 
 function formatPhoneForSupabase(telefon) {
   if (!telefon) return '';
@@ -37,6 +38,7 @@ export default function OTPVerifyScreen() {
   const route = useRoute();
   const { loginWithToken } = useAuth();
   const { telefon: paramTelefon, email: paramEmail, islemTipi, onSuccess } = route.params || {};
+  const isRegistrationEmailFlow = islemTipi === 'kayit_email';
   const [phoneInput, setPhoneInput] = useState(paramTelefon || paramEmail || '');
   const [otpSent, setOtpSent] = useState(false);
   const [sentToPhone, setSentToPhone] = useState('');
@@ -70,7 +72,7 @@ export default function OTPVerifyScreen() {
         if (supabase) {
           const { error } = await supabase.auth.signInWithOtp({
             email: trimmed.toLowerCase(),
-            options: { shouldCreateUser: islemTipi === 'kayit' },
+            options: { shouldCreateUser: islemTipi === 'kayit' || isRegistrationEmailFlow },
           });
           if (error) {
             logger.warn('OTPVerify signInWithOtp email error', { message: error.message, code: error.code });
@@ -89,14 +91,11 @@ export default function OTPVerifyScreen() {
         setCountdown(300);
         Toast.show({ type: 'success', text1: 'Kod gönderildi', text2: `${trimmed} adresine doğrulama kodu gönderildi` });
       } catch (e) {
-        const msg = (e?.message || '').toLowerCase();
-        const kullaniciMesaji =
-          msg.includes('sending') && msg.includes('mail')
-            ? 'E-posta servisi yapılandırılmamış. Supabase Dashboard → Auth → SMTP ayarlarını kontrol edin.'
-            : msg.includes('authorized') || msg.includes('not allowed')
-              ? 'Bu e-posta ile kod gönderilemiyor. Custom SMTP ayarlanmış mı kontrol edin.'
-              : e?.message || 'Tekrar deneyin.';
-        Toast.show({ type: 'error', text1: 'Kod gönderilemedi', text2: kullaniciMesaji });
+        Toast.show({
+          type: 'error',
+          text1: 'Kod gönderilemedi',
+          text2: getEmailOtpErrorMessage(e, { requiresExistingAccount: !(islemTipi === 'kayit' || isRegistrationEmailFlow) }),
+        });
       }
       setLoading(false);
       return;
@@ -240,7 +239,8 @@ export default function OTPVerifyScreen() {
           if (!error && data?.session?.access_token) {
             const accessToken = data.session.access_token;
             if (onSuccess) {
-              onSuccess({ token: accessToken, kullanici: null, tesis: null });
+              onSuccess({ token: accessToken, kullanici: null, tesis: null, email: emailForOtp });
+              if (isRegistrationEmailFlow) navigation.goBack();
               return;
             }
             try {
@@ -374,7 +374,7 @@ export default function OTPVerifyScreen() {
         setLoading(true);
         const { error } = await supabase.auth.signInWithOtp({
           email: emailForOtp,
-          options: { shouldCreateUser: islemTipi === 'kayit' },
+          options: { shouldCreateUser: islemTipi === 'kayit' || isRegistrationEmailFlow },
         });
         if (error) throw error;
         setCountdown(300);
