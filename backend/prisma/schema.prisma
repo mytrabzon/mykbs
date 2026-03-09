@@ -187,8 +187,7 @@ model Misafir {
   misafirTipi       String?  // tc_vatandasi | ykn | yabanci (Jandarma/Polis bildirimi için)
   girisTarihi       DateTime @default(now())
   cikisTarihi       DateTime?
-  /** Admin tarafından tanıma: atanan e-posta (misafir bildirimi / davet için) */
-  email             String?
+  email             String?  // Admin: atanan e-posta (misafir bildirimi / davet)
   
   oda               Oda      @relation(fields: [odaId], references: [id], onDelete: Cascade)
   bildirimler       Bildirim[]
