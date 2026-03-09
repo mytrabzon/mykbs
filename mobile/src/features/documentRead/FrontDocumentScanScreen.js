@@ -1,7 +1,7 @@
 /**
  * Ön yüz belge fotoğrafı: kamera ile çek, POST /ocr/document ile MRZ + ön yüz OCR al.
  */
-import React, { useState, useRef, useCallback } from 'react';
+import React, { useState, useRef, useCallback, useEffect } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { CameraView, useCameraPermissions } from 'expo-camera';
@@ -17,6 +17,22 @@ export default function FrontDocumentScanScreen({ navigation, route }) {
   const [cameraOpenFailed, setCameraOpenFailed] = useState(false);
   const [permission, requestPermission] = useCameraPermissions();
   const cameraRef = useRef(null);
+  const cameraReadyTimeoutRef = useRef(null);
+
+  // Kamera 8 sn içinde hazır olmazsa "açılamadı" göster
+  useEffect(() => {
+    if (!permission?.granted || cameraReady || cameraOpenFailed) return;
+    cameraReadyTimeoutRef.current = setTimeout(() => {
+      cameraReadyTimeoutRef.current = null;
+      setCameraOpenFailed(true);
+    }, 8000);
+    return () => {
+      if (cameraReadyTimeoutRef.current) {
+        clearTimeout(cameraReadyTimeoutRef.current);
+        cameraReadyTimeoutRef.current = null;
+      }
+    };
+  }, [permission?.granted, cameraReady, cameraOpenFailed]);
 
   const captureAndUpload = useCallback(async () => {
     if (!cameraRef.current || loading) return;
@@ -79,8 +95,11 @@ export default function FrontDocumentScanScreen({ navigation, route }) {
         ref={cameraRef}
         style={StyleSheet.absoluteFill}
         facing="back"
-        active
         onCameraReady={() => {
+          if (cameraReadyTimeoutRef.current) {
+            clearTimeout(cameraReadyTimeoutRef.current);
+            cameraReadyTimeoutRef.current = null;
+          }
           setCameraReady(true);
           setCameraOpenFailed(false);
         }}

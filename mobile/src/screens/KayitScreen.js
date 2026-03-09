@@ -19,6 +19,7 @@ import Toast from 'react-native-toast-message';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
 import { api } from '../services/api';
+import { supabase } from '../lib/supabase/supabase';
 import { SegmentedControl, Button, Input } from '../components/ui';
 import { typography, spacing } from '../theme';
 
@@ -82,6 +83,12 @@ export default function KayitScreen() {
 
     setLoading(true);
     try {
+      // E-posta doğrulama sonrası Supabase oturumu varsa gönder → backend user_profiles + branch_id (şube) oluşturur
+      let accessToken = null;
+      if (supabase?.auth?.getSession) {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session?.access_token) accessToken = session.access_token;
+      }
       const res = await api.post('/auth/kayit', {
         adSoyad: ad,
         email: em,
@@ -90,6 +97,7 @@ export default function KayitScreen() {
         tesisAdi: tesis,
         odaSayisi: oda,
         ortalamaBildirim: bildirim,
+        ...(accessToken ? { access_token: accessToken } : {}),
       });
       const { token, kullanici, tesis: tesisData } = res.data || {};
       if (token && kullanici && tesisData) {

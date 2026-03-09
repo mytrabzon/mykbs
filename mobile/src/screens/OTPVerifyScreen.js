@@ -203,12 +203,18 @@ export default function OTPVerifyScreen() {
       setLoading(true);
 
       if (islemTipi === 'kayit') {
-        // Kayıt tamamlama
+        // Kayıt tamamlama — Supabase oturumu varsa access_token gönder → backend user_profiles + branch_id (şube) oluşturur
+        let accessTokenKayit = null;
+        if (supabase?.auth?.getSession) {
+          const { data: { session } } = await supabase.auth.getSession();
+          if (session?.access_token) accessTokenKayit = session.access_token;
+        }
         logger.api('POST', '/auth/kayit/dogrula', { telefon, otpLength: code.length });
         const response = await api.post('/auth/kayit/dogrula', {
           telefon,
           otp: code,
-          ...route.params?.kayitBilgileri || {}
+          ...route.params?.kayitBilgileri || {},
+          ...(accessTokenKayit ? { access_token: accessTokenKayit } : {}),
         });
 
         logger.api('POST', '/auth/kayit/dogrula', null, {

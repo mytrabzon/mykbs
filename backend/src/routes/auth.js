@@ -352,6 +352,19 @@ router.post('/kayit', async (req, res) => {
 
     console.log('Yeni kayıt başarılı:', { tesisId: tesis.id, kullaniciId: kullanici.id });
 
+    // Supabase kullanılıyorsa: access_token ile user_profiles + branch_id oluştur (şube atanması)
+    const accessToken = req.body.access_token;
+    if (accessToken && typeof accessToken === 'string' && supabaseAdmin) {
+      try {
+        const { data: { user: supabaseUser }, error } = await supabaseAdmin.auth.getUser(accessToken);
+        if (!error && supabaseUser?.id) {
+          await ensureSupabaseBranchAndProfile(supabaseUser.id, kullanici, tesis);
+        }
+      } catch (e) {
+        console.warn('[auth/kayit] Supabase sync atlandı:', e?.message);
+      }
+    }
+
     res.status(201).json({
       message: "Kayıt tamamlandı. Uygulamayı kullanabilirsiniz. KBS için Ayarlar'dan tesis kodu ve şifre ile onaya gönderin.",
       token,
@@ -551,6 +564,19 @@ router.post('/kayit/dogrula', async (req, res) => {
     );
 
     console.log('Kayıt tamamlandı:', { tesisId: tesis.id, kullaniciId: kullanici.id });
+
+    // Supabase kullanılıyorsa: access_token ile user_profiles + branch_id oluştur (şube atanması)
+    const accessTokenKayit = req.body.access_token;
+    if (accessTokenKayit && typeof accessTokenKayit === 'string' && supabaseAdmin) {
+      try {
+        const { data: { user: supabaseUser }, error } = await supabaseAdmin.auth.getUser(accessTokenKayit);
+        if (!error && supabaseUser?.id) {
+          await ensureSupabaseBranchAndProfile(supabaseUser.id, kullanici, tesis);
+        }
+      } catch (e) {
+        console.warn('[auth/kayit/dogrula] Supabase sync atlandı:', e?.message);
+      }
+    }
 
     res.json({
       message: 'Kayıt başarıyla tamamlandı',
