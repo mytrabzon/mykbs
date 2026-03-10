@@ -141,6 +141,8 @@ export default {
       EXPO_PUBLIC_USE_TRPC: process.env.EXPO_PUBLIC_USE_TRPC === "true",
       // KBS backend (Node) – tanımlıysa health + checkin buraya gider
       backendUrl: process.env.EXPO_PUBLIC_BACKEND_URL || "",
+      // Web admin paneli (mobil Admin ekranından "Web paneli aç" ile açılacak adres)
+      adminPanelWebUrl: process.env.EXPO_PUBLIC_ADMIN_PANEL_WEB_URL || "",
       // Development mode
       NODE_ENV: process.env.NODE_ENV || "development",
     }

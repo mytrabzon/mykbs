@@ -15,6 +15,8 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../context/ThemeContext';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useAuth } from '../../context/AuthContext';
+import { getIsAdminPanelUser } from '../../utils/adminAuth';
 
 let LinearGradient;
 try {
@@ -151,6 +153,8 @@ export default function PrimeHomeView({
 }) {
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
+  const { user } = useAuth();
+  const isSuperAdmin = getIsAdminPanelUser(user);
 
   const dolulukPct = ozet?.toplamOda > 0
     ? Math.round((ozet.doluOda / ozet.toplamOda) * 100)
@@ -177,6 +181,18 @@ export default function PrimeHomeView({
           <Text style={[styles.hotelName, { color: colors.textPrimary }]}>{hotelName} 🏨</Text>
         </View>
         <View style={styles.headerRight}>
+          {isSuperAdmin && (
+            <TouchableOpacity
+              style={styles.adminButtonWrap}
+              onPress={() => navigation?.navigate('AdminPanel')}
+              activeOpacity={0.7}
+            >
+              <Ionicons name="shield" size={24} color="#8B5CF6" />
+              <View style={styles.adminBadge}>
+                <Text style={styles.adminBadgeText}>A</Text>
+              </View>
+            </TouchableOpacity>
+          )}
           <TouchableOpacity
             style={styles.notificationButton}
             onPress={() => navigation?.navigate('Bildirimler')}
@@ -186,7 +202,7 @@ export default function PrimeHomeView({
           </TouchableOpacity>
           <TouchableOpacity
             style={styles.profileButton}
-            onPress={() => navigation?.navigate('ProfilDuzenle')}
+            onPress={() => navigation?.navigate('DahaFazla', { screen: 'Ayarlar' })}
           >
             <LinearGradient colors={['#06B6D4', '#8B5CF6']} style={styles.profileGradient}>
               <Text style={styles.profileInitials}>KBS</Text>
@@ -384,6 +400,19 @@ const styles = StyleSheet.create({
   greeting: { fontSize: 14 },
   hotelName: { fontSize: 24, fontWeight: 'bold' },
   headerRight: { flexDirection: 'row', alignItems: 'center', gap: 15 },
+  adminButtonWrap: { position: 'relative', padding: 8 },
+  adminBadge: {
+    position: 'absolute',
+    top: 4,
+    right: 4,
+    width: 14,
+    height: 14,
+    borderRadius: 7,
+    backgroundColor: '#8B5CF6',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  adminBadgeText: { color: '#fff', fontSize: 9, fontWeight: 'bold' },
   notificationButton: { position: 'relative', padding: 8 },
   notificationBadge: {
     position: 'absolute',

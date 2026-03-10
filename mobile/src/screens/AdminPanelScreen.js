@@ -9,6 +9,7 @@ import {
   Platform,
   ScrollView,
   RefreshControl,
+  Linking,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -19,6 +20,7 @@ import { getIsAdminPanelUser } from '../utils/adminAuth';
 import { getBackendUrl } from '../services/apiSupabase';
 import { logger } from '../utils/logger';
 import Toast from 'react-native-toast-message';
+import { ENV } from '../lib/config/env';
 
 const HIT_SLOP = { top: 12, bottom: 12, left: 12, right: 12 };
 const CARD_PADDING = 16;
@@ -360,26 +362,45 @@ export default function AdminPanelScreen() {
             <TouchableOpacity
               hitSlop={HIT_SLOP}
               activeOpacity={0.7}
-              style={[styles.menuRow, { borderBottomWidth: 0 }]}
+              style={[styles.menuRow, { borderBottomColor: colors.border }]}
               onPress={() => navigation.navigate('TesisList')}
             >
               <Ionicons name="list" size={22} color={colors.primary} />
               <Text style={[styles.menuRowText, { color: colors.textPrimary }]}>Tesis listesi</Text>
               <Ionicons name="chevron-forward" size={20} color={colors.textSecondary} />
             </TouchableOpacity>
+            <TouchableOpacity
+              hitSlop={HIT_SLOP}
+              activeOpacity={0.7}
+              style={[styles.menuRow, { borderBottomWidth: 0 }]}
+              onPress={async () => {
+                const url = (ENV.ADMIN_PANEL_WEB_URL || '').trim() || 'http://localhost:3000';
+                try {
+                  const can = await Linking.canOpenURL(url);
+                  if (can) await Linking.openURL(url);
+                  else Toast.show({ type: 'info', text1: 'Web panel adresi açılamıyor', text2: 'EXPO_PUBLIC_ADMIN_PANEL_WEB_URL ayarlayın.' });
+                } catch (e) {
+                  Toast.show({ type: 'error', text1: 'Açılamadı', text2: e?.message || url });
+                }
+              }}
+            >
+              <Ionicons name="open-outline" size={22} color={colors.primary} />
+              <Text style={[styles.menuRowText, { color: colors.textPrimary }]}>Web admin panelini aç</Text>
+              <Ionicons name="chevron-forward" size={20} color={colors.textSecondary} />
+            </TouchableOpacity>
           </View>
 
-          {/* Paket dağılımı */}
-          {data.paketDagilimi && Object.keys(data.paketDagilimi).length > 0 && (
-            <>
-              <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>Paket dağılımı</Text>
-              <SectionCard title="Aktif tesislerde paket sayıları">
-                {Object.entries(data.paketDagilimi).map(([paket, count], i, arr) => (
-                  <Row key={paket} label={paket} value={String(count)} last={i === arr.length - 1} />
-                ))}
-              </SectionCard>
-            </>
-          )}
+          {/* Paket dağılımı — her zaman göster, boşsa "Veri yok" */}
+          <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>Paket dağılımı</Text>
+          <SectionCard title="Aktif tesislerde paket sayıları">
+            {data.paketDagilimi && Object.keys(data.paketDagilimi).length > 0 ? (
+              Object.entries(data.paketDagilimi).map(([paket, count], i, arr) => (
+                <Row key={paket} label={paket} value={String(count)} last={i === arr.length - 1} />
+              ))
+            ) : (
+              <Text style={[styles.emptyText, { color: colors.textSecondary }]}>Veri yok</Text>
+            )}
+          </SectionCard>
 
           {/* Kota aşımı */}
           {data.kotaAsimi && data.kotaAsimi.length > 0 && (
@@ -396,13 +417,6 @@ export default function AdminPanelScreen() {
                 ))}
               </SectionCard>
             </>
-          )}
-
-          {data && (!data.paketDagilimi || Object.keys(data.paketDagilimi).length === 0) && (!data.kotaAsimi || data.kotaAsimi.length === 0) && (
-            <View style={[styles.emptySection, { backgroundColor: colors.surface }]}>
-              <Ionicons name="stats-chart-outline" size={40} color={colors.textSecondary} />
-              <Text style={[styles.emptySectionText, { color: colors.textSecondary }]}>Henüz ek veri yok</Text>
-            </View>
           )}
         </ScrollView>
       )}

@@ -27,4 +27,7 @@ export const ENV = {
     'EXPO_PUBLIC_BACKEND_URL',
     fromProcess('EXPO_PUBLIC_BACKEND_URL') ?? (extra.backendUrl as string)
   ),
+  /** Web admin paneli URL (mobilde "Web paneli aç" – boşsa gösterilmez veya localhost:3000) */
+  ADMIN_PANEL_WEB_URL:
+    fromProcess('EXPO_PUBLIC_ADMIN_PANEL_WEB_URL') ?? (extra.adminPanelWebUrl as string) ?? '',
 };

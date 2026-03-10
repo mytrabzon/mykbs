@@ -264,9 +264,13 @@ export default function OTPVerifyScreen() {
             } catch (sessionErr) {
               const status = sessionErr?.response?.status;
               const msg = sessionErr?.response?.data?.message || sessionErr?.message;
+              const is429 = status === 429 || sessionErr?.response?.data?.rateLimit === true;
               if (status === 503 && (msg || '').includes('Veritabanı')) {
                 Toast.show({ type: 'error', text1: 'Bakım', text2: msg || 'Veritabanı güncellemesi gerekli.' });
                 return;
+              }
+              if (is429) {
+                Toast.show({ type: 'info', text1: 'Sunucu yoğun', text2: 'Oturum açılıyor…' });
               }
               const fallback = await loginWithToken(accessToken, null, null, accessToken);
               if (!fallback?.success) {
@@ -313,9 +317,13 @@ export default function OTPVerifyScreen() {
             } catch (sessionErr) {
               const status = sessionErr?.response?.status;
               const msg = sessionErr?.response?.data?.message || sessionErr?.message;
+              const is429 = status === 429 || sessionErr?.response?.data?.rateLimit === true;
               if (status === 503 && (msg || '').includes('Veritabanı')) {
                 Toast.show({ type: 'error', text1: 'Bakım', text2: msg || 'Veritabanı güncellemesi gerekli.' });
                 return;
+              }
+              if (is429) {
+                Toast.show({ type: 'info', text1: 'Sunucu yoğun', text2: 'Oturum açılıyor…' });
               }
               const fallback = await loginWithToken(accessToken, null, null, accessToken);
               if (!fallback?.success) {
@@ -354,20 +362,26 @@ export default function OTPVerifyScreen() {
         response: error.response?.data,
         status: error.response?.status
       });
+      const status = error.response?.status;
       const apiMessage = error.response?.data?.message || error.response?.data?.error;
+      const is429 = status === 429 || error.response?.data?.rateLimit === true;
       const isNetwork = error.message === 'Network Error' || error.code === 'NETWORK_ERROR';
       const isTimeout = error.name === 'AbortError' || error.message?.includes('abort');
-      const text2 = isTimeout
-        ? 'İstek zaman aşımına uğradı. İnterneti kontrol edip tekrar deneyin.'
-        : isNetwork
-          ? 'İnternet bağlantınızı kontrol edip tekrar deneyin.'
-          : (apiMessage || error.message || 'Kod hatalı veya süresi doldu. Yeni kod gönderip tekrar deneyin.');
+      const text2 = is429
+        ? 'Çok fazla istek. Lütfen 1–2 dakika sonra tekrar deneyin.'
+        : isTimeout
+          ? 'İstek zaman aşımına uğradı. İnterneti kontrol edip tekrar deneyin.'
+          : isNetwork
+            ? 'İnternet bağlantınızı kontrol edip tekrar deneyin.'
+            : (apiMessage || error.message || 'Kod hatalı veya süresi doldu. Yeni kod gönderip tekrar deneyin.');
       Toast.show({
         type: 'error',
-        text1: isTimeout ? 'Zaman Aşımı' : isNetwork ? 'Bağlantı Hatası' : 'Doğrulama Başarısız',
+        text1: is429 ? 'Çok Fazla İstek' : isTimeout ? 'Zaman Aşımı' : isNetwork ? 'Bağlantı Hatası' : 'Doğrulama Başarısız',
         text2,
       });
-      setOtp(['', '', '', '', '', '']);
+      if (!is429) {
+        setOtp(['', '', '', '', '', '']);
+      }
       inputRefs.current[0]?.focus();
     } finally {
       setLoading(false);

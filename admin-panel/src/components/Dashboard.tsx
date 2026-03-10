@@ -78,20 +78,52 @@ export default function Dashboard({ embedLayout = false }: DashboardProps) {
   const router = useRouter()
   const [stats, setStats] = useState<DashboardStats | null>(null)
   const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState<string | null>(null)
 
   useEffect(() => {
     loadDashboard()
   }, [])
 
+  const emptyStats: DashboardStats = {
+    toplamTesis: 0,
+    aktifTesis: 0,
+    paketDagilimi: {},
+    gunlukBildirim: 0,
+    gunlukHata: 0,
+    kotaAsimi: [],
+  }
+
   const loadDashboard = async () => {
+    setLoadError(null)
     try {
-      const response = await api.get('/admin/dashboard')
-      setStats(response.data)
+      const response = await api.get<DashboardStats>('/admin/dashboard')
+      const raw = response?.data
+      const data = raw && typeof raw === 'object' && 'toplamTesis' in raw ? raw : (raw as { data?: DashboardStats })?.data
+      const resolved = (data && typeof data === 'object' ? data : null) as DashboardStats | null
+      setStats({
+        toplamTesis: Number(resolved?.toplamTesis) || 0,
+        aktifTesis: Number(resolved?.aktifTesis) || 0,
+        paketDagilimi: (resolved?.paketDagilimi && typeof resolved.paketDagilimi === 'object') ? resolved.paketDagilimi : {},
+        gunlukBildirim: Number(resolved?.gunlukBildirim) || 0,
+        gunlukHata: Number(resolved?.gunlukHata) || 0,
+        kotaAsimi: Array.isArray(resolved?.kotaAsimi) ? resolved.kotaAsimi : [],
+      })
     } catch (error: unknown) {
-      toast.error('Dashboard verileri yüklenemedi')
-      if (error && typeof error === 'object' && 'response' in error) {
-        const err = error as { response?: { status?: number } }
-        if (err.response?.status === 401) router.push('/login')
+      const err = error as { response?: { status?: number; data?: { message?: string } } }
+      const msg = err.response?.data?.message
+      const is401 = err.response?.status === 401
+      if (is401) {
+        const token = typeof window !== 'undefined' ? localStorage.getItem('admin_token') : null
+        const isPanelSecret = typeof token === 'string' && token.length > 10 && (token.match(/\./g)?.length ?? 0) < 2
+        toast.error(
+          isPanelSecret
+            ? 'Yetkisiz. Panel şifresi ile giriş yaptıysanız backend .env içindeki ADMIN_SECRET, admin panel .env.local içindeki NEXT_PUBLIC_ADMIN_SECRET ile aynı olmalı.'
+            : msg || 'Yetkisiz'
+        )
+        router.push('/login')
+      } else {
+        setLoadError(msg || 'Dashboard verileri yüklenemedi')
+        setStats(emptyStats)
       }
     } finally {
       setLoading(false)
@@ -115,6 +147,14 @@ export default function Dashboard({ embedLayout = false }: DashboardProps) {
         <p className="kbs-dash-greeting">{getGreeting()}</p>
         <h1 className="kbs-dash-title">Kontrol Merkezi</h1>
         <p className="kbs-dash-sub">Özet, paket dağılımı ve kota durumu</p>
+        {loadError && (
+          <div className="kbs-dash-error" role="alert">
+            <p>{loadError}</p>
+            <button type="button" onClick={() => { setLoadError(null); loadDashboard() }} className="kbs-btn-primary">
+              Yenile
+            </button>
+          </div>
+        )}
       </header>
 
       {/* Hızlı erişim */}
@@ -260,7 +300,6 @@ export default function Dashboard({ embedLayout = false }: DashboardProps) {
           <div className="kbs-nav-links">
             <Link href="/tesisler" className="kbs-nav-link">Tesisler</Link>
             <Link href="/users" className="kbs-nav-link">Kullanıcılar</Link>
-            <Link href="/community" className="kbs-nav-link">Topluluk</Link>
             <Link href="/kbs-notifications" className="kbs-nav-link">KBS Bildirimleri</Link>
             <Link href="/audit" className="kbs-nav-link">Audit</Link>
             <button type="button" onClick={() => { localStorage.removeItem('admin_token'); router.push('/login') }} className="kbs-btn-logout">

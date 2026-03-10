@@ -49,7 +49,7 @@ function withTimeout(promise, ms, msg = 'İstek zaman aşımına uğradı') {
 export default function ProfilIletisimScreen() {
   const navigation = useNavigation();
   const { colors } = useTheme();
-  const { user, tesis, refreshMe } = useAuth();
+  const { user, tesis, refreshMe, setSupabaseToken } = useAuth();
 
   const currentEmail = (user?.email || '').trim() || null;
   const currentPhone = (user?.telefon || user?.phone || '').trim() || null;
@@ -91,6 +91,10 @@ export default function ProfilIletisimScreen() {
       Toast.show({ type: 'error', text1: 'Geçersiz e-posta', text2: 'Geçerli bir e-posta adresi girin' });
       return;
     }
+    if (currentEmail && email === currentEmail.trim().toLowerCase()) {
+      Toast.show({ type: 'error', text1: 'Yeni e-posta girin', text2: 'Mevcut e-postanızdan farklı bir adres yazın.' });
+      return;
+    }
     if (!supabase) {
       Toast.show({ type: 'error', text1: 'Hata', text2: 'E-posta servisi kullanılamıyor.' });
       return;
@@ -103,13 +107,13 @@ export default function ProfilIletisimScreen() {
         'E-posta gönderimi zaman aşımına uğradı. İnterneti kontrol edip tekrar deneyin.'
       );
       if (error) throw error;
-      setStep('list');
-      setTarget(null);
-      setNewEmail('');
+      setStep('enter_code');
+      setTarget('email');
+      setCode(['', '', '', '', '', '']);
       Toast.show({
         type: 'success',
-        text1: 'Doğrulama linki gönderildi',
-        text2: `${email} adresine doğrulama linki gönderildi. E-postanızı (ve gerekiyorsa spam klasörünü) kontrol edin.`,
+        text1: 'Kod gönderildi',
+        text2: `${email} adresine 6 haneli kod gönderildi. Aşağıya girin.`,
         visibilityTime: 5000,
       });
     } catch (e) {
@@ -179,8 +183,11 @@ export default function ProfilIletisimScreen() {
         });
         if (error) throw error;
         if (data?.user) {
+          if (data.session?.access_token && typeof setSupabaseToken === 'function') {
+            await setSupabaseToken(data.session.access_token);
+          }
           await refreshMe?.();
-          Toast.show({ type: 'success', text1: 'E-posta güncellendi', text2: 'Yeni e-posta adresiniz kaydedildi.' });
+          Toast.show({ type: 'success', text1: 'E-posta güncellendi', text2: 'Yeni e-posta adresiniz kaydedildi. Oturumunuz açık kaldı.' });
           setStep('list');
           setTarget(null);
           setNewEmail('');
@@ -219,7 +226,7 @@ export default function ProfilIletisimScreen() {
   const startLinkOrChange = (type) => {
     setTarget(type);
     if (type === 'email') {
-      setNewEmail(currentEmail || '');
+      setNewEmail('');
       setStep('enter_email');
     } else {
       setNewPhone(currentPhone ? currentPhone.replace(/\D/g, '').replace(/^90/, '0') : '');
@@ -242,7 +249,7 @@ export default function ProfilIletisimScreen() {
         tesis={tesis}
         onBack={() => (step !== 'list' ? cancelFlow() : navigation.goBack())}
         onNotification={() => navigation.navigate('Bildirimler')}
-        onProfile={() => navigation.navigate('Ayarlar')}
+        onProfile={() => navigation.navigate('Main', { screen: 'DahaFazla', params: { screen: 'Ayarlar' } })}
         backendConfigured={backendStatus.configured}
         backendOnline={backendStatus.isOnline}
         backendError={backendStatus.error}
@@ -300,20 +307,22 @@ export default function ProfilIletisimScreen() {
               {target === 'email' ? (
                 <>
                   <Input
-                    label="E-posta adresi"
+                    label={currentEmail ? 'Yeni e-posta adresi' : 'E-posta adresi'}
                     value={newEmail}
                     onChangeText={setNewEmail}
-                    placeholder="ornek@email.com"
+                    placeholder="yeni@email.com"
                     keyboardType="email-address"
                     autoCapitalize="none"
                   />
                   <Text style={[styles.hint, { color: colors.textSecondary }]}>
-                    Doğrulama linki bu adrese gönderilir. Linke tıklayarak e-postanızı bağlayın.
+                    {currentEmail
+                      ? 'Yeni e-postanızı yazın. 6 haneli doğrulama kodu o adrese gidecek; aynı sayfada kodu girip onaylayacaksınız.'
+                      : 'E-posta adresinizi yazın. 6 haneli kod bu adrese gönderilir; aynı sayfada kodu girin.'}
                   </Text>
                   <View style={styles.rowButtons}>
                     <Button variant="secondary" onPress={cancelFlow}>İptal</Button>
                     <Button variant="primary" onPress={sendCodeToEmail} loading={sendingCode} disabled={sendingCode}>
-                      Kod gönder
+                      Kod talep et
                     </Button>
                   </View>
                 </>
@@ -342,7 +351,7 @@ export default function ProfilIletisimScreen() {
               <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>Doğrulama kodu</Text>
               <Text style={[styles.hint, { color: colors.textSecondary }]}>
                 {target === 'email'
-                  ? `${pendingEmail} adresine gönderilen 6 haneli kodu girin.`
+                  ? `${pendingEmail} adresine gönderilen 6 haneli kodu aşağıya girin.`
                   : 'Telefonunuza gelen 6 haneli kodu girin.'}
               </Text>
               <View style={styles.otpRow}>

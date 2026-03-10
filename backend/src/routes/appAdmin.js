@@ -40,15 +40,27 @@ async function requireAdminPanelUser(req, res, next) {
           }
         }
       }
-    } catch (_) { /* not a backend JWT */ }
+    } catch (jwtErr) {
+      const looksLikeJwt = (token.match(/\./g)?.length ?? 0) >= 2;
+      if (looksLikeJwt) {
+        return res.status(401).json({
+          message: 'Token gecersiz veya suresi dolmus. Yeniden giris yapin.',
+        });
+      }
+    }
 
-    // 2) Supabase token
+    // 2) Supabase token (backend JWT degil; Supabase Auth JWT gerekir)
     if (!supabaseAdmin) {
       return res.status(503).json({ message: 'Supabase yapılandırılmamış' });
     }
     const { data: { user }, error } = await supabaseAdmin.auth.getUser(token);
     if (error || !user) {
-      return res.status(401).json({ message: 'Yetkisiz' });
+      const looksLikePanelSecret = token.length > 8 && (token.match(/\./g)?.length ?? 0) < 2;
+      return res.status(401).json({
+        message: looksLikePanelSecret
+          ? 'Yetkisiz. Panel şifresi kullandıysanız backend .env ADMIN_SECRET değeri, admin panel .env.local NEXT_PUBLIC_ADMIN_SECRET ile aynı olmalı.'
+          : 'Yetkisiz',
+      });
     }
     const { data: profilesRow } = await supabaseAdmin.from('profiles').select('is_admin').eq('id', user.id).maybeSingle();
     if (profilesRow?.is_admin === true) {

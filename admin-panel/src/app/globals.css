@@ -650,6 +650,26 @@ body {
   color: var(--kbs-text-muted);
 }
 
+.kbs-dash-error {
+  margin-top: 1rem;
+  padding: 1rem;
+  background: rgba(248, 113, 113, 0.12);
+  border: 1px solid var(--kbs-danger);
+  border-radius: 12px;
+  color: var(--kbs-text);
+}
+
+.kbs-dash-error p {
+  margin-bottom: 0.75rem;
+  font-size: 0.9rem;
+}
+
+.kbs-dash-error .kbs-btn-primary {
+  width: auto;
+  padding: 0.5rem 1rem;
+  margin-top: 0;
+}
+
 /* Hızlı erişim */
 .kbs-dash-quick {
   margin-bottom: 1.5rem;
@@ -796,6 +816,10 @@ body {
   padding: 0.5rem 0.75rem;
 }
 
+.admin-dashboard-embed {
+  min-height: 60vh;
+}
+
 .admin-dashboard-embed .kbs-dash-header {
   margin-bottom: 1rem;
 }
@@ -874,6 +898,13 @@ body {
   border-color: var(--kbs-accent);
   color: var(--kbs-accent);
   box-shadow: 0 0 20px rgba(34, 211, 238, 0.15);
+}
+
+.kbs-login-note {
+  font-size: 0.8rem;
+  color: var(--kbs-text-muted);
+  margin-bottom: 1rem;
+  line-height: 1.4;
 }
 
 .kbs-input {

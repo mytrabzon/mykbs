@@ -619,6 +619,47 @@ function handlePrismaAuthError(res, error) {
   throw error;
 }
 
+/** Ortak giriş yanıtı: tesis kontrolü + JWT + kullanici/tesis/supabaseAccessToken */
+async function issueGirisYeniResponse(res, kullanici, supabaseAccessToken) {
+  if (!kullanici.tesis) {
+    return res.status(403).json({ message: 'Hesabınız bir tesise bağlı değil. Yöneticinize başvurun.' });
+  }
+  if (kullanici.tesis.durum !== 'aktif') {
+    return res.status(403).json({ message: 'Tesis aktif değil' });
+  }
+  const token = jwt.sign(
+    { userId: kullanici.id, tesisId: kullanici.tesis.id },
+    process.env.JWT_SECRET,
+    { expiresIn: process.env.JWT_EXPIRES_IN || '7d' }
+  );
+  const adminKullaniciIdRaw = process.env.ADMIN_KULLANICI_ID != null ? String(process.env.ADMIN_KULLANICI_ID).trim() : '';
+  const isAdmin = adminKullaniciIdRaw && adminKullaniciIdRaw === String(kullanici.id);
+  const role = isAdmin ? 'admin' : 'user';
+  return res.json({
+    token,
+    kullanici: {
+      id: kullanici.id,
+      adSoyad: kullanici.adSoyad,
+      email: kullanici.email,
+      telefon: kullanici.telefon,
+      rol: kullanici.rol,
+      biyometriAktif: kullanici.biyometriAktif,
+      is_admin: isAdmin,
+      role,
+    },
+    tesis: {
+      id: kullanici.tesis.id,
+      tesisAdi: kullanici.tesis.tesisAdi,
+      tesisKodu: kullanici.tesis.tesisKodu,
+      paket: kullanici.tesis.paket,
+      kota: kullanici.tesis.kota,
+      kullanilanKota: kullanici.tesis.kullanilanKota,
+      trialEndsAt: kullanici.tesis.trialEndsAt,
+    },
+    ...(supabaseAccessToken && { supabaseAccessToken }),
+  });
+}
+
 /**
  * Yeni giriş (email/telefon + şifre)
  */
@@ -666,14 +707,40 @@ router.post('/giris/yeni', async (req, res) => {
     }
 
     // Şifre kontrolü — hesapta şifre yoksa (örn. sadece OTP ile kayıt olunduysa) net mesaj
+    const emailForSupabase = (kullanici.email || '').trim().toLowerCase();
     if (!kullanici.sifre) {
+      // Prisma'da şifre yok; sadece Supabase ile giriş denenebilir (örn. şifre sadece Supabase'de tanımlı)
+      if (emailForSupabase && supabaseAnon?.auth) {
+        const { data: supabaseData, error: supabaseErr } = await supabaseAnon.auth.signInWithPassword({
+          email: emailForSupabase,
+          password: sifreTrim,
+        });
+        if (!supabaseErr && supabaseData?.session?.access_token) {
+          // Supabase ile giriş başarılı — Prisma şifresini senkronize et, sonra aynı payload ile devam
+          const hashedSifre = await bcrypt.hash(sifreTrim, 10);
+          await prisma.kullanici.update({ where: { id: kullanici.id }, data: { sifre: hashedSifre } }).catch(() => {});
+          return await issueGirisYeniResponse(res, kullanici, supabaseData.session.access_token);
+        }
+      }
       return res.status(401).json({
         message: 'Bu hesapta şifre tanımlı değil. "Kod ile giriş" kullanın veya "Şifremi unuttum" ile şifre oluşturun.',
         code: 'PASSWORD_NOT_SET',
       });
     }
 
-    const sifreDogru = await bcrypt.compare(sifreTrim, kullanici.sifre);
+    let sifreDogru = await bcrypt.compare(sifreTrim, kullanici.sifre);
+    if (!sifreDogru && emailForSupabase && supabaseAnon?.auth) {
+      // Backend (Prisma) şifresi eşleşmedi; şifre sadece Supabase'de güncellenmiş olabilir (internet girişi Supabase ile)
+      const { data: supabaseData, error: supabaseErr } = await supabaseAnon.auth.signInWithPassword({
+        email: emailForSupabase,
+        password: sifreTrim,
+      });
+      if (!supabaseErr && supabaseData?.session?.access_token) {
+        const hashedSifre = await bcrypt.hash(sifreTrim, 10);
+        await prisma.kullanici.update({ where: { id: kullanici.id }, data: { sifre: hashedSifre } }).catch(() => {});
+        return await issueGirisYeniResponse(res, kullanici, supabaseData.session.access_token);
+      }
+    }
     if (!sifreDogru) {
       return res.status(401).json({ message: 'Geçersiz şifre' });
     }
@@ -695,7 +762,6 @@ router.post('/giris/yeni', async (req, res) => {
 
     // Profil ve topluluk için Supabase token — e-posta ile giren herkes topluluk görebilsin
     let supabaseAccessToken = null;
-    const emailForSupabase = (kullanici.email || '').trim().toLowerCase();
     if (emailForSupabase && supabaseAnon?.auth) {
       try {
         const { data, error } = await supabaseAnon.auth.signInWithPassword({
@@ -765,6 +831,7 @@ router.post('/giris/yeni', async (req, res) => {
   }
 });
 
+// Özel giriş: sadece yetkili personel. Production'da (Railway vb.) ADMIN_SECRET env değişkeni mutlaka ayarlanmalı.
 router.post('/ozel-giris', async (req, res) => {
   try {
     const sifre = (req.body.sifre && String(req.body.sifre).trim()) || '';

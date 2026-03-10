@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
+  TextInput,
   TouchableOpacity,
   StyleSheet,
   ScrollView,
@@ -10,27 +11,39 @@ import {
   Linking,
   Modal,
   Image,
+  ActivityIndicator,
 } from 'react-native';
 import Constants from 'expo-constants';
+import * as ImagePicker from 'expo-image-picker';
+import * as FileSystem from 'expo-file-system/legacy';
 import { useNavigation } from '@react-navigation/native';
 import { useTheme } from '../context/ThemeContext';
 import { useAuth } from '../context/AuthContext';
-import { api } from '../services/api';
+import { api, getBackendUrl } from '../services/api';
 import { supabase } from '../lib/supabase/supabase';
 import { dataService } from '../services/dataService';
 import { backendHealth } from '../services/backendHealth';
 import { getApiBaseUrl, isSupabaseConfigured } from '../config/api';
 import { getNfcEnabled, setNfcEnabled } from '../utils/nfcSetting';
+import * as communityApi from '../services/communityApi';
 import Toast from 'react-native-toast-message';
 import { Ionicons } from '@expo/vector-icons';
 import { Button, Banner, SegmentedControl, Input } from '../components/ui';
 import { typography, spacing } from '../theme';
 import AppHeader from '../components/AppHeader';
 
+const PROFILE_SAVE_TIMEOUT_MS = 30000;
+function withTimeout(promise, ms, msg = 'İstek zaman aşımına uğradı') {
+  return Promise.race([
+    promise,
+    new Promise((_, reject) => setTimeout(() => reject(new Error(msg)), ms)),
+  ]);
+}
+
 export default function AyarlarScreen() {
   const navigation = useNavigation();
   const { colors } = useTheme();
-  const { logout, tesis, user, setTesis, token } = useAuth();
+  const { logout, tesis, user, setTesis, token, getSupabaseToken, refreshMe } = useAuth();
   const [deleteAccountLoading, setDeleteAccountLoading] = useState(false);
   const [tesisDetail, setTesisDetail] = useState(null);
   const [tesisAdiEdit, setTesisAdiEdit] = useState('');
@@ -63,6 +76,15 @@ export default function AyarlarScreen() {
   const [okutulanBelgeDetail, setOkutulanBelgeDetail] = useState(null);
   const [nfcEnabled, setNfcEnabledState] = useState(false);
   const settingsLoadedRef = useRef(false);
+  // Profil (birleştirilmiş profil düzenleme)
+  const [displayName, setDisplayName] = useState(() => (user?.adSoyad || '').trim());
+  const [title, setTitle] = useState('');
+  const [telefon, setTelefon] = useState('');
+  const [avatarUrl, setAvatarUrl] = useState(null);
+  const [avatarUrlTs, setAvatarUrlTs] = useState(0);
+  const [localAvatarUri, setLocalAvatarUri] = useState(null);
+  const [profileSaving, setProfileSaving] = useState(false);
+  const [profileLoaded, setProfileLoaded] = useState(false);
 
   const loadOkutulanBelgeler = async () => {
     setOkutulanBelgelerLoading(true);
@@ -149,6 +171,46 @@ export default function AyarlarScreen() {
     if (tesis?.tesisAdi != null && tesisAdiEdit === '') setTesisAdiEdit(tesis.tesisAdi);
   }, [tesis?.tesisAdi]);
 
+  // Profil verisi yükle (Supabase me veya backend /auth/profile)
+  useEffect(() => {
+    if (profileLoaded) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const t = await getSupabaseToken?.();
+        if (t) {
+          let me = await withTimeout(communityApi.getMe(t), 6000).catch(() => null);
+          if (!me && t) {
+            await new Promise((r) => setTimeout(r, 400));
+            me = await withTimeout(communityApi.getMe(t), 6000).catch(() => null);
+          }
+          if (!cancelled && me) {
+            setDisplayName((me.display_name || user?.adSoyad || '').trim());
+            setTitle(me.title || '');
+            setAvatarUrl(me.avatar_url || null);
+          }
+        } else {
+          const res = await withTimeout(api.get('/auth/profile'), 6000).catch(() => null);
+          const data = res?.data || {};
+          if (!cancelled && (data.display_name != null || data.title != null || data.avatar_url != null || data.telefon != null)) {
+            setDisplayName((data.display_name || user?.adSoyad || '').trim());
+            setTitle(data.title || '');
+            setAvatarUrl(data.avatar_url || null);
+            if (data.telefon) setTelefon(String(data.telefon).replace(/^\+\d*/, '').replace(/\D/g, '').replace(/^0?/, '').slice(0, 11) || '');
+          }
+        }
+        if (!cancelled && user?.telefon && user.telefon !== '-') {
+          setTelefon((prev) => (prev || String(user.telefon).replace(/^\+\d*/, '').replace(/\D/g, '').replace(/^0?/, '').slice(0, 11) || ''));
+        }
+      } catch (_) {}
+      if (!cancelled) {
+        setDisplayName((prev) => prev || (user?.adSoyad || '').trim());
+        setProfileLoaded(true);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [profileLoaded, user?.adSoyad, user?.telefon, getSupabaseToken]);
+
   const handleTesisAdiSave = async () => {
     const name = (tesisAdiEdit && String(tesisAdiEdit).trim()) || '';
     if (!name) {
@@ -166,6 +228,103 @@ export default function AyarlarScreen() {
       Toast.show({ type: 'error', text1: 'Hata', text2: e?.response?.data?.message || 'Tesis adı güncellenemedi' });
     } finally {
       setTesisAdiSaving(false);
+    }
+  };
+
+  const pickAvatar = async () => {
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== 'granted') {
+      Toast.show({ type: 'error', text1: 'İzin gerekli', text2: 'Galeri erişimi gerekli' });
+      return;
+    }
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaType?.Images ?? 'images',
+      allowsEditing: true,
+      aspect: [1, 1],
+      quality: 0.8,
+    });
+    if (!result.canceled && result.assets[0]) {
+      let uri = result.assets[0].uri;
+      try {
+        const Manipulator = require('expo-image-manipulator');
+        if (Manipulator?.manipulateAsync) {
+          const m = await Manipulator.manipulateAsync(uri, [{ resize: { width: 800 } }], { compress: 0.8 });
+          if (m?.uri) uri = m.uri;
+        }
+      } catch (_) {}
+      setLocalAvatarUri(uri);
+    }
+  };
+
+  const handleProfileSave = async () => {
+    const backendAvailable = !!getBackendUrl?.();
+    const t = await getSupabaseToken?.();
+    if (!backendAvailable && !t) {
+      Toast.show({ type: 'error', text1: 'Profil düzenleme', text2: 'E-posta veya telefon ile giriş yaparak profil düzenleyebilirsiniz.' });
+      return;
+    }
+    setProfileSaving(true);
+    try {
+      const body = {
+        display_name: (displayName || '').trim() || null,
+        title: (title || '').trim() || null,
+        telefon: (telefon || '').trim() ? String(telefon).trim().replace(/\D/g, '') : '',
+        avatar_url: avatarUrl || null,
+      };
+      if (localAvatarUri) {
+        let base64;
+        try {
+          base64 = await FileSystem.readAsStringAsync(localAvatarUri, { encoding: FileSystem.EncodingType.Base64 });
+        } catch (readErr) {
+          if (localAvatarUri.startsWith('content://') || localAvatarUri.startsWith('file://')) {
+            try {
+              const cachePath = `${FileSystem.cacheDirectory}avatar_${Date.now()}.jpg`;
+              await FileSystem.copyAsync({ from: localAvatarUri, to: cachePath });
+              base64 = await FileSystem.readAsStringAsync(cachePath, { encoding: FileSystem.EncodingType.Base64 });
+              await FileSystem.deleteAsync(cachePath, { idempotent: true });
+            } catch (copyErr) {
+              Toast.show({ type: 'error', text1: 'Profil resmi okunamadı', text2: 'Görseli tekrar seçin.' });
+              setProfileSaving(false);
+              return;
+            }
+          } else {
+            Toast.show({ type: 'error', text1: 'Profil resmi okunamadı', text2: readErr?.message || 'Görseli tekrar seçin.' });
+            setProfileSaving(false);
+            return;
+          }
+        }
+        if (typeof base64 === 'string') base64 = base64.replace(/^data:image\/[^;]+;base64,/i, '').replace(/[^A-Za-z0-9+/=]/g, '');
+        if (base64?.length > 0) body.avatar_base64 = base64;
+        else {
+          Toast.show({ type: 'error', text1: 'Profil resmi boş', text2: 'Başka bir görsel seçin.' });
+          setProfileSaving(false);
+          return;
+        }
+      }
+      if (backendAvailable) {
+        await withTimeout(api.put('/auth/profile', body), PROFILE_SAVE_TIMEOUT_MS, 'Kayıt zaman aşımına uğradı.');
+        const res = await api.get('/auth/profile').catch(() => null);
+        if (res?.data?.avatar_url) setAvatarUrl(res.data.avatar_url);
+      } else {
+        let finalAvatarUrl = body.avatar_url;
+        if (body.avatar_base64) finalAvatarUrl = await withTimeout(communityApi.uploadAvatar(body.avatar_base64, t), PROFILE_SAVE_TIMEOUT_MS);
+        await withTimeout(
+          communityApi.updateProfile({ display_name: body.display_name, avatar_url: finalAvatarUrl, title: body.title }, t),
+          PROFILE_SAVE_TIMEOUT_MS
+        );
+        if (finalAvatarUrl) {
+          setAvatarUrl(finalAvatarUrl);
+          setAvatarUrlTs(Date.now());
+        }
+      }
+      if (localAvatarUri) setLocalAvatarUri(null);
+      if (typeof refreshMe === 'function') await refreshMe();
+      Toast.show({ type: 'success', text1: 'Profil kaydedildi' });
+    } catch (err) {
+      const msg = err?.response?.data?.message || err?.message || 'Kaydedilemedi';
+      Toast.show({ type: 'error', text1: 'Kaydedilemedi', text2: msg });
+    } finally {
+      setProfileSaving(false);
     }
   };
 
@@ -419,7 +578,7 @@ export default function AyarlarScreen() {
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       <AppHeader
-        title="Ayarlar"
+        title="Profil ve Ayarlar"
         tesis={tesis}
         backendConfigured={backendStatus.configured}
         backendOnline={backendStatus.isOnline}
@@ -428,20 +587,63 @@ export default function AyarlarScreen() {
         supabaseOnline={supabaseStatus.isOnline}
         supabaseError={supabaseStatus.error}
         onNotification={() => navigation.navigate('Bildirimler')}
-        onProfile={() => navigation.navigate('ProfilDuzenle')}
       />
       <ScrollView style={styles.scroll} contentContainerStyle={styles.content}>
         <View style={[styles.section, { backgroundColor: colors.surface }]}>
           <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>Profil</Text>
-          <TouchableOpacity
-            style={[styles.menuRow, { borderBottomColor: colors.border }]}
-            onPress={() => navigation.navigate('ProfilDuzenle')}
-          >
-            <Text style={[styles.menuRowText, { color: colors.textPrimary }]}>Profil düzenle & avatar</Text>
-            <Ionicons name="chevron-forward" size={20} color={colors.textSecondary} />
+          <Text style={[styles.label, { color: colors.textSecondary }]}>Avatar</Text>
+          <TouchableOpacity onPress={pickAvatar} style={[styles.avatarWrap, { backgroundColor: colors.background }]}>
+            {(localAvatarUri || avatarUrl) ? (
+              <Image source={{ uri: localAvatarUri || (avatarUrl ? `${avatarUrl}${avatarUrlTs ? `?t=${avatarUrlTs}` : ''}` : '') }} style={styles.avatarImg} />
+            ) : (
+              <Ionicons name="person" size={48} color={colors.textSecondary} />
+            )}
+            <View style={[styles.avatarBadge, { backgroundColor: colors.primary }]}>
+              <Ionicons name="camera" size={16} color="#fff" />
+            </View>
           </TouchableOpacity>
+          {(user?.email || (user?.telefon && user?.telefon !== '-')) ? (
+            <View style={styles.accountRow}>
+              <Text style={[styles.label, { color: colors.textSecondary }]}>Hesap (giriş)</Text>
+              <Text style={[styles.infoText, { color: colors.textSecondary }]} numberOfLines={1}>{user?.email || user?.telefon}</Text>
+            </View>
+          ) : null}
+          <Text style={[styles.label, { color: colors.textSecondary }]}>Ad Soyad / Görünen ad</Text>
+          <TextInput
+            style={[styles.input, { backgroundColor: colors.background, color: colors.textPrimary, borderColor: colors.border }]}
+            value={displayName}
+            onChangeText={setDisplayName}
+            placeholder="Adınız"
+            placeholderTextColor={colors.textSecondary}
+          />
+          <Text style={[styles.label, { color: colors.textSecondary }]}>Ünvan / Pozisyon</Text>
+          <TextInput
+            style={[styles.input, { backgroundColor: colors.background, color: colors.textPrimary, borderColor: colors.border }]}
+            value={title}
+            onChangeText={setTitle}
+            placeholder="Örn. Resepsiyon, Ön Büro Müdürü..."
+            placeholderTextColor={colors.textSecondary}
+          />
+          <Text style={[styles.label, { color: colors.textSecondary }]}>Telefon (isteğe bağlı)</Text>
+          <TextInput
+            style={[styles.input, { backgroundColor: colors.background, color: colors.textPrimary, borderColor: colors.border }]}
+            value={telefon}
+            onChangeText={(t) => setTelefon(t.replace(/\D/g, '').slice(0, 11))}
+            placeholder="5XX XXX XX XX"
+            placeholderTextColor={colors.textSecondary}
+            keyboardType="phone-pad"
+          />
+          <Button
+            variant="primary"
+            onPress={handleProfileSave}
+            loading={profileSaving}
+            disabled={profileSaving}
+            style={{ marginTop: spacing.sm }}
+          >
+            Profil bilgilerini kaydet
+          </Button>
           <TouchableOpacity
-            style={[styles.menuRow, { borderBottomWidth: 0 }]}
+            style={[styles.menuRow, { borderTopWidth: 1, borderTopColor: colors.border, marginTop: spacing.md }]}
             onPress={() => navigation.navigate('ProfilIletisim')}
           >
             <Text style={[styles.menuRowText, { color: colors.textPrimary }]}>Telefon ve e-posta bağla / değiştir</Text>
@@ -896,6 +1098,35 @@ const styles = StyleSheet.create({
   },
   okutulanDetailPhoto: { width: '100%', height: '100%' },
   okutulanDetailFields: { marginBottom: spacing.sm },
+  avatarWrap: {
+    width: 100,
+    height: 100,
+    borderRadius: 50,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 16,
+    overflow: 'hidden',
+  },
+  avatarImg: { width: 100, height: 100, borderRadius: 50 },
+  avatarBadge: {
+    position: 'absolute',
+    bottom: 0,
+    right: 0,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  accountRow: { marginBottom: 16 },
+  input: {
+    borderWidth: 1,
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    fontSize: typography.text.body.fontSize,
+    marginBottom: 16,
+  },
   menuRow: {
     flexDirection: 'row',
     alignItems: 'center',

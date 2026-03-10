@@ -87,7 +87,7 @@ export default function BildirimlerScreen({ navigation }) {
           title="Bildirimler"
           tesis={tesis}
           onNotification={() => navigation.navigate('Bildirimler')}
-          onProfile={() => navigation.navigate('ProfilDuzenle')}
+          onProfile={() => navigation.navigate('DahaFazla', { screen: 'Ayarlar' })}
         />
         <View style={styles.emptyState}>
           <View style={[styles.emptyIconWrap, { backgroundColor: colors.primarySoft }]}>
@@ -108,7 +108,7 @@ export default function BildirimlerScreen({ navigation }) {
           title="Bildirimler"
           tesis={tesis}
           onNotification={() => navigation.navigate('Bildirimler')}
-          onProfile={() => navigation.navigate('ProfilDuzenle')}
+          onProfile={() => navigation.navigate('DahaFazla', { screen: 'Ayarlar' })}
         />
         <View style={styles.emptyState}>
           <Text style={[styles.emptyStateText, { color: colors.textSecondary }]}>
@@ -125,7 +125,7 @@ export default function BildirimlerScreen({ navigation }) {
         title="Bildirimler"
         tesis={tesis}
         onNotification={() => navigation.navigate('Bildirimler')}
-        onProfile={() => navigation.navigate('ProfilDuzenle')}
+        onProfile={() => navigation.navigate('DahaFazla', { screen: 'Ayarlar' })}
       />
       {loading && !refreshing ? (
         <View style={styles.centered}><ActivityIndicator size="large" color={colors.primary} /></View>

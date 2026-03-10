@@ -1,7 +1,7 @@
 /**
- * "Daha Fazla" menü — Paket satın al, Topluluk, Ayarlar, Admin (sadece yetkili hesaplarda)
+ * "Daha Fazla" menü — Paket satın al, Profil ve Ayarlar, Admin (sadece yetkili hesaplarda)
  */
-import React, { useCallback } from 'react';
+import React, { useCallback, useRef } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
@@ -13,8 +13,7 @@ import { spacing, typography } from '../theme';
 
 const MENU_ITEMS_BASE = [
   { key: 'PaketSatınAl', label: 'Paket satın al', icon: 'pricetag-outline', action: 'paywall' },
-  { key: 'Topluluk', label: 'Topluluk', icon: 'chatbubbles-outline', route: 'Topluluk' },
-  { key: 'Ayarlar', label: 'Ayarlar', icon: 'settings-outline', route: 'Ayarlar' },
+  { key: 'Ayarlar', label: 'Profil ve Ayarlar', icon: 'person-circle-outline', route: 'Ayarlar' },
   { key: 'AdminPanel', label: 'Admin Panel', icon: 'shield-outline', route: 'AdminPanel', adminOnly: true },
 ];
 
@@ -24,12 +23,14 @@ export default function DahaFazlaScreen() {
   const { triggerPaywall } = useCredits();
   const { user, refreshMe } = useAuth();
   const isAdmin = getIsAdminPanelUser(user);
+  const refreshMeRef = useRef(refreshMe);
+  refreshMeRef.current = refreshMe;
 
-  // Ekran odaklandığında kullanıcı verisini yenile (admin yetkisi verildikten sonra buton görünsün)
+  // Ekran odaklandığında kullanıcı verisini yenile (admin yetkisi verildikten sonra buton görünsün). Ref ile refreshMe bağımlılığı yok — sonsuz /auth/me döngüsü önlenir.
   useFocusEffect(
     useCallback(() => {
-      if (typeof refreshMe === 'function') refreshMe();
-    }, [refreshMe])
+      if (typeof refreshMeRef.current === 'function') refreshMeRef.current();
+    }, [])
   );
 
   const items = MENU_ITEMS_BASE.filter((item) => !item.adminOnly || isAdmin);

@@ -1,4 +1,4 @@
-import React, { createContext, useState, useContext, useEffect, useRef } from 'react';
+import React, { createContext, useState, useContext, useEffect, useRef, useCallback } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { api, setApiTokenProvider, setOnUnauthorized } from '../services/api';
 import { dataService, setDataServiceTokenProvider } from '../services/dataService';
@@ -179,6 +179,8 @@ export const AuthProvider = ({ children }) => {
   const [authError, setAuthError] = useState(null);
   const mounted = useRef(true);
   const lastMe429AtRef = useRef(0);
+  const lastFetchMeAtRef = useRef(0);
+  const ME_REFRESH_THROTTLE_MS = 45000; // TOKEN_REFRESHED / focus'tan en fazla 45 sn'de bir /auth/me
   const me429Options = { last429Ref: lastMe429AtRef, backoffMs: ME_429_BACKOFF_MS };
 
   /** Supabase kullanılıyorsa her istekte güncel session'dan token alır; süresi dolmuşsa refresh eder. Böylece "Geçersiz token" 401 önlenir. getSession hata verirse veya session boşsa AsyncStorage'dan dön (oturum açıkken token null görünmesin). */
@@ -335,6 +337,11 @@ export const AuthProvider = ({ children }) => {
                 setRecoverySessionPending(true);
                 return;
               }
+              if (event === 'TOKEN_REFRESHED') {
+                const now = Date.now();
+                if (now - lastFetchMeAtRef.current < ME_REFRESH_THROTTLE_MS) return;
+                lastFetchMeAtRef.current = now;
+              }
               await fetchMeAndSetState(session.access_token, setUser, setTesis, setToken, getSupabaseAwareTokenProvider, setPrivacyPolicyAcceptedAt, setTermsOfServiceAcceptedAt, setAccountPendingDeletion, setDeletionAt, setGuest, undefined, me429Options);
             }
           });
@@ -384,8 +391,11 @@ export const AuthProvider = ({ children }) => {
     return await AsyncStorage.getItem(AUTH_STORAGE_KEYS.SUPABASE_TOKEN);
   };
 
-  const refreshMe = async () => {
+  const refreshMe = useCallback(async () => {
     setAuthError(null);
+    const now = Date.now();
+    if (now - lastFetchMeAtRef.current < ME_REFRESH_THROTTLE_MS) return;
+    lastFetchMeAtRef.current = now;
     const accessToken = await getSupabaseToken();
     if (accessToken) {
       await fetchMeAndSetState(accessToken, setUser, setTesis, setToken, supabase ? getSupabaseAwareTokenProvider : undefined, setPrivacyPolicyAcceptedAt, setTermsOfServiceAcceptedAt, setAccountPendingDeletion, setDeletionAt, setGuest, setAuthError, me429Options);
@@ -405,7 +415,7 @@ export const AuthProvider = ({ children }) => {
         }
       } catch (_) {}
     }
-  };
+  }, []);
 
   const setSupabaseToken = async (accessToken) => {
     if (accessToken) {

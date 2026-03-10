@@ -905,6 +905,19 @@ export const api = {
         const res = await callFn('checkout', { misafirId: guestId }, token);
         return toResponse(res);
       }
+      // Misafir hesabı oluştur — backend (auth gerekmez; cihaz başına tek hesap)
+      if (pathname === '/auth/guest/create' || pathname === 'auth/guest/create') {
+        const backendUrl = getBackendUrl();
+        if (!backendUrl) throw Object.assign(new Error('Sunucu adresi tanımlı değil'), { response: { status: 503, data: {} } });
+        const r = await fetchWithLog(`${backendUrl}/api/auth/guest/create`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload || {}),
+        });
+        const data = await r.json().catch(() => ({})) as { email?: string; password?: string; message?: string };
+        if (!r.ok) throw Object.assign(new Error(data?.message || 'Misafir hesabı oluşturulamadı'), { response: { status: r.status, data } });
+        return toResponse(data);
+      }
       // Paket siparişi (Satın Al) — backend JWT ile tesis bilgisi gerekir
       if (pathname === '/siparis' || pathname === 'siparis') {
         const backendUrl = getBackendUrl();

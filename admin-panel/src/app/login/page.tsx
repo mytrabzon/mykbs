@@ -75,9 +75,9 @@ export default function LoginPage() {
       if (!token) throw new Error('Oturum alınamadı')
       setSupabaseToken(token)
       const me = await callEdgeFunction<{ role: string }>('me', {})
-      if (!['admin', 'moderator'].includes(me?.role || '')) {
+      if (!['admin', 'moderator', 'super_admin'].includes(me?.role || '')) {
         supabase.auth.signOut()
-        toast.error('Bu hesap admin/moderator değil')
+        toast.error('Bu hesap admin yetkisine sahip değil')
         setLoading(false)
         return
       }
@@ -106,13 +106,14 @@ export default function LoginPage() {
       <div className="kbs-login-card">
         <h1 className="kbs-login-title">KBS Prime Admin</h1>
         <div className="kbs-login-tabs">
-          <button type="button" onClick={() => setMode('secret')} className={`kbs-login-tab ${mode === 'secret' ? 'active' : ''}`}>Şifre</button>
+          <button type="button" onClick={() => setMode('secret')} className={`kbs-login-tab ${mode === 'secret' ? 'active' : ''}`}>Özel Giriş</button>
           <button type="button" onClick={() => setMode('backend')} className={`kbs-login-tab ${mode === 'backend' ? 'active' : ''}`}>E-posta + Şifre</button>
           <button type="button" onClick={() => setMode('supabase')} className={`kbs-login-tab ${mode === 'supabase' ? 'active' : ''}`}>Supabase</button>
         </div>
         {mode === 'secret' ? (
           <form onSubmit={handleSecretLogin}>
-            <input type="password" value={secret} onChange={(e) => setSecret(e.target.value)} placeholder="Şifre" className="kbs-input" autoComplete="off" />
+            <p className="kbs-login-note">Bu alan kullanıcı girişi için değildir; sadece yetkili personel içindir.</p>
+            <input type="password" value={secret} onChange={(e) => setSecret(e.target.value)} placeholder="Özel giriş şifresi" className="kbs-input" autoComplete="off" />
             <button type="submit" disabled={loading} className="kbs-btn-primary">{loading ? 'Giriş yapılıyor...' : 'Giriş Yap'}</button>
           </form>
         ) : mode === 'backend' ? (

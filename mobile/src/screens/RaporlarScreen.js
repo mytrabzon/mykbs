@@ -96,7 +96,7 @@ export default function RaporlarScreen({ navigation }) {
         title="Raporlar"
         tesis={tesis}
         onNotification={() => navigation.navigate('Bildirimler')}
-        onProfile={() => navigation.navigate('ProfilDuzenle')}
+        onProfile={() => navigation.navigate('DahaFazla', { screen: 'Ayarlar' })}
       />
       {loading && !refreshing ? (
         <View style={styles.centered}>

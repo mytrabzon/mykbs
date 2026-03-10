@@ -197,7 +197,7 @@ export default function ToplulukScreen({ navigation }) {
     title: 'Topluluk',
     minimal: true,
     onNotification: () => navigation.navigate('Bildirimler'),
-    onProfile: () => navigation.navigate('ProfilDuzenle'),
+    onProfile: () => navigation.navigate('DahaFazla', { screen: 'Ayarlar' }),
     backendConfigured: backendStatus.configured,
     backendOnline: backendStatus.isOnline,
     backendError: backendStatus.error,

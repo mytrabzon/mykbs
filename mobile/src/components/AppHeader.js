@@ -1,8 +1,11 @@
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Modal, Pressable } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useNavigation } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../context/ThemeContext';
+import { useAuth } from '../context/AuthContext';
+import { getIsAdminPanelUser } from '../utils/adminAuth';
 import { typography, spacing } from '../theme';
 
 /**
@@ -47,6 +50,9 @@ export default function AppHeader({
 }) {
   const insets = useSafeAreaInsets();
   const { colors } = useTheme();
+  const navigation = useNavigation();
+  const { user } = useAuth();
+  const isSuperAdmin = getIsAdminPanelUser(user);
   const [modalVisible, setModalVisible] = useState(false);
   const [modalContent, setModalContent] = useState({ title: '', body: '' });
 
@@ -126,6 +132,21 @@ export default function AppHeader({
           </View>
           {rightComponent ?? (
             <>
+              {isSuperAdmin && (
+                <TouchableOpacity
+                  onPress={() => navigation.navigate('AdminPanel')}
+                  style={styles.adminButtonWrap}
+                  activeOpacity={0.6}
+                  hitSlop={{ top: 16, bottom: 16, left: 16, right: 16 }}
+                  accessibilityLabel="Admin Paneli"
+                  accessibilityRole="button"
+                >
+                  <Ionicons name="shield" size={22} color="#8B5CF6" />
+                  <View style={styles.adminBadge}>
+                    <Text style={styles.adminBadgeText}>A</Text>
+                  </View>
+                </TouchableOpacity>
+              )}
               {onNotification != null && (
                 <TouchableOpacity
                   onPress={() => onNotification()}
@@ -219,6 +240,29 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     padding: spacing.xs,
+  },
+  adminButtonWrap: {
+    position: 'relative',
+    minWidth: 44,
+    minHeight: 44,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  adminBadge: {
+    position: 'absolute',
+    top: -2,
+    right: -2,
+    backgroundColor: '#8B5CF6',
+    width: 14,
+    height: 14,
+    borderRadius: 7,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  adminBadgeText: {
+    color: '#fff',
+    fontSize: 9,
+    fontWeight: 'bold',
   },
   dotsRow: {
     flexDirection: 'row',

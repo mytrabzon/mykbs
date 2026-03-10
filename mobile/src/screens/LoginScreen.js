@@ -169,8 +169,13 @@ export default function LoginScreen({ route }) {
         }
         Toast.show({ type: 'success', text1: 'Giriş başarılı' });
       } catch (sessionErr) {
+        const is429 = sessionErr?.response?.status === 429 || sessionErr?.response?.data?.rateLimit === true;
         await loginWithToken(accessToken, null, null, accessToken);
-        Toast.show({ type: 'success', text1: 'Giriş başarılı' });
+        Toast.show({
+          type: 'success',
+          text1: 'Giriş başarılı',
+          text2: is429 ? 'Sunucu yoğundu; oturum açıldı.' : undefined,
+        });
       }
     } catch (e) {
       const msg = e?.message || '';

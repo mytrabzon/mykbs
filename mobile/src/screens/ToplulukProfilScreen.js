@@ -82,7 +82,7 @@ export default function ToplulukProfilScreen({ route, navigation }) {
         tesis={tesis}
         onBack={() => navigation.goBack()}
         onNotification={() => navigation.navigate('Bildirimler')}
-        onProfile={() => navigation.navigate('ProfilDuzenle')}
+        onProfile={() => navigation.navigate('DahaFazla', { screen: 'Ayarlar' })}
       />
       {loading ? (
         <View style={[styles.centered, { backgroundColor: colors.background }]}>
@@ -118,7 +118,7 @@ export default function ToplulukProfilScreen({ route, navigation }) {
             {isMe && (
               <TouchableOpacity
                 style={[styles.editBtn, { borderColor: colors.primary }]}
-                onPress={() => navigation.navigate('ProfilDuzenle')}
+                onPress={() => navigation.navigate('DahaFazla', { screen: 'Ayarlar' })}
               >
                 <Ionicons name="create-outline" size={18} color={colors.primary} />
                 <Text style={[styles.editBtnText, { color: colors.primary }]}>Profili düzenle</Text>

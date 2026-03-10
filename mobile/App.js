@@ -36,7 +36,6 @@ import PostDetayScreen from './src/screens/PostDetayScreen';
 import ToplulukProfilScreen from './src/screens/ToplulukProfilScreen';
 import AddRoomScreen from './src/screens/AddRoomScreen';
 import PaylasimEkleScreen from './src/screens/PaylasimEkleScreen';
-import ProfilDuzenleScreen from './src/screens/ProfilDuzenleScreen';
 import ProfilIletisimScreen from './src/screens/ProfilIletisimScreen';
 import RaporlarScreen from './src/screens/RaporlarScreen';
 import DahaFazlaScreen from './src/screens/DahaFazlaScreen';
@@ -142,7 +141,7 @@ function MisafirlerScreen({ navigation }) {
 
   return (
     <View style={[styles.screenContainer, { backgroundColor: colors.background }]}>
-      <AppHeader title="Misafirler" tesis={tesis} onNotification={() => navigation.navigate('Bildirimler')} onProfile={() => navigation.navigate('ProfilDuzenle')} />
+      <AppHeader title="Misafirler" tesis={tesis} onNotification={() => navigation.navigate('Bildirimler')} onProfile={() => navigation.navigate('DahaFazla', { screen: 'Ayarlar' })} />
       <View style={styles.contentContainer}>
         {loading && misafirler.length === 0 ? (
           <View style={styles.misafirlerLoading}>
@@ -584,7 +583,6 @@ function AppNavigator() {
             <Stack.Screen name="AddRoom" component={AddRoomScreen} />
             <Stack.Screen name="PostDetay" component={PostDetayScreen} />
             <Stack.Screen name="PaylasimEkle" component={PaylasimEkleScreen} />
-            <Stack.Screen name="ProfilDuzenle" component={ProfilDuzenleScreen} />
             <Stack.Screen name="ProfilIletisim" component={ProfilIletisimScreen} />
             <Stack.Screen name="ToplulukProfil" component={ToplulukProfilScreen} />
             <Stack.Screen name="AdminPanel" component={AdminPanelScreen} />
