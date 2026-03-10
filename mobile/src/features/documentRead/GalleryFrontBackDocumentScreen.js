@@ -64,7 +64,7 @@ export default function GalleryFrontBackDocumentScreen({ navigation, route }) {
       return;
     }
     const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      mediaTypes: ImagePicker.MediaType?.Images ?? 'images',
       allowsEditing: false,
       quality: 0.9,
       allowsMultipleSelection: false,

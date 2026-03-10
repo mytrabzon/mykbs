@@ -223,6 +223,32 @@ const styles = StyleSheet.create({
   guestBannerText: { flex: 1, fontSize: 12 },
   appLoadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', gap: 12 },
   appLoadingText: { fontSize: 16 },
+  connectionErrorWrapper: { flex: 1, justifyContent: 'center', backgroundColor: '#f5f5f5' },
+  connectionErrorContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 24,
+  },
+  connectionErrorTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#EF4444',
+    marginBottom: 10,
+  },
+  connectionErrorMessage: {
+    fontSize: 15,
+    color: '#4B5563',
+    textAlign: 'center',
+    marginBottom: 24,
+  },
+  connectionErrorButton: {
+    backgroundColor: '#06B6D4',
+    paddingVertical: 12,
+    paddingHorizontal: 24,
+    borderRadius: 8,
+  },
+  connectionErrorButtonText: { color: '#fff', fontWeight: '600', fontSize: 16 },
   contentContainer: { flex: 1, paddingHorizontal: 20, paddingBottom: 120 },
   misafirListContent: { paddingVertical: 12, paddingBottom: 120 },
   misafirCard: {
@@ -450,8 +476,20 @@ function AppLoadingScreen() {
   );
 }
 
+function ConnectionErrorScreen({ message, onRetry }) {
+  return (
+    <View style={styles.connectionErrorContainer}>
+      <Text style={styles.connectionErrorTitle}>Bağlantı hatası</Text>
+      <Text style={styles.connectionErrorMessage}>{message}</Text>
+      <TouchableOpacity style={styles.connectionErrorButton} onPress={onRetry} activeOpacity={0.8}>
+        <Text style={styles.connectionErrorButtonText}>Tekrar dene</Text>
+      </TouchableOpacity>
+    </View>
+  );
+}
+
 function AppNavigator() {
-  const { isAuthenticated, isLoading, recoverySessionPending, clearRecoveryPending, needsPrivacyConsent, needsTermsConsent, accountPendingDeletion } = useAuth();
+  const { isAuthenticated, isLoading, authError, clearAuthError, refreshMe, recoverySessionPending, clearRecoveryPending, needsPrivacyConsent, needsTermsConsent, accountPendingDeletion } = useAuth();
   const hasPrivacyAccepted = !needsPrivacyConsent;
   const hasTermsAccepted = !needsTermsConsent;
   const showPrivacyConsent = isAuthenticated && needsPrivacyConsent;
@@ -460,6 +498,11 @@ function AppNavigator() {
   const showConsentBeforeLoginIos = !isAuthenticated && Platform.OS === 'ios' && (needsPrivacyConsent || needsTermsConsent);
   const blockMainWithConsentIos = isAuthenticated && Platform.OS === 'ios' && (needsPrivacyConsent || needsTermsConsent);
   const showConsentAsButtonAndroid = Platform.OS === 'android' && (needsPrivacyConsent || needsTermsConsent);
+
+  const handleRetryConnection = useCallback(() => {
+    clearAuthError();
+    refreshMe();
+  }, [clearAuthError, refreshMe]);
 
   useEffect(() => {
     if (!supabase?.auth) return;
@@ -489,6 +532,14 @@ function AppNavigator() {
 
   if (isLoading) {
     return <AppLoadingScreen />;
+  }
+
+  if (!isAuthenticated && authError) {
+    return (
+      <View style={styles.connectionErrorWrapper}>
+        <ConnectionErrorScreen message={authError} onRetry={handleRetryConnection} />
+      </View>
+    );
   }
 
   const showRecovery = !isAuthenticated && recoverySessionPending;

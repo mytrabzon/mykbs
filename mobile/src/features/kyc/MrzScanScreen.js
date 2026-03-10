@@ -938,7 +938,7 @@ export default function MrzScanScreen({ navigation }) {
       return;
     }
     const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      mediaTypes: ImagePicker.MediaType?.Images ?? 'images',
       allowsEditing: false,
       quality: 0.9,
     });
@@ -961,7 +961,7 @@ export default function MrzScanScreen({ navigation }) {
       return;
     }
     const result = await ImagePicker.launchCameraAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      mediaTypes: ImagePicker.MediaType?.Images ?? 'images',
       allowsEditing: false,
       quality: 0.95,
     });

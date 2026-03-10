@@ -319,7 +319,7 @@ export default function CheckInScreen({ navigation, route }) {
     try {
       logger.log('Launching camera');
       const result = await ImagePicker.launchCameraAsync({
-        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        mediaTypes: ImagePicker.MediaType?.Images ?? 'images',
         allowsEditing: false,
         quality: 1,
       });

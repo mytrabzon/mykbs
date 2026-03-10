@@ -13,7 +13,7 @@ export function CameraFallback({ onImageSelected, onRetry }) {
       return;
     }
     const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      mediaTypes: ImagePicker.MediaType?.Images ?? 'images',
       base64: true,
       quality: 0.8,
     });

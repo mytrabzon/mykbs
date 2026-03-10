@@ -1693,6 +1693,9 @@ router.get('/me', authenticateTesisOrSupabase, async (req, res) => {
     } catch (e) {
       return handlePrismaAuthError(res, e);
     }
+    if (!kullanici) {
+      return errRes(req, res, 404, 'NOT_FOUND', 'Kullanıcı bilgisi bulunamadı.');
+    }
 
     let role = 'user';
     // Kullanici.id CUID (string); ADMIN_KULLANICI_ID .env'de bu CUID veya eski sayısal id olabilir

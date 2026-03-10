@@ -56,7 +56,7 @@ export default function PaylasimEkleScreen() {
       return;
     }
     const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      mediaTypes: ImagePicker.MediaType?.Images ?? 'images',
       allowsMultipleSelection: true,
       quality: 0.5,
       base64: true,

@@ -140,19 +140,8 @@ export default function ToplulukScreen({ navigation }) {
     if (isRefresh) setRefreshing(true);
     else setLoading(true);
     try {
-      let branchId = tesis?.id;
-      if (!branchId) {
-        try {
-          const me = await communityApi.getMe(t);
-          branchId = me?.branch_id;
-        } catch (_) {}
-      }
-      if (!branchId) {
-        setPosts([]);
-        return;
-      }
+      // Edge function uses auth.profile.branch_id; only send branch_id when explicitly needed (e.g. admin switch)
       const res = await communityApi.getCommunityPosts({
-        branch_id: branchId,
         type: 'post',
         category: category || undefined,
         limit: 30,
@@ -168,7 +157,7 @@ export default function ToplulukScreen({ navigation }) {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [tesis?.id, category, getSupabaseToken]);
+  }, [category, getSupabaseToken]);
 
   useEffect(() => {
     loadToken();

@@ -31,10 +31,14 @@ serve(async (req) => {
     body = {};
   }
 
-  const branchId = body.branch_id || auth.profile.branch_id;
-  if (branchId !== auth.profile.branch_id) {
+  const requestedBranchId = body.branch_id ?? auth.profile.branch_id ?? null;
+  if (!requestedBranchId) {
+    return errorResponse("Tesis bilgisi bulunamadi", 400);
+  }
+  if (body.branch_id != null && auth.profile.branch_id != null && String(body.branch_id) !== String(auth.profile.branch_id)) {
     return errorResponse("Bu tesis icin yetkiniz yok", 403);
   }
+  const branchId = requestedBranchId;
 
   const limit = Math.min(Math.max(Number(body.limit) || 20, 1), 100);
   const offset = Math.max(Number(body.offset) || 0, 0);

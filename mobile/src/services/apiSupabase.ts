@@ -194,7 +194,7 @@ export const api = {
           err.response = { status: 401, data: { message: 'Token bulunamadı' } };
           throw err;
         }
-        const timeoutMs = _config?.timeout ?? 15000;
+        const timeoutMs = _config?.timeout ?? 10000;
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
         let r: Response;
@@ -204,9 +204,18 @@ export const api = {
             headers: { Authorization: `Bearer ${token}` },
             signal: controller.signal,
           });
-        } finally {
+        } catch (fetchErr: unknown) {
           clearTimeout(timeoutId);
+          const err = fetchErr as Error & { name?: string };
+          if (err?.name === 'AbortError') {
+            const abortError = new Error('Sunucu yanıt vermiyor (zaman aşımı).') as Error & { response?: { status: number }; name?: string };
+            abortError.name = 'AbortError';
+            abortError.response = { status: 408 };
+            throw abortError;
+          }
+          throw fetchErr;
         }
+        clearTimeout(timeoutId);
         const data = await r.json().catch(() => ({})) as Record<string, unknown>;
         throwIfNotOk(r, data, 'Bilgi alınamadı');
         return toResponse(data);
