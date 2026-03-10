@@ -237,6 +237,44 @@ async function preprocessForPaperMrz(filePath) {
 }
 
 /**
+ * Soluk / silik baskı MRZ için: çok yüksek kontrast + hafif parlaklık – fotokopi/kağıt baskıda işe yarar.
+ */
+async function preprocessForFadedMrz(filePath) {
+  if (!filePath || !fs.existsSync(filePath)) return filePath;
+  try {
+    const Jimp = (await import('jimp')).default;
+    let image = await Jimp.read(filePath);
+    const w = image.bitmap.width;
+    const h = image.bitmap.height;
+    image = image.greyscale().normalize().brightness(0.15).contrast(0.85);
+    if (w < 800 || h < 200) {
+      const scale = Math.min(2.2, 800 / Math.max(w, 1), 400 / Math.max(h, 1));
+      if (scale > 1.2) image = image.resize(Math.round(w * scale), Math.round(h * scale), Jimp.RESIZE_BICUBIC);
+    }
+    await image.write(filePath);
+    return filePath;
+  } catch (e) {
+    return filePath;
+  }
+}
+
+/**
+ * Ters görüntü (negatif): bazı taramalarda MRZ beyaz zemin üstünde siyah olmayabilir.
+ * Renkleri ters çevirip Tesseract için standart siyah-yazı-beyaz-zemin formatına getirir.
+ */
+async function preprocessForInvertedMrz(filePath) {
+  if (!filePath || !fs.existsSync(filePath)) return filePath;
+  try {
+    const Jimp = (await import('jimp')).default;
+    const image = await Jimp.read(filePath);
+    await image.greyscale().normalize().invert().contrast(0.5).write(filePath);
+    return filePath;
+  } catch (e) {
+    return filePath;
+  }
+}
+
+/**
  * Görüntünün alt %40'ından 3 farklı alt ROI döndürür (bottom 25%, 30%, 35% of that band).
  * Kimlik MRZ bant konumu değişebildiği için adaptif crop; her biri ayrı dosyaya yazılır.
  * @param {string} filePath - Kaynak görüntü
@@ -309,6 +347,8 @@ module.exports = {
   cropCenterFraction,
   preprocessForKimlikMrz,
   preprocessForPaperMrz,
+  preprocessForFadedMrz,
+  preprocessForInvertedMrz,
   cropMrzCandidates,
   rotateImage,
   applyOrientationRotation,

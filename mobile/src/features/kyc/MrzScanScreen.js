@@ -65,12 +65,7 @@ const MAX_FAILS = 6;
 /** Kamera önizlemesi bu süre içinde hazır olmazsa "Kamera açılamadı" göster (siyah ekran donması önlemi). iOS'ta onCameraReady sıklıkla gelmediği için daha kısa. */
 const CAMERA_READY_TIMEOUT_MS = Platform.OS === 'ios' ? 4000 : 8000;
 
-/** ISO/IEC 7810 ID-1 (kimlik/pasaport kartı) ölçüleri – overlay çerçeve oranı */
-const ID1_WIDTH_MM = 85.6;
-const ID1_HEIGHT_MM = 53.98;
-const ID1_CORNER_RADIUS_MM = 3.18;
-const ID1_ASPECT_RATIO = ID1_WIDTH_MM / ID1_HEIGHT_MM;
-// MRZ göründüğü anda anlık çekim (en üst düzey) — kimlik/pasaport fark etmez
+// MRZ göründüğü anda anlık çekim — kimlik/pasaport fark etmez
 const STABLE_READ_COUNT = 1;
 const SHOW_INSTANT_RESULT = true;
 const ACCEPT_ON_CHECK_FAIL = true;
@@ -99,7 +94,7 @@ function getFailureReasonMessage(checksReason, failCount) {
   return 'Işık ve hizayı kontrol edin veya manuel giriş ile devam edin.';
 }
 
-/** false = native MrzReaderView (Android, canlı okuma); true = expo-camera (çekim). Native daha stabil, önce denenir. */
+/** false = native MrzReaderView (canlı okuma, kamera daha stabil); true = expo-camera + backend (çekim). Native önce denenir; bazı cihazlarda expo-camera açılmıyor. */
 const USE_UNIFIED_MRZ_FLOW = false;
 
 export default function MrzScanScreen({ navigation }) {
@@ -874,32 +869,6 @@ export default function MrzScanScreen({ navigation }) {
   const docTypeForReader = Platform.OS === 'ios' ? DocType.Passport : selectedDocType;
   const useUnifiedFlow = USE_UNIFIED_MRZ_FLOW;
 
-  const { width: screenWidth } = Dimensions.get('window');
-  const frameWidth = screenWidth * 0.9;
-  const frameHeight = frameWidth * ID1_ASPECT_RATIO;
-  const frameBorderRadius = Math.max(6, (frameWidth * ID1_CORNER_RADIUS_MM) / ID1_HEIGHT_MM);
-  const id1FrameStyle = {
-    width: frameWidth,
-    height: frameHeight,
-    borderWidth: 2,
-    borderColor: 'rgba(255,255,255,0.7)',
-    borderRadius: frameBorderRadius,
-    overflow: 'hidden',
-  };
-  const mrzZoneHeight = frameHeight * 0.22;
-  const mrzZoneStyle = {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    bottom: 0,
-    height: mrzZoneHeight,
-    borderTopWidth: 2,
-    borderColor: 'rgba(0,255,120,0.9)',
-    borderBottomLeftRadius: frameBorderRadius,
-    borderBottomRightRadius: frameBorderRadius,
-    backgroundColor: 'rgba(0,255,120,0.08)',
-  };
-
   const toggleTorch = useCallback(() => {
     if (!TorchModule) {
       Toast.show({ type: 'info', text1: 'Fener', text2: 'Bu cihazda fener desteği yok.' });
@@ -1064,7 +1033,7 @@ export default function MrzScanScreen({ navigation }) {
           </View>
         )}
         <View style={styles.captureOverlay}>
-          <Text style={styles.frameHint}>Belgenin ön yüzünü (fotoğraf ve bilgiler) çerçeve içine alıp çekin</Text>
+          <Text style={styles.frameHint}>Belgenin ön yüzünü (fotoğraf ve bilgiler) kameraya gösterip çekin</Text>
           <TouchableOpacity
             style={styles.captureBtn}
             onPress={async () => {
@@ -1211,13 +1180,6 @@ export default function MrzScanScreen({ navigation }) {
                 </TouchableOpacity>
               </View>
             )}
-            {!ocrLoading && cameraPreviewReady && !cameraOpenFailed ? (
-              <View style={[styles.overlayCenter, { pointerEvents: 'none' }]}>
-                <View style={[styles.frame, id1FrameStyle]}>
-                  <View style={mrzZoneStyle} />
-                </View>
-              </View>
-            ) : null}
             {ocrLoading ? (
               <View style={[StyleSheet.absoluteFill, styles.mrzPickLoading, { justifyContent: 'center', alignItems: 'center' }]}>
                 <ActivityIndicator size="large" color="#fff" />
@@ -1225,7 +1187,7 @@ export default function MrzScanScreen({ navigation }) {
               </View>
             ) : !cameraOpenFailed ? (
               <View style={styles.directMrzOverlay} pointerEvents="box-none">
-                <Text style={styles.directMrzHint}>Kimlik veya pasaport MRZ alanını çerçeveye alıp dokunun</Text>
+                <Text style={styles.directMrzHint}>MRZ alanını kameraya gösterip dokunun – otomatik okunur</Text>
                 <TouchableOpacity style={styles.directMrzCaptureBtn} onPress={handleDirectMrzCapture} disabled={ocrLoading} activeOpacity={0.9}>
                   <Ionicons name="camera" size={40} color="#fff" />
                 </TouchableOpacity>
@@ -1309,15 +1271,10 @@ export default function MrzScanScreen({ navigation }) {
                 <Text style={[styles.docTypeBtnText, selectedDocType === DocType.ID && styles.docTypeBtnTextActive]}>Kimlik</Text>
               </TouchableOpacity>
             </View>
-            <Text style={styles.docTypeHint}>Pasaport: 2 satır MRZ · Kimlik: 3 satır MRZ</Text>
+            <Text style={styles.docTypeHint}>MRZ göründüğü anda okunur · Yatay veya dikey tutabilirsiniz</Text>
           </View>
         )}
         <View style={styles.overlayBackBtn} />
-      </View>
-      <View style={styles.overlayCenter} pointerEvents="none">
-        <View style={[styles.frame, id1FrameStyle]}>
-          <View style={mrzZoneStyle} />
-        </View>
       </View>
       <View style={[styles.overlayBottom, { paddingBottom: insets.bottom + 20 }]} pointerEvents="box-none">
         <View style={styles.overlayBottomBtn} />
@@ -1386,7 +1343,7 @@ function CameraFallbackView({ onCapture, onBack, loading, permission, requestPer
       </View>
       <View style={styles.captureOverlay}>
         <Text style={styles.frameHint}>
-          Kimlik: 3 satır MRZ; pasaport: 2 satır MRZ. Alanı çerçeveleyip çekin.
+          Kimlik: 3 satır MRZ; pasaport: 2 satır MRZ. MRZ alanını kameraya gösterip çekin.
         </Text>
         <TouchableOpacity style={styles.captureBtn} onPress={capture} disabled={loading}>
           {loading ? <ActivityIndicator color="#fff" /> : <Ionicons name="camera" size={40} color="#fff" />}

@@ -12,6 +12,8 @@ const {
   preprocessForKimlikMrz,
   preprocessForPaperMrz,
   preprocessForPhotocopyMrz,
+  preprocessForFadedMrz,
+  preprocessForInvertedMrz,
   cropMrzCandidates,
   rotateImage,
 } = require('../lib/vision/preprocess');
@@ -90,67 +92,66 @@ function normalizeOcrTextForMrz(text) {
     .replace(/[^A-Z0-9<]/g, '');
 }
 
-/** OCR çıktısından MRZ satır adayları: kimlik/pasaport/fotokopi 22+ karakter. TD3 (pasaport) 2x44 için 38-46 da kabul. */
+/** OCR çıktısından MRZ satır adayları: kimlik/pasaport/fotokopi 20+ karakter. TD3 35-48, TD1 20-34 kabul. */
 function extractMrzLinesFromOcr(text) {
   if (!text || typeof text !== 'string') return [];
   const lines = text.split(/\r\n|\r|\n/)
-    .map((l) => l.trim().toUpperCase().replace(/\s/g, '').replace(/[\u00AB\u2039]/g, '<'))
+    .map((l) => l.trim().toUpperCase().replace(/\s/g, '').replace(/[\u00AB\u2039\u203A\u00BB]/g, '<'))
     .map((l) => l.replace(/[^A-Z0-9<]/g, ''))
-    .filter((l) => l.length >= 22);
+    .filter((l) => l.length >= 20);
   const withAngle = lines.filter((l) => l.includes('<'));
-  const twoLine44 = lines.filter((l) => l.length >= 38 && l.length <= 46);
-  const threeLine30 = lines.filter((l) => l.length >= 24 && l.length <= 33);
+  const twoLine44 = lines.filter((l) => l.length >= 35 && l.length <= 48);
+  const threeLine30 = lines.filter((l) => l.length >= 22 && l.length <= 34);
   const candidates = threeLine30.length >= 3 ? threeLine30.slice(0, 3)
     : (withAngle.length >= 2 ? withAngle : (twoLine44.length >= 2 ? twoLine44 : lines));
-  return candidates.filter((l) => l.length >= 22 && l.length <= 46);
+  return candidates.filter((l) => l.length >= 20 && l.length <= 48);
 }
 
-/** OCR çıktısından MRZ benzeri satırları bul (TD1: 3x30 kimlik, TD2: 2x36, TD3: 2x44 pasaport). Kimlik (3x30) öncelikli. */
+/** OCR çıktısından MRZ benzeri satırları bul (TD1: 3x30 kimlik, TD2: 2x36, TD3: 2x44 pasaport). Esnek aralıklar. */
 function extractMrzFromOcr(text) {
   if (!text || typeof text !== 'string') return '';
   const lines = extractMrzLinesFromOcr(text);
-  if (lines.length >= 3 && lines.every((l) => l.length >= 24 && l.length <= 33)) {
+  if (lines.length >= 3 && lines.every((l) => l.length >= 22 && l.length <= 34)) {
     return lines.slice(0, 3).map((l) => padMrzLine(l, 30)).join('\n');
   }
-  if (lines.length >= 3 && lines.some((l) => l.length >= 26 && l.length <= 32)) {
-    const take = lines.filter((l) => l.length >= 26 && l.length <= 32).slice(0, 3);
+  if (lines.length >= 3 && lines.some((l) => l.length >= 24 && l.length <= 32)) {
+    const take = lines.filter((l) => l.length >= 24 && l.length <= 32).slice(0, 3);
     if (take.length >= 3) return take.map((l) => padMrzLine(l, 30)).join('\n');
   }
   const normalized = normalizeOcrTextForMrz(text);
   const one = normalized.trim();
-  if (one.length >= 82 && one.length <= 95 && /^[A-Z0-9<]+$/.test(one)) {
-    const a = 30;
-    const b = 60;
+  if (one.length >= 78 && one.length <= 96 && /^[A-Z0-9<]+$/.test(one)) {
+    const a = 30, b = 60;
     const s1 = padMrzLine(one.slice(0, a), 30);
     const s2 = padMrzLine(one.slice(a, b), 30);
     const s3 = padMrzLine(one.slice(b), 30);
     return s1 + '\n' + s2 + '\n' + s3;
   }
-  if (one.length >= 80 && one.length <= 96 && /^[A-Z0-9<]+$/.test(one)) {
+  if (one.length >= 76 && one.length <= 98 && /^[A-Z0-9<]+$/.test(one)) {
     const a = 44;
     const s1 = padMrzLine(one.slice(0, a), 44);
     const s2 = padMrzLine(one.slice(a, one.length), 44);
     return s1 + '\n' + s2;
   }
-  if (one.length >= 68 && one.length <= 76 && /^[A-Z0-9<]+$/.test(one)) {
+  if (one.length >= 66 && one.length <= 78 && /^[A-Z0-9<]+$/.test(one)) {
     const s1 = padMrzLine(one.slice(0, 36), 36);
     const s2 = padMrzLine(one.slice(36, 72), 36);
     return s1 + '\n' + s2;
   }
-  if (lines.length >= 2 && lines.every((l) => l.length >= 36 && l.length <= 46)) {
+  if (lines.length >= 2 && lines.every((l) => l.length >= 35 && l.length <= 48)) {
     return lines.slice(0, 2).map((l) => padMrzLine(l, 44)).join('\n');
   }
-  if (lines.length >= 2 && lines.every((l) => l.length >= 30 && l.length <= 38)) {
+  if (lines.length >= 2 && lines.every((l) => l.length >= 28 && l.length <= 40)) {
     return lines.slice(0, 2).map((l) => padMrzLine(l, 36)).join('\n');
   }
   if (lines.length >= 2) {
     const l0 = lines[0].length, l1 = lines[1].length;
-    if (l0 >= 36 && l1 >= 36) return padMrzLine(lines[0], 44) + '\n' + padMrzLine(lines[1], 44);
-    if (l0 >= 30 && l1 >= 30) return padMrzLine(lines[0], 36) + '\n' + padMrzLine(lines[1], 36);
-    if (l0 >= 22 && l1 >= 22) return padMrzLine(lines[0], 30) + '\n' + padMrzLine(lines[1], 30);
+    if (l0 >= 35 && l1 >= 35) return padMrzLine(lines[0], 44) + '\n' + padMrzLine(lines[1], 44);
+    if (l0 >= 28 && l1 >= 28) return padMrzLine(lines[0], 36) + '\n' + padMrzLine(lines[1], 36);
+    if (l0 >= 20 && l1 >= 20) return padMrzLine(lines[0], 30) + '\n' + padMrzLine(lines[1], 30);
   }
   if (lines.length >= 3) return lines.slice(0, 3).map((l) => padMrzLine(l, 30)).join('\n');
-  if (lines.length === 1 && lines[0].length >= 22) return padMrzLine(lines[0], 30);
+  if (lines.length === 1 && lines[0].length >= 20) return padMrzLine(lines[0], 30);
   return '';
 }
 
@@ -168,18 +169,31 @@ function fixMrzOcrErrorsBackend(raw) {
   }
   return lines.join('\n');
 }
+/** Tarih alanlarında (YYMMDD) OCR rakam karışıklıkları – soluk/fotokopi/kağıt baskıda sık görülen. */
+const OCR_DATE_FIXES = {
+  O: '0', Q: '0', D: '0', U: '0',
+  I: '1', L: '1', '|': '1', J: '1',
+  Z: '2', V: '2',
+  E: '3',
+  A: '4', H: '4',
+  S: '5',
+  G: '6', C: '6',
+  T: '7', Y: '7',
+  B: '8', R: '8',
+  P: '9',
+};
+/** Belge no / check digit – sadece en yaygın karışıklıklar (alfanumerik alanda D vb. harf olabilir). */
+const OCR_DIGIT_SAFE = { O: '0', Q: '0', I: '1', L: '1', '|': '1', S: '5', B: '8', Z: '2' };
 function fixLineDigitPositions(line, digitRanges) {
   if (!line) return line;
   const arr = line.split('');
   for (const [start, end] of digitRanges) {
+    const isDateRange = start >= 13 && end <= 29; /* YYMMDD + check digit alanları */
+    const map = isDateRange ? OCR_DATE_FIXES : OCR_DIGIT_SAFE;
     for (let i = start; i < end && i < arr.length; i++) {
       const c = arr[i];
-      if (c === 'O' || c === 'Q') arr[i] = '0';
-      else if (c === 'I' || c === 'L' || c === '|') arr[i] = '1';
-      else if (c === 'S') arr[i] = '5';
-      else if (c === 'B') arr[i] = '8';
-      else if (c === 'Z') arr[i] = '2';
-      // S/B/Z sadece rakam beklenen aralıklarda (tarih vb.); 0-10 belge no, 13-20 doğum, 21-28 son geçerlilik
+      const fix = map[c];
+      if (fix) arr[i] = fix;
     }
   }
   return arr.join('');
@@ -284,6 +298,8 @@ async function runMrzPipeline(filePath) {
       { fn: (p) => preprocessForKimlikMrz(p, { sharpen: true }), name: 'kimlikSharp' },
       { fn: preprocessForPhotocopyMrz, name: 'photocopy' },
       { fn: preprocessForPaperMrz, name: 'paper' },
+      { fn: preprocessForFadedMrz, name: 'faded' },
+      { fn: preprocessForInvertedMrz, name: 'inverted' },
     ];
 
     const psms = [7, 13, 6, 11];
@@ -342,6 +358,16 @@ async function runMrzPipeline(filePath) {
       await cropBottomFraction(filePath, frac, cropPath);
       registerTemp(cropPath);
       if (await tryImage(cropPath)) break;
+    }
+
+    if (best.score < 100) {
+      const topFractions = [0.35, 0.30, 0.40, 0.25];
+      for (const frac of topFractions) {
+        const cropPath = path.join(dir, `crop_top_${frac}.jpg`);
+        await cropTopFraction(filePath, frac, cropPath);
+        registerTemp(cropPath);
+        if (await tryImage(cropPath)) break;
+      }
     }
 
     if (best.score < 100) {

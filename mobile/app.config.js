@@ -29,7 +29,7 @@ export default {
     owner: "luvolive",
     scheme: "kbsprime",
     version: "1.0.3",
-    orientation: "portrait",
+    orientation: "default",
     icon: "./assets/icon.png",
     userInterfaceStyle: "light",
     splash: {

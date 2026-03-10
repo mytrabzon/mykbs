@@ -138,14 +138,31 @@ function parseTD1(lines) {
   };
 }
 
-/** MRZ satırında sadece rakam/check olması gereken pozisyonlarda OCR düzeltmesi (O->0, I/L->1). */
+/** Tarih alanlarında (YYMMDD) soluk/fotokopi OCR karışıklıkları. */
+const OCR_DATE_FIXES = {
+  O: '0', Q: '0', D: '0', U: '0',
+  I: '1', L: '1', '|': '1', J: '1',
+  Z: '2', V: '2',
+  E: '3',
+  A: '4', H: '4',
+  S: '5',
+  G: '6', C: '6',
+  T: '7', Y: '7',
+  B: '8', R: '8',
+  P: '9',
+};
+/** Belge no / check digit – sadece yaygın karışıklıklar. */
+const OCR_DIGIT_SAFE = { O: '0', Q: '0', I: '1', L: '1', '|': '1', S: '5', B: '8', Z: '2' };
 function fixLineDigitPositions(line, digitRanges) {
+  if (!line) return line;
   const arr = line.split('');
   for (const [start, end] of digitRanges) {
+    const isDateRange = start >= 13 && end <= 29;
+    const map = isDateRange ? OCR_DATE_FIXES : OCR_DIGIT_SAFE;
     for (let i = start; i < end && i < arr.length; i++) {
       const c = arr[i];
-      if (c === 'O' || c === 'Q') arr[i] = '0';
-      else if (c === 'I' || c === 'L' || c === '|') arr[i] = '1';
+      const fix = map[c];
+      if (fix) arr[i] = fix;
     }
   }
   return arr.join('');
