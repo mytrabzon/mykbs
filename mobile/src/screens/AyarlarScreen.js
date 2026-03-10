@@ -20,6 +20,7 @@ import { supabase } from '../lib/supabase/supabase';
 import { dataService } from '../services/dataService';
 import { backendHealth } from '../services/backendHealth';
 import { getApiBaseUrl, isSupabaseConfigured } from '../config/api';
+import { getNfcEnabled, setNfcEnabled } from '../utils/nfcSetting';
 import Toast from 'react-native-toast-message';
 import { Ionicons } from '@expo/vector-icons';
 import { Button, Banner, SegmentedControl, Input } from '../components/ui';
@@ -60,6 +61,7 @@ export default function AyarlarScreen() {
   const [okutulanBelgeler, setOkutulanBelgeler] = useState([]);
   const [okutulanBelgelerLoading, setOkutulanBelgelerLoading] = useState(false);
   const [okutulanBelgeDetail, setOkutulanBelgeDetail] = useState(null);
+  const [nfcEnabled, setNfcEnabledState] = useState(false);
 
   const loadOkutulanBelgeler = async () => {
     setOkutulanBelgelerLoading(true);
@@ -90,6 +92,10 @@ export default function AyarlarScreen() {
       setKbsServerIp(null);
     }
   };
+
+  useEffect(() => {
+    getNfcEnabled().then(setNfcEnabledState);
+  }, []);
 
   useEffect(() => {
     if (!token) return;
@@ -427,8 +433,21 @@ export default function AyarlarScreen() {
         <View style={[styles.section, { backgroundColor: colors.surface }]}>
           <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>Kimlik / Pasaport</Text>
           <Text style={[styles.infoText, { color: colors.textSecondary }]}>
-            Belge okuma için tab menüdeki "MRZ Tara" sekmesini kullanın. Check-in sırasında da MRZ sekmesinden tarayıp dönebilirsiniz; manuel giriş her zaman kullanılabilir.
+            Belge okuma için öncelik MRZ (kamera) ile okumadır. İsterseniz NFC ile okumayı açabilirsiniz.
           </Text>
+          <View style={[styles.switchRow, { borderColor: colors.border }]}>
+            <Text style={[styles.label, { color: colors.textPrimary }]}>NFC ile okumayı kullan</Text>
+            <Switch
+              value={nfcEnabled}
+              onValueChange={async (v) => {
+                await setNfcEnabled(v);
+                setNfcEnabledState(v);
+                Toast.show({ type: 'info', text1: v ? 'NFC açıldı' : 'NFC kapatıldı', text2: v ? 'Kimlik ekranında NFC önce denenecek' : 'Öncelik MRZ (kamera)' });
+              }}
+              trackColor={{ false: colors.border, true: colors.primarySoft }}
+              thumbColor={nfcEnabled ? colors.primary : colors.textSecondary}
+            />
+          </View>
         </View>
 
         <View style={[styles.section, { backgroundColor: colors.surface }]}>

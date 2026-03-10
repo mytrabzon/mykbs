@@ -43,6 +43,7 @@ import {
   requestNotificationPermissionAsync,
   registerPushToken,
 } from '../services/pushNotifications';
+import { getNfcEnabled } from '../utils/nfcSetting';
 
 // Lobi CANLI noktası — nabız animasyonu
 function LiveDotPulse() {
@@ -82,9 +83,17 @@ export default function OdalarScreen() {
   const filtreRef = useRef(filtre);
   const [notificationPermissionStatus, setNotificationPermissionStatus] = useState(null);
   const [notificationCardDismissed, setNotificationCardDismissed] = useState(false);
+  const [sonGirenler, setSonGirenler] = useState([]);
+  const [nfcEnabledInSettings, setNfcEnabledInSettings] = useState(false);
   useEffect(() => {
     filtreRef.current = filtre;
   }, [filtre]);
+
+  useFocusEffect(
+    useCallback(() => {
+      getNfcEnabled().then(setNfcEnabledInSettings);
+    }, [])
+  );
 
   const loading = initialLoading || filterLoading;
 
@@ -448,6 +457,10 @@ export default function OdalarScreen() {
       if (tesis) setOzet(tesis.ozet);
       setOdalar(odalar || []);
       if ((odalar || []).length > 0) setBackendStatus((p) => ({ ...p, isOnline: true }));
+      dataService.getMisafirler(false).then((list) => {
+        const sorted = [...(list || [])].sort((a, b) => new Date(b.girisTarihi || 0) - new Date(a.girisTarihi || 0));
+        setSonGirenler(sorted.slice(0, 8));
+      }).catch(() => {});
       logger.log('[OdalarScreen] loadData tamamlandı', { step: lastLoadStep, odaCount: (odalar || []).length });
     } catch (error) {
       const loadStep = error?.loadStep ?? error?.step ?? error?.response?.data?.step ?? lastLoadStep;
@@ -754,8 +767,12 @@ export default function OdalarScreen() {
               </View>
               <View style={styles.toolbarActionsWrap}>
                 <QuickActionsStrip
+                  nfcEnabled={nfcEnabledInSettings}
                   onAction={({ type, route }) => {
-                    if (route === 'CheckIn') navigation.navigate('MrzScan', { fromCheckIn: true });
+                    if (route === 'FamilyCheckIn') navigation.navigate('FamilyCheckIn');
+                    else if (route === 'MrzScan') navigation.navigate('MrzScan');
+                    else if (route === 'NfcRead') navigation.navigate('NfcRead');
+                    else if (route === 'CheckIn') navigation.navigate('CheckIn');
                     else if (route) navigation.navigate(route);
                   }}
                   isCompact={commandMode}
@@ -822,6 +839,28 @@ export default function OdalarScreen() {
                     </View>
                   ))}
                 </ScrollView>
+              </View>
+            )}
+            {sonGirenler.length > 0 && (
+              <View style={[styles.sonGirenlerWrap, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+                <Text style={[styles.sonGirenlerTitle, { color: colors.textPrimary }]}>👥 Son giriş yapanlar</Text>
+                {sonGirenler.map((m) => (
+                  <TouchableOpacity
+                    key={m.id}
+                    style={[styles.sonGirenlerRow, { borderBottomColor: colors.border }]}
+                    onPress={() => m.odaId && navigation.navigate('OdaDetay', { odaId: m.odaId })}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={[styles.sonGirenlerTime, { color: colors.textSecondary }]}>
+                      {m.girisTarihi ? new Date(m.girisTarihi).toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' }) : '—'}
+                    </Text>
+                    <Text style={[styles.sonGirenlerRoom, { color: colors.primary }]}>Oda {m.odaNumarasi || '—'}</Text>
+                    <Text style={[styles.sonGirenlerName, { color: colors.textPrimary }]} numberOfLines={1}>
+                      {m.ad} {m.soyad}
+                    </Text>
+                    <Text style={[styles.sonGirenlerUyruk, { color: colors.textSecondary }]}>{m.uyruk || '—'}</Text>
+                  </TouchableOpacity>
+                ))}
               </View>
             )}
             <View style={[styles.odalarSectionHeader, { borderBottomColor: colors.border }]}>
@@ -1086,6 +1125,29 @@ const styles = StyleSheet.create({
     flex: 1,
     minWidth: 0,
   },
+  sonGirenlerWrap: {
+    marginHorizontal: theme.spacing.screenPadding,
+    marginBottom: 12,
+    padding: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+  },
+  sonGirenlerTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    marginBottom: 8,
+  },
+  sonGirenlerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 8,
+    borderBottomWidth: 1,
+    gap: 8,
+  },
+  sonGirenlerTime: { fontSize: 12, width: 36 },
+  sonGirenlerRoom: { fontSize: 12, fontWeight: '600', width: 48 },
+  sonGirenlerName: { flex: 1, fontSize: 13, fontWeight: '500' },
+  sonGirenlerUyruk: { fontSize: 11, width: 32 },
   odalarSectionHeader: {
     flexDirection: 'row',
     alignItems: 'center',

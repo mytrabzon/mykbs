@@ -188,15 +188,16 @@ export function fixMrzOcrErrors(raw) {
 /** Ham MRZ'ı satırlara böl. TD1 kimlik: 3x30 (86-94 karakter tek blok); TD3 pasaport: 2x44 (88); TD2: 2x36 (72). */
 function normalizeMrzLines(raw) {
   const one = raw.trim().toUpperCase().replace(/\s/g, '').replace(/[^A-Z0-9<]/g, '');
-  // Kimlik (TD1): 3 satır × 30 karakter (88 pasaport ile çakışmasın)
-  if (one.length >= 86 && one.length <= 94 && one.length !== 88) {
+  // Kimlik (TD1): 3 satır — 88 karakter (30+30+28) I/A ile başlarsa kimlik; 88 ve P ise pasaport aşağıda
+  const isIdCard = one[0] === 'I' || one[0] === 'A';
+  if (one.length >= 86 && one.length <= 94 && (one.length !== 88 || isIdCard)) {
     const s1 = one.slice(0, 30).padEnd(30, '<');
     const s2 = one.slice(30, 60).padEnd(30, '<');
     const s3 = one.slice(60).padEnd(30, '<');
     return [s1, s2, s3];
   }
-  // Pasaport (TD3): 2×44 — 70–100 karakter (aynı kağıtta farklı pasaport MRZ'leri, farklı font)
-  if (one.length >= 70 && one.length <= 100) {
+  // Pasaport (TD3): 2×44 — 66–100 karakter (88 ve P ile başlarsa veya 88 değilse)
+  if (one.length >= 66 && one.length <= 100) {
     const s1 = one.slice(0, 44).padEnd(44, '<');
     const s2 = one.slice(44).padEnd(44, '<');
     return [s1, s2];
@@ -206,16 +207,22 @@ function normalizeMrzLines(raw) {
   }
   const lines = raw.replace(/\r\n/g, '\n').replace(/\r/g, '\n').split('\n')
     .map((l) => l.trim().toUpperCase().replace(/\s/g, '').replace(/[^A-Z0-9<]/g, '')).filter(Boolean);
-  if (lines.length >= 2 && lines[0].length >= 30 && lines[1].length >= 30) {
+  if (lines.length >= 2 && lines[0].length >= 28 && lines[1].length >= 28) {
     const total = lines[0].length + lines[1].length;
-    if (total >= 75 && total <= 100) return [lines[0].padEnd(44, '<').slice(0, 44), lines[1].padEnd(44, '<').slice(0, 44)];
+    if (total >= 72 && total <= 76 && lines[0].length >= 34 && lines[0].length <= 36) {
+      return [lines[0].padEnd(36, '<').slice(0, 36), lines[1].padEnd(36, '<').slice(0, 36)];
+    }
+    if (total >= 68 && total <= 100) {
+      return [lines[0].padEnd(44, '<').slice(0, 44), lines[1].padEnd(44, '<').slice(0, 44)];
+    }
   }
   return lines;
 }
 
 function parseMrzWithLines(lines) {
   if (lines.length >= 2 && lines[0].length >= 34 && lines[0].length <= 36) return parseTD2(lines);
-  if (lines.length >= 2 && lines[0].length >= 30) return parseTD3(lines);
+  // TD3 pasaport: 28+ satır uzunluğu (İran vb. farklı font/uzunluk)
+  if (lines.length >= 2 && lines[0].length >= 28) return parseTD3(lines);
   if (lines.length >= 3 && lines[0].length >= 28) return parseTD1(lines);
   return null;
 }
@@ -228,8 +235,9 @@ export function parseMrz(raw) {
   let result = parseMrzWithLines(lines);
   if (result) return result;
   const one = raw.trim().toUpperCase().replace(/\s/g, '').replace(/[^A-Z0-9<]/g, '');
-  if (one.length >= 82 && one.length <= 92) {
-    for (const splitAt of [43, 44, 45, 42, 46]) {
+  // İran vb. pasaportlar: farklı bölme noktaları dene (tek satır 66–100 karakter)
+  if (one.length >= 66 && one.length <= 100) {
+    for (const splitAt of [44, 43, 45, 42, 46, 41, 40]) {
       if (splitAt >= one.length) continue;
       const l1 = one.slice(0, splitAt).padEnd(44, '<');
       const l2 = one.slice(splitAt).padEnd(44, '<');

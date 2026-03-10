@@ -17,6 +17,12 @@ try {
   logger.warn('IndependentNfcReader: react-native-nfc-manager yok', e?.message);
 }
 
+/** iOS'ta NfcTech.IsoDep bazen tanımsız; IsoDep → NfcA → Ndef fallback (CheckInScreen ile aynı). */
+function getNfcTechForRequest() {
+  if (!NfcTech) return null;
+  return NfcTech.IsoDep ?? NfcTech.NfcA ?? NfcTech.Ndef ?? null;
+}
+
 // eMRTD / eID AID'leri (ICAO 9303)
 const PASSPORT_AID = [0xa0, 0x00, 0x00, 0x02, 0x47, 0x20, 0x01];
 const ID_CARD_AID = [0xa0, 0x00, 0x00, 0x02, 0x47, 0x10, 0x01];
@@ -166,7 +172,8 @@ export function useIndependentNfcReader() {
   }, []);
 
   const readNfcDirect = useCallback(async () => {
-    if (!NfcManager || !NfcTech?.IsoDep) {
+    const tech = getNfcTechForRequest();
+    if (!NfcManager || !tech) {
       return { success: false, error: 'NFC desteklenmiyor', fallback: 'MRZ' };
     }
 
@@ -176,8 +183,22 @@ export function useIndependentNfcReader() {
     setLastResult(null);
 
     try {
+      if (typeof NfcManager.start === 'function') {
+        await NfcManager.start();
+      }
+      try {
+        if (typeof NfcManager.isEnabled === 'function') {
+          const enabled = await NfcManager.isEnabled();
+          if (enabled === false) {
+            return { success: false, error: 'NFC kapalı. Ayarlardan NFC\'yi açın.', fallback: 'MRZ' };
+          }
+        }
+      } catch (_) {
+        // iOS'ta isEnabled bazen atar veya desteklenmez; okumayı dene
+      }
+
       setProgress('Belgeyi telefonun arkasına yaklaştırın...');
-      await NfcManager.requestTechnology(NfcTech.IsoDep);
+      await NfcManager.requestTechnology(tech);
       techRequestedRef.current = true;
 
       setProgress('Belge tipi algılanıyor...');
@@ -187,28 +208,34 @@ export function useIndependentNfcReader() {
 
       if (docType === 'id_card') {
         setProgress('Kimlik kartı okunuyor...');
-        result = await readIDCard();
-        setLastResult(result);
-        return { success: true, data: result };
+        try {
+          result = await readIDCard();
+          setLastResult(result);
+          return { success: true, data: result };
+        } catch (idErr) {
+          logger.warn('[IndependentNfc] Kimlik okuma hatası', idErr?.message);
+          return { success: false, error: 'Kimlik çipi okunamadı. MRZ veya kamera ile deneyin.', fallback: 'MRZ' };
+        }
       }
 
       if (docType === 'passport') {
-        setProgress('Pasaport çipi okunuyor...');
-        result = await readPassportWithoutMRZ();
-        setLastResult(result);
-        return { success: true, data: result };
+        return { success: false, error: 'Pasaport çipi MRZ ile açılır. Önce MRZ kamerayı kullanın.', fallback: 'MRZ' };
       }
 
       setProgress('Belge tanınamadı.');
-      return { success: false, error: 'Belge tipi tanınamadı', fallback: 'MRZ' };
+      return { success: false, error: 'Çip tanınamadı. Türk kimlik kartı veya MRZ kullanın.', fallback: 'MRZ' };
     } catch (error) {
       const msg = error?.message || '';
       logger.warn('[IndependentNfc] Okuma hatası', msg);
-      const fallback = msg.includes('MRZ') || msg.includes('pasaport') ? 'MRZ' : 'MRZ';
+      let userMsg = msg;
+      if (msg.includes('cancelled') || msg.includes('Cancel')) userMsg = 'Okuma iptal edildi.';
+      else if (msg.includes('timeout') || msg.includes('Timeout')) userMsg = 'Süre aşımı. Belgeyi yaklaştırıp tekrar deneyin.';
+      else if (msg.includes('tag') || msg.includes('lost')) userMsg = 'Bağlantı koptu. Belgeyi sabit tutup tekrar deneyin.';
+      else if (msg.includes('IsoDep') || msg.includes('Tech')) userMsg = 'Bu belge NFC ile okunamıyor. MRZ kullanın.';
       return {
         success: false,
-        error: msg,
-        fallback,
+        error: userMsg,
+        fallback: 'MRZ',
       };
     } finally {
       if (techRequestedRef.current) closeNfc();
@@ -223,6 +250,6 @@ export function useIndependentNfcReader() {
     progress,
     lastResult,
     closeNfc,
-    isSupported: !!(NfcManager && NfcTech?.IsoDep),
+    isSupported: !!(NfcManager && getNfcTechForRequest()),
   };
 }

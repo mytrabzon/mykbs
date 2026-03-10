@@ -45,9 +45,11 @@ import TermsConsentScreen from './src/screens/TermsConsentScreen';
 import AccountDeletionPendingScreen from './src/screens/AccountDeletionPendingScreen';
 import MrzScanScreen from './src/features/kyc/MrzScanScreen';
 import MrzResultScreen from './src/features/kyc/MrzResultScreen';
+import FamilyCheckInScreen from './src/features/family/FamilyCheckInScreen';
 import KycSubmitScreen from './src/features/kyc/KycSubmitScreen';
 import KycManualEntryScreen from './src/features/kyc/KycManualEntryScreen';
 import NfcIntroScreen from './src/features/kyc/NfcIntroScreen';
+import NfcReadScreen from './src/features/nfc/NfcReadScreen';
 import DocumentHubScreen from './src/features/documentRead/DocumentHubScreen';
 import FrontDocumentScanScreen from './src/features/documentRead/FrontDocumentScanScreen';
 import GallerySingleDocumentScreen from './src/features/documentRead/GallerySingleDocumentScreen';
@@ -268,6 +270,7 @@ import { AuthProvider, useAuth } from './src/context/AuthContext';
 import { ThemeProvider, useTheme } from './src/context/ThemeContext';
 import { CreditsProvider, useCredits } from './src/context/CreditsContext';
 import { CameraProvider } from './src/context/CameraContext';
+import { FamilyCheckInProvider } from './src/context/FamilyCheckInContext';
 import CreditsBanner from './src/components/CreditsBanner';
 import PaywallModal from './src/components/PaywallModal';
 const Tab = createBottomTabNavigator();
@@ -317,7 +320,6 @@ function MainTabs() {
       <GuestBanner />
       <CreditsBanner />
       <Tab.Navigator
-      lazy={false}
       initialRouteName={initialTab}
       screenOptions={({ route, navigation }) => {
         const state = navigation.getState();
@@ -340,6 +342,7 @@ function MainTabs() {
           shadowRadius: 16,
         };
         return {
+        lazy: false,
         tabBarIcon: ({ focused, color, size }) => {
           if (route.name === 'MRZ') {
             return (
@@ -553,6 +556,7 @@ function AppNavigator() {
             <Stack.Screen name="PrivacyConsent" component={PrivacyConsentScreen} options={{ headerShown: false }} />
             <Stack.Screen name="TermsConsent" component={TermsConsentScreen} options={{ headerShown: false }} />
             <Stack.Screen name="CheckIn" component={CheckInScreen} />
+            <Stack.Screen name="FamilyCheckIn" component={FamilyCheckInScreen} />
             <Stack.Screen name="Kaydedilenler" component={KaydedilenlerScreen} />
             <Stack.Screen name="OdaDetay" component={OdaDetayScreen} />
             <Stack.Screen name="AddRoom" component={AddRoomScreen} />
@@ -565,6 +569,7 @@ function AppNavigator() {
             <Stack.Screen name="TesisList" component={TesisListScreen} />
             <Stack.Screen name="Bildirimler" component={BildirimlerScreen} />
             <Stack.Screen name="MrzScan" component={MrzScanScreen} />
+            <Stack.Screen name="NfcRead" component={NfcReadScreen} />
             <Stack.Screen name="MrzResult" component={MrzResultScreen} />
             <Stack.Screen name="KycSubmit" component={KycSubmitScreen} />
             <Stack.Screen name="KycManualEntry" component={KycManualEntryScreen} />
@@ -673,10 +678,12 @@ export default function App() {
       <ThemeProvider>
         <CameraProvider>
           <AuthProvider>
-            <CreditsProvider>
-              <AppNavigator />
-              <Toast />
-            </CreditsProvider>
+            <FamilyCheckInProvider>
+              <CreditsProvider>
+                <AppNavigator />
+                <Toast />
+              </CreditsProvider>
+            </FamilyCheckInProvider>
           </AuthProvider>
         </CameraProvider>
       </ThemeProvider>

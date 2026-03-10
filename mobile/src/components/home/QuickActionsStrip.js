@@ -9,16 +9,18 @@ import { useTheme } from '../../context/ThemeContext';
 import { spacing, typography } from '../../theme';
 
 const ACTIONS = [
+  { key: 'aileGiris', label: 'Aile Girişi', icon: 'people', nav: 'FamilyCheckIn' },
+  { key: 'mrz', label: 'Hızlı MRZ', icon: 'camera', nav: 'MrzScan' },
   { key: 'checkin', label: 'Check-in', icon: 'log-in-outline', nav: 'CheckIn' },
-  { key: 'mrz', label: 'MRZ', icon: 'document-text-outline', nav: 'MrzScan' },
-  { key: 'rezervasyon', label: 'Rezervasyon', icon: 'calendar-outline', nav: 'CheckIn' },
-  { key: 'odaDegistir', label: 'Oda Değiştir', icon: 'swap-horizontal-outline', nav: null },
-  { key: 'sorun', label: 'Sorun', icon: 'alert-circle-outline', nav: null },
-  { key: 'misafirAra', label: 'Misafirler', icon: 'people-outline', nav: 'Misafirler' },
+  { key: 'odaAta', label: 'Oda Ata', icon: 'bed-outline', nav: 'CheckIn' },
+  { key: 'liste', label: 'Liste', icon: 'list-outline', nav: 'Misafirler' },
 ];
 
-export default function QuickActionsStrip({ onAction, isCompact }) {
+const NFC_ACTION = { key: 'nfcOku', label: 'NFC Oku', icon: 'hardware-chip-outline', nav: 'NfcRead' };
+
+export default function QuickActionsStrip({ onAction, isCompact, nfcEnabled }) {
   const { colors } = useTheme();
+  const actions = nfcEnabled ? [NFC_ACTION, ...ACTIONS] : ACTIONS;
 
   const handlePress = (action) => {
     if (action.nav) onAction?.({ type: 'navigate', route: action.nav });
@@ -32,7 +34,7 @@ export default function QuickActionsStrip({ onAction, isCompact }) {
         showsHorizontalScrollIndicator={false}
         contentContainerStyle={styles.scrollContent}
       >
-        {ACTIONS.map((a) => (
+        {actions.map((a) => (
           <TouchableOpacity
             key={a.key}
             style={[styles.pill, { backgroundColor: colors.surface, borderColor: colors.border }]}

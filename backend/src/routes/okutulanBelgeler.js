@@ -104,7 +104,10 @@ router.post('/', express.json({ limit: '6mb' }), async (req, res) => {
       }
     }
 
-    const tenantId = getTenantIdForRecord(req);
+    const rawTenantId = getTenantIdForRecord(req);
+    // OkutulanBelge.tenantId DB'de UUID; CUID (tesis.id) veya geçersiz değer verilirse Prisma hata atar.
+    const isUuid = (v) => typeof v === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(v.trim());
+    const tenantId = rawTenantId && isUuid(rawTenantId) ? rawTenantId.trim() : null;
     const rec = await prisma.okutulanBelge.create({
       data: {
         tesisId,

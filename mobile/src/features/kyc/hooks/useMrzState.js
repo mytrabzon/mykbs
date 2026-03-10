@@ -1,8 +1,8 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
 
-const DUPLICATE_THROTTLE_MS = 5000;
+const DUPLICATE_THROTTLE_MS = 2500;
 const MAX_HISTORY = 10;
-const PROCESSING_COOLDOWN_MS = 500;
+const PROCESSING_COOLDOWN_MS = 180;
 
 /**
  * MRZ state: tek kaynak, scanId, önceki okuma, geçmiş, işlem kilidi.
@@ -87,6 +87,8 @@ export function useMrzState() {
   const clearCurrent = useCallback(() => {
     setCurrentMrz(null);
     lastDocumentKeyRef.current = '';
+    lastScanTimeRef.current = 0;
+    setIsProcessing(false);
   }, []);
 
   const setCurrentMrzFromOutside = useCallback((payload) => {

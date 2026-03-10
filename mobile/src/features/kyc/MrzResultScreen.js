@@ -21,11 +21,24 @@ export default function MrzResultScreen({ route, navigation }) {
   const payload = route?.params?.payload ?? null;
   const raw = payload?.raw ?? '';
   const scanDurationMs = route?.params?.scanDurationMs ?? 0;
+  const fromNfc = route?.params?.fromNfc === true;
   const [savingOkutulan, setSavingOkutulan] = useState(false);
   const [savedToOkutulan, setSavedToOkutulan] = useState(false);
 
-  const validation = payload ? validateMrz(payload) : { valid: false, reason: 'no_payload' };
-  const minimal = payload ? toMinimalPayload(payload) : null;
+  const validation = fromNfc
+    ? { valid: !!(payload?.givenNames || payload?.surname) }
+    : (payload ? validateMrz(payload) : { valid: false, reason: 'no_payload' });
+  const minimal = payload
+    ? (fromNfc
+      ? {
+          passportNumber: payload.passportNumber?.trim() || '',
+          birthDate: payload.birthDate || '',
+          expiryDate: '',
+          issuingCountry: payload.issuingCountry || '',
+          docType: payload.docType || 'ID',
+        }
+      : toMinimalPayload(payload))
+    : null;
 
   const handleConfirm = () => {
     if (!minimal || !validation.valid) return;

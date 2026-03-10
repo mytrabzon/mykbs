@@ -105,7 +105,7 @@ function PostCard({ item, colors, onPostPress, onAuthorPress, onCommentPress, ca
 }
 
 export default function ToplulukScreen({ navigation }) {
-  const { tesis, user, isLoggedIn, getSupabaseToken } = useAuth();
+  const { tesis, user, isLoggedIn, getSupabaseToken, logout } = useAuth();
   const { colors } = useTheme();
   const [posts, setPosts] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -118,9 +118,13 @@ export default function ToplulukScreen({ navigation }) {
 
   const loadToken = useCallback(async () => {
     let t = await getSupabaseToken();
+    // E-posta/telefon girişinde Supabase session bazen gecikmeli yazılıyor; birkaç kez daha dene
     if (!t && isLoggedIn) {
-      await new Promise((r) => setTimeout(r, 500));
-      t = await getSupabaseToken();
+      for (const delayMs of [500, 1000, 1500]) {
+        await new Promise((r) => setTimeout(r, delayMs));
+        t = await getSupabaseToken();
+        if (t) break;
+      }
     }
     setToken(t);
     setHasCommunity(!!t);
@@ -220,6 +224,11 @@ export default function ToplulukScreen({ navigation }) {
     );
   }
   if (tokenChecked && !token) {
+    const retryLoadToken = async () => {
+      setTokenChecked(false);
+      setToken(null);
+      await loadToken();
+    };
     return (
       <View style={[styles.screenContainer, { backgroundColor: colors.background }]}>
         <AppHeader
@@ -231,8 +240,10 @@ export default function ToplulukScreen({ navigation }) {
         <View style={styles.emptyWrap}>
           <EmptyState
             icon="people-outline"
-            title="Topluluk"
-            message="Topluluk için e-posta veya telefon ile giriş yapın."
+            title="Topluluk oturumu alınamadı"
+            message={'Giriş yaptınız ancak topluluk için gerekli oturum bilgisi alınamadı. Önce "Yenile"yi deneyin; olmazsa çıkış yapıp tekrar e-posta ve şifre ile giriş yapın.'}
+            primaryCta={{ label: 'Yenile', onPress: retryLoadToken }}
+            secondaryCta={{ label: 'Çıkış yapıp tekrar giriş yap', onPress: () => logout() }}
           />
         </View>
       </View>

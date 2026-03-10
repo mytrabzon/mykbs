@@ -34,6 +34,8 @@ import { useAuth } from '../../context/AuthContext';
 import { useNfcAutoScanner } from '../nfc/NfcAutoScanner';
 import { useIndependentNfcReader } from '../nfc/IndependentNfcReader';
 import { CameraFallback } from '../../components/CameraFallback';
+import { getNfcEnabled } from '../../utils/nfcSetting';
+import { useFamilyCheckIn } from '../../context/FamilyCheckInContext';
 
 /** Okutulan belgeyi backend'e kaydet (arka planda; hata sessiz). */
 async function saveOkutulanBelgeAsync(payload, photoUri) {
@@ -84,7 +86,7 @@ try {
 } catch (e) {}
 
 const TIMEOUT_MS = 15000;
-const MAX_FAILS = 6;
+const MAX_FAILS = 8;
 /** Kamera önizlemesi bu süre içinde hazır olmazsa "Kamera açılamadı" göster (siyah ekran donması önlemi). iOS'ta onCameraReady sıklıkla gelmediği için daha kısa. */
 const CAMERA_READY_TIMEOUT_MS = Platform.OS === 'ios' ? 4000 : 8000;
 
@@ -94,11 +96,15 @@ const SHOW_INSTANT_RESULT = true;
 const ACCEPT_ON_CHECK_FAIL = true;
 const ACCEPT_MINIMAL_DOC_NUMBER_ONLY = true; // Sadece belge no ile de hemen kabul (eksik alanlar sonuç ekranında düzeltilir)
 
-/** Tek kamera: hem MRZ (arka/alt) hem ön yüz otomatik okunur. iOS + Android unified (kimlik kartı desteği). */
-const USE_UNIFIED_AUTO_SCAN = true;
+/** false = Native MrzReaderView kamerası (açılma sorunu yok). true = expo-camera ile unified (bazı cihazlarda onCameraReady gelmiyor, siyah ekran). */
+const USE_UNIFIED_AUTO_SCAN = false;
 const UNIFIED_CAPTURE_INTERVAL_MS = 2500;
 /** İzin verildikten sonra kamera mount gecikmesi (Android siyah ekran önlemi). */
 const UNIFIED_CAMERA_MOUNT_DELAY_MS = Platform.OS === 'android' ? 350 : 150;
+/** Kamera bileşenini her zaman bu süre sonra mount et (onLayout'a güvenmeden). */
+const UNIFIED_CAMERA_MOUNT_AFTER_MS = 400;
+/** Kamera açıldı ama onCameraReady gelmezse (siyah ekran) bu süre sonra fallback göster. */
+const UNIFIED_CAMERA_READY_TIMEOUT_MS = 6000;
 
 function Row({ label, value }) {
   const v = value != null && value !== '' ? String(value) : '—';
@@ -154,7 +160,7 @@ export default function MrzScanScreen({ navigation }) {
   const [frontLoading, setFrontLoading] = useState(false);
   const [torchOn, setTorchOn] = useState(false);
   const [mrzDocType, setMrzDocType] = useState(Platform.OS === 'android' ? DocType.ID : DocType.Passport);
-  const [scanMode, setScanMode] = useState(DocType.Passport); // Varsayılan pasaport (daha sık okunur)
+  const [scanMode, setScanMode] = useState(Platform.OS === 'android' ? DocType.ID : DocType.Passport); // Android: kimlik (3 satır), iOS: kütüphane sadece pasaport destekliyor
   const [mrzLocked, setMrzLocked] = useState(false); // Sonuç gelince true, toggle durur
   const [cameraKey, setCameraKey] = useState(0); // Ekrana her girişte artır → kamera yeniden mount (siyah ekran önlemi)
   const [scanDurationMs, setScanDurationMs] = useState(0); // Milisaniye cinsinden tarama süresi
@@ -162,8 +168,8 @@ export default function MrzScanScreen({ navigation }) {
   const [isScreenFocused, setIsScreenFocused] = useState(true);
   const [savedToOkutulan, setSavedToOkutulan] = useState(false);
   const [savingOkutulan, setSavingOkutulan] = useState(false);
-  /** Giriş yöntemi: önce NFC dene, başarısızsa MRZ kamera */
-  const [primaryInputMethod, setPrimaryInputMethod] = useState('nfc');
+  /** Ayarlardan NFC açık mı? Kapalıysa tüm NFC işlemleri yapılmaz, NFC butonu gizlenir. */
+  const [nfcEnabledInSettings, setNfcEnabledInSettings] = useState(false);
   /** İzin hook gecikmesine karşı: kullanıcı "İzin ver" deyince hemen kamera alanını göster */
   const [permissionGrantedLocal, setPermissionGrantedLocal] = useState(false);
   /** Kamera sadece layout tamamlandıktan sonra mount edilsin (0 yükseklik = siyah ekran önlemi) */
@@ -197,14 +203,16 @@ export default function MrzScanScreen({ navigation }) {
   const insets = useSafeAreaInsets();
   const [permission, requestPermission] = useCameraPermissions();
   const unifiedFallbackTimerRef = useRef(null);
+  const unifiedCameraReadyTimeoutRef = useRef(null);
   const nfcHandlerRef = useRef(null);
+  const familyCheckIn = useFamilyCheckIn();
 
   const { processNewMrz, isProcessing: mrzStateProcessing, clearCurrent: clearMrzState } = useMrzState();
 
   const { readNfcDirect, isReading: nfcIndependentReading, progress: nfcIndependentProgress, closeNfc: closeIndependentNfc, isSupported: nfcReaderSupported } = useIndependentNfcReader();
 
   const { isScanning: nfcScanning, lastError: nfcError, isSupported: nfcSupported } = useNfcAutoScanner({
-    enabled: !!(permission?.granted || permissionGrantedLocal) && primaryInputMethod !== 'nfc',
+    enabled: !!(permission?.granted || permissionGrantedLocal) && nfcEnabledInSettings,
     alertMessage: 'Pasaport veya kimlik kartını telefonun arkasına yaklaştırın…',
     onTagDetected: (tag) => nfcHandlerRef.current?.(tag),
   });
@@ -286,7 +294,7 @@ export default function MrzScanScreen({ navigation }) {
       setMergedPayload(null);
       setFrontImageUri(null);
       setMrzCheckFailed(false);
-      setPrimaryInputMethod(nfcReaderSupported ? 'nfc' : 'mrz');
+      getNfcEnabled().then((v) => { if (mounted.current) setNfcEnabledInSettings(!!v); });
       clearMrzState();
       scanStartTimeRef.current = Date.now();
 
@@ -308,6 +316,10 @@ export default function MrzScanScreen({ navigation }) {
         if (unifiedFallbackTimerRef.current) {
           clearTimeout(unifiedFallbackTimerRef.current);
           unifiedFallbackTimerRef.current = null;
+        }
+        if (unifiedCameraReadyTimeoutRef.current) {
+          clearTimeout(unifiedCameraReadyTimeoutRef.current);
+          unifiedCameraReadyTimeoutRef.current = null;
         }
         if (unifiedMountDelayRef.current) {
           clearTimeout(unifiedMountDelayRef.current);
@@ -518,15 +530,15 @@ export default function MrzScanScreen({ navigation }) {
     return () => { nfcHandlerRef.current = null; };
   }, [readNfcDirect]);
 
-  // NFC öncelikli mod: ekran açıldığında veya NFC görünümündeyken bir kez doğrudan NFC oku
-  useEffect(() => {
-    if (primaryInputMethod !== 'nfc' || !isScreenFocused || isExiting || !mounted.current) return;
-    let cancelled = false;
-    (async () => {
+  const handleNfcButtonPress = useCallback(async () => {
+    if (!nfcEnabledInSettings || nfcIndependentReading || hasAcceptedForUnifiedRef.current || !mounted.current) return;
+    try {
       const result = await readNfcDirect();
-      if (cancelled || !mounted.current) return;
+      if (!mounted.current || hasAcceptedForUnifiedRef.current) return;
       if (result.success && result.data) {
+        hasAcceptedForUnifiedRef.current = true;
         const d = result.data;
+        triggerReadSuccessFeedback();
         setMergedPayload({
           ad: d.ad || '',
           soyad: d.soyad || '',
@@ -534,23 +546,24 @@ export default function MrzScanScreen({ navigation }) {
           pasaportNo: d.pasaportNo || null,
           dogumTarihi: d.dogumTarihi || null,
           uyruk: d.uyruk || 'TÜRK',
+          chipPhotoBase64: d.chipPhotoBase64 || null,
         });
         setInstantPayload({
           givenNames: d.ad || '',
           surname: d.soyad || '',
           passportNumber: (d.kimlikNo || d.pasaportNo || '').trim() || '',
-          birthDate: d.dogumTarihi ? d.dogumTarihi.split('.').reverse().join('-') : null,
+          birthDate: d.dogumTarihi ? (d.dogumTarihi.split('.').reverse().join('-') || null) : null,
           nationality: d.uyruk || 'TÜRK',
+          chipPhotoBase64: d.chipPhotoBase64 || null,
         });
-        triggerReadSuccessFeedback();
         setScanDurationMs(scanStartTimeRef.current ? Date.now() - scanStartTimeRef.current : 0);
       } else {
-        Toast.show({ type: 'info', text1: 'NFC okunamadı', text2: 'MRZ ile devam edin' });
-        setPrimaryInputMethod('mrz');
+        Toast.show({ type: 'info', text1: 'NFC okunamadı', text2: 'MRZ kamerayı veya galeriden kullanın.' });
       }
-    })();
-    return () => { cancelled = true; };
-  }, [primaryInputMethod, isScreenFocused, isExiting, readNfcDirect]);
+    } catch (e) {
+      if (mounted.current) Toast.show({ type: 'info', text1: 'NFC okunamadı', text2: 'MRZ veya galeriden devam edin.' });
+    }
+  }, [nfcEnabledInSettings, nfcIndependentReading, readNfcDirect]);
 
   const handleMRZRead = useCallback(
     (data) => {
@@ -559,16 +572,21 @@ export default function MrzScanScreen({ navigation }) {
       if (acceptedRawRef.current === raw) return;
       const scanDurationMs = Date.now() - scanStartTimeRef.current;
       let payload = parseMrz(raw);
-      if (!payload.checks?.ok && raw) {
+      const docNumFirst = (payload.passportNumber || '').trim();
+      const hasMinimalFromFirst = (docNumFirst && (payload.birthDate || payload.expiryDate)) || (ACCEPT_MINIMAL_DOC_NUMBER_ONLY && docNumFirst);
+      if (!payload.checks?.ok && raw && !hasMinimalFromFirst) {
         let fixed = raw;
-        for (let pass = 0; pass < 5; pass++) {
+        for (let pass = 0; pass < 3; pass++) {
           fixed = fixMrzOcrErrors(fixed || raw);
           const next = parseMrz(fixed);
           if (next?.checks?.ok) {
             payload = next;
             break;
           }
-          if (next?.passportNumber && (next?.birthDate || next?.expiryDate)) payload = next;
+          if (next?.passportNumber && (next?.birthDate || next?.expiryDate)) {
+            payload = next;
+            break;
+          }
         }
       }
       const docNum = (payload.passportNumber || '').trim();
@@ -627,6 +645,11 @@ export default function MrzScanScreen({ navigation }) {
         }
         if (__DEV__) logger.info('[MRZ] Yeni MRZ okundu (native)', { documentNumber: enriched.documentNumber, scanId: enriched.scanId });
         triggerReadSuccessFeedback();
+        Toast.show({ type: 'success', text1: 'Okundu', text2: ((enriched.surname || '') + ' ' + (enriched.givenNames || '')).trim() || 'Belge okundu' });
+        if (route.params?.mode === 'family' && familyCheckIn?.addMemberFromScan) {
+          familyCheckIn.addMemberFromScan(enriched);
+          return;
+        }
         if (SHOW_INSTANT_RESULT && fromCheckIn) {
           acceptInstant(enriched);
         } else if (SHOW_INSTANT_RESULT && !fromCheckIn) {
@@ -645,6 +668,11 @@ export default function MrzScanScreen({ navigation }) {
           return;
         }
         triggerReadSuccessFeedback();
+        Toast.show({ type: 'success', text1: 'Okundu', text2: ((enriched.surname || '') + ' ' + (enriched.givenNames || '')).trim() || 'Belge okundu' });
+        if (route.params?.mode === 'family' && familyCheckIn?.addMemberFromScan) {
+          familyCheckIn.addMemberFromScan(enriched);
+          return;
+        }
         if (SHOW_INSTANT_RESULT && fromCheckIn) {
           acceptInstant(enriched);
         } else {
@@ -1137,20 +1165,20 @@ export default function MrzScanScreen({ navigation }) {
     return () => clearTimeout(t);
   }, [permission?.granted, Platform.OS]);
 
-  // Unified kamera: onLayout bazen tetiklenmeyebilir; izin sonrası kısa sürede mount (siyah ekran önlemi)
+  // Unified kamera: izin + MRZ modunda KISA gecikmeyle her zaman mount et (onLayout'a güvenmeden – siyah ekran kalıcı çözüm).
   useEffect(() => {
     if (!USE_UNIFIED_AUTO_SCAN || !(permission?.granted || permissionGrantedLocal)) return;
     if (unifiedFallbackTimerRef.current) clearTimeout(unifiedFallbackTimerRef.current);
-    const fallbackMs = Platform.OS === 'android' ? 550 : 450;
+    const mountMs = UNIFIED_CAMERA_MOUNT_AFTER_MS;
     unifiedFallbackTimerRef.current = setTimeout(() => {
       unifiedFallbackTimerRef.current = null;
       if (mounted.current) {
         setUnifiedCameraMountReady((ready) => {
-          if (!ready) logger.info('[MRZ] Unified kamera fallback – mount', { fallbackMs });
+          if (!ready) logger.info('[MRZ] Unified kamera mount (sabit gecikme)', { mountMs });
           return true;
         });
       }
-    }, fallbackMs);
+    }, mountMs);
     return () => {
       if (unifiedFallbackTimerRef.current) {
         clearTimeout(unifiedFallbackTimerRef.current);
@@ -1159,14 +1187,25 @@ export default function MrzScanScreen({ navigation }) {
     };
   }, [USE_UNIFIED_AUTO_SCAN, permission?.granted, permissionGrantedLocal]);
 
-  // MRZ kamera moduna geçince kamerayı hemen mount et (siyah ekran önlemi)
+  // Siyah ekran önlemi: CameraView mount edildi ama onCameraReady gelmezse belirli süre sonra fallback göster.
   useEffect(() => {
-    if (primaryInputMethod !== 'mrz' || !(permission?.granted || permissionGrantedLocal)) return;
-    const t = setTimeout(() => {
-      if (mounted.current) setUnifiedCameraMountReady(true);
-    }, 350);
-    return () => clearTimeout(t);
-  }, [primaryInputMethod, permission?.granted, permissionGrantedLocal]);
+    if (!USE_UNIFIED_AUTO_SCAN || !unifiedCameraMountReady || unifiedCameraReady || unifiedCameraError) return;
+    if (unifiedCameraReadyTimeoutRef.current) clearTimeout(unifiedCameraReadyTimeoutRef.current);
+    unifiedCameraReadyTimeoutRef.current = setTimeout(() => {
+      unifiedCameraReadyTimeoutRef.current = null;
+      if (mounted.current && !unifiedCameraError) {
+        logger.warn('[MRZ] Kamera onCameraReady gelmedi – siyah ekran timeout, fallback gösteriliyor');
+        setUnifiedCameraError(true);
+        Toast.show({ type: 'info', text1: 'Kamera açılamadı', text2: 'Galeriden görsel seçebilir veya Tekrar dene.' });
+      }
+    }, UNIFIED_CAMERA_READY_TIMEOUT_MS);
+    return () => {
+      if (unifiedCameraReadyTimeoutRef.current) {
+        clearTimeout(unifiedCameraReadyTimeoutRef.current);
+        unifiedCameraReadyTimeoutRef.current = null;
+      }
+    };
+  }, [USE_UNIFIED_AUTO_SCAN, unifiedCameraMountReady, unifiedCameraReady, unifiedCameraError]);
 
   // Kamera önizlemesi hazır olmazsa (onCameraReady gelmezse) timeout sonunda fallback (unified + iOS'ta MrzReaderView kendi kamerasını kullanır, timeout yok)
   useEffect(() => {
@@ -1187,8 +1226,8 @@ export default function MrzScanScreen({ navigation }) {
 
   const selectedDocType = mrzLockedRef.current ? lockedDocTypeRef.current : scanMode;
   selectedDocTypeRef.current = selectedDocType;
-  // Tek sistem: her zaman Pasaport modu ile oku (2 satır MRZ). Pasaport tutarlı okunsun; kimlik için kullanıcı "Kimlik"e geçebilir.
-  const docTypeForReader = selectedDocType;
+  // iOS: @corupta/react-native-mrz-reader sadece PASSPORT destekliyor; ID_CARD verince hata atıyor.
+  const docTypeForReader = Platform.OS === 'ios' ? DocType.Passport : selectedDocType;
 
   const toggleTorch = useCallback(() => {
     if (!TorchModule) {
@@ -1401,7 +1440,7 @@ export default function MrzScanScreen({ navigation }) {
           <View style={styles.iconBtn} />
         </View>
         <View style={styles.mrzPickContainer}>
-          <Ionicons name="camera-off" size={80} color="#EF4444" style={{ marginBottom: 16 }} />
+          <Ionicons name="camera-outline" size={80} color="#EF4444" style={{ marginBottom: 16 }} />
           <Text style={styles.mrzPickTitle}>Kamera İzni Gerekli</Text>
           <Text style={styles.mrzPickHint}>MRZ okumak için kameraya erişim izni vermelisiniz.</Text>
           <TouchableOpacity
@@ -1443,49 +1482,6 @@ export default function MrzScanScreen({ navigation }) {
     );
   }
 
-  // NFC öncelikli ekran: önce NFC ile oku (MRZ gerekmez), başarısızsa MRZ kamera
-  if (primaryInputMethod === 'nfc') {
-    return (
-      <SafeAreaView style={[styles.container, styles.nfcFirstRoot]} edges={['top']}>
-        <View style={styles.header}>
-          <TouchableOpacity onPress={goBack} style={styles.iconBtn}>
-            <Ionicons name="arrow-back" size={24} color="#fff" />
-          </TouchableOpacity>
-          <Text style={styles.title}>Kimlik / Pasaport</Text>
-          <View style={styles.iconBtn} />
-        </View>
-        <View style={styles.nfcFullScreen}>
-          <View style={styles.nfcAnimation}>
-            <Ionicons name="nfc" size={80} color="#06B6D4" />
-          </View>
-          <Text style={styles.nfcTitle}>
-            {nfcIndependentReading ? 'Okunuyor...' : 'NFC ile Oku'}
-          </Text>
-          <Text style={styles.nfcDescription}>
-            {nfcIndependentProgress || 'Kimlik veya pasaportu telefonun arkasına yaklaştırın'}
-          </Text>
-          {nfcIndependentReading && (
-            <ActivityIndicator size="large" color="#06B6D4" style={{ marginVertical: 16 }} />
-          )}
-          <TouchableOpacity
-            style={styles.mrzSwitchButton}
-            onPress={() => {
-              closeIndependentNfc();
-              setPrimaryInputMethod('mrz');
-            }}
-            disabled={nfcIndependentReading}
-          >
-            <Ionicons name="camera" size={22} color="#06B6D4" />
-            <Text style={styles.mrzSwitchText}>MRZ Kamera ile dene</Text>
-          </TouchableOpacity>
-        </View>
-        <View style={styles.infoBar}>
-          <Text style={styles.infoText}>En hızlı yöntem: NFC (MRZ gerekmez)</Text>
-        </View>
-      </SafeAreaView>
-    );
-  }
-
   if (USE_UNIFIED_AUTO_SCAN) {
     // Kamera açılamadı: CameraFallback (Galeriden seç / Tekrar dene)
     if (unifiedCameraError) {
@@ -1521,14 +1517,14 @@ export default function MrzScanScreen({ navigation }) {
         <View
           style={styles.unifiedCameraWrap}
           onLayout={(e) => {
-            if (unifiedCameraMountReady) return;
             const { width, height } = e.nativeEvent.layout;
             const hasValidSize = width > 50 && height > 50;
+            if (!hasValidSize) return;
             if (unifiedMountDelayRef.current) clearTimeout(unifiedMountDelayRef.current);
             unifiedMountDelayRef.current = setTimeout(() => {
               unifiedMountDelayRef.current = null;
-              if (mounted.current && (hasValidSize || true)) setUnifiedCameraMountReady(true);
-            }, hasValidSize ? UNIFIED_CAMERA_MOUNT_DELAY_MS : 250);
+              if (mounted.current) setUnifiedCameraMountReady(true);
+            }, UNIFIED_CAMERA_MOUNT_DELAY_MS);
           }}
         >
           {unifiedCameraMountReady ? (
@@ -1537,7 +1533,14 @@ export default function MrzScanScreen({ navigation }) {
               ref={unifiedCameraRef}
               style={[StyleSheet.absoluteFill, styles.unifiedCameraSize]}
               facing="back"
-              onCameraReady={() => { setUnifiedCameraReady(true); setUnifiedCameraError(false); }}
+              onCameraReady={() => {
+                if (unifiedCameraReadyTimeoutRef.current) {
+                  clearTimeout(unifiedCameraReadyTimeoutRef.current);
+                  unifiedCameraReadyTimeoutRef.current = null;
+                }
+                setUnifiedCameraReady(true);
+                setUnifiedCameraError(false);
+              }}
               onMountError={(e) => {
                 setUnifiedCameraReady(false);
                 const msg = e?.nativeEvent?.message || e?.message || 'Kamera açılamadı';
@@ -1579,22 +1582,6 @@ export default function MrzScanScreen({ navigation }) {
             <View style={styles.overlayBottomBtn} />
           )}
         </View>
-        {nfcSupported && (
-          <View style={styles.nfcIndicator} pointerEvents="box-none">
-            <View style={styles.nfcIcon}>
-              <Ionicons name="nfc" size={18} color="#fff" />
-            </View>
-            <Text style={styles.nfcText}>
-              {nfcScanning ? 'NFC okunuyor…' : 'Pasaportu telefonun arkasına yaklaştırın'}
-            </Text>
-          </View>
-        )}
-        {nfcError && (
-          <View style={styles.nfcErrorBanner} pointerEvents="box-none">
-            <Ionicons name="warning-outline" size={18} color={theme.colors.warning} />
-            <Text style={styles.nfcErrorText}>{nfcError}</Text>
-          </View>
-        )}
         {ocrLoading && (
           <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'center', alignItems: 'center' }]} pointerEvents="none">
             <ActivityIndicator size="large" color="#fff" />
@@ -1623,31 +1610,28 @@ export default function MrzScanScreen({ navigation }) {
         <TouchableOpacity onPress={goBack} style={styles.overlayBackBtn} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }} activeOpacity={0.8}>
           <Ionicons name="arrow-back" size={26} color="#fff" />
         </TouchableOpacity>
-        {Platform.OS === 'android' && (
-          <View style={styles.docTypeWrap} pointerEvents="box-none">
-            <View style={styles.docTypeRow}>
-              <TouchableOpacity
-                style={[styles.docTypeBtn, selectedDocType === DocType.Passport && styles.docTypeBtnActive]}
-                onPress={() => {
-                  setMrzDocType(DocType.Passport);
-                  setScanMode(DocType.Passport);
-                }}
-              >
-                <Text style={[styles.docTypeBtnText, selectedDocType === DocType.Passport && styles.docTypeBtnTextActive]}>Pasaport</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.docTypeBtn, selectedDocType === DocType.ID && styles.docTypeBtnActive]}
-                onPress={() => {
-                  setMrzDocType(DocType.ID);
-                  setScanMode(DocType.ID);
-                }}
-              >
-                <Text style={[styles.docTypeBtnText, selectedDocType === DocType.ID && styles.docTypeBtnTextActive]}>Kimlik</Text>
-              </TouchableOpacity>
-            </View>
-            <Text style={styles.docTypeHint}>MRZ göründüğü anda okunur · Kamerayı yan çevirip de okuyabilirsiniz</Text>
+        <View style={styles.docTypeWrap} pointerEvents="box-none">
+          <View style={styles.docTypeRow}>
+            <TouchableOpacity
+              style={[styles.docTypeBtn, selectedDocType === DocType.Passport && styles.docTypeBtnActive]}
+              onPress={() => {
+                setMrzDocType(DocType.Passport);
+                setScanMode(DocType.Passport);
+              }}
+            >
+              <Text style={[styles.docTypeBtnText, selectedDocType === DocType.Passport && styles.docTypeBtnTextActive]}>Pasaport</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.docTypeBtn, selectedDocType === DocType.ID && styles.docTypeBtnActive]}
+              onPress={() => {
+                setMrzDocType(DocType.ID);
+                setScanMode(DocType.ID);
+              }}
+            >
+              <Text style={[styles.docTypeBtnText, selectedDocType === DocType.ID && styles.docTypeBtnTextActive]}>Kimlik</Text>
+            </TouchableOpacity>
           </View>
-        )}
+        </View>
         <View style={styles.overlayBackBtn} />
       </View>
       <View style={[styles.overlayBottom, { paddingBottom: insets.bottom + 20 }]} pointerEvents="box-none">
@@ -1664,7 +1648,11 @@ export default function MrzScanScreen({ navigation }) {
         <View style={[styles.bannerFloating, { bottom: insets.bottom + 80 }]}>
           <Ionicons name="warning-outline" size={18} color={theme.colors.warning} />
           <Text style={styles.bannerText}>
-            {lastMrzChecksReason === 'invalid_format' ? 'MRZ tanınmadı. Kimlik 3 satır, pasaport 2 satır olmalı.' : 'Işık veya hizayı kontrol edin.'}
+            {lastMrzChecksReason === 'invalid_format'
+              ? 'MRZ tanınmadı. Kimlik: 3 satır, pasaport: 2 satır. Kartı düz tutun, 3 satırı birden gösterin.'
+              : (Platform.OS === 'ios' && selectedDocType === DocType.ID
+                ? 'Kimlik 3 satır MRZ\'yi tam gösterin. Işık ve hizayı kontrol edin.'
+                : 'Işık veya hizayı kontrol edin.')}
           </Text>
         </View>
       )}
@@ -1789,6 +1777,7 @@ const styles = StyleSheet.create({
   frameHintSecondary: { marginTop: 4, color: 'rgba(255,255,255,0.7)', fontSize: 11, textAlign: 'center', paddingHorizontal: theme.spacing.base },
   overlayBottom: { position: 'absolute', bottom: 0, left: 0, right: 0, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 28 },
   overlayBottomBtn: { width: 52, height: 52, borderRadius: 26, backgroundColor: 'rgba(0,0,0,0.4)', alignItems: 'center', justifyContent: 'center' },
+  nfcBtnRound: { backgroundColor: 'rgba(6,182,212,0.6)' },
   torchBtnRound: {},
   torchBtnRoundOn: { backgroundColor: 'rgba(255,180,0,0.85)' },
   bannerFloating: { position: 'absolute', left: 12, right: 12, flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.75)', padding: 10, borderRadius: 8 },

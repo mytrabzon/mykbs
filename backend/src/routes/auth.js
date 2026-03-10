@@ -693,21 +693,40 @@ router.post('/giris/yeni', async (req, res) => {
       { expiresIn: process.env.JWT_EXPIRES_IN || '7d' }
     );
 
-    // Profil ve topluluk için Supabase token (nasıl girilirse girilsin aynı deneyim)
+    // Profil ve topluluk için Supabase token — e-posta ile giren herkes topluluk görebilsin
     let supabaseAccessToken = null;
-    if (supabaseAnon?.auth) {
-      const emailForSupabase = (kullanici.email || '').trim().toLowerCase();
-      if (emailForSupabase) {
-        try {
-          const { data, error } = await supabaseAnon.auth.signInWithPassword({
-            email: emailForSupabase,
-            password: sifreTrim,
-          });
-          if (!error && data?.session?.access_token) {
-            supabaseAccessToken = data.session.access_token;
+    const emailForSupabase = (kullanici.email || '').trim().toLowerCase();
+    if (emailForSupabase && supabaseAnon?.auth) {
+      try {
+        const { data, error } = await supabaseAnon.auth.signInWithPassword({
+          email: emailForSupabase,
+          password: sifreTrim,
+        });
+        if (!error && data?.session?.access_token) {
+          supabaseAccessToken = data.session.access_token;
+        }
+      } catch (e) {
+        // Supabase'de kullanıcı yoksa oluştur, topluluk çalışsın
+        if (supabaseAdmin?.auth) {
+          try {
+            const { data: createData, error: createErr } = await supabaseAdmin.auth.admin.createUser({
+              email: emailForSupabase,
+              password: sifreTrim,
+              email_confirm: true,
+            });
+            if (!createErr && createData?.user?.id) {
+              await ensureSupabaseBranchAndProfile(createData.user.id, kullanici, kullanici.tesis);
+              const { data: signInData, error: signInErr } = await supabaseAnon.auth.signInWithPassword({
+                email: emailForSupabase,
+                password: sifreTrim,
+              });
+              if (!signInErr && signInData?.session?.access_token) {
+                supabaseAccessToken = signInData.session.access_token;
+              }
+            }
+          } catch (adminE) {
+            // Kullanıcı zaten var vb. — token olmadan devam
           }
-        } catch (e) {
-          // Supabase hesabı yok veya şifre farklı; backend girişi yine başarılı
         }
       }
     }

@@ -17,6 +17,7 @@ import { api } from '../services/api';
 import { showKimlikBildirimInProgress, dismissKimlikBildirimNotification } from '../services/pushNotifications';
 import Toast from 'react-native-toast-message';
 import { logger } from '../utils/logger';
+import { getNfcEnabled } from '../utils/nfcSetting';
 import { Ionicons, MaterialIcons } from '@expo/vector-icons';
 import { theme } from '../theme';
 import { useCredits } from '../context/CreditsContext';
@@ -39,6 +40,8 @@ export default function CheckInScreen({ navigation, route }) {
     misafirTipi: '' // tc_vatandasi | ykn | yabanci — Jandarma/Polis için
   });
   const [nfcSupported, setNfcSupported] = useState(false);
+  /** Ayarlardan "NFC ile okumayı kullan" açıksa true; kapalıysa öncelik MRZ/kamera */
+  const [nfcEnabledInSettings, setNfcEnabledInSettings] = useState(false);
   const [loading, setLoading] = useState(false);
   /** Kimlik Okuma (step 2) ekranında otomatik NFC dinlemesi aktif mi */
   const [nfcListening, setNfcListening] = useState(false);
@@ -54,6 +57,7 @@ export default function CheckInScreen({ navigation, route }) {
 
   useEffect(() => {
     logger.log('CheckInScreen mounted');
+    getNfcEnabled().then(setNfcEnabledInSettings);
     try {
       checkNFC();
       loadOdalar();
@@ -215,7 +219,7 @@ export default function CheckInScreen({ navigation, route }) {
 
   // Kimlik Okuma (step 2): registerTagEvent + DiscoverTag ile kimlik yaklaştığında otomatik oku (Android/iOS event tabanlı).
   useEffect(() => {
-    if (step !== 2 || !nfcSupported) {
+    if (step !== 2 || !nfcSupported || !nfcEnabledInSettings) {
       setNfcListening(false);
       return;
     }
@@ -260,7 +264,7 @@ export default function CheckInScreen({ navigation, route }) {
       NfcManager.setEventListener(NfcEvents.DiscoverTag, null);
       NfcManager.unregisterTagEvent().catch(() => {});
     };
-  }, [step, nfcSupported]);
+  }, [step, nfcSupported, nfcEnabledInSettings]);
 
   const handleNFCRead = async () => {
     let techRequested = false;
@@ -370,13 +374,14 @@ export default function CheckInScreen({ navigation, route }) {
 
   const handleOkut = () => {
     try {
+      const useNfc = nfcSupported && nfcEnabledInSettings;
       logger.button('Okut Button', 'clicked');
-      logger.log('Okut button pressed', { nfcSupported, step });
-      if (nfcSupported) {
-        logger.log('NFC supported, calling handleNFCRead');
+      logger.log('Okut button pressed', { nfcSupported, nfcEnabledInSettings, step });
+      if (useNfc) {
+        logger.log('NFC enabled in settings, calling handleNFCRead');
         handleNFCRead();
       } else {
-        logger.log('NFC not supported, calling handleCameraRead');
+        logger.log('Using MRZ/camera (NFC off or not supported), calling handleCameraRead');
         handleCameraRead();
       }
     } catch (error) {
@@ -619,9 +624,9 @@ export default function CheckInScreen({ navigation, route }) {
 
           <View style={styles.readerContainer}>
             <View style={styles.readerIconContainer}>
-              {nfcSupported ? (
+              {nfcSupported && nfcEnabledInSettings ? (
                 <View style={[styles.readerIcon, { backgroundColor: theme.colors.primary + '15' }]}>
-                  <Ionicons name="nfc" size={80} color={theme.colors.primary} />
+                  <Ionicons name="hardware-chip-outline" size={80} color={theme.colors.primary} />
                 </View>
               ) : (
                 <View style={[styles.readerIcon, { backgroundColor: theme.colors.secondary + '15' }]}>
@@ -631,36 +636,36 @@ export default function CheckInScreen({ navigation, route }) {
             </View>
 
             <Text style={styles.readerTitle}>
-              {nfcSupported ? 'NFC ile Okut' : 'Kamera ile Okut'}
+              {nfcSupported && nfcEnabledInSettings ? 'NFC ile Okut' : 'Kamera ile Okut'}
             </Text>
             
             <Text style={styles.readerDescription}>
-              {nfcSupported
+              {nfcSupported && nfcEnabledInSettings
                 ? (nfcListening
                     ? 'Kimliği telefonun arka kısmına yaklaştırın — otomatik okunacak'
                     : 'Kimliği yaklaştırın veya aşağıdaki düğmeyle okuyun. İlk kullanımda NFC izni istenebilir.')
-                : 'Kimliğinizin ön yüzünün fotoğrafını çekin'}
+                : 'Kimliğinizin ön yüzünün fotoğrafını çekin veya MRZ için "MRZ Tara" sekmesine gidin'}
             </Text>
 
-            {nfcSupported && nfcListening && (
+            {nfcSupported && nfcEnabledInSettings && nfcListening && (
               <View style={[styles.nfcListeningBadge, { backgroundColor: theme.colors.primary + '20' }]}>
-                <Ionicons name="nfc" size={18} color={theme.colors.primary} />
+                <Ionicons name="hardware-chip-outline" size={18} color={theme.colors.primary} />
                 <Text style={[styles.nfcListeningText, { color: theme.colors.primary }]}>Dinleniyor…</Text>
               </View>
             )}
 
             <TouchableOpacity 
-              style={[styles.okutButton, nfcSupported ? styles.okutButtonNFC : styles.okutButtonCamera]}
+              style={[styles.okutButton, (nfcSupported && nfcEnabledInSettings) ? styles.okutButtonNFC : styles.okutButtonCamera]}
               onPress={handleOkut}
             >
               <Ionicons 
-                name={nfcSupported ? "nfc" : "camera"} 
+                name={(nfcSupported && nfcEnabledInSettings) ? "hardware-chip-outline" : "camera"} 
                 size={24} 
                 color={theme.colors.white} 
                 style={styles.okutButtonIcon}
               />
               <Text style={styles.okutButtonText}>
-                {nfcSupported ? (nfcListening ? 'Yeniden oku' : 'NFC ile Okut') : 'Kamera ile Okut'}
+                {(nfcSupported && nfcEnabledInSettings) ? (nfcListening ? 'Yeniden oku' : 'NFC ile Okut') : 'Kamera ile Okut'}
               </Text>
             </TouchableOpacity>
 
@@ -680,6 +685,14 @@ export default function CheckInScreen({ navigation, route }) {
               <Text style={styles.manualButtonText}>Manuel Giriş Yap</Text>
             </TouchableOpacity>
 
+            {nfcSupported && !nfcEnabledInSettings && (
+              <View style={styles.nfcInfo}>
+                <Ionicons name="information-circle-outline" size={16} color={theme.colors.warning} />
+                <Text style={styles.nfcInfoText}>
+                  NFC kullanmak için Ayarlar → Kimlik / Pasaport bölümünden "NFC ile okumayı kullan"ı açın.
+                </Text>
+              </View>
+            )}
             {!nfcSupported && (
               <View style={styles.nfcInfo}>
                 <Ionicons name="information-circle-outline" size={16} color={theme.colors.warning} />
@@ -687,7 +700,7 @@ export default function CheckInScreen({ navigation, route }) {
                   NFC desteği için development build gereklidir. Şu anda kamera kullanılıyor.
                 </Text>
               </View>
-          )}
+            )}
         </View>
       </ScrollView>
     </View>

@@ -25,7 +25,7 @@ export function CameraFallback({ onImageSelected, onRetry }) {
 
   return (
     <View style={styles.fallbackContainer}>
-      <Ionicons name="camera-off" size={50} color="#EF4444" />
+      <Ionicons name="camera-outline" size={50} color="#EF4444" />
       <Text style={styles.fallbackTitle}>Kamera Açılamadı</Text>
       <Text style={styles.fallbackText}>
         Galeriden bir görsel seçin veya uygulamayı yeniden başlatın
