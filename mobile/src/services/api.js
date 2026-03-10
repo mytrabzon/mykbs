@@ -35,7 +35,41 @@ function logApiError(method, path, error) {
   logger.error(`API ${method} Error`, detail);
 }
 
-// Request/response log (axios interceptor benzeri)
+/** 429 alındığında bekleyip tekrar dener (max 3 deneme). Auth path'lerinde retry yapılmaz (kotayı tüketmemek için). */
+const RETRY_COUNT = 3;
+const RETRY_DELAY_MS = 2000;
+
+function isAuthPath(path) {
+  const p = typeof path === 'string' ? path : '';
+  return p.startsWith('/auth') || p.startsWith('auth');
+}
+
+async function requestWithRetry(fn, path) {
+  let lastError;
+  const skipRetry429 = isAuthPath(path);
+  for (let i = 0; i < RETRY_COUNT; i++) {
+    try {
+      return await fn();
+    } catch (error) {
+      lastError = error;
+      const status = error?.response?.status;
+      if (status === 429) {
+        if (skipRetry429) throw error;
+        if (i >= RETRY_COUNT - 1) throw error;
+        const waitMs = (i + 1) * RETRY_DELAY_MS;
+        if (__DEV__) {
+          logger.api?.('RETRY', path, null, { rateLimit: true, waitMs });
+        }
+        await new Promise((r) => setTimeout(r, waitMs));
+        continue;
+      }
+      throw error;
+    }
+  }
+  throw lastError;
+}
+
+// Request/response log (axios interceptor benzeri) + 429 retry
 const originalGet = api.get.bind(api);
 const originalPost = api.post.bind(api);
 const originalPut = api.put.bind(api);
@@ -43,7 +77,7 @@ const originalPut = api.put.bind(api);
 api.get = async (path, config) => {
   try {
     logger.api('GET', path, null);
-    const res = await originalGet(path, config);
+    const res = await requestWithRetry(() => originalGet(path, config), path);
     logger.api('GET', path, null, { status: 200, data: res.data });
     return res;
   } catch (error) {
@@ -55,7 +89,7 @@ api.get = async (path, config) => {
 api.post = async (path, data, config) => {
   try {
     logger.api('POST', path, data);
-    const res = await originalPost(path, data, config);
+    const res = await requestWithRetry(() => originalPost(path, data, config), path);
     logger.api('POST', path, null, { status: 200, data: res.data });
     return res;
   } catch (error) {
@@ -67,7 +101,7 @@ api.post = async (path, data, config) => {
 api.put = async (path, data, config) => {
   try {
     logger.api('PUT', path, data);
-    const res = await originalPut(path, data, config);
+    const res = await requestWithRetry(() => originalPut(path, data, config), path);
     logger.api('PUT', path, null, { status: 200, data: res.data });
     return res;
   } catch (error) {

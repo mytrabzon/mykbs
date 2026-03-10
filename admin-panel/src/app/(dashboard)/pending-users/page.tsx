@@ -30,9 +30,12 @@ export default function PendingUsersPage() {
       const res = await api.get<{ users: PendingUser[] }>('/app-admin/pending-users')
       setUsers(res.data.users || [])
     } catch (e: unknown) {
-      const err = e as { response?: { status?: number } }
+      const err = e as { response?: { status?: number; data?: { message?: string } }; message?: string }
       if (err.response?.status === 401) router.push('/login')
-      else toast.error('Bekleyen kullanıcılar yüklenemedi')
+      else {
+        const msg = err.response?.data?.message || err.message || 'Bekleyen kullanıcılar yüklenemedi'
+        toast.error(msg)
+      }
       setUsers([])
     } finally {
       setLoading(false)

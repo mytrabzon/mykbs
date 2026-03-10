@@ -39,9 +39,29 @@ function getAuthErrorMessage(e) {
  * @param setAuthError - opsiyonel; hata durumunda kullanıcı mesajı set edilir, başarıda null.
  * @returns {Promise<boolean>} true = kullanıcı/tesis set edildi veya zaten token geçerli; false = 401 ile oturum temizlendi (giriş başarısız).
  */
-async function fetchMeAndSetState(accessToken, setUser, setTesis, setToken, getTokenProvider, setPrivacyPolicyAcceptedAt, setTermsOfServiceAcceptedAt, setAccountPendingDeletion, setDeletionAt, setGuest, setAuthError) {
+const ME_429_BACKOFF_MS = 60000; // 429 alındıktan sonra bu süre boyunca /auth/me atlanır, cache kullanılır
+
+async function fetchMeAndSetState(accessToken, setUser, setTesis, setToken, getTokenProvider, setPrivacyPolicyAcceptedAt, setTermsOfServiceAcceptedAt, setAccountPendingDeletion, setDeletionAt, setGuest, setAuthError, options) {
   if (!accessToken) return false;
   if (typeof setAuthError === 'function') setAuthError(null);
+  const last429Ref = options?.last429Ref;
+  const backoffMs = options?.backoffMs ?? ME_429_BACKOFF_MS;
+  if (last429Ref?.current && (Date.now() - last429Ref.current) < backoffMs) {
+    try {
+      await AsyncStorage.setItem(AUTH_STORAGE_KEYS.TOKEN, accessToken);
+      await AsyncStorage.setItem(AUTH_STORAGE_KEYS.SUPABASE_TOKEN, accessToken);
+      setToken(accessToken);
+      const getToken = getTokenProvider ? getTokenProvider() : (async () => await AsyncStorage.getItem(AUTH_STORAGE_KEYS.SUPABASE_TOKEN));
+      setApiTokenProvider(getToken);
+      setDataServiceTokenProvider(getToken);
+      const storedUser = await AsyncStorage.getItem(AUTH_STORAGE_KEYS.USER);
+      const storedTesis = await AsyncStorage.getItem(AUTH_STORAGE_KEYS.TESIS);
+      if (storedUser) setUser(JSON.parse(storedUser));
+      if (storedTesis) setTesis(JSON.parse(storedTesis));
+      logger.warn('AuthContext fetch /me: 429 backoff, using cache');
+    } catch (_) {}
+    return true;
+  }
   await AsyncStorage.setItem(AUTH_STORAGE_KEYS.TOKEN, accessToken);
   await AsyncStorage.setItem(AUTH_STORAGE_KEYS.SUPABASE_TOKEN, accessToken);
   setToken(accessToken);
@@ -110,6 +130,29 @@ async function fetchMeAndSetState(accessToken, setUser, setTesis, setToken, getT
       if (typeof setAuthError === 'function') setAuthError(null);
       return true;
     }
+    if (status === 429) {
+      if (options?.last429Ref) options.last429Ref.current = Date.now();
+      try {
+        const storedUser = await AsyncStorage.getItem(AUTH_STORAGE_KEYS.USER);
+        const storedTesis = await AsyncStorage.getItem(AUTH_STORAGE_KEYS.TESIS);
+        if (storedUser) setUser(JSON.parse(storedUser));
+        if (storedTesis) setTesis(JSON.parse(storedTesis));
+        logger.warn('AuthContext fetch /me: 429 rate limit, using cached auth state');
+      } catch (_) {}
+      if (typeof setAuthError === 'function') setAuthError('Çok fazla istek. Lütfen 1–2 dakika sonra tekrar deneyin.');
+      return true;
+    }
+    if (status === 500) {
+      try {
+        const storedUser = await AsyncStorage.getItem(AUTH_STORAGE_KEYS.USER);
+        const storedTesis = await AsyncStorage.getItem(AUTH_STORAGE_KEYS.TESIS);
+        if (storedUser) setUser(JSON.parse(storedUser));
+        if (storedTesis) setTesis(JSON.parse(storedTesis));
+        logger.warn('AuthContext fetch /me: 500, using cached auth state');
+      } catch (_) {}
+      if (typeof setAuthError === 'function') setAuthError('Bilgi alınamadı. Önbellekten devam ediliyor; kısa süre sonra tekrar deneyin.');
+      return true;
+    }
     const userMessage = getAuthErrorMessage(e);
     if (typeof setAuthError === 'function') setAuthError(userMessage);
     logger.error('AuthContext fetch /me failed', e);
@@ -133,6 +176,8 @@ export const AuthProvider = ({ children }) => {
   const [recoverySessionPending, setRecoverySessionPending] = useState(false);
   const [authError, setAuthError] = useState(null);
   const mounted = useRef(true);
+  const lastMe429AtRef = useRef(0);
+  const me429Options = { last429Ref: lastMe429AtRef, backoffMs: ME_429_BACKOFF_MS };
 
   /** Supabase kullanılıyorsa her istekte güncel session'dan token alır; süresi dolmuşsa refresh eder. Böylece "Geçersiz token" 401 önlenir. getSession hata verirse veya session boşsa AsyncStorage'dan dön (oturum açıkken token null görünmesin). */
   const getSupabaseAwareTokenProvider = () => {
@@ -228,13 +273,21 @@ export const AuthProvider = ({ children }) => {
           if (session?.access_token && mounted.current) {
             const storedUser = await AsyncStorage.getItem(AUTH_STORAGE_KEYS.USER);
             const storedTesis = await AsyncStorage.getItem(AUTH_STORAGE_KEYS.TESIS);
-            if (storedUser && mounted.current) {
-              setUser(JSON.parse(storedUser));
+            if (storedUser && mounted.current) setUser(JSON.parse(storedUser));
+            if (storedTesis && mounted.current) setTesis(JSON.parse(storedTesis));
+            await AsyncStorage.setItem(AUTH_STORAGE_KEYS.TOKEN, session.access_token);
+            await AsyncStorage.setItem(AUTH_STORAGE_KEYS.SUPABASE_TOKEN, session.access_token);
+            setToken(session.access_token);
+            const getToken = getSupabaseAwareTokenProvider ? getSupabaseAwareTokenProvider() : (async () => await AsyncStorage.getItem(AUTH_STORAGE_KEYS.SUPABASE_TOKEN));
+            setApiTokenProvider(getToken);
+            setDataServiceTokenProvider(getToken);
+            // Cache'li oturum varsa ana ekranı hemen aç; /auth/me arka planda doğrulasın (uygulama geç açılmasın)
+            if (storedUser && storedTesis) {
+              setIsLoading(false);
+              fetchMeAndSetState(session.access_token, setUser, setTesis, setToken, getSupabaseAwareTokenProvider, setPrivacyPolicyAcceptedAt, setTermsOfServiceAcceptedAt, setAccountPendingDeletion, setDeletionAt, setGuest, setAuthError, me429Options).catch(() => {});
+            } else {
+              await fetchMeAndSetState(session.access_token, setUser, setTesis, setToken, getSupabaseAwareTokenProvider, setPrivacyPolicyAcceptedAt, setTermsOfServiceAcceptedAt, setAccountPendingDeletion, setDeletionAt, setGuest, setAuthError, me429Options);
             }
-            if (storedTesis && mounted.current) {
-              setTesis(JSON.parse(storedTesis));
-            }
-            await fetchMeAndSetState(session.access_token, setUser, setTesis, setToken, getSupabaseAwareTokenProvider, setPrivacyPolicyAcceptedAt, setTermsOfServiceAcceptedAt, setAccountPendingDeletion, setDeletionAt, setGuest, setAuthError);
           } else {
             // Supabase oturumu yok: backend JWT (telefon+şifre girişi) ile kayıtlı token varsa doğrula
             const storedToken = await AsyncStorage.getItem(AUTH_STORAGE_KEYS.TOKEN);
@@ -280,7 +333,7 @@ export const AuthProvider = ({ children }) => {
                 setRecoverySessionPending(true);
                 return;
               }
-              await fetchMeAndSetState(session.access_token, setUser, setTesis, setToken, getSupabaseAwareTokenProvider, setPrivacyPolicyAcceptedAt, setTermsOfServiceAcceptedAt, setAccountPendingDeletion, setDeletionAt, setGuest);
+              await fetchMeAndSetState(session.access_token, setUser, setTesis, setToken, getSupabaseAwareTokenProvider, setPrivacyPolicyAcceptedAt, setTermsOfServiceAcceptedAt, setAccountPendingDeletion, setDeletionAt, setGuest, undefined, me429Options);
             }
           });
         } else {
@@ -333,7 +386,7 @@ export const AuthProvider = ({ children }) => {
     setAuthError(null);
     const accessToken = await getSupabaseToken();
     if (accessToken) {
-      await fetchMeAndSetState(accessToken, setUser, setTesis, setToken, supabase ? getSupabaseAwareTokenProvider : undefined, setPrivacyPolicyAcceptedAt, setTermsOfServiceAcceptedAt, setAccountPendingDeletion, setDeletionAt, setGuest, setAuthError);
+      await fetchMeAndSetState(accessToken, setUser, setTesis, setToken, supabase ? getSupabaseAwareTokenProvider : undefined, setPrivacyPolicyAcceptedAt, setTermsOfServiceAcceptedAt, setAccountPendingDeletion, setDeletionAt, setGuest, setAuthError, me429Options);
       return;
     }
     const backendToken = await AsyncStorage.getItem(AUTH_STORAGE_KEYS.TOKEN);
@@ -391,7 +444,7 @@ export const AuthProvider = ({ children }) => {
         await AsyncStorage.setItem(AUTH_STORAGE_KEYS.TESIS, JSON.stringify(tesisData));
       }
       if (!kullanici || !tesisData) {
-        const fetched = await fetchMeAndSetState(tokenForApi, setUser, setTesis, setToken, supabase ? getSupabaseAwareTokenProvider : undefined, setPrivacyPolicyAcceptedAt, setTermsOfServiceAcceptedAt, setAccountPendingDeletion, setDeletionAt, setGuest, setAuthError);
+        const fetched = await fetchMeAndSetState(tokenForApi, setUser, setTesis, setToken, supabase ? getSupabaseAwareTokenProvider : undefined, setPrivacyPolicyAcceptedAt, setTermsOfServiceAcceptedAt, setAccountPendingDeletion, setDeletionAt, setGuest, setAuthError, me429Options);
         if (!fetched) {
           return { success: false, message: 'Bu hesap uygulamada tanımlı değil. Lütfen önce kayıt olun veya tesis kodunuzu kontrol edin.' };
         }
@@ -591,7 +644,7 @@ export const AuthProvider = ({ children }) => {
             const { data, error } = await supabase.auth.signInAnonymously();
             if (error) return { success: false, message: error.message || 'Misafir girişi yapılamadı.' };
             if (data?.session?.access_token && mounted.current) {
-              await fetchMeAndSetState(data.session.access_token, setUser, setTesis, setToken, getSupabaseAwareTokenProvider, setPrivacyPolicyAcceptedAt, setTermsOfServiceAcceptedAt, setAccountPendingDeletion, setDeletionAt, setGuest, setAuthError);
+              await fetchMeAndSetState(data.session.access_token, setUser, setTesis, setToken, getSupabaseAwareTokenProvider, setPrivacyPolicyAcceptedAt, setTermsOfServiceAcceptedAt, setAccountPendingDeletion, setDeletionAt, setGuest, setAuthError, me429Options);
               return { success: true };
             }
             return { success: false, message: 'Oturum alınamadı.' };

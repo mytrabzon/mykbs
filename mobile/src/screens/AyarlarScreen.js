@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -62,6 +62,7 @@ export default function AyarlarScreen() {
   const [okutulanBelgelerLoading, setOkutulanBelgelerLoading] = useState(false);
   const [okutulanBelgeDetail, setOkutulanBelgeDetail] = useState(null);
   const [nfcEnabled, setNfcEnabledState] = useState(false);
+  const settingsLoadedRef = useRef(false);
 
   const loadOkutulanBelgeler = async () => {
     setOkutulanBelgelerLoading(true);
@@ -97,13 +98,31 @@ export default function AyarlarScreen() {
     getNfcEnabled().then(setNfcEnabledState);
   }, []);
 
+  // Tek seferde tüm ayar verilerini yükle (429 rate limit önlemi: aynı anda 4+ istek yerine tek batch)
   useEffect(() => {
-    if (!token) return;
-    loadKBSSettings();
-    loadCredentialStatus();
-    loadKbsServerIp();
-    loadOkutulanBelgeler();
-    dataService.getTesis(true).then((t) => setTesisDetail(t)).catch(() => {});
+    if (!token) {
+      settingsLoadedRef.current = false;
+      return;
+    }
+    if (settingsLoadedRef.current) return;
+    settingsLoadedRef.current = true;
+    setLoading(true);
+    const loadAll = async () => {
+      try {
+        await Promise.all([
+          loadKBSSettings(),
+          loadCredentialStatus(),
+          loadKbsServerIp(),
+          loadOkutulanBelgeler(),
+        ]);
+        dataService.getTesis(true).then((t) => setTesisDetail(t)).catch(() => {});
+      } catch (e) {
+        console.error('Ayarlar veri yüklenemedi:', e);
+      } finally {
+        setLoading(false);
+      }
+    };
+    loadAll();
   }, [token]);
 
   useEffect(() => {

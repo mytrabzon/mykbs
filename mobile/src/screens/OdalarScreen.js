@@ -394,7 +394,7 @@ export default function OdalarScreen() {
           setFilterLoading(false);
           setRefreshing(false);
           logger.warn('[OdalarScreen] loadData timeout – showing screen so user is not stuck');
-        }, 15000);
+        }, 10000);
       }
       const apiFiltre = filtre === 'cikisaYakin' ? 'dolu' : filtre;
       logger.log('[OdalarScreen] loadData başladı', { filtre, apiFiltre, isInitial });

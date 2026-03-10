@@ -1,16 +1,17 @@
 /**
  * KBS backend API: checkin, checkout, room-change.
+ * authenticateTesisOrSupabase kullanır: hem normal kullanıcı hem misafir (anonymous) şube atanmış olur, misafir girişi çalışır.
  * 1) DB yaz 2) kbs_outbox'a ekle (kbs_configured ise) 3) attemptSendOutbox hemen dene.
  */
 const express = require('express');
 const { supabaseAdmin } = require('../../lib/supabaseAdmin');
-const { authenticateSupabase } = require('../../middleware/authSupabase');
+const { authenticateTesisOrSupabase } = require('../../middleware/authTesisOrSupabase');
 const { errorResponse } = require('../../lib/errorResponse');
 const { createOutbox } = require('../../repo/kbsOutboxRepo');
 const { attemptSendOutbox } = require('../../worker/kbsOutboxWorker');
 
 const router = express.Router();
-router.use(authenticateSupabase);
+router.use(authenticateTesisOrSupabase);
 
 /**
  * POST /api/checkin
@@ -19,12 +20,12 @@ router.use(authenticateSupabase);
  */
 router.post('/checkin', async (req, res) => {
   try {
-    if (req.user?.is_anonymous) {
-      return errorResponse(req, res, 403, 'GUEST_EMAIL_REQUIRED', 'KBS bilgilerini doldurmak için e-posta doğrulaması gerekli. Profil > Telefon ve e-posta bağla bölümünden e-posta ekleyip doğrulayın.');
-    }
     const body = req.body || {};
     const branchId = req.branchId;
-    const branch = req.branch || {};
+    const branch = req.branch || (req.tesis ? { kbs_configured: false, kbs_approved: false } : {});
+    if (!branchId) {
+      return errorResponse(req, res, 409, 'BRANCH_LOAD_FAILED', 'Tesis/şube bilgisi yüklenemedi. Lütfen tekrar giriş yapın.');
+    }
     if (branch.kbs_configured && !branch.kbs_approved) {
       return errorResponse(req, res, 409, 'APPROVAL_REQUIRED', 'KBS bilgileriniz admin onayından sonra aktif olacaktır.');
     }
@@ -126,9 +127,6 @@ router.post('/checkin', async (req, res) => {
  */
 router.post('/checkout/:guestId?', async (req, res) => {
   try {
-    if (req.user?.is_anonymous) {
-      return errorResponse(req, res, 403, 'GUEST_EMAIL_REQUIRED', 'KBS işlemleri için e-posta doğrulaması gerekli. Profil > E-posta ekleyin.');
-    }
     const guestId = req.params?.guestId || req.body?.guest_id || req.body?.misafirId;
     const branchId = req.branchId;
     if (!guestId) {
@@ -200,9 +198,6 @@ router.post('/checkout/:guestId?', async (req, res) => {
  */
 router.post('/room-change', async (req, res) => {
   try {
-    if (req.user?.is_anonymous) {
-      return errorResponse(req, res, 403, 'GUEST_EMAIL_REQUIRED', 'KBS işlemleri için e-posta doğrulaması gerekli. Profil > E-posta ekleyin.');
-    }
     const guestId = req.body?.guest_id || req.body?.misafirId;
     const yeniOdaNumara = req.body?.yeni_oda_numara || req.body?.yeniOdaNumarasi || req.body?.room_number;
     const branchId = req.branchId;

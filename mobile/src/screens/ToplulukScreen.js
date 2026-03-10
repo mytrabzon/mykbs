@@ -17,6 +17,8 @@ import { useFocusEffect } from '@react-navigation/native';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
 import * as communityApi from '../services/communityApi';
+import { backendHealth } from '../services/backendHealth';
+import { getApiBaseUrl, isSupabaseConfigured } from '../config/api';
 import Toast from 'react-native-toast-message';
 import { Chip } from '../components/ui';
 import EmptyState from '../components/EmptyState';
@@ -115,6 +117,19 @@ export default function ToplulukScreen({ navigation }) {
   const [tokenChecked, setTokenChecked] = useState(false);
   const [hasCommunity, setHasCommunity] = useState(false);
   const [categoryModalVisible, setCategoryModalVisible] = useState(false);
+  const [backendStatus, setBackendStatus] = useState({ configured: false, isOnline: false, error: null });
+  const [supabaseStatus, setSupabaseStatus] = useState({ configured: false, isOnline: false, error: null });
+
+  useEffect(() => {
+    const backendUrl = getApiBaseUrl();
+    const supabaseCfg = isSupabaseConfigured();
+    setBackendStatus((prev) => ({ ...prev, configured: !!backendUrl }));
+    setSupabaseStatus((prev) => ({ ...prev, configured: supabaseCfg }));
+    const updateBackend = (status) => setBackendStatus({ configured: !!backendUrl, isOnline: status.isOnline, error: status.error });
+    const updateSupabase = (status) => setSupabaseStatus({ configured: status.configured, isOnline: status.isOnline, error: status.error });
+    backendHealth.checkHealth().then(updateBackend);
+    if (supabaseCfg) backendHealth.checkSupabaseHealth().then(updateSupabase);
+  }, []);
 
   const loadToken = useCallback(async () => {
     const getToken = typeof getSupabaseToken === 'function' ? getSupabaseToken : async () => null;
@@ -178,15 +193,23 @@ export default function ToplulukScreen({ navigation }) {
 
   const onRefresh = () => loadPosts(true);
 
+  const headerProps = {
+    title: 'Topluluk',
+    minimal: true,
+    onNotification: () => navigation.navigate('Bildirimler'),
+    onProfile: () => navigation.navigate('ProfilDuzenle'),
+    backendConfigured: backendStatus.configured,
+    backendOnline: backendStatus.isOnline,
+    backendError: backendStatus.error,
+    supabaseConfigured: supabaseStatus.configured,
+    supabaseOnline: supabaseStatus.isOnline,
+    supabaseError: supabaseStatus.error,
+  };
+
   if (!isLoggedIn) {
     return (
       <View style={[styles.screenContainer, { backgroundColor: colors.background }]}>
-        <AppHeader
-          title="Topluluk"
-          minimal
-          onNotification={() => navigation.navigate('Bildirimler')}
-          onProfile={() => navigation.navigate('ProfilDuzenle')}
-        />
+        <AppHeader {...headerProps} />
         <View style={[styles.emptyWrap, styles.centered]}>
           <EmptyState
             icon="people-outline"
@@ -201,12 +224,7 @@ export default function ToplulukScreen({ navigation }) {
   if (isLoggedIn && !tokenChecked) {
     return (
       <View style={[styles.screenContainer, { backgroundColor: colors.background }]}>
-        <AppHeader
-          title="Topluluk"
-          minimal
-          onNotification={() => navigation.navigate('Bildirimler')}
-          onProfile={() => navigation.navigate('ProfilDuzenle')}
-        />
+        <AppHeader {...headerProps} />
         <View style={[styles.emptyWrap, styles.centered]}>
           <ActivityIndicator size="large" color={colors.primary} />
           <Text style={[styles.loadingText, { color: colors.textSecondary }]}>Yükleniyor...</Text>
@@ -222,12 +240,7 @@ export default function ToplulukScreen({ navigation }) {
     };
     return (
       <View style={[styles.screenContainer, { backgroundColor: colors.background }]}>
-        <AppHeader
-          title="Topluluk"
-          minimal
-          onNotification={() => navigation.navigate('Bildirimler')}
-          onProfile={() => navigation.navigate('ProfilDuzenle')}
-        />
+        <AppHeader {...headerProps} />
         <View style={styles.emptyWrap}>
           <EmptyState
             icon="people-outline"
@@ -246,12 +259,7 @@ export default function ToplulukScreen({ navigation }) {
 
   return (
     <View style={[styles.screenContainer, { backgroundColor: colors.background }]}>
-      <AppHeader
-        title="Topluluk"
-        minimal
-        onNotification={() => navigation.navigate('Bildirimler')}
-        onProfile={() => navigation.navigate('ProfilDuzenle')}
-      />
+      <AppHeader {...headerProps} />
 
       {/* Kategori chips */}
       <View style={styles.filterRow}>

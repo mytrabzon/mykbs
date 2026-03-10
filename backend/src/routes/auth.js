@@ -731,6 +731,11 @@ router.post('/giris/yeni', async (req, res) => {
       }
     }
 
+    // Admin yetkisi: ADMIN_KULLANICI_ID ile eşleşen kullanıcı mobilde Admin butonunu görür
+    const adminKullaniciIdRaw = process.env.ADMIN_KULLANICI_ID != null ? String(process.env.ADMIN_KULLANICI_ID).trim() : '';
+    const isAdmin = adminKullaniciIdRaw && adminKullaniciIdRaw === String(kullanici.id);
+    const role = isAdmin ? 'admin' : 'user';
+
     res.json({
       token,
       kullanici: {
@@ -739,7 +744,9 @@ router.post('/giris/yeni', async (req, res) => {
         email: kullanici.email,
         telefon: kullanici.telefon,
         rol: kullanici.rol,
-        biyometriAktif: kullanici.biyometriAktif
+        biyometriAktif: kullanici.biyometriAktif,
+        is_admin: isAdmin,
+        role
       },
       tesis: {
         id: kullanici.tesis.id,
@@ -755,6 +762,78 @@ router.post('/giris/yeni', async (req, res) => {
   } catch (error) {
     console.error('Yeni giriş hatası:', error);
     res.status(500).json({ message: 'Giriş başarısız', error: error.message });
+  }
+});
+
+/**
+ * Özel giriş: Sadece şifre (ADMIN_SECRET). Mobilde "Özel giriş" butonu ile panel şifresi yazıp girmek için.
+ * Admin tesis (MYKBS-ADMIN) veya ADMIN_KULLANICI_ID ile eşleşen kullanıcıya JWT döner.
+ */
+router.post('/ozel-giris', async (req, res) => {
+  try {
+    const sifre = (req.body.sifre && String(req.body.sifre).trim()) || '';
+    const adminSecret = process.env.ADMIN_SECRET || '';
+    if (!adminSecret || sifre !== adminSecret) {
+      return res.status(401).json({ message: 'Geçersiz giriş kodu' });
+    }
+    let kullanici = null;
+    const adminKullaniciIdRaw = process.env.ADMIN_KULLANICI_ID != null ? String(process.env.ADMIN_KULLANICI_ID).trim() : '';
+    if (adminKullaniciIdRaw) {
+      kullanici = await prisma.kullanici.findUnique({
+        where: { id: adminKullaniciIdRaw },
+        include: { tesis: true }
+      });
+    }
+    if (!kullanici) {
+      const adminTesis = await prisma.tesis.findFirst({ where: { tesisKodu: 'MYKBS-ADMIN' } });
+      if (adminTesis) {
+        kullanici = await prisma.kullanici.findFirst({
+          where: { tesisId: adminTesis.id },
+          include: { tesis: true }
+        });
+      }
+    }
+    if (!kullanici || !kullanici.tesis) {
+      return res.status(503).json({
+        message: 'Özel giriş için admin hesabı tanımlı değil. Backend\'de create-admin-user.js çalıştırın veya ADMIN_KULLANICI_ID ayarlayın.'
+      });
+    }
+    const token = jwt.sign(
+      { userId: kullanici.id, tesisId: kullanici.tesis.id },
+      process.env.JWT_SECRET,
+      { expiresIn: process.env.JWT_EXPIRES_IN || '7d' }
+    );
+    const isAdmin = adminKullaniciIdRaw && adminKullaniciIdRaw === String(kullanici.id);
+    res.json({
+      token,
+      kullanici: {
+        id: kullanici.id,
+        adSoyad: kullanici.adSoyad,
+        email: kullanici.email,
+        telefon: kullanici.telefon,
+        rol: kullanici.rol,
+        biyometriAktif: kullanici.biyometriAktif,
+        is_admin: isAdmin,
+        role: isAdmin ? 'admin' : 'user',
+        yetkiler: {
+          checkIn: !!kullanici.checkInYetki,
+          odaDegistirme: !!kullanici.odaDegistirmeYetki,
+          bilgiDuzenleme: !!kullanici.bilgiDuzenlemeYetki
+        }
+      },
+      tesis: {
+        id: kullanici.tesis.id,
+        tesisAdi: kullanici.tesis.tesisAdi,
+        tesisKodu: kullanici.tesis.tesisKodu,
+        paket: kullanici.tesis.paket,
+        kota: kullanici.tesis.kota,
+        kullanilanKota: kullanici.tesis.kullanilanKota ?? 0,
+        trialEndsAt: kullanici.tesis.trialEndsAt
+      }
+    });
+  } catch (error) {
+    console.error('Özel giriş hatası:', error);
+    res.status(500).json({ message: 'Özel giriş başarısız', error: error.message });
   }
 });
 
@@ -1588,14 +1667,23 @@ router.get('/me', authenticateTesisOrSupabase, async (req, res) => {
     if (req.authSource === 'supabase') {
       const u = req.user;
       const b = req.branch;
-      if (!u || !b) {
+      if (!u || !u.id) {
         return errRes(req, res, 409, 'BRANCH_LOAD_FAILED', 'Kullanıcı veya şube bilgisi yüklenemedi. Lütfen tekrar giriş yapın.');
+      }
+      if (!b || typeof b !== 'object') {
+        return errRes(req, res, 409, 'BRANCH_LOAD_FAILED', 'Şube bilgisi yüklenemedi. Lütfen tekrar giriş yapın.');
+      }
+      const bId = b.id != null ? b.id : null;
+      const bName = b.name != null ? b.name : null;
+      if (bId == null && bName == null) {
+        return errRes(req, res, 409, 'BRANCH_LOAD_FAILED', 'Şube bilgisi yüklenemedi. Lütfen tekrar giriş yapın.');
       }
       const profileRole = req.profileRole || 'staff';
       let is_admin = false;
       let role = 'user';
       let privacyPolicyAcceptedAt = null;
       let termsOfServiceAcceptedAt = null;
+      let deletionRequestedAt = null;
       let userProfileRow = null;
       if (supabaseAdmin) {
         let profileRow = null;
@@ -1612,7 +1700,7 @@ router.get('/me', authenticateTesisOrSupabase, async (req, res) => {
         is_admin = profileRow?.is_admin === true;
         privacyPolicyAcceptedAt = profileRow?.privacy_policy_accepted_at ?? null;
         termsOfServiceAcceptedAt = profileRow?.terms_of_service_accepted_at ?? null;
-        const deletionRequestedAt = profileRow?.deletion_requested_at ?? null;
+        deletionRequestedAt = profileRow?.deletion_requested_at ?? null;
         try {
           const { data: appRole } = await supabaseAdmin.from('app_roles').select('role').eq('user_id', u.id).maybeSingle();
           if (appRole?.role === 'admin') role = 'admin';
@@ -1620,7 +1708,7 @@ router.get('/me', authenticateTesisOrSupabase, async (req, res) => {
         } catch (appRoleErr) {
           console.warn('[auth/me] app_roles query failed:', appRoleErr?.message || appRoleErr);
         }
-        const branchId = req.branchId || b?.id;
+        const branchId = req.branchId ?? bId;
         if (branchId) {
           try {
             const { data: upRow } = await supabaseAdmin.from('user_profiles').select('display_name, title, avatar_url').eq('user_id', u.id).eq('branch_id', branchId).maybeSingle();
@@ -1630,17 +1718,19 @@ router.get('/me', authenticateTesisOrSupabase, async (req, res) => {
           }
         }
       }
-      const adSoyadFallback = u.user_metadata?.full_name || u.user_metadata?.ad_soyad || u.email || u.phone || 'Kullanıcı';
+      const adSoyadFallback = (u.user_metadata && (u.user_metadata.full_name || u.user_metadata.ad_soyad)) || u.email || u.phone || 'Kullanıcı';
+      const tesisId = bId != null ? String(bId) : 'unknown';
+      const tesisAdi = (bName != null ? String(bName) : null) || 'Tesis';
       return res.json({
         kullanici: {
           id: u.id,
           uid: u.id,
-          adSoyad: userProfileRow?.display_name?.trim() || adSoyadFallback,
-          display_name: userProfileRow?.display_name?.trim() || null,
-          title: userProfileRow?.title?.trim() || null,
-          avatar_url: userProfileRow?.avatar_url?.trim() || null,
-          telefon: u.phone || null,
-          email: u.email || null,
+          adSoyad: (userProfileRow?.display_name && String(userProfileRow.display_name).trim()) || adSoyadFallback,
+          display_name: (userProfileRow?.display_name && String(userProfileRow.display_name).trim()) || null,
+          title: (userProfileRow?.title && String(userProfileRow.title).trim()) || null,
+          avatar_url: (userProfileRow?.avatar_url && String(userProfileRow.avatar_url).trim()) || null,
+          telefon: u.phone ?? null,
+          email: u.email ?? null,
           rol: profileRole,
           biyometriAktif: false,
           is_admin,
@@ -1648,13 +1738,13 @@ router.get('/me', authenticateTesisOrSupabase, async (req, res) => {
           yetkiler: { checkIn: true, odaDegistirme: true, bilgiDuzenleme: true }
         },
         tesis: {
-          id: b.id,
-          tesisAdi: b.name,
-          tesisKodu: b.id,
+          id: tesisId,
+          tesisAdi,
+          tesisKodu: tesisId,
           paket: 'standart',
           kota: 1000,
           kullanilanKota: 0,
-          kbsTuru: b.kbs_turu || null
+          kbsTuru: (b && b.kbs_turu != null ? b.kbs_turu : null) ?? null
         },
         privacyPolicyAcceptedAt: privacyPolicyAcceptedAt || undefined,
         termsOfServiceAcceptedAt: termsOfServiceAcceptedAt || undefined,
@@ -1668,7 +1758,7 @@ router.get('/me', authenticateTesisOrSupabase, async (req, res) => {
             return new Date(ts + 7 * 24 * 60 * 60 * 1000).toISOString();
           } catch (_) { return undefined; }
         })(),
-        isGuest: u.is_anonymous === true && !(u.email_confirmed_at === true)
+        isGuest: !!(u.is_anonymous === true && !(u.email_confirmed_at === true))
       });
     }
 
@@ -1739,17 +1829,33 @@ router.get('/me', authenticateTesisOrSupabase, async (req, res) => {
     const requestId = req.requestId || '-';
     const msg = error?.message || '';
     const code = error?.code || error?.meta?.code;
-    console.error(`[auth/me] GET /api/auth/me hatası:`, msg, 'code:', code, 'authSource:', req.authSource, 'stack:', error?.stack || '');
+    const errName = error?.name || '';
+    console.error(
+      `[auth/me] GET /api/auth/me hatası:`,
+      'message:', msg,
+      'name:', errName,
+      'code:', code,
+      'authSource:', req.authSource,
+      'stack:', error?.stack || ''
+    );
     const { errorResponse: errRes } = require('../lib/errorResponse');
     const isP2025 = code === 'P2025' || (error?.meta?.code === 'P2025');
     const isDb = /prisma|ECONNREFUSED|08P01|connect|relation|column|42703/i.test(msg);
+    const isRefError = /Cannot access .* before initialization|ReferenceError/i.test(msg);
     if (isP2025 || /Cannot read propert|kullanici\.|findUnique.*null/i.test(msg)) {
       return errRes(req, res, 404, 'NOT_FOUND', 'Kullanıcı bilgisi bulunamadı.');
     }
     if (isDb) {
       return errRes(req, res, 500, 'DB_CONNECT_ERROR', 'Veritabanı geçici olarak kullanılamıyor. Lütfen tekrar deneyin.');
     }
-    return errRes(req, res, 500, 'UNHANDLED_ERROR', 'Bilgi alınamadı.');
+    if (isRefError) {
+      return errRes(req, res, 500, 'SERVER_ERROR', 'Sunucu güncellemesi gerekli. Lütfen kısa süre sonra tekrar deneyin.');
+    }
+    // In development/staging surface the real message for debugging; production keeps generic message
+    const safeMessage = process.env.NODE_ENV === 'production'
+      ? 'Bilgi alınamadı.'
+      : (msg || 'Bilgi alınamadı.');
+    return errRes(req, res, 500, 'UNHANDLED_ERROR', safeMessage);
   }
 });
 

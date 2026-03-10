@@ -46,10 +46,16 @@ app.use(express.urlencoded({ extended: true }));
 // Static file serving - Upload edilen resimler için
 app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
 
-// Rate limiting
+// Rate limiting — mobil: odalar/tesis/me/KBS/okutulan-belgeler batch yüklensin diye client tarafı düzeltildi.
+// Gerekirse RATE_LIMIT_WINDOW_MS (ms) ve RATE_LIMIT_MAX (pencere başına istek) ile artırılabilir.
+const RATE_LIMIT_WINDOW_MS = Number(process.env.RATE_LIMIT_WINDOW_MS) || 15 * 60 * 1000; // 15 min
+const RATE_LIMIT_MAX = Number(process.env.RATE_LIMIT_MAX) || 1000; // IP başına 1000 istek / 15 dk (giriş + normal kullanım için)
 const limiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 100 // limit each IP to 100 requests per windowMs
+  windowMs: RATE_LIMIT_WINDOW_MS,
+  max: RATE_LIMIT_MAX,
+  message: { message: 'Too many requests, please try again later.', rateLimit: true },
+  standardHeaders: true,
+  legacyHeaders: false,
 });
 app.use('/api/', limiter);
 

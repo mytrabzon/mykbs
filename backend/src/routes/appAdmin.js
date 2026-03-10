@@ -317,17 +317,23 @@ router.get('/audit', async (req, res) => {
 });
 
 /**
- * Bekleyen kullanıcılar (user_profiles.approval_status = 'pending')
+ * Bekleyen kullanıcılar (user_profiles.approval_status = 'pending').
+ * Supabase yoksa veya tablo/şema farklıysa boş liste döner (panel hata göstermesin).
  */
 router.get('/pending-users', async (req, res) => {
   try {
-    if (!supabaseAdmin) return res.status(503).json({ message: 'Supabase yapılandırılmamış' });
+    if (!supabaseAdmin) {
+      return res.json({ users: [] });
+    }
     const { data: profiles, error: profErr } = await supabaseAdmin
       .from('user_profiles')
       .select('user_id, branch_id, role, display_name, approval_status, approved_at, created_at')
       .eq('approval_status', 'pending')
       .order('created_at', { ascending: false });
-    if (profErr) return res.status(500).json({ message: 'Liste alınamadı', error: profErr.message });
+    if (profErr) {
+      console.warn('[appAdmin] pending-users user_profiles:', profErr.message);
+      return res.json({ users: [] });
+    }
     const userIds = (profiles || []).map((p) => p.user_id);
     const usersMap = {};
     if (userIds.length > 0) {
@@ -353,7 +359,7 @@ router.get('/pending-users', async (req, res) => {
     res.json({ users: list });
   } catch (err) {
     console.error('[appAdmin] pending-users', err);
-    res.status(500).json({ message: 'Bekleyen kullanıcılar alınamadı', error: err.message });
+    res.json({ users: [] });
   }
 });
 

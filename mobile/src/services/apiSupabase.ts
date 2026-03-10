@@ -437,6 +437,18 @@ export const api = {
         if (!r.ok) throw Object.assign(new Error((data as { message?: string }).message || 'Şifre güncellenemedi'), { response: { status: r.status, data } });
         return toResponse(data);
       }
+      if (pathname === '/auth/ozel-giris' || pathname === 'auth/ozel-giris') {
+        const backendUrl = getBackendUrl();
+        if (!backendUrl) throw new Error('Sunucu adresi eksik. EXPO_PUBLIC_BACKEND_URL tanımlayın.');
+        const r = await fetchWithLog(`${backendUrl}/api/auth/ozel-giris`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+        const data = await r.json().catch(() => ({}));
+        if (!r.ok) throw Object.assign(new Error((data as { message?: string }).message || 'Özel giriş başarısız'), { response: { status: r.status, data } });
+        return toResponse(data);
+      }
       if (pathname === '/auth/giris/yeni' || pathname === 'auth/giris/yeni') {
         // Telefon/e-posta + şifre girişi sadece backend üzerinden; Edge OTP içindir.
         const backendUrl = getBackendUrl();

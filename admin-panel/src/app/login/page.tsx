@@ -13,7 +13,7 @@ export default function LoginPage() {
   const [secret, setSecret] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
-  const [mode, setMode] = useState<'secret' | 'supabase' | 'backend'>('backend')
+  const [mode, setMode] = useState<'secret' | 'supabase' | 'backend'>('secret')
   const [loading, setLoading] = useState(false)
 
   const handleSecretLogin = (e: React.FormEvent) => {
@@ -86,7 +86,8 @@ export default function LoginPage() {
       toast.success('Giriş başarılı')
       router.push('/')
     } catch (err: unknown) {
-      toast.error((err as Error).message || 'Giriş başarısız')
+      const msg = (err as Error).message || 'Giriş başarısız'
+      toast.error(msg === 'Invalid login credentials' ? 'Supabase: E-posta veya şifre hatalı. Panel Şifresi sekmesini deneyin.' : msg)
       setLoading(false)
     }
   }
@@ -105,14 +106,15 @@ export default function LoginPage() {
       <div className="kbs-login-card">
         <h1 className="kbs-login-title">KBS Prime Admin</h1>
         <div className="kbs-login-tabs">
-          <button type="button" onClick={() => setMode('backend')} className={`kbs-login-tab ${mode === 'backend' ? 'active' : ''}`}>E-posta + Şifre</button>
           <button type="button" onClick={() => setMode('secret')} className={`kbs-login-tab ${mode === 'secret' ? 'active' : ''}`}>Panel Şifresi</button>
+          <button type="button" onClick={() => setMode('backend')} className={`kbs-login-tab ${mode === 'backend' ? 'active' : ''}`}>E-posta + Şifre</button>
           <button type="button" onClick={() => setMode('supabase')} className={`kbs-login-tab ${mode === 'supabase' ? 'active' : ''}`}>Supabase</button>
         </div>
         {mode === 'secret' ? (
           <form onSubmit={handleSecretLogin}>
-            <input type="password" value={secret} onChange={(e) => setSecret(e.target.value)} placeholder="Admin panel şifresi (ADMIN_SECRET)" className="kbs-input" />
+            <input type="password" value={secret} onChange={(e) => setSecret(e.target.value)} placeholder="Panel şifresi (.env.local NEXT_PUBLIC_ADMIN_SECRET)" className="kbs-input" autoComplete="off" />
             <button type="submit" disabled={loading} className="kbs-btn-primary">{loading ? 'Giriş yapılıyor...' : 'Giriş Yap'}</button>
+            <p className="kbs-login-hint">Backend veya Supabase gerekmez. Şifre: admin-panel/.env.local içindeki NEXT_PUBLIC_ADMIN_SECRET.</p>
           </form>
         ) : mode === 'backend' ? (
           <form onSubmit={handleBackendLogin}>

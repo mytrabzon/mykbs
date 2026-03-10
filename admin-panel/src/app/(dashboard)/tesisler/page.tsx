@@ -37,11 +37,12 @@ export default function TesislerPage() {
       if (filtre.paket) params.append('paket', filtre.paket)
       if (filtre.durum) params.append('durum', filtre.durum)
       const response = await api.get(`/admin/tesisler?${params.toString()}`)
-      setTesisler(response.data.tesisler)
+      setTesisler(Array.isArray(response.data?.tesisler) ? response.data.tesisler : [])
     } catch (error: unknown) {
-      toast.error('Tesisler yüklenemedi')
-      const err = error as { response?: { status?: number } }
+      const err = error as { response?: { status?: number; data?: { message?: string } }; message?: string }
       if (err.response?.status === 401) router.push('/login')
+      else toast.error(err.response?.data?.message || err.message || 'Tesisler yüklenemedi')
+      setTesisler([])
     } finally {
       setLoading(false)
     }
@@ -142,7 +143,11 @@ export default function TesislerPage() {
             </tbody>
           </table>
         </div>
-        {tesisler.length === 0 && <p className="kbs-card-empty-text kbs-card-empty-pad">Tesis bulunamadı.</p>}
+        {tesisler.length === 0 && (
+          <p className="kbs-card-empty-text kbs-card-empty-pad">
+            Tesis bulunamadı. Filtreleri temizleyip tekrar deneyin veya backend ve veritabanının çalıştığından emin olun.
+          </p>
+        )}
       </div>
     </div>
   )

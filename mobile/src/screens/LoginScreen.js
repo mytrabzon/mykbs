@@ -49,6 +49,9 @@ export default function LoginScreen({ route }) {
   const [otp, setOtp] = useState(['', '', '', '', '', '']);
   const [sendCodeLoading, setSendCodeLoading] = useState(false);
   const otpRefs = useRef([]);
+  const [showOzelGirisModal, setShowOzelGirisModal] = useState(false);
+  const [ozelGirisSifre, setOzelGirisSifre] = useState('');
+  const [ozelGirisLoading, setOzelGirisLoading] = useState(false);
 
   useEffect(() => {
     (async () => {
@@ -186,6 +189,32 @@ export default function LoginScreen({ route }) {
     setKodModu(false);
     setOtpGonderildi(false);
     setOtp(['', '', '', '', '', '']);
+  };
+
+  const handleOzelGiris = async () => {
+    const sifreTrim = (ozelGirisSifre || '').trim();
+    if (!sifreTrim) {
+      Toast.show({ type: 'error', text1: 'Giriş kodu', text2: 'Şifreyi girin' });
+      return;
+    }
+    setOzelGirisLoading(true);
+    try {
+      const res = await api.post('/auth/ozel-giris', { sifre: sifreTrim });
+      const { token: newToken, kullanici, tesis: tesisData } = res.data || {};
+      if (newToken && kullanici && tesisData) {
+        await loginWithToken(newToken, kullanici, tesisData, null);
+        setShowOzelGirisModal(false);
+        setOzelGirisSifre('');
+        Toast.show({ type: 'success', text1: 'Giriş başarılı' });
+        navigation.reset({ index: 0, routes: [{ name: 'Main' }] });
+      } else {
+        Toast.show({ type: 'error', text1: 'Giriş başarısız', text2: res.data?.message || 'Beklenmeyen yanıt' });
+      }
+    } catch (e) {
+      const msg = e?.response?.data?.message || e?.message || 'Özel giriş başarısız';
+      Toast.show({ type: 'error', text1: 'Özel giriş', text2: msg });
+    }
+    setOzelGirisLoading(false);
   };
 
   return (
@@ -347,6 +376,16 @@ export default function LoginScreen({ route }) {
             </TouchableOpacity>
           </View>
 
+          <View style={[styles.guestRow, { borderTopColor: colors.border, marginTop: 0, paddingTop: spacing.md }]}>
+            <Text style={[styles.guestText, { color: colors.textSecondary }]}>Sadece şifre ile giriş (özel erişim)</Text>
+            <TouchableOpacity
+              onPress={() => { setShowOzelGirisModal(true); setOzelGirisSifre(''); }}
+              style={[styles.guestBtn, { borderColor: colors.textSecondary }]}
+            >
+              <Text style={[styles.guestBtnText, { color: colors.textSecondary }]}>Özel giriş</Text>
+            </TouchableOpacity>
+          </View>
+
           <View style={styles.registerRow}>
             <Text style={[styles.registerText, { color: colors.textSecondary }]}>Hesabınız yok mu?</Text>
             <TouchableOpacity onPress={() => navigation.navigate('Kayit')}>
@@ -384,6 +423,39 @@ export default function LoginScreen({ route }) {
               )}
             </ScrollView>
             <Button variant="primary" onPress={() => setShowErrorModal(false)}>Kapat</Button>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal visible={showOzelGirisModal} transparent animationType="fade">
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalContent, { backgroundColor: colors.surface }]}>
+            <View style={[styles.modalHeader, { borderBottomColor: colors.border }]}>
+              <Text style={[styles.modalTitle, { color: colors.textPrimary }]}>Özel giriş</Text>
+              <TouchableOpacity onPress={() => { setShowOzelGirisModal(false); setOzelGirisSifre(''); }}>
+                <Ionicons name="close" size={24} color={colors.textPrimary} />
+              </TouchableOpacity>
+            </View>
+            <Text style={[styles.modalBodyText, { color: colors.textSecondary, marginBottom: spacing.md }]}>
+              Özel erişim şifresini girin (admin panel ile aynı şifre).
+            </Text>
+            <Input
+              label="Giriş kodu"
+              value={ozelGirisSifre}
+              onChangeText={setOzelGirisSifre}
+              placeholder="Şifreyi girin"
+              secureTextEntry
+              autoCapitalize="none"
+              autoCorrect={false}
+            />
+            <Button
+              variant="primary"
+              onPress={handleOzelGiris}
+              loading={ozelGirisLoading}
+              disabled={ozelGirisLoading || !(ozelGirisSifre || '').trim()}
+            >
+              Giriş Yap
+            </Button>
           </View>
         </View>
       </Modal>

@@ -117,9 +117,11 @@ class DataService {
   private lastSync: Date | null = null;
   private syncInProgress = false;
   private listeners: Map<string, Set<Function>> = new Map();
+  /** Açılışta disk cache yüklenene kadar beklemek için; getTesis/getOdalar ilk cache kontrolünden önce buna await eder. */
+  private cacheReadyPromise: Promise<void>;
 
   constructor() {
-    this.loadCache();
+    this.cacheReadyPromise = this.loadCache();
   }
 
   /**
@@ -325,13 +327,15 @@ class DataService {
    */
   async getTesis(forceRefresh = false): Promise<TesisData | null> {
     try {
+      // Disk cache yüklenene kadar bekle (cold start'ta önce cache'den gösterebilmek için)
+      await this.cacheReadyPromise;
       // Cache geçerliyse ve force refresh değilse cache'den dön
       if (!forceRefresh && this.isCacheValid() && this.tesisCache) {
         logger.log('Returning tesis from cache');
         return this.tesisCache;
       }
-      // Stale-while-revalidate: cache varsa hemen dön, arka planda yenile
-      if (forceRefresh && this.tesisCache) {
+      // Stale-while-revalidate: cache varsa hemen dön (geçerli veya süresi dolmuş), arka planda yenile
+      if (this.tesisCache) {
         const cached = this.tesisCache;
         this.refreshTesisInBackground().catch(() => {});
         return cached;
@@ -506,6 +510,8 @@ class DataService {
     let lastStep = '';
 
     try {
+      // Disk cache yüklenene kadar bekle (cold start'ta önce cache'den gösterebilmek için)
+      await this.cacheReadyPromise;
       lastStep = STEP.CACHE;
       if (!forceRefresh && this.isCacheValid() && this.odalarCache.has(cacheKey)) {
         const cached = this.odalarCache.get(cacheKey);
@@ -514,8 +520,8 @@ class DataService {
           return cached;
         }
       }
-      // Stale-while-revalidate: cache varsa hemen dön, arka planda yenile
-      if (forceRefresh && this.odalarCache.has(cacheKey)) {
+      // Stale-while-revalidate: cache varsa hemen dön (geçerli veya süresi dolmuş), arka planda yenile
+      if (this.odalarCache.has(cacheKey)) {
         const cached = this.odalarCache.get(cacheKey)!;
         this.refreshOdalarInBackground(filtre).catch(() => {});
         return cached;
@@ -672,6 +678,7 @@ class DataService {
    */
   async getMisafirler(forceRefresh = false): Promise<MisafirData[]> {
     try {
+      await this.cacheReadyPromise;
       // Cache geçerliyse ve force refresh değilse cache'den dön
       if (!forceRefresh && this.isCacheValid() && this.misafirlerCache) {
         logger.log('Returning misafirler from cache', { count: this.misafirlerCache.length });
