@@ -83,3 +83,21 @@ export const darkColors = {
 
 // Legacy export: default light (theme context ile override edilir)
 export const colors = lightColors;
+
+/** KBS Prime B2B — canlı renk paleti (oda durumları, dashboard) */
+export const COLORS = {
+  primary: '#06B6D4',
+  secondary: '#8B5CF6',
+  success: '#10B981',
+  warning: '#F59E0B',
+  error: '#EF4444',
+  background: '#F9FAFB',
+  surface: '#FFFFFF',
+  text: '#1F2937',
+  textLight: '#6B7280',
+  border: '#E5E7EB',
+  roomAvailable: '#10B981',
+  roomOccupied: '#EF4444',
+  roomCleaning: '#F59E0B',
+  roomMaintenance: '#6B7280',
+};

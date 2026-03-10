@@ -12,9 +12,34 @@ datasource db {
   directUrl = env("DIRECT_URL")
 }
 
-// Tesis (Otel) Modeli
+// B2B Multi-Tenant: Merkez panel müşteri (otel) — Supabase tenants tablosu UUID id kullanır
+model Tenant {
+  id                String    @id @default(uuid()) @db.Uuid
+  otelAdi           String    @map("otel_adi")
+  yetkiliAdi        String?   @map("yetkili_adi")
+  yetkiliTelefon    String?   @map("yetkili_telefon")
+  yetkiliEmail      String?   @unique @map("yetkili_email")
+  vergiNo           String?   @map("vergi_no")
+  adres             String?
+  paketTipi         String    @default("bronze") @map("paket_tipi") // gold, silver, bronze, trial
+  lisansBaslangic   DateTime? @map("lisans_baslangic")
+  lisansBitis       DateTime? @map("lisans_bitis")
+  odaSayisi         Int       @default(0) @map("oda_sayisi")
+  kullaniciSayisi   Int       @default(1) @map("kullanici_sayisi")
+  ayarlar           Json      @default("{}")
+  durum             String    @default("aktif") // aktif, pasif, deneme
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  tesisler          Tesis[]
+
+  @@map("tenants")
+}
+
+// Tesis (Otel) Modeli — isteğe bağlı tenant (B2B) bağlantısı
 model Tesis {
   id                String   @id @default(cuid())
+  tenantId          String?  @map("tenant_id") @db.Uuid
   tesisAdi          String
   yetkiliAdSoyad    String
   telefon           String   // WhatsApp numarası
@@ -51,6 +76,7 @@ model Tesis {
   trialEndsAt       DateTime?                  // deneme süresi bitişi (3 gün); paket alınca null
   
   // İlişkiler
+  tenant            Tenant?  @relation(fields: [tenantId], references: [id], onDelete: SetNull)
   kullanicilar      Kullanici[]
   odalar            Oda[]
   bildirimler       Bildirim[]
@@ -66,12 +92,15 @@ model Tesis {
 
   createdAt         DateTime  @default(now())
   updatedAt         DateTime  @updatedAt
+
+  @@index([tenantId])
 }
 
-// Okutulan kimlik/pasaport kayıtları — ayarlarda listelenir, foto opsiyonel
+// Okutulan kimlik/pasaport kayıtları — ayarlarda listelenir, foto opsiyonel; B2B için tenant_id
 model OkutulanBelge {
   id             String   @id @default(cuid())
   tesisId        String
+  tenantId       String?  @map("tenant_id") @db.Uuid // B2B: merkez raporlama için (opsiyonel)
   kullaniciId    String?  // Kim okuttu (Supabase user id veya backend kullanici id)
   belgeTuru      String   // kimlik, pasaport
   ad             String
@@ -87,6 +116,7 @@ model OkutulanBelge {
   tesis          Tesis    @relation(fields: [tesisId], references: [id], onDelete: Cascade)
 
   @@index([tesisId])
+  @@index([tenantId])
   @@index([createdAt])
 }
 

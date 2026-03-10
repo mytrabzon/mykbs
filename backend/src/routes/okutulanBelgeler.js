@@ -9,6 +9,7 @@ const path = require('path');
 const fs = require('fs');
 const { prisma } = require('../lib/prisma');
 const { authenticateTesisOrSupabase } = require('../middleware/authTesisOrSupabase');
+const { tenantMiddleware, getTenantIdForRecord } = require('../middleware/tenant');
 const { errorResponse } = require('../lib/errorResponse');
 const { supabaseAdmin } = require('../lib/supabaseAdmin');
 const { BUCKET_DOCUMENTS } = require('../config/storage');
@@ -24,6 +25,7 @@ const isStoragePath = (photoUrl) =>
 const SIGNED_URL_EXPIRY = 3600;
 
 router.use(authenticateTesisOrSupabase);
+router.use(tenantMiddleware);
 
 function getTesisId(req) {
   return req.authSource === 'supabase' ? req.branchId : req.tesis?.id;
@@ -102,9 +104,11 @@ router.post('/', express.json({ limit: '6mb' }), async (req, res) => {
       }
     }
 
+    const tenantId = getTenantIdForRecord(req);
     const rec = await prisma.okutulanBelge.create({
       data: {
         tesisId,
+        ...(tenantId ? { tenantId } : {}),
         kullaniciId: getKullaniciId(req),
         belgeTuru,
         ad,

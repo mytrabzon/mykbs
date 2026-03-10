@@ -5,6 +5,7 @@ const fs = require('fs');
 const path = require('path');
 const os = require('os');
 const { authenticateTesisOrSupabase } = require('../middleware/authTesisOrSupabase');
+const { tenantMiddleware } = require('../middleware/tenant');
 const {
   cropBottomFraction,
   cropTopFraction,
@@ -539,7 +540,7 @@ router.post('/document', authenticateTesisOrSupabase, upload.single('image'), as
 });
 
 /** Galeriden seçilen görsel: base64 ile gönder (Android content URI FormData sorununu aşar). MRZ için runMrzPipeline kullan (kimlik MRZ canavarı). */
-router.post('/document-base64', authenticateTesisOrSupabase, express.json({ limit: '8mb' }), async (req, res) => {
+router.post('/document-base64', authenticateTesisOrSupabase, tenantMiddleware, express.json({ limit: '8mb' }), async (req, res) => {
   const base64 = req.body?.imageBase64;
   let filePath = null;
   const logPrefix = '[document-base64]';
