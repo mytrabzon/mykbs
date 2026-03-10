@@ -177,6 +177,45 @@ async function authenticateTesisOrSupabase(req, res, next) {
           }
         }
         if (!profile && !profileError) {
+          // user_profiles kaydı yok: misafir için özel oluştur; normal kullanıcı için ilk şube ile oluştur
+          const createProfileForUser = async () => {
+            try {
+              let orgId = null;
+              let newBranch = null;
+              const { data: branchRows } = await supabaseAdmin.from('branches').select('id, name, kbs_turu, kbs_tesis_kodu, kbs_web_servis_sifre, kbs_configured, kbs_endpoint_url, kbs_approved, kbs_approved_at').limit(1);
+              if (Array.isArray(branchRows) && branchRows.length > 0) {
+                newBranch = branchRows[0];
+              } else {
+                const { data: orgs } = await supabaseAdmin.from('organizations').select('id').limit(1);
+                orgId = orgs?.[0]?.id;
+                if (!orgId) {
+                  const { data: newOrg, error: orgErr } = await supabaseAdmin.from('organizations').insert({ name: 'MyKBS' }).select('id').single();
+                  if (orgErr) throw orgErr;
+                  orgId = newOrg?.id;
+                }
+                const { data: nb, error: branchErr } = await supabaseAdmin.from('branches').insert({ organization_id: orgId, name: 'Merkez' }).select('id, name, kbs_turu, kbs_tesis_kodu, kbs_configured, kbs_endpoint_url, kbs_approved, kbs_approved_at').single();
+                if (branchErr || !nb) throw branchErr || new Error('Branch not created');
+                newBranch = nb;
+              }
+              if (!newBranch) throw new Error('No branch available');
+              const displayName = user.user_metadata?.full_name || user.user_metadata?.ad_soyad || user.email || user.phone || 'Kullanıcı';
+              const { error: profileErr } = await supabaseAdmin.from('user_profiles').insert({ user_id: user.id, branch_id: newBranch.id, role: 'staff', display_name: displayName });
+              if (profileErr) throw profileErr;
+              req.authSource = 'supabase';
+              req.user = user;
+              req.branchId = newBranch.id;
+              req.branch = newBranch;
+              req.profileRole = 'staff';
+              req.tesis = null;
+              console.warn('[authTesisOrSupabase] user_profiles otomatik oluşturuldu:', user.id, newBranch.id);
+              next();
+              return true;
+            } catch (e) {
+              console.error('[authTesisOrSupabase] user_profiles auto-create failed:', e?.message || e);
+              return false;
+            }
+          };
+
           if (user.is_anonymous) {
             try {
               let orgId = null;
@@ -190,7 +229,8 @@ async function authenticateTesisOrSupabase(req, res, next) {
               if (!orgId) throw new Error('Org not created');
               const { data: newBranch, error: branchErr } = await supabaseAdmin.from('branches').insert({ organization_id: orgId, name: 'Misafir Hesap' }).select('id, name').single();
               if (branchErr || !newBranch) throw branchErr || new Error('Branch not created');
-              const { error: profileErr } = await supabaseAdmin.from('user_profiles').insert({ user_id: user.id, branch_id: newBranch.id, role: 'staff' });
+              const displayName = user.user_metadata?.full_name || user.email || user.phone || 'Misafir';
+              const { error: profileErr } = await supabaseAdmin.from('user_profiles').insert({ user_id: user.id, branch_id: newBranch.id, role: 'staff', display_name: displayName });
               if (profileErr) throw profileErr;
               const fullSelect = 'id, name, kbs_turu, kbs_tesis_kodu, kbs_web_servis_sifre, kbs_configured, kbs_endpoint_url, kbs_approved, kbs_approved_at';
               const resBranch = await supabaseAdmin.from('branches').select(fullSelect).eq('id', newBranch.id).single();
@@ -208,6 +248,8 @@ async function authenticateTesisOrSupabase(req, res, next) {
               return errorResponse(req, res, 401, 'GUEST_SETUP_FAILED', 'Misafir hesabı oluşturulamadı. Lütfen e-posta ve şifre ile giriş yapın.');
             }
           }
+          // Normal Supabase kullanıcısı (OTP/email ile kayıt) ama user_profiles yok: otomatik oluştur
+          if (await createProfileForUser()) return;
           console.warn('[authTesisOrSupabase] Supabase user geçerli ama user_profiles kaydı yok:', user.id);
           return errorResponse(req, res, 409, 'BRANCH_NOT_ASSIGNED', 'Hesabınız henüz bir şubeye bağlı değil. Yöneticinize başvurun.');
         }

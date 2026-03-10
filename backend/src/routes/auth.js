@@ -1579,18 +1579,36 @@ router.get('/me', authenticateTesisOrSupabase, async (req, res) => {
       let termsOfServiceAcceptedAt = null;
       let userProfileRow = null;
       if (supabaseAdmin) {
-        const { data: profileRow } = await supabaseAdmin.from('profiles').select('is_admin, privacy_policy_accepted_at, terms_of_service_accepted_at, deletion_requested_at').eq('id', u.id).maybeSingle();
+        let profileRow = null;
+        try {
+          const profileRes = await supabaseAdmin.from('profiles').select('is_admin, privacy_policy_accepted_at, terms_of_service_accepted_at, deletion_requested_at').eq('id', u.id).maybeSingle();
+          profileRow = profileRes.data;
+          if (profileRes.error && (profileRes.error.code === '42703' || String(profileRes.error.message || '').includes('42703'))) {
+            const fallback = await supabaseAdmin.from('profiles').select('is_admin, privacy_policy_accepted_at, terms_of_service_accepted_at').eq('id', u.id).maybeSingle();
+            profileRow = fallback.data;
+          }
+        } catch (profErr) {
+          console.warn('[auth/me] profiles query failed:', profErr?.message || profErr);
+        }
         is_admin = profileRow?.is_admin === true;
         privacyPolicyAcceptedAt = profileRow?.privacy_policy_accepted_at ?? null;
         termsOfServiceAcceptedAt = profileRow?.terms_of_service_accepted_at ?? null;
         const deletionRequestedAt = profileRow?.deletion_requested_at ?? null;
-        const { data: appRole } = await supabaseAdmin.from('app_roles').select('role').eq('user_id', u.id).maybeSingle();
-        if (appRole?.role === 'admin') role = 'admin';
-        else if (is_admin) role = 'admin';
+        try {
+          const { data: appRole } = await supabaseAdmin.from('app_roles').select('role').eq('user_id', u.id).maybeSingle();
+          if (appRole?.role === 'admin') role = 'admin';
+          else if (is_admin) role = 'admin';
+        } catch (appRoleErr) {
+          console.warn('[auth/me] app_roles query failed:', appRoleErr?.message || appRoleErr);
+        }
         const branchId = req.branchId || b?.id;
         if (branchId) {
-          const { data: upRow } = await supabaseAdmin.from('user_profiles').select('display_name, title, avatar_url').eq('user_id', u.id).eq('branch_id', branchId).maybeSingle();
-          userProfileRow = upRow;
+          try {
+            const { data: upRow } = await supabaseAdmin.from('user_profiles').select('display_name, title, avatar_url').eq('user_id', u.id).eq('branch_id', branchId).maybeSingle();
+            userProfileRow = upRow;
+          } catch (upErr) {
+            console.warn('[auth/me] user_profiles query failed:', upErr?.message || upErr);
+          }
         }
       }
       const adSoyadFallback = u.user_metadata?.full_name || u.user_metadata?.ad_soyad || u.email || u.phone || 'Kullanıcı';
@@ -1623,7 +1641,14 @@ router.get('/me', authenticateTesisOrSupabase, async (req, res) => {
         termsOfServiceAcceptedAt: termsOfServiceAcceptedAt || undefined,
         accountPendingDeletion: deletionRequestedAt ? true : undefined,
         deletionRequestedAt: deletionRequestedAt || undefined,
-        deletionAt: deletionRequestedAt ? new Date(new Date(deletionRequestedAt).getTime() + 7 * 24 * 60 * 60 * 1000).toISOString() : undefined,
+        deletionAt: (() => {
+          if (!deletionRequestedAt) return undefined;
+          try {
+            const ts = new Date(deletionRequestedAt).getTime();
+            if (!Number.isFinite(ts)) return undefined;
+            return new Date(ts + 7 * 24 * 60 * 60 * 1000).toISOString();
+          } catch (_) { return undefined; }
+        })(),
         isGuest: u.is_anonymous === true && !(u.email_confirmed_at === true)
       });
     }
@@ -1690,12 +1715,12 @@ router.get('/me', authenticateTesisOrSupabase, async (req, res) => {
     });
   } catch (error) {
     const requestId = req.requestId || '-';
-    if (requestId !== '-') console.error(`[REQ ${requestId}] GET /api/auth/me -> stack:`, error?.stack || error);
-    const { errorResponse: errRes } = require('../lib/errorResponse');
     const msg = error?.message || '';
     const code = error?.code || error?.meta?.code;
+    console.error(`[auth/me] GET /api/auth/me hatası:`, msg, 'code:', code, 'authSource:', req.authSource, 'stack:', error?.stack || '');
+    const { errorResponse: errRes } = require('../lib/errorResponse');
     const isP2025 = code === 'P2025' || (error?.meta?.code === 'P2025');
-    const isDb = /prisma|ECONNREFUSED|08P01|connect|relation|column/i.test(msg);
+    const isDb = /prisma|ECONNREFUSED|08P01|connect|relation|column|42703/i.test(msg);
     if (isP2025 || /Cannot read propert|kullanici\.|findUnique.*null/i.test(msg)) {
       return errRes(req, res, 404, 'NOT_FOUND', 'Kullanıcı bilgisi bulunamadı.');
     }

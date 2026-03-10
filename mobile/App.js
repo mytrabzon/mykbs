@@ -387,7 +387,7 @@ function MainTabs() {
         name="MRZ"
         component={MrzScanScreen}
         options={{
-          tabBarLabel: 'MRZ Tara',
+          tabBarLabel: 'Kimlik / Pasaport',
           tabBarActiveTintColor: colors.primary,
         }}
       />

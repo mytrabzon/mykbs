@@ -13,6 +13,7 @@ import {
   Dimensions,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useFocusEffect } from '@react-navigation/native';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
 import * as communityApi from '../services/communityApi';
@@ -116,11 +117,15 @@ export default function ToplulukScreen({ navigation }) {
   const [categoryModalVisible, setCategoryModalVisible] = useState(false);
 
   const loadToken = useCallback(async () => {
-    const t = await getSupabaseToken();
+    let t = await getSupabaseToken();
+    if (!t && isLoggedIn) {
+      await new Promise((r) => setTimeout(r, 500));
+      t = await getSupabaseToken();
+    }
     setToken(t);
     setHasCommunity(!!t);
     setTokenChecked(true);
-  }, [getSupabaseToken]);
+  }, [getSupabaseToken, isLoggedIn]);
 
   const loadPosts = useCallback(async (isRefresh = false) => {
     const t = await getSupabaseToken();
@@ -165,6 +170,12 @@ export default function ToplulukScreen({ navigation }) {
     loadToken();
   }, [loadToken]);
 
+  useFocusEffect(
+    useCallback(() => {
+      if (isLoggedIn) loadToken();
+    }, [isLoggedIn, loadToken])
+  );
+
   useEffect(() => {
     if (token) loadPosts();
     else setPosts([]);
@@ -181,12 +192,29 @@ export default function ToplulukScreen({ navigation }) {
           onNotification={() => navigation.navigate('Bildirimler')}
           onProfile={() => navigation.navigate('ProfilDuzenle')}
         />
-        <View style={styles.emptyWrap}>
+        <View style={[styles.emptyWrap, styles.centered]}>
           <EmptyState
             icon="people-outline"
             title="Topluluk"
             message="Paylaşım ve topluluk özellikleri için giriş yapın."
           />
+        </View>
+      </View>
+    );
+  }
+
+  if (isLoggedIn && !tokenChecked) {
+    return (
+      <View style={[styles.screenContainer, { backgroundColor: colors.background }]}>
+        <AppHeader
+          title="Topluluk"
+          minimal
+          onNotification={() => navigation.navigate('Bildirimler')}
+          onProfile={() => navigation.navigate('ProfilDuzenle')}
+        />
+        <View style={[styles.emptyWrap, styles.centered]}>
+          <ActivityIndicator size="large" color={colors.primary} />
+          <Text style={[styles.loadingText, { color: colors.textSecondary }]}>Yükleniyor...</Text>
         </View>
       </View>
     );
@@ -204,7 +232,7 @@ export default function ToplulukScreen({ navigation }) {
           <EmptyState
             icon="people-outline"
             title="Topluluk"
-            message="Paylaşım için e-posta veya telefon ile giriş yapın."
+            message="Topluluk için e-posta veya telefon ile giriş yapın."
           />
         </View>
       </View>
@@ -331,6 +359,7 @@ const styles = StyleSheet.create({
   chipsContent: { paddingHorizontal: spacing.screenPadding, gap: 8, paddingVertical: 8 },
   listContent: { paddingBottom: 100 },
   centered: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  loadingText: { marginTop: 12, fontSize: typography.text.body.fontSize },
 
   postCard: {
     marginBottom: 12,

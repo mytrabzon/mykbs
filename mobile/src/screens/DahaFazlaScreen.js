@@ -1,9 +1,9 @@
 /**
  * "Daha Fazla" menü — Paket satın al, Topluluk, Ayarlar, Admin (sadece yetkili hesaplarda)
  */
-import React from 'react';
+import React, { useCallback } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../context/ThemeContext';
 import { useCredits } from '../context/CreditsContext';
@@ -22,8 +22,16 @@ export default function DahaFazlaScreen() {
   const navigation = useNavigation();
   const { colors } = useTheme();
   const { triggerPaywall } = useCredits();
-  const { user } = useAuth();
+  const { user, refreshMe } = useAuth();
   const isAdmin = getIsAdminPanelUser(user);
+
+  // Ekran odaklandığında kullanıcı verisini yenile (admin yetkisi verildikten sonra buton görünsün)
+  useFocusEffect(
+    useCallback(() => {
+      if (typeof refreshMe === 'function') refreshMe();
+    }, [refreshMe])
+  );
+
   const items = MENU_ITEMS_BASE.filter((item) => !item.adminOnly || isAdmin);
 
   const onItemPress = (item) => {
