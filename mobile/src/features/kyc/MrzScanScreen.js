@@ -4,15 +4,6 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useRoute, useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 
-/** expo-screen-orientation native modülü dev client'ta yoksa no-op (uygulama çökmez). */
-function getScreenOrientation() {
-  try {
-    return require('expo-screen-orientation');
-  } catch {
-    return null;
-  }
-}
-
 /** Belge okunduğunda kullanıcıya bildir: toast + kısa titreşim */
 function triggerReadSuccessFeedback() {
   Toast.show({ type: 'success', text1: 'Okundu!', text2: 'Belge bilgileri alındı.' });
@@ -96,9 +87,10 @@ const SHOW_INSTANT_RESULT = true;
 const ACCEPT_ON_CHECK_FAIL = true;
 const ACCEPT_MINIMAL_DOC_NUMBER_ONLY = true; // Sadece belge no ile de hemen kabul (eksik alanlar sonuç ekranında düzeltilir)
 
-/** false = Native MrzReaderView kamerası (açılma sorunu yok). true = expo-camera ile unified (bazı cihazlarda onCameraReady gelmiyor, siyah ekran). */
-const USE_UNIFIED_AUTO_SCAN = false;
-const UNIFIED_CAPTURE_INTERVAL_MS = 2500;
+/** Android: otomatik algılama — expo-camera + backend OCR. iOS: native MrzReaderView. */
+const USE_UNIFIED_AUTO_SCAN = Platform.OS === 'android';
+/** Otomatik algılama için periyodik çekim aralığı (kısa = daha hızlı algılama). */
+const UNIFIED_CAPTURE_INTERVAL_MS = 1600;
 /** İzin verildikten sonra kamera mount gecikmesi (Android siyah ekran önlemi). */
 const UNIFIED_CAMERA_MOUNT_DELAY_MS = Platform.OS === 'android' ? 350 : 150;
 /** Kamera bileşenini her zaman bu süre sonra mount et (onLayout'a güvenmeden). */
@@ -306,17 +298,6 @@ export default function MrzScanScreen({ navigation }) {
         hasMrzReader: !!MrzReaderView,
         platform: Platform.OS,
       });
-      // Android dev client'ta ExpoScreenOrientation native modülü sıklıkla yok; sadece iOS'ta veya production build'de kullan
-      if (!USE_UNIFIED_AUTO_SCAN && Platform.OS === 'ios') {
-        try {
-          const SO = getScreenOrientation();
-          if (SO && typeof SO.unlockAsync === 'function') {
-            try {
-              SO.unlockAsync().catch(() => {});
-            } catch (_) {}
-          }
-        } catch (_) {}
-      }
       mounted.current = true;
       hasLeftScreenRef.current = false;
       setIsExiting(false);
@@ -371,17 +352,6 @@ export default function MrzScanScreen({ navigation }) {
         if (unifiedMountDelayRef.current) {
           clearTimeout(unifiedMountDelayRef.current);
           unifiedMountDelayRef.current = null;
-        }
-        if (!USE_UNIFIED_AUTO_SCAN && Platform.OS === 'ios') {
-          try {
-            const SOCleanup = getScreenOrientation();
-            if (SOCleanup && typeof SOCleanup.lockAsync === 'function') {
-              try {
-                const lock = SOCleanup.OrientationLock?.PORTRAIT_UP ?? 1;
-                SOCleanup.lockAsync(lock).catch(() => {});
-              } catch (_) {}
-            }
-          } catch (_) {}
         }
         hasLeftScreenRef.current = true;
         setIsScreenFocused(false);
@@ -1648,8 +1618,21 @@ export default function MrzScanScreen({ navigation }) {
         )}
         <View style={[styles.bannerFloating, { bottom: insets.bottom + 80 }]} pointerEvents="box-none">
           <Text style={[styles.bannerText, { marginLeft: 0 }]}>
-            Belgeyi gösterin: MRZ (arka/alt) veya ön yüz (fotoğraf + bilgiler) otomatik okunur
+            Otomatik algılama: belgeyi kameraya tutun (MRZ veya ön yüz), butona basmayın
           </Text>
+        </View>
+        <View style={[styles.androidFallbackBar, { bottom: insets.bottom + 72 }]} pointerEvents="box-none">
+          <Text style={styles.androidFallbackLabel}>Algılanmazsa</Text>
+          <View style={styles.androidFallbackRow}>
+            <TouchableOpacity style={styles.androidFallbackBtn} onPress={handlePickImage} disabled={ocrLoading} activeOpacity={0.8}>
+              <Ionicons name="images-outline" size={20} color="#fff" />
+              <Text style={styles.androidFallbackBtnText}>Galeriden seç</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.androidFallbackBtn} onPress={handleTakePhotoWithSystemCamera} disabled={ocrLoading} activeOpacity={0.8}>
+              <Ionicons name="camera-outline" size={20} color="#fff" />
+              <Text style={styles.androidFallbackBtnText}>Fotoğraf çek</Text>
+            </TouchableOpacity>
+          </View>
         </View>
       </View>
     );

@@ -28,7 +28,8 @@ async function preprocessForOcr(filePath) {
 }
 
 /**
- * Fotokopi / kağıt MRZ için güçlü ön işleme: yüksek kontrast, netlik (resize up then back) – basılı MRZ daha iyi okunur.
+ * Fotokopi / kağıt MRZ için güçlü ön işleme: yüksek kontrast, gri ton, gerekirse büyütme ve keskinleştirme.
+ * Soluk fotokopide okunabilirliği artırır.
  * @param {string} filePath - Path to image file
  * @returns {Promise<string>} Same filePath after write
  */
@@ -39,11 +40,36 @@ async function preprocessForPhotocopyMrz(filePath) {
     let image = await Jimp.read(filePath);
     const w = image.bitmap.width;
     const h = image.bitmap.height;
-    await image
-      .greyscale()
-      .normalize()
-      .contrast(0.45)
-      .write(filePath);
+    image = image.greyscale().normalize().contrast(0.55).brightness(0.08);
+    if (w < 900 || h < 300) {
+      const scale = Math.min(2.2, 900 / Math.max(w, 1), 350 / Math.max(h, 1));
+      if (scale > 1.15) image = image.resize(Math.round(w * scale), Math.round(h * scale), Jimp.RESIZE_BICUBIC);
+    }
+    image = applySharpenKernel(image);
+    await image.write(filePath);
+    return filePath;
+  } catch (e) {
+    return filePath;
+  }
+}
+
+/**
+ * Fotokopi – çok soluk / düşük kalite için daha agresif ön işleme: yüksek kontrast, parlaklık, büyütme.
+ */
+async function preprocessForPhotocopyMrzStrong(filePath) {
+  if (!filePath || !fs.existsSync(filePath)) return filePath;
+  try {
+    const Jimp = (await import('jimp')).default;
+    let image = await Jimp.read(filePath);
+    const w = image.bitmap.width;
+    const h = image.bitmap.height;
+    image = image.greyscale().normalize().brightness(0.12).contrast(0.78);
+    if (w < 1000 || h < 350) {
+      const scale = Math.min(2.5, 1000 / Math.max(w, 1), 400 / Math.max(h, 1));
+      if (scale > 1.1) image = image.resize(Math.round(w * scale), Math.round(h * scale), Jimp.RESIZE_BICUBIC);
+    }
+    image = applySharpenKernel(image);
+    await image.write(filePath);
     return filePath;
   } catch (e) {
     return filePath;
@@ -211,7 +237,7 @@ function applySharpenKernel(image) {
 }
 
 /**
- * A4 kağıt / fotokopi MRZ için ön işleme: yüksek kontrast, gerekirse 2x büyütme (küçük yazı için).
+ * A4 kağıt / fotokopi MRZ için ön işleme: yüksek kontrast, gerekirse büyütme ve keskinleştirme.
  * Fotokopide pasaport MRZ genelde soluk; kontrast artırıp Tesseract'ın okumasını kolaylaştırır.
  */
 async function preprocessForPaperMrz(filePath) {
@@ -221,14 +247,12 @@ async function preprocessForPaperMrz(filePath) {
     let image = await Jimp.read(filePath);
     const w = image.bitmap.width;
     const h = image.bitmap.height;
-    await image
-      .greyscale()
-      .normalize()
-      .contrast(0.6);
-    if (w < 800 || h < 200) {
-      const scale = Math.min(2, 800 / Math.max(w, 1), 400 / Math.max(h, 1));
-      if (scale > 1.2) image = image.scale(scale);
+    image = image.greyscale().normalize().brightness(0.05).contrast(0.65);
+    if (w < 900 || h < 250) {
+      const scale = Math.min(2.2, 900 / Math.max(w, 1), 450 / Math.max(h, 1));
+      if (scale > 1.2) image = image.resize(Math.round(w * scale), Math.round(h * scale), Jimp.RESIZE_BICUBIC);
     }
+    image = applySharpenKernel(image);
     await image.write(filePath);
     return filePath;
   } catch (e) {
@@ -369,6 +393,7 @@ module.exports = {
   preprocessForOcr,
   preprocessFromBase64,
   preprocessForPhotocopyMrz,
+  preprocessForPhotocopyMrzStrong,
   cropBottomFraction,
   cropTopFraction,
   cropCenterFraction,

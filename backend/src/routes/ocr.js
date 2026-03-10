@@ -13,6 +13,7 @@ const {
   preprocessForKimlikMrz,
   preprocessForPaperMrz,
   preprocessForPhotocopyMrz,
+  preprocessForPhotocopyMrzStrong,
   preprocessForFadedMrz,
   preprocessForInvertedMrz,
   preprocessMrzImage,
@@ -98,19 +99,63 @@ function normalizeOcrTextForMrz(text) {
     .replace(/[^A-Z0-9<]/g, '');
 }
 
-/** OCR çıktısından MRZ satır adayları: kimlik/pasaport/fotokopi 20+ karakter. TD3 35-48, TD1 20-34 kabul. */
+/** OCR çıktısından MRZ satır adayları: kimlik/pasaport/fotokopi. Fotokopide satır bölünebilir; 18+ kabul, birleştirme dene. */
 function extractMrzLinesFromOcr(text) {
   if (!text || typeof text !== 'string') return [];
-  const lines = text.split(/\r\n|\r|\n/)
+  const rawLines = text.split(/\r\n|\r|\n/)
     .map((l) => l.trim().toUpperCase().replace(/\s/g, '').replace(/[\u00AB\u2039\u203A\u00BB]/g, '<'))
     .map((l) => l.replace(/[^A-Z0-9<]/g, ''))
-    .filter((l) => l.length >= 20);
+    .filter((l) => l.length >= 14);
+  // Fotokopi: ardışık kısa satırları birleştir (örn. 15+15 → 30, 22+22 → 44)
+  const merged = [];
+  let i = 0;
+  while (i < rawLines.length) {
+    const line = rawLines[i];
+    if (line.length >= 26 && line.length <= 48) {
+      merged.push(line);
+      i++;
+      continue;
+    }
+    if (line.length >= 20 && line.length <= 34) {
+      merged.push(line);
+      i++;
+      continue;
+    }
+    let combined = line;
+    let j = i + 1;
+    while (j < rawLines.length && combined.length < 42) {
+      const next = rawLines[j];
+      const joined = combined + next;
+      if (joined.length >= 28 && joined.length <= 34) {
+        merged.push(joined.slice(0, 30));
+        i = j + 1;
+        break;
+      }
+      if (joined.length >= 35 && joined.length <= 48) {
+        merged.push(joined.slice(0, 44));
+        i = j + 1;
+        break;
+      }
+      if (joined.length >= 44 && joined.length <= 52) {
+        merged.push(joined.slice(0, 44));
+        i = j + 1;
+        break;
+      }
+      combined = joined;
+      j++;
+    }
+    if (j >= rawLines.length) {
+      if (combined.length >= 20 && combined.length <= 48) merged.push(combined.slice(0, 48));
+      i++;
+    }
+  }
+  const lines = merged.length > 0 ? merged : rawLines.filter((l) => l.length >= 20);
   const withAngle = lines.filter((l) => l.includes('<'));
   const twoLine44 = lines.filter((l) => l.length >= 35 && l.length <= 48);
   const threeLine30 = lines.filter((l) => l.length >= 22 && l.length <= 34);
   const candidates = threeLine30.length >= 3 ? threeLine30.slice(0, 3)
     : (withAngle.length >= 2 ? withAngle : (twoLine44.length >= 2 ? twoLine44 : lines));
-  return candidates.filter((l) => l.length >= 20 && l.length <= 48);
+  return candidates.filter((l) => l.length >= 18 && l.length <= 48);
 }
 
 /** OCR çıktısından MRZ benzeri satırları bul (TD1: 3x30 kimlik, TD2: 2x36, TD3: 2x44 pasaport). Esnek aralıklar. */
@@ -298,14 +343,15 @@ async function runMrzPipeline(filePath) {
 
     const preprocessVariants = [
       { fn: (p) => preprocessMrzImage(p, { mrzFraction: 0.3, contrast: 0.3, brightness: 0.2 }), name: 'mrzCrop' },
+      { fn: preprocessForPhotocopyMrz, name: 'photocopy' },
+      { fn: preprocessForPaperMrz, name: 'paper' },
+      { fn: preprocessForPhotocopyMrzStrong, name: 'photocopyStrong' },
+      { fn: preprocessForFadedMrz, name: 'faded' },
       { fn: (p) => preprocessForKimlikMrz(p, { contrast: 0.45 }), name: 'kimlikLow' },
       { fn: (p) => preprocessForKimlikMrz(p, { contrast: 0.55 }), name: 'kimlik' },
       { fn: (p) => preprocessForKimlikMrz(p, { contrast: 0.65 }), name: 'kimlikMid' },
       { fn: (p) => preprocessForKimlikMrz(p, { contrast: 0.8 }), name: 'kimlikHi' },
       { fn: (p) => preprocessForKimlikMrz(p, { sharpen: true }), name: 'kimlikSharp' },
-      { fn: preprocessForPhotocopyMrz, name: 'photocopy' },
-      { fn: preprocessForPaperMrz, name: 'paper' },
-      { fn: preprocessForFadedMrz, name: 'faded' },
       { fn: preprocessForInvertedMrz, name: 'inverted' },
     ];
 
@@ -374,6 +420,26 @@ async function runMrzPipeline(filePath) {
         await cropTopFraction(filePath, frac, cropPath);
         registerTemp(cropPath);
         if (await tryImage(cropPath)) break;
+      }
+    }
+
+    // A4 / fotokopi: MRZ sayfa ortasında veya alt-ortada olabilir; orta bant crop dene
+    if (best.score < 100) {
+      let imgW = 0, imgH = 0;
+      try {
+        const Jimp = (await import('jimp')).default;
+        const meta = await Jimp.read(filePath);
+        imgW = meta.bitmap.width;
+        imgH = meta.bitmap.height;
+      } catch (_) {}
+      const looksLikePage = imgW > 400 && imgH > 400 && imgW / imgH > 0.5 && imgW / imgH < 2.2;
+      if (looksLikePage) {
+        for (const frac of [0.5, 0.45, 0.4]) {
+          const cropPath = path.join(dir, `crop_center_${frac}.jpg`);
+          await cropCenterFraction(filePath, frac, cropPath);
+          registerTemp(cropPath);
+          if (await tryImage(cropPath)) break;
+        }
       }
     }
 

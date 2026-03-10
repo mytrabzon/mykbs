@@ -13,6 +13,7 @@ import {
   ActivityIndicator,
   Alert,
   Platform,
+  Animated,
 } from 'react-native';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { useAuth } from '../context/AuthContext';
@@ -35,6 +36,7 @@ import {
   RoomCardModern,
   RoomDetailSheet,
   FABHalfSheet,
+  PrimeHomeView,
 } from '../components/home';
 import PermissionCard from '../components/PermissionCard';
 import { getIsAdminPanelUser } from '../utils/adminAuth';
@@ -734,213 +736,114 @@ export default function OdalarScreen() {
   }
 
   const screenBg = colors.background === '#0F172A' ? colors.background : '#EDF0F7';
+  const showBackendError = backendStatus.isOnline === false || lastLoadErrorType !== null || backendStatus.dbOnline === false;
+
+  const primeHeaderContent = (
+    <>
+      {token && notificationPermissionStatus && notificationPermissionStatus !== 'granted' && !notificationCardDismissed && (
+        <PermissionCard
+          icon="notifications-outline"
+          title="Bildirimlere izin verin"
+          description="Oda ve KBS güncellemelerini anında almak için bildirimlere izin verebilirsiniz. İstediğiniz zaman bu kartı kapatıp sonra tekrar açabilirsiniz."
+          onAllow={async () => {
+            const status = await requestNotificationPermissionAsync();
+            setNotificationPermissionStatus(status);
+            if (status === 'granted') await registerPushToken(() => token);
+          }}
+          onDismiss={() => setNotificationCardDismissed(true)}
+          dismissLabel="Şimdi değil"
+        />
+      )}
+      {liveUpdates.length > 0 && (
+        <View style={[styles.lobbyLiveContainer, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+          <View style={styles.lobbyLiveHeader}>
+            <View style={styles.liveIndicator}>
+              <LiveDotPulse />
+              <Text style={[styles.lobbyLiveText, { color: colors.primary }]}>CANLI</Text>
+            </View>
+            <Text style={[styles.lobbyLiveTitle, { color: colors.textSecondary }]}>Son Güncellemeler</Text>
+          </View>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.liveUpdatesScroll}>
+            {liveUpdates.map((update, index) => (
+              <View key={index} style={[styles.lobbyLiveCard, { backgroundColor: colors.background }]}>
+                <View style={styles.liveUpdateHeader}>
+                  <Ionicons name={update.type === 'kbs_status' ? 'shield-checkmark' : 'refresh'} size={14} color={colors.primary} />
+                  <Text style={[styles.lobbyLiveUpdateRoom, { color: colors.textPrimary }]}>Oda {update.roomNumber}</Text>
+                  <Text style={[styles.lobbyLiveUpdateTime, { color: colors.textSecondary }]}>{new Date(update.timestamp).toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' })}</Text>
+                </View>
+                <Text style={[styles.lobbyLiveUpdateMessage, { color: colors.textSecondary }]}>{update.message}</Text>
+              </View>
+            ))}
+          </ScrollView>
+        </View>
+      )}
+    </>
+  );
+
   return (
     <View style={[styles.container, { backgroundColor: screenBg }]}>
       <StatusBar barStyle={screenBg === '#0F172A' ? 'light-content' : 'dark-content'} backgroundColor={colors.surface} />
-      {/* Komuta Şeridi — header + toolbar (profil/bildirim altında çerçeveli butonlar) */}
-      <HomeCommandStrip
-        tesis={tesis}
-        ozet={ozet}
-        onNotification={() => navigation.navigate('Bildirimler')}
-        onProfile={() => navigation.navigate('ProfilDuzenle')}
-        onDateChange={setSelectedDateKey}
-        selectedDateKey={selectedDateKey}
-        commandMode={commandMode}
-        onCommandModeChange={setCommandMode}
-        bottomContent={
-          <View style={styles.headerToolbar}>
-            <FilterSortBar
-              selectedFilter={filtre}
-              onFilterChange={(key) => { logger.button('Filtre', key); setFiltre(key); }}
-              sortKey={sortKey}
-              onSortChange={setSortKey}
-              onToggleSortMenu={() => {}}
-            />
-            <View style={styles.toolbarRow2}>
-              <View style={styles.toolbarKpiWrap}>
-                <KPICarousel
-                  ozet={ozet}
-                  odalarCountByFilter={odalarCountByFilter}
-                  onCardPress={setFiltre}
-                  selectedFilter={filtre}
-                />
-              </View>
-              <View style={styles.toolbarActionsWrap}>
-                <QuickActionsStrip
-                  nfcEnabled={nfcEnabledInSettings}
-                  onAction={({ type, route }) => {
-                    if (route === 'FamilyCheckIn') navigation.navigate('FamilyCheckIn');
-                    else if (route === 'MrzScan') navigation.navigate('MrzScan');
-                    else if (route === 'NfcRead') navigation.navigate('NfcRead');
-                    else if (route === 'CheckIn') navigation.navigate('CheckIn');
-                    else if (route) navigation.navigate(route);
-                  }}
-                  isCompact={commandMode}
-                />
-              </View>
-            </View>
-          </View>
-        }
-      />
-
-      <FlatList
-        ref={flatListRef}
-        data={displayOdalar}
-        renderItem={renderOdaCard}
-        keyExtractor={keyExtractor}
-        numColumns={2}
-        key="two-column"
-        columnWrapperStyle={styles.odaColumnWrapper}
-        getItemLayout={getItemLayout}
-        removeClippedSubviews={true}
-        maxToRenderPerBatch={10}
-        updateCellsBatchingPeriod={50}
-        initialNumToRender={10}
-        windowSize={10}
-        refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[colors.primary]} tintColor={colors.primary} />
-        }
-        contentContainerStyle={[styles.list, displayOdalar.length === 0 && styles.listEmpty]}
-        showsVerticalScrollIndicator={false}
-        ListHeaderComponent={
-          <>
-            {token && notificationPermissionStatus && notificationPermissionStatus !== 'granted' && !notificationCardDismissed && (
-              <PermissionCard
-                icon="notifications-outline"
-                title="Bildirimlere izin verin"
-                description="Oda ve KBS güncellemelerini anında almak için bildirimlere izin verebilirsiniz. İstediğiniz zaman bu kartı kapatıp sonra tekrar açabilirsiniz."
-                onAllow={async () => {
-                  const status = await requestNotificationPermissionAsync();
-                  setNotificationPermissionStatus(status);
-                  if (status === 'granted') await registerPushToken(() => token);
-                }}
-                onDismiss={() => setNotificationCardDismissed(true)}
-                dismissLabel="Şimdi değil"
-              />
-            )}
-            {liveUpdates.length > 0 && (
-              <View style={[styles.lobbyLiveContainer, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-                <View style={styles.lobbyLiveHeader}>
-                  <View style={styles.liveIndicator}>
-                    <LiveDotPulse />
-                    <Text style={[styles.lobbyLiveText, { color: colors.primary }]}>CANLI</Text>
-                  </View>
-                  <Text style={[styles.lobbyLiveTitle, { color: colors.textSecondary }]}>Son Güncellemeler</Text>
-                </View>
-                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.liveUpdatesScroll}>
-                  {liveUpdates.map((update, index) => (
-                    <View key={index} style={[styles.lobbyLiveCard, { backgroundColor: colors.background }]}>
-                      <View style={styles.liveUpdateHeader}>
-                        <Ionicons name={update.type === 'kbs_status' ? 'shield-checkmark' : 'refresh'} size={14} color={colors.primary} />
-                        <Text style={[styles.lobbyLiveUpdateRoom, { color: colors.textPrimary }]}>Oda {update.roomNumber}</Text>
-                        <Text style={[styles.lobbyLiveUpdateTime, { color: colors.textSecondary }]}>{new Date(update.timestamp).toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' })}</Text>
-                      </View>
-                      <Text style={[styles.lobbyLiveUpdateMessage, { color: colors.textSecondary }]}>{update.message}</Text>
-                    </View>
-                  ))}
-                </ScrollView>
-              </View>
-            )}
-            {sonGirenler.length > 0 && (
-              <View style={[styles.sonGirenlerWrap, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-                <Text style={[styles.sonGirenlerTitle, { color: colors.textPrimary }]}>👥 Son giriş yapanlar</Text>
-                {sonGirenler.map((m) => (
-                  <TouchableOpacity
-                    key={m.id}
-                    style={[styles.sonGirenlerRow, { borderBottomColor: colors.border }]}
-                    onPress={() => m.odaId && navigation.navigate('OdaDetay', { odaId: m.odaId })}
-                    activeOpacity={0.7}
-                  >
-                    <Text style={[styles.sonGirenlerTime, { color: colors.textSecondary }]}>
-                      {m.girisTarihi ? new Date(m.girisTarihi).toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' }) : '—'}
-                    </Text>
-                    <Text style={[styles.sonGirenlerRoom, { color: colors.primary }]}>Oda {m.odaNumarasi || '—'}</Text>
-                    <Text style={[styles.sonGirenlerName, { color: colors.textPrimary }]} numberOfLines={1}>
-                      {m.ad} {m.soyad}
-                    </Text>
-                    <Text style={[styles.sonGirenlerUyruk, { color: colors.textSecondary }]}>{m.uyruk || '—'}</Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
-            )}
-            <View style={[styles.odalarSectionHeader, { borderBottomColor: colors.border }]}>
-              <Text style={[styles.odalarSectionTitle, { color: colors.textPrimary }]}>Odalar</Text>
-              <Text style={[styles.odalarSectionCount, { color: colors.textSecondary }]}>
-                {displayOdalar.length} oda
-              </Text>
-            </View>
-          </>
-        }
-        ListEmptyComponent={
-          !initialLoading && !filterLoading ? (
-            (backendStatus.isOnline === false || lastLoadErrorType !== null || backendStatus.dbOnline === false) ? (
-              <BackendErrorScreen
-                onRetry={() => loadData(true)}
-                onTestConnection={async () => {
-                  const status = await backendHealth.checkHealth();
-                  setBackendStatus({
-                    isOnline: status.isOnline,
-                    lastChecked: status.lastChecked || new Date(),
-                    error: status.error,
-                    dbOnline: status.dbOnline,
-                  });
-                  if (status.isOnline && status.dbOnline !== false) {
-                    setLastLoadErrorType(null);
-                    Toast.show({
-                      type: 'success',
-                      text1: 'Bağlantı kuruldu',
-                      text2: 'Veriler yeniden yükleniyor...',
-                      visibilityTime: 2000,
-                    });
-                    loadData(true);
-                  } else if (status.isOnline && status.dbOnline === false) {
-                    setLastLoadErrorType('db');
-                    Toast.show({
-                      type: 'error',
-                      text1: 'Veritabanı bağlantısı yok',
-                      text2: 'Sunucu çalışıyor ama veritabanına ulaşılamıyor.',
-                      visibilityTime: 4000,
-                    });
-                  } else {
-                    setLastLoadErrorType(null);
-                    Toast.show({ type: 'error', text1: 'Bağlantı başarısız', text2: status.error || 'Sunucuya erişilemiyor' });
-                  }
-                }}
-                onOpenSettings={() => navigation.navigate('Ayarlar')}
-                lastError={backendStatus.error}
-                lastChecked={backendStatus.lastChecked}
-                errorType={lastLoadErrorType || (backendStatus.isOnline && backendStatus.dbOnline === false ? 'db' : null)}
-                testedUrl={getHealthUrl()}
-                apiBaseUrl={getBackendUrl()}
-                requestId={lastErrorPayload?.requestId}
-                serverMessage={lastErrorPayload?.message}
-                showDebug={showDebugUrls}
-                onToggleDebug={() => setShowDebugUrls((v) => !v)}
-              />
-            ) : (
-              <View style={styles.emptyContainer}>
-                <MaterialIcons name="hotel" size={48} color={colors.textSecondary} style={{ marginBottom: spacing.md }} />
-                <Text style={[styles.emptyTitle, { color: colors.textPrimary }]}>Henüz oda yok</Text>
-                <Text style={[styles.emptyText, { color: colors.textSecondary }]}>Oda ekleyerek veya check-in yaparak başlayın</Text>
-                {__DEV__ && (() => {
-                  const { healthUrl, apiBaseUrl } = getApiDebugInfo();
-                  return (
-                    <Text style={[styles.emptyText, { color: colors.textSecondary, marginTop: spacing.lg, fontSize: 11 }]}>
-                      Health OK · API: {apiBaseUrl || '(yok)'}
-                    </Text>
-                  );
-                })()}
-              </View>
-            )
-          ) : (
-            <View style={styles.emptyContainer}>
-              <ActivityIndicator size="large" color={colors.primary} />
-              <Text style={[styles.emptyTitle, { color: colors.textPrimary }]}>Yükleniyor...</Text>
-              <Text style={[styles.emptyText, { color: colors.textSecondary }]}>Odalar yükleniyor</Text>
-            </View>
-          )
-        }
-      />
+      {showBackendError ? (
+        <BackendErrorScreen
+          onRetry={() => loadData(true)}
+          onTestConnection={async () => {
+            const status = await backendHealth.checkHealth();
+            setBackendStatus({
+              isOnline: status.isOnline,
+              lastChecked: status.lastChecked || new Date(),
+              error: status.error,
+              dbOnline: status.dbOnline,
+            });
+            if (status.isOnline && status.dbOnline !== false) {
+              setLastLoadErrorType(null);
+              Toast.show({
+                type: 'success',
+                text1: 'Bağlantı kuruldu',
+                text2: 'Veriler yeniden yükleniyor...',
+                visibilityTime: 2000,
+              });
+              loadData(true);
+            } else if (status.isOnline && status.dbOnline === false) {
+              setLastLoadErrorType('db');
+              Toast.show({
+                type: 'error',
+                text1: 'Veritabanı bağlantısı yok',
+                text2: 'Sunucu çalışıyor ama veritabanına ulaşılamıyor.',
+                visibilityTime: 4000,
+              });
+            } else {
+              setLastLoadErrorType(null);
+              Toast.show({ type: 'error', text1: 'Bağlantı başarısız', text2: status.error || 'Sunucuya erişilemiyor' });
+            }
+          }}
+          onOpenSettings={() => navigation.navigate('Ayarlar')}
+          lastError={backendStatus.error}
+          lastChecked={backendStatus.lastChecked}
+          errorType={lastLoadErrorType || (backendStatus.isOnline && backendStatus.dbOnline === false ? 'db' : null)}
+          testedUrl={getHealthUrl()}
+          apiBaseUrl={getBackendUrl()}
+          requestId={lastErrorPayload?.requestId}
+          serverMessage={lastErrorPayload?.message}
+          showDebug={showDebugUrls}
+          onToggleDebug={() => setShowDebugUrls((v) => !v)}
+        />
+      ) : (
+        <PrimeHomeView
+          headerContent={primeHeaderContent}
+          tesis={tesis}
+          ozet={ozet}
+          odalar={displayOdalar}
+          sonGirenler={sonGirenler}
+          filtre={filtre}
+          onFilterChange={(key) => { logger.button('Filtre', key); setFiltre(key); }}
+          onOdaPress={setSheetRoom}
+          onRefresh={onRefresh}
+          refreshing={refreshing}
+          navigation={navigation}
+          getBackendUrl={getBackendUrl}
+          backendOk={backendStatus.isOnline === true}
+        />
+      )}
 
       {/* FAB + half-sheet menü */}
       <View style={[styles.fabContainer, { zIndex: 20 }]}>
