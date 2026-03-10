@@ -12,8 +12,9 @@ const { runMrzPipeline } = require('../../lib/vision/mrz');
 const fs = require('fs');
 
 router.post('/mrz/parse', authenticateTesisOrSupabase, express.json({ limit: '8mb' }), async (req, res) => {
-  const { imageBase64, docTypeHint, correlationId } = req.body || {};
+  const { imageBase64, docTypeHint, correlationId, paperMode } = req.body || {};
   const corr = correlationId || req.requestId || 'no-correlation';
+  const usePaperMode = !!paperMode;
   let filePath = null;
 
   try {
@@ -23,10 +24,10 @@ router.post('/mrz/parse', authenticateTesisOrSupabase, express.json({ limit: '8m
     }
 
     const uploadsDir = require('path').join(__dirname, '../../../uploads/scan');
-    const { filePath: fp } = await preprocessFromBase64(imageBase64, uploadsDir);
+    const { filePath: fp } = await preprocessFromBase64(imageBase64, uploadsDir, { paperMode: usePaperMode });
     filePath = fp;
 
-    const result = await runMrzPipeline(filePath, corr);
+    const result = await runMrzPipeline(filePath, corr, { paperMode: usePaperMode });
 
     const response = {
       ok: result.ok,

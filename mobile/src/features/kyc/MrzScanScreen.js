@@ -856,7 +856,7 @@ export default function MrzScanScreen({ navigation }) {
           }
         }
         logger.info('[Galeri kimlik] Base64 okundu', { base64Len: base64?.length ?? 0 });
-        const res = await api.post('/ocr/document-base64', { imageBase64: base64 });
+        const res = await api.post('/ocr/document-base64', { imageBase64: base64, paperMode: true });
         const data = res?.data;
         if (!mounted.current) return;
         logger.info('[Galeri kimlik] Backend cevabı', {
@@ -1683,14 +1683,6 @@ export default function MrzScanScreen({ navigation }) {
         </View>
         <View style={styles.overlayBackBtn} />
       </View>
-      <View style={styles.guideOverlay} pointerEvents="none">
-        <View style={styles.mrzFrame}>
-          <View style={styles.mrzLine1} />
-          <View style={styles.mrzLine2} />
-        </View>
-        <Text style={styles.guideText}>MRZ'yi çerçeveye hizala</Text>
-        <Text style={styles.guideSubtext}>Işık yansıması olmasın, belgeyi düz tutun</Text>
-      </View>
       <View style={[styles.overlayBottom, { paddingBottom: insets.bottom + 20 }]} pointerEvents="box-none">
         <View style={styles.overlayBottomBtn} />
         {TorchModule ? (
@@ -1859,12 +1851,6 @@ const styles = StyleSheet.create({
   androidFallbackRow: { flexDirection: 'row', gap: 12 },
   androidFallbackBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: 'rgba(0,0,0,0.6)', paddingVertical: 10, paddingHorizontal: 16, borderRadius: 10 },
   androidFallbackBtnText: { color: '#fff', fontSize: 13, fontWeight: '600' },
-  guideOverlay: { position: 'absolute', left: 0, right: 0, bottom: '35%', alignItems: 'center', justifyContent: 'center', zIndex: 5 },
-  mrzFrame: { width: SCREEN_WIDTH * 0.88, paddingVertical: 14, paddingHorizontal: 10, borderWidth: 2, borderColor: 'rgba(255,255,255,0.6)', borderRadius: 8 },
-  mrzLine1: { height: 2, backgroundColor: 'rgba(255,255,255,0.4)', marginBottom: 8, width: '100%' },
-  mrzLine2: { height: 2, backgroundColor: 'rgba(255,255,255,0.4)', width: '100%' },
-  guideText: { color: 'rgba(255,255,255,0.95)', fontSize: 15, fontWeight: '600', marginTop: 12 },
-  guideSubtext: { color: 'rgba(255,255,255,0.75)', fontSize: 12, marginTop: 4 },
   nfcIndicator: {
     position: 'absolute',
     top: 100,

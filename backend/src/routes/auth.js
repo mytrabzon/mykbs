@@ -765,14 +765,10 @@ router.post('/giris/yeni', async (req, res) => {
   }
 });
 
-/**
- * Özel giriş: Sadece şifre (ADMIN_SECRET). Mobilde "Özel giriş" butonu ile panel şifresi yazıp girmek için.
- * Admin tesis (MYKBS-ADMIN) veya ADMIN_KULLANICI_ID ile eşleşen kullanıcıya JWT döner.
- */
 router.post('/ozel-giris', async (req, res) => {
   try {
     const sifre = (req.body.sifre && String(req.body.sifre).trim()) || '';
-    const adminSecret = process.env.ADMIN_SECRET || '';
+    const adminSecret = (process.env.ADMIN_SECRET || '').trim();
     if (!adminSecret || sifre !== adminSecret) {
       return res.status(401).json({ message: 'Geçersiz giriş kodu' });
     }
@@ -794,9 +790,7 @@ router.post('/ozel-giris', async (req, res) => {
       }
     }
     if (!kullanici || !kullanici.tesis) {
-      return res.status(503).json({
-        message: 'Özel giriş için admin hesabı tanımlı değil. Backend\'de create-admin-user.js çalıştırın veya ADMIN_KULLANICI_ID ayarlayın.'
-      });
+      return res.status(503).json({ message: 'Giriş şu an kullanılamıyor.' });
     }
     const token = jwt.sign(
       { userId: kullanici.id, tesisId: kullanici.tesis.id },
@@ -832,8 +826,8 @@ router.post('/ozel-giris', async (req, res) => {
       }
     });
   } catch (error) {
-    console.error('Özel giriş hatası:', error);
-    res.status(500).json({ message: 'Özel giriş başarısız', error: error.message });
+    console.error('ozel-giris error:', error);
+    res.status(500).json({ message: 'Giriş başarısız' });
   }
 });
 
@@ -1658,13 +1652,91 @@ router.post('/kayit/supabase-create', async (req, res) => {
 });
 
 /**
+ * Misafir hesabı oluştur (cihaz başına bir kez; mobil bu bilgileri saklayıp aynı hesapla giriş yapar).
+ * E-posta formatı: misafir01_abc12xyz@mykbs.guest — admin kaçıncı hesap olduğunu (01, 02, 03...) görür.
+ * Auth gerekmez.
+ */
+const crypto = require('crypto');
+const GUEST_EMAIL_DOMAIN = 'mykbs.guest';
+
+function randomAlphanumeric(len) {
+  return crypto.randomBytes(Math.ceil(len / 2)).toString('hex').slice(0, len);
+}
+
+router.post('/guest/create', async (req, res) => {
+  const { errorResponse: errRes } = require('../lib/errorResponse');
+  if (!supabaseAdmin) {
+    return errRes(req, res, 503, 'SERVICE_UNAVAILABLE', 'Supabase yapılandırılmamış.');
+  }
+  try {
+    let nextN = 1;
+    try {
+      const { count, error: countErr } = await supabaseAdmin.from('guest_emails').select('*', { count: 'exact', head: true });
+      if (!countErr && count != null) nextN = count + 1;
+    } catch (_) {
+      // Tablo yoksa veya hata varsa 1 kullan
+    }
+    const nStr = String(nextN).padStart(2, '0');
+    const randomPart = randomAlphanumeric(8);
+    const email = `misafir${nStr}_${randomPart}@${GUEST_EMAIL_DOMAIN}`;
+    const password = crypto.randomBytes(16).toString('hex');
+
+    const { data: createdUser, error: createErr } = await supabaseAdmin.auth.admin.createUser({
+      email,
+      password,
+      email_confirm: true,
+    });
+    if (createErr || !createdUser?.user?.id) {
+      console.error('[auth/guest/create] createUser failed:', createErr?.message || createErr);
+      return errRes(req, res, 500, 'UNHANDLED_ERROR', createErr?.message || 'Misafir hesabı oluşturulamadı.');
+    }
+    const userId = createdUser.user.id;
+
+    let orgId = null;
+    const { data: orgs } = await supabaseAdmin.from('organizations').select('id').ilike('name', 'Misafir%').limit(1);
+    if (orgs && orgs[0]) orgId = orgs[0].id;
+    if (!orgId) {
+      const { data: newOrg, error: orgErr } = await supabaseAdmin.from('organizations').insert({ name: 'Misafir Organizasyonu' }).select('id').single();
+      if (orgErr) throw orgErr;
+      orgId = newOrg?.id;
+    }
+    if (!orgId) throw new Error('Org not created');
+    const { data: newBranch, error: branchErr } = await supabaseAdmin.from('branches').insert({ organization_id: orgId, name: 'Misafir Hesap' }).select('id, name').single();
+    if (branchErr || !newBranch) throw branchErr || new Error('Branch not created');
+    const { error: profileErr } = await supabaseAdmin.from('user_profiles').insert({
+      user_id: userId,
+      branch_id: newBranch.id,
+      role: 'staff',
+      display_name: `Misafir ${nStr}`,
+    });
+    if (profileErr) {
+      console.error('[auth/guest/create] user_profiles insert failed:', profileErr.message);
+    }
+    await supabaseAdmin.from('guest_emails').insert({ email }).then(() => {}).catch((e) => {
+      if (e?.code !== '42P01') console.warn('[auth/guest/create] guest_emails insert failed (table may be missing):', e?.message);
+    });
+
+    return res.status(201).json({ email, password });
+  } catch (e) {
+    console.error('[auth/guest/create]', e?.message || e);
+    return errRes(req, res, 500, 'UNHANDLED_ERROR', e?.message || 'Misafir hesabı oluşturulamadı.');
+  }
+});
+
+/**
  * Mevcut kullanıcı bilgilerini getir (Supabase token veya backend JWT).
  * role: 'user' | 'admin' — mobil Admin sekmesi görünürlüğü için.
  */
 router.get('/me', authenticateTesisOrSupabase, async (req, res) => {
   const { errorResponse: errRes } = require('../lib/errorResponse');
   try {
+    if (!req.authSource || (req.authSource !== 'supabase' && req.authSource !== 'prisma' && req.authSource !== 'bypass')) {
+      return errRes(req, res, 401, 'INVALID_TOKEN', 'Oturum bilgisi geçersiz. Lütfen tekrar giriş yapın.');
+    }
     if (req.authSource === 'supabase') {
+      if (!supabaseAdmin) {
+        return errRes(req, res, 503, 'SERVICE_UNAVAILABLE', 'Supabase yapılandırılmamış. Lütfen yöneticiye bildirin.');
+      }
       const u = req.user;
       const b = req.branch;
       if (!u || !u.id) {
@@ -1758,7 +1830,7 @@ router.get('/me', authenticateTesisOrSupabase, async (req, res) => {
             return new Date(ts + 7 * 24 * 60 * 60 * 1000).toISOString();
           } catch (_) { return undefined; }
         })(),
-        isGuest: !!(u.is_anonymous === true && !(u.email_confirmed_at === true))
+        isGuest: !!(u.is_anonymous === true && !(u.email_confirmed_at === true)) || !!(u.email && String(u.email).toLowerCase().endsWith('@mykbs.guest'))
       });
     }
 
@@ -1840,13 +1912,17 @@ router.get('/me', authenticateTesisOrSupabase, async (req, res) => {
     );
     const { errorResponse: errRes } = require('../lib/errorResponse');
     const isP2025 = code === 'P2025' || (error?.meta?.code === 'P2025');
-    const isDb = /prisma|ECONNREFUSED|08P01|connect|relation|column|42703/i.test(msg);
+    const isDb = /prisma|ECONNREFUSED|08P01|connect|relation|column|42703|P1001|Can't reach database|connection refused|ENOTFOUND|ETIMEDOUT|getaddrinfo/i.test(msg) || code === 'P1001';
     const isRefError = /Cannot access .* before initialization|ReferenceError/i.test(msg);
+    const isSupabaseAuth = /invalid jwt|jwt expired|getUser|session/i.test(msg);
     if (isP2025 || /Cannot read propert|kullanici\.|findUnique.*null/i.test(msg)) {
       return errRes(req, res, 404, 'NOT_FOUND', 'Kullanıcı bilgisi bulunamadı.');
     }
     if (isDb) {
       return errRes(req, res, 500, 'DB_CONNECT_ERROR', 'Veritabanı geçici olarak kullanılamıyor. Lütfen tekrar deneyin.');
+    }
+    if (isSupabaseAuth) {
+      return errRes(req, res, 401, 'TOKEN_EXPIRED', 'Oturum süresi doldu veya geçersiz. Lütfen tekrar giriş yapın.');
     }
     if (isRefError) {
       return errRes(req, res, 500, 'SERVER_ERROR', 'Sunucu güncellemesi gerekli. Lütfen kısa süre sonra tekrar deneyin.');

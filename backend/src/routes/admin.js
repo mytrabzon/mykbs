@@ -8,12 +8,11 @@ const appAdminRouter = require('./appAdmin');
 
 const router = express.Router();
 
-const ADMIN_SECRET = process.env.ADMIN_SECRET || 'admin-secret-key';
+const ADMIN_SECRET = (process.env.ADMIN_SECRET || 'admin-secret-key').trim();
 
-// Admin auth: ADMIN_SECRET (şifre) veya Supabase/backend admin JWT — tesis listesi her iki girişle kullanılabilir
 const adminAuth = (req, res, next) => {
-  const token = req.headers.authorization?.replace('Bearer ', '');
-  if (token === ADMIN_SECRET) {
+  const token = (req.headers.authorization?.replace('Bearer ', '') || '').trim();
+  if (token && token === ADMIN_SECRET) {
     return next();
   }
   appAdminRouter.requireAdminPanelUser(req, res, next);

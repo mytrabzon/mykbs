@@ -266,28 +266,66 @@ function confidenceFromChecks(parsed) {
   return 60;
 }
 
+const TESSERACT_MRZ_OPTIONS = {
+  logger: () => {},
+  tessedit_pageseg_mode: 6,
+  tessedit_char_whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789<',
+};
+
+function runOcr(imagePath) {
+  return Tesseract.recognize(imagePath, 'eng', TESSERACT_MRZ_OPTIONS).then((r) => r.data.text);
+}
+
 /**
  * Run MRZ pipeline: preprocessed image path -> OCR -> extract -> parse -> result.
+ * Tesseract PSM 6 + MRZ whitelist for speed and accuracy. On failure, paper mode retries with stronger preprocessing.
  * @param {string} imagePath - Preprocessed image path
  * @param {string} correlationId - For logging
+ * @param {{ paperMode?: boolean }} [opts] - paperMode: ilk denemede bulunamazsa kağıt ön işlemi ile tekrar dene
  * @returns {Promise<{ ok: boolean, confidence: number, mrzRaw: string, mrzRawMasked: string, fields: object, checks: object, errorCode?: string }>}
  */
-async function runMrzPipeline(imagePath, correlationId) {
+async function runMrzPipeline(imagePath, correlationId, opts = {}) {
   const { logScanEvent } = require('../log/scanLog');
   const { maskMrz } = require('../security/redact');
+  const { preprocessForPaperMrz, preprocessMrzImage } = require('./preprocess');
 
   logScanEvent(correlationId, 'preprocess_done', {});
   let text;
   try {
-    const { data: { text: t } } = await Tesseract.recognize(imagePath, 'tur+eng', { logger: () => {} });
-    text = t;
+    text = await runOcr(imagePath);
   } catch (e) {
     logScanEvent(correlationId, 'error', { errorCode: 'ocr_failed', message: e.message });
     return { ok: false, confidence: 0, mrzRaw: '', mrzRawMasked: maskMrz(''), fields: {}, checks: {}, errorCode: 'ocr_failed' };
   }
   logScanEvent(correlationId, 'ocr_done', {});
 
-  const mrzRaw = extractMrzFromOcr(text);
+  let mrzRaw = extractMrzFromOcr(text);
+  if (!mrzRaw && opts.paperMode && fs.existsSync(imagePath)) {
+    const dir = path.dirname(imagePath);
+    const paperPath = path.join(dir, `scan_paper_${Date.now()}.jpg`);
+    try {
+      fs.copyFileSync(imagePath, paperPath);
+      await preprocessForPaperMrz(paperPath);
+      const text2 = await runOcr(paperPath);
+      mrzRaw = extractMrzFromOcr(text2);
+      try { fs.unlinkSync(paperPath); } catch (_) {}
+    } catch (_) {
+      try { fs.unlinkSync(paperPath); } catch (__) {}
+    }
+    if (!mrzRaw) {
+      const cropPath = path.join(dir, `scan_crop_${Date.now()}.jpg`);
+      try {
+        fs.copyFileSync(imagePath, cropPath);
+        await preprocessMrzImage(cropPath, { mrzFraction: 0.35, contrast: 0.4, brightness: 0.1 });
+        const text3 = await runOcr(cropPath);
+        mrzRaw = extractMrzFromOcr(text3);
+        try { fs.unlinkSync(cropPath); } catch (_) {}
+      } catch (_) {
+        try { fs.unlinkSync(cropPath); } catch (__) {}
+      }
+    }
+  }
+
   if (!mrzRaw) {
     logScanEvent(correlationId, 'parse_done', { found: false });
     return { ok: false, confidence: 0, mrzRaw: '', mrzRawMasked: '', fields: {}, checks: {}, errorCode: 'mrz_not_found' };

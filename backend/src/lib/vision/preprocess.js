@@ -80,10 +80,11 @@ async function preprocessForPhotocopyMrzStrong(filePath) {
  * Load image from base64, preprocess, and optionally save to temp file.
  * @param {string} imageBase64 - JPEG/PNG base64 string
  * @param {string} [tempDir] - Directory for temp file (optional; if not set, returns buffer in memory is not implemented - we write to temp)
+ * @param {{ paperMode?: boolean }} [options] - paperMode: kağıt/fotokopi MRZ için güçlü ön işleme (kontrast, keskinleştirme, büyütme)
  * @returns {Promise<{ filePath: string }>} Path to preprocessed image
  */
 const PREPROCESS_LOG = '[preprocessFromBase64]';
-async function preprocessFromBase64(imageBase64, tempDir) {
+async function preprocessFromBase64(imageBase64, tempDir, options = {}) {
   let buf;
   try {
     buf = Buffer.from(imageBase64, 'base64');
@@ -101,12 +102,15 @@ async function preprocessFromBase64(imageBase64, tempDir) {
   fs.mkdirSync(dir, { recursive: true });
   try {
     fs.writeFileSync(filePath, buf);
-    console.log(PREPROCESS_LOG, "Storage'a yazıldı:", filePath, { bufLen: buf.length });
+    console.log(PREPROCESS_LOG, "Storage'a yazıldı:", filePath, { bufLen: buf.length, paperMode: !!options.paperMode });
   } catch (writeErr) {
     console.error(PREPROCESS_LOG, "Storage yazma hatası:", writeErr.message, "path:", filePath);
     throw new Error('Görsel kaydedilemedi: ' + writeErr.message);
   }
   await preprocessForOcr(filePath);
+  if (options.paperMode) {
+    await preprocessForPaperMrz(filePath);
+  }
   return { filePath };
 }
 
@@ -238,7 +242,7 @@ function applySharpenKernel(image) {
 
 /**
  * A4 kağıt / fotokopi MRZ için ön işleme: yüksek kontrast, gerekirse büyütme ve keskinleştirme.
- * Fotokopide pasaport MRZ genelde soluk; kontrast artırıp Tesseract'ın okumasını kolaylaştırır.
+ * Fotokopide pasaport MRZ genelde soluk; kontrast artırıp Tesseract okunabilirliğini artırır.
  */
 async function preprocessForPaperMrz(filePath) {
   if (!filePath || !fs.existsSync(filePath)) return filePath;
@@ -247,10 +251,10 @@ async function preprocessForPaperMrz(filePath) {
     let image = await Jimp.read(filePath);
     const w = image.bitmap.width;
     const h = image.bitmap.height;
-    image = image.greyscale().normalize().brightness(0.05).contrast(0.65);
-    if (w < 900 || h < 250) {
-      const scale = Math.min(2.2, 900 / Math.max(w, 1), 450 / Math.max(h, 1));
-      if (scale > 1.2) image = image.resize(Math.round(w * scale), Math.round(h * scale), Jimp.RESIZE_BICUBIC);
+    image = image.greyscale().normalize().brightness(0.08).contrast(0.75);
+    if (w < 1000 || h < 280) {
+      const scale = Math.min(2.4, 1000 / Math.max(w, 1), 500 / Math.max(h, 1));
+      if (scale > 1.15) image = image.resize(Math.round(w * scale), Math.round(h * scale), Jimp.RESIZE_BICUBIC);
     }
     image = applySharpenKernel(image);
     await image.write(filePath);

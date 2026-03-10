@@ -19,9 +19,10 @@ export default function LoginPage() {
   const handleSecretLogin = (e: React.FormEvent) => {
     e.preventDefault()
     setLoading(true)
-    const adminSecret = process.env.NEXT_PUBLIC_ADMIN_SECRET || 'admin-secret-key'
-    if (secret === adminSecret) {
-      localStorage.setItem('admin_token', secret)
+    const adminSecret = (process.env.NEXT_PUBLIC_ADMIN_SECRET || '').trim()
+    const trimmedSecret = (secret || '').trim()
+    if (trimmedSecret && trimmedSecret === adminSecret) {
+      localStorage.setItem('admin_token', trimmedSecret)
       toast.success('Giriş başarılı')
       router.push('/')
     } else {
@@ -30,7 +31,6 @@ export default function LoginPage() {
     }
   }
 
-  /** Backend (Prisma) e-posta + şifre — aynı hesap mobilde de kullanılır. ADMIN_KULLANICI_ID ile admin yetkisi verilir. */
   const handleBackendLogin = async (e: React.FormEvent) => {
     e.preventDefault()
     const em = (email || '').trim().toLowerCase()
@@ -87,7 +87,7 @@ export default function LoginPage() {
       router.push('/')
     } catch (err: unknown) {
       const msg = (err as Error).message || 'Giriş başarısız'
-      toast.error(msg === 'Invalid login credentials' ? 'Supabase: E-posta veya şifre hatalı. Panel Şifresi sekmesini deneyin.' : msg)
+      toast.error(msg === 'Invalid login credentials' ? 'E-posta veya şifre hatalı' : msg)
       setLoading(false)
     }
   }
@@ -106,22 +106,20 @@ export default function LoginPage() {
       <div className="kbs-login-card">
         <h1 className="kbs-login-title">KBS Prime Admin</h1>
         <div className="kbs-login-tabs">
-          <button type="button" onClick={() => setMode('secret')} className={`kbs-login-tab ${mode === 'secret' ? 'active' : ''}`}>Panel Şifresi</button>
+          <button type="button" onClick={() => setMode('secret')} className={`kbs-login-tab ${mode === 'secret' ? 'active' : ''}`}>Şifre</button>
           <button type="button" onClick={() => setMode('backend')} className={`kbs-login-tab ${mode === 'backend' ? 'active' : ''}`}>E-posta + Şifre</button>
           <button type="button" onClick={() => setMode('supabase')} className={`kbs-login-tab ${mode === 'supabase' ? 'active' : ''}`}>Supabase</button>
         </div>
         {mode === 'secret' ? (
           <form onSubmit={handleSecretLogin}>
-            <input type="password" value={secret} onChange={(e) => setSecret(e.target.value)} placeholder="Panel şifresi (.env.local NEXT_PUBLIC_ADMIN_SECRET)" className="kbs-input" autoComplete="off" />
+            <input type="password" value={secret} onChange={(e) => setSecret(e.target.value)} placeholder="Şifre" className="kbs-input" autoComplete="off" />
             <button type="submit" disabled={loading} className="kbs-btn-primary">{loading ? 'Giriş yapılıyor...' : 'Giriş Yap'}</button>
-            <p className="kbs-login-hint">Backend veya Supabase gerekmez. Şifre: admin-panel/.env.local içindeki NEXT_PUBLIC_ADMIN_SECRET.</p>
           </form>
         ) : mode === 'backend' ? (
           <form onSubmit={handleBackendLogin}>
             <input type="email" name="email" autoComplete="email" inputMode="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="E-posta (admin hesabı)" required className="kbs-input" />
             <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Şifre" required minLength={6} className="kbs-input" />
             <button type="submit" disabled={loading} className="kbs-btn-primary">{loading ? 'Giriş yapılıyor...' : 'Giriş Yap'}</button>
-            <p className="kbs-login-hint">Mobil uygulamada da aynı e-posta ve şifre ile giriş yapabilirsiniz.</p>
           </form>
         ) : (
           <form onSubmit={handleSupabaseLogin}>

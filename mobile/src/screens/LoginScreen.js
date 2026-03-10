@@ -377,12 +377,11 @@ export default function LoginScreen({ route }) {
           </View>
 
           <View style={[styles.guestRow, { borderTopColor: colors.border, marginTop: 0, paddingTop: spacing.md }]}>
-            <Text style={[styles.guestText, { color: colors.textSecondary }]}>Sadece şifre ile giriş (özel erişim)</Text>
             <TouchableOpacity
               onPress={() => { setShowOzelGirisModal(true); setOzelGirisSifre(''); }}
               style={[styles.guestBtn, { borderColor: colors.textSecondary }]}
             >
-              <Text style={[styles.guestBtnText, { color: colors.textSecondary }]}>Özel giriş</Text>
+              <Text style={[styles.guestBtnText, { color: colors.textSecondary }]}>Şifre ile giriş</Text>
             </TouchableOpacity>
           </View>
 
@@ -431,19 +430,16 @@ export default function LoginScreen({ route }) {
         <View style={styles.modalOverlay}>
           <View style={[styles.modalContent, { backgroundColor: colors.surface }]}>
             <View style={[styles.modalHeader, { borderBottomColor: colors.border }]}>
-              <Text style={[styles.modalTitle, { color: colors.textPrimary }]}>Özel giriş</Text>
+              <Text style={[styles.modalTitle, { color: colors.textPrimary }]}>Giriş</Text>
               <TouchableOpacity onPress={() => { setShowOzelGirisModal(false); setOzelGirisSifre(''); }}>
                 <Ionicons name="close" size={24} color={colors.textPrimary} />
               </TouchableOpacity>
             </View>
-            <Text style={[styles.modalBodyText, { color: colors.textSecondary, marginBottom: spacing.md }]}>
-              Özel erişim şifresini girin (admin panel ile aynı şifre).
-            </Text>
             <Input
-              label="Giriş kodu"
+              label=""
               value={ozelGirisSifre}
               onChangeText={setOzelGirisSifre}
-              placeholder="Şifreyi girin"
+              placeholder="Şifre"
               secureTextEntry
               autoCapitalize="none"
               autoCorrect={false}

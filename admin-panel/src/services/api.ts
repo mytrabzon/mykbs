@@ -22,15 +22,20 @@ api.interceptors.request.use(
   }
 )
 
-// Response interceptor
+// Response interceptor: 401'de sadece JWT token ise çıkış yap (Panel Şifresi ile girişte backend 401 dönebilir, token silinmemeli)
 api.interceptors.response.use(
   (response) => {
     return response
   },
   (error) => {
     if (error.response?.status === 401) {
-      localStorage.removeItem('admin_token')
-      window.location.href = '/login'
+      const token = localStorage.getItem('admin_token')
+      // JWT genelde "xxx.yyy.zzz" formatında; panel şifresi düz metin. Sadece JWT ise çıkış yap.
+      const isJwt = typeof token === 'string' && (token.match(/\./g)?.length ?? 0) >= 2
+      if (isJwt) {
+        localStorage.removeItem('admin_token')
+        window.location.href = '/login'
+      }
     }
     return Promise.reject(error)
   }

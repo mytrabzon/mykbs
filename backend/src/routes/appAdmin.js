@@ -1,7 +1,3 @@
-/**
- * Uygulama içi admin paneli: Supabase admin veya backend JWT + role admin.
- * Authorization: Bearer <supabase_access_token | backend_jwt>
- */
 const express = require('express');
 const jwt = require('jsonwebtoken');
 const { prisma } = require('../lib/prisma');
@@ -10,17 +6,15 @@ const { encrypt } = require('../utils/kbsEncrypt');
 
 const router = express.Router();
 
-const ADMIN_SECRET = process.env.ADMIN_SECRET || 'admin-secret-key';
+const ADMIN_SECRET = (process.env.ADMIN_SECRET || 'admin-secret-key').trim();
 
 async function requireAdminPanelUser(req, res, next) {
   try {
     const authHeader = req.headers.authorization;
-    const token = authHeader && authHeader.startsWith('Bearer ') ? authHeader.slice(7) : null;
+    const token = authHeader && authHeader.startsWith('Bearer ') ? authHeader.slice(7).trim() : null;
     if (!token) {
       return res.status(401).json({ message: 'Token bulunamadı' });
     }
-
-    // 0) Admin şifre ile giriş (panel tüm sayfaları tek token ile kullanılabilsin)
     if (token === ADMIN_SECRET) {
       return next();
     }

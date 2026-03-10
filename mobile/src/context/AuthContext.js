@@ -14,6 +14,8 @@ const AUTH_STORAGE_KEYS = {
   SUPABASE_TOKEN: `@${APP_PREFIX}:auth:supabase_token`,
   LAST_TAB: `@${APP_PREFIX}:auth:last_tab`,
   RECOVERY_PENDING: `@${APP_PREFIX}:auth:recovery_pending`,
+  /** Cihaz başına tek misafir hesabı: { email, password } — çıkışta silinmez, tekrar girişte aynı hesap kullanılır */
+  GUEST_CREDENTIALS: `@${APP_PREFIX}:auth:guest_credentials`,
   LOCAL_PRIVACY_ACCEPTED_AT: `@${APP_PREFIX}:consent:local_privacy_at`,
   LOCAL_TERMS_ACCEPTED_AT: `@${APP_PREFIX}:consent:local_terms_at`,
 };
@@ -641,16 +643,44 @@ export const AuthProvider = ({ children }) => {
         loginAsGuest: async () => {
           if (!supabase?.auth) return { success: false, message: 'Misafir girişi kullanılamıyor.' };
           try {
-            const { data, error } = await supabase.auth.signInAnonymously();
-            if (error) return { success: false, message: error.message || 'Misafir girişi yapılamadı.' };
-            if (data?.session?.access_token && mounted.current) {
-              await fetchMeAndSetState(data.session.access_token, setUser, setTesis, setToken, getSupabaseAwareTokenProvider, setPrivacyPolicyAcceptedAt, setTermsOfServiceAcceptedAt, setAccountPendingDeletion, setDeletionAt, setGuest, setAuthError, me429Options);
+            let email = null;
+            let password = null;
+            const stored = await AsyncStorage.getItem(AUTH_STORAGE_KEYS.GUEST_CREDENTIALS);
+            if (stored) {
+              try {
+                const parsed = JSON.parse(stored);
+                if (parsed?.email && parsed?.password) {
+                  email = parsed.email;
+                  password = parsed.password;
+                }
+              } catch (_) {}
+            }
+            if (!email || !password) {
+              const res = await api.post('/auth/guest/create');
+              const data = res?.data;
+              if (!data?.email || !data?.password) {
+                return { success: false, message: 'Misafir hesabı oluşturulamadı.' };
+              }
+              email = data.email;
+              password = data.password;
+              await AsyncStorage.setItem(AUTH_STORAGE_KEYS.GUEST_CREDENTIALS, JSON.stringify({ email, password }));
+            }
+            const { data: signInData, error } = await supabase.auth.signInWithPassword({ email, password });
+            if (error) {
+              if (error.message && (error.message.includes('Invalid') || error.message.includes('invalid'))) {
+                await AsyncStorage.removeItem(AUTH_STORAGE_KEYS.GUEST_CREDENTIALS);
+                return { success: false, message: 'Kayıtlı misafir hesabı geçersiz. Tekrar deneyin.' };
+              }
+              return { success: false, message: error.message || 'Misafir girişi yapılamadı.' };
+            }
+            if (signInData?.session?.access_token && mounted.current) {
+              await fetchMeAndSetState(signInData.session.access_token, setUser, setTesis, setToken, getSupabaseAwareTokenProvider, setPrivacyPolicyAcceptedAt, setTermsOfServiceAcceptedAt, setAccountPendingDeletion, setDeletionAt, setGuest, setAuthError, me429Options);
               return { success: true };
             }
             return { success: false, message: 'Oturum alınamadı.' };
           } catch (e) {
             logger.error('loginAsGuest error', e);
-            return { success: false, message: e?.message || 'Misafir girişi yapılamadı.' };
+            return { success: false, message: e?.response?.data?.message || e?.message || 'Misafir girişi yapılamadı.' };
           }
         },
         resetPasswordForEmail,

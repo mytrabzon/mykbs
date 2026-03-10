@@ -212,15 +212,6 @@ const styles = StyleSheet.create({
   },
   screenContainer: { flex: 1 },
   mainTabsWrap: { flex: 1 },
-  guestBanner: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    gap: 8,
-    borderBottomWidth: 1,
-  },
-  guestBannerText: { flex: 1, fontSize: 12 },
   appLoadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', gap: 12 },
   appLoadingText: { fontSize: 16 },
   connectionErrorWrapper: { flex: 1, justifyContent: 'center', backgroundColor: '#f5f5f5' },
@@ -315,25 +306,6 @@ function DahaFazlaStack() {
   );
 }
 
-function GuestBanner() {
-  const { isGuest } = useAuth();
-  const { colors } = useTheme();
-  const navigation = useNavigation();
-  if (!isGuest) return null;
-  return (
-    <TouchableOpacity
-      style={[styles.guestBanner, { backgroundColor: colors.primarySoft || colors.primary + '20', borderColor: colors.border }]}
-      onPress={() => navigation.navigate('DahaFazla', { screen: 'Ayarlar' })}
-      activeOpacity={0.8}
-    >
-      <Ionicons name="person-outline" size={18} color={colors.primary} />
-      <Text style={[styles.guestBannerText, { color: colors.text }]} numberOfLines={2}>
-        Misafir modu: En fazla 5 pasaport. KBS için Daha Fazla → Ayarlar → E-posta ekleyin.
-      </Text>
-    </TouchableOpacity>
-  );
-}
-
 function MainTabs() {
   const insets = useSafeAreaInsets();
   const { user, lastTab, setLastTab } = useAuth();
@@ -343,7 +315,6 @@ function MainTabs() {
 
   return (
     <View style={styles.mainTabsWrap}>
-      <GuestBanner />
       <CreditsBanner />
       <Tab.Navigator
       initialRouteName={initialTab}

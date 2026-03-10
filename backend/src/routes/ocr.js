@@ -323,9 +323,11 @@ async function runOcrWithPsm(worker, imagePath, psm) {
 /**
  * Kimlik MRZ canavarı: multi-preprocess × multi-PSM × crop candidates × rotate/deskew, checksum bazlı skor.
  * @param {string} filePath - Yüklenen görüntü path
+ * @param {{ paperMode?: boolean }} [opts] - paperMode: true ise kağıt/fotokopi varyantları önce denenir (daha hızlı sonuç)
  * @returns {Promise<{ ok: boolean, mrzRaw?: string, payload?: object, score?: number, attemptsUsed?: number, qualityHints?: object }>}
  */
-async function runMrzPipeline(filePath) {
+async function runMrzPipeline(filePath, opts = {}) {
+  const paperMode = !!opts.paperMode;
   const dir = path.join(os.tmpdir(), `mrz_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`);
   fs.mkdirSync(dir, { recursive: true });
   const tempPaths = new Set();
@@ -338,22 +340,31 @@ async function runMrzPipeline(filePath) {
   let best = { score: 0, raw: '', fixed: '', payload: null, attemptsUsed: 0 };
   const qualityHints = { needMoreZoom: false, glareHigh: false, blurry: false, suggestTorch: 'keep' };
 
+  const allVariants = [
+    { fn: (p) => preprocessMrzImage(p, { mrzFraction: 0.3, contrast: 0.3, brightness: 0.2 }), name: 'mrzCrop' },
+    { fn: preprocessForPhotocopyMrz, name: 'photocopy' },
+    { fn: preprocessForPaperMrz, name: 'paper' },
+    { fn: preprocessForPhotocopyMrzStrong, name: 'photocopyStrong' },
+    { fn: preprocessForFadedMrz, name: 'faded' },
+    { fn: (p) => preprocessForKimlikMrz(p, { contrast: 0.45 }), name: 'kimlikLow' },
+    { fn: (p) => preprocessForKimlikMrz(p, { contrast: 0.55 }), name: 'kimlik' },
+    { fn: (p) => preprocessForKimlikMrz(p, { contrast: 0.65 }), name: 'kimlikMid' },
+    { fn: (p) => preprocessForKimlikMrz(p, { contrast: 0.8 }), name: 'kimlikHi' },
+    { fn: (p) => preprocessForKimlikMrz(p, { sharpen: true }), name: 'kimlikSharp' },
+    { fn: preprocessForInvertedMrz, name: 'inverted' },
+  ];
+  const preprocessVariants = paperMode
+    ? [
+        { fn: preprocessForPaperMrz, name: 'paper' },
+        { fn: preprocessForPhotocopyMrzStrong, name: 'photocopyStrong' },
+        { fn: preprocessForFadedMrz, name: 'faded' },
+        { fn: preprocessForPhotocopyMrz, name: 'photocopy' },
+        ...allVariants.filter((v) => !['paper', 'photocopyStrong', 'faded', 'photocopy'].includes(v.name)),
+      ]
+    : allVariants;
+
   try {
     const worker = await Tesseract.createWorker('eng', 1, { logger: () => {} });
-
-    const preprocessVariants = [
-      { fn: (p) => preprocessMrzImage(p, { mrzFraction: 0.3, contrast: 0.3, brightness: 0.2 }), name: 'mrzCrop' },
-      { fn: preprocessForPhotocopyMrz, name: 'photocopy' },
-      { fn: preprocessForPaperMrz, name: 'paper' },
-      { fn: preprocessForPhotocopyMrzStrong, name: 'photocopyStrong' },
-      { fn: preprocessForFadedMrz, name: 'faded' },
-      { fn: (p) => preprocessForKimlikMrz(p, { contrast: 0.45 }), name: 'kimlikLow' },
-      { fn: (p) => preprocessForKimlikMrz(p, { contrast: 0.55 }), name: 'kimlik' },
-      { fn: (p) => preprocessForKimlikMrz(p, { contrast: 0.65 }), name: 'kimlikMid' },
-      { fn: (p) => preprocessForKimlikMrz(p, { contrast: 0.8 }), name: 'kimlikHi' },
-      { fn: (p) => preprocessForKimlikMrz(p, { sharpen: true }), name: 'kimlikSharp' },
-      { fn: preprocessForInvertedMrz, name: 'inverted' },
-    ];
 
     const psms = [7, 13, 6, 11];
     const bottomFractions = [0.35, 0.30, 0.28, 0.25, 0.22, 0.20, 0.18, 0.15, 0.12, 0.40];
@@ -611,9 +622,10 @@ router.post('/document', authenticateTesisOrSupabase, upload.single('image'), as
   }
 });
 
-/** Galeriden seçilen görsel: base64 ile gönder (Android content URI FormData sorununu aşar). MRZ için runMrzPipeline kullan (kimlik MRZ canavarı). */
+/** Galeriden seçilen görsel: base64 ile gönder (Android content URI FormData sorununu aşar). MRZ için runMrzPipeline kullan (kimlik MRZ canavarı). paperMode: true ile kağıt/fotokopi ön işlemi öncelikli. */
 router.post('/document-base64', authenticateTesisOrSupabase, tenantMiddleware, express.json({ limit: '8mb' }), async (req, res) => {
   const base64 = req.body?.imageBase64;
+  const paperMode = !!req.body?.paperMode;
   let filePath = null;
   const logPrefix = '[document-base64]';
   const clientId = req.headers['x-client-id'] || req.ip || 'unknown';
@@ -660,8 +672,8 @@ router.post('/document-base64', authenticateTesisOrSupabase, tenantMiddleware, e
         return res.status(400).json({ message: 'Görsel formatı desteklenmiyor veya bozuk. JPEG/PNG deneyin.' });
       }
     }
-    console.log(logPrefix, 'runMrzPipeline başlıyor');
-    const mrzResult = await runMrzPipeline(filePath);
+    console.log(logPrefix, 'runMrzPipeline başlıyor', { paperMode });
+    const mrzResult = await runMrzPipeline(filePath, { paperMode });
     console.log(logPrefix, 'runMrzPipeline bitti', { ok: mrzResult.ok, hasMrzRaw: !!mrzResult.mrzRaw, score: mrzResult.score, attemptsUsed: mrzResult.attemptsUsed });
     let mrzRaw = mrzResult.mrzRaw || null;
     let mrzPayload = mrzResult.payload || null;
