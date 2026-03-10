@@ -117,12 +117,13 @@ export default function ToplulukScreen({ navigation }) {
   const [categoryModalVisible, setCategoryModalVisible] = useState(false);
 
   const loadToken = useCallback(async () => {
-    let t = await getSupabaseToken();
+    const getToken = typeof getSupabaseToken === 'function' ? getSupabaseToken : async () => null;
+    let t = await getToken();
     // E-posta/telefon girişinde Supabase session bazen gecikmeli yazılıyor; birkaç kez daha dene
     if (!t && isLoggedIn) {
       for (const delayMs of [500, 1000, 1500]) {
         await new Promise((r) => setTimeout(r, delayMs));
-        t = await getSupabaseToken();
+        t = await getToken();
         if (t) break;
       }
     }
@@ -132,7 +133,8 @@ export default function ToplulukScreen({ navigation }) {
   }, [getSupabaseToken, isLoggedIn]);
 
   const loadPosts = useCallback(async (isRefresh = false) => {
-    const t = await getSupabaseToken();
+    const getToken = typeof getSupabaseToken === 'function' ? getSupabaseToken : async () => null;
+    const t = await getToken();
     if (!t) {
       setPosts([]);
       return;

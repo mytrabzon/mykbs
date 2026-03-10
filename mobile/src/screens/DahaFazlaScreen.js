@@ -40,7 +40,12 @@ export default function DahaFazlaScreen() {
       return;
     }
     if (item.route) {
-      navigation.navigate(item.route);
+      // Stack içinde ekranı her seferinde açmak için push kullan (navigate bazen aynı stack’te tepkisiz kalabiliyor)
+      if (typeof navigation.push === 'function') {
+        navigation.push(item.route);
+      } else {
+        navigation.navigate(item.route);
+      }
     }
   };
 
