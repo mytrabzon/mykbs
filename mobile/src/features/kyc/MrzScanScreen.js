@@ -2,6 +2,7 @@ import React, { useState, useRef, useCallback, useEffect } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Alert, ActivityIndicator, Platform, Image, ScrollView, PanResponder, BackHandler, Dimensions } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRoute, useFocusEffect } from '@react-navigation/native';
+import * as ScreenOrientation from 'expo-screen-orientation';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { CameraView, useCameraPermissions } from 'expo-camera';
@@ -94,8 +95,7 @@ function getFailureReasonMessage(checksReason, failCount) {
   return 'Işık ve hizayı kontrol edin veya manuel giriş ile devam edin.';
 }
 
-/** false = native MrzReaderView (canlı okuma, kamera daha stabil); true = expo-camera + backend (çekim). Native önce denenir; bazı cihazlarda expo-camera açılmıyor. */
-const USE_UNIFIED_MRZ_FLOW = false;
+/** Tek MRZ sistemi: sadece native MrzReaderView. Diğer (expo-camera + backend) kaldırıldı. */
 
 export default function MrzScanScreen({ navigation }) {
   const route = useRoute();
@@ -105,7 +105,6 @@ export default function MrzScanScreen({ navigation }) {
   const [timeoutWarning, setTimeoutWarning] = useState(false);
   const [failCount, setFailCount] = useState(0);
   const [ocrLoading, setOcrLoading] = useState(false);
-  const [showCameraFallback, setShowCameraFallback] = useState(USE_UNIFIED_MRZ_FLOW);
   const [lastMrzRaw, setLastMrzRaw] = useState('');
   const [stableReadCount, setStableReadCount] = useState(0);
   const [lastMrzChecksReason, setLastMrzChecksReason] = useState('');
@@ -185,6 +184,7 @@ export default function MrzScanScreen({ navigation }) {
         hasMrzReader: !!MrzReaderView,
         platform: Platform.OS,
       });
+      ScreenOrientation.unlockAsync().catch(() => {});
       mounted.current = true;
       hasLeftScreenRef.current = false;
       setIsExiting(false);
@@ -214,6 +214,7 @@ export default function MrzScanScreen({ navigation }) {
 
       return () => {
         logger.info('[MRZ] useFocusEffect: ekran odaktan çıktı (focus loss / cleanup)');
+        ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.PORTRAIT_UP).catch(() => {});
         hasLeftScreenRef.current = true;
         setIsScreenFocused(false);
         setMrzCameraMountReady(false);
@@ -283,7 +284,7 @@ export default function MrzScanScreen({ navigation }) {
       let payload = parseMrz(raw);
       if (!payload.checks?.ok && raw) {
         let fixed = raw;
-        for (let pass = 0; pass < 3; pass++) {
+        for (let pass = 0; pass < 5; pass++) {
           fixed = fixMrzOcrErrors(fixed || raw);
           const next = parseMrz(fixed);
           if (next?.checks?.ok) {
@@ -569,17 +570,6 @@ export default function MrzScanScreen({ navigation }) {
     [processMrzRaw]
   );
 
-  const handleTakePhoto = useCallback(async () => {
-    if (!permission?.granted) {
-      const { granted } = await requestPermission();
-      if (!granted) {
-        Toast.show({ type: 'error', text1: 'Kamera izni gerekli' });
-        return;
-      }
-    }
-    setShowCameraFallback(true);
-  }, [permission, requestPermission]);
-
   const handlePickImage = useCallback(async () => {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (status !== 'granted') {
@@ -859,23 +849,10 @@ export default function MrzScanScreen({ navigation }) {
     };
   }, [mrzCameraMountReady, permission?.granted, cameraPreviewReady]);
 
-  // DocType toggle: ID_CARD (600–900ms) → Passport (600–900ms) döngüsü; sonuç gelince lock
-  const SCAN_MODE_INTERVAL_MS = 1000;
-  useEffect(() => {
-    if (!MrzReaderView || Platform.OS !== 'android' || mrzLockedRef.current) return;
-    const t = setInterval(() => {
-      if (!mounted.current || mrzLockedRef.current) return;
-      setScanMode((prev) => (prev === DocType.ID ? DocType.Passport : DocType.ID));
-    }, SCAN_MODE_INTERVAL_MS);
-    return () => clearInterval(t);
-  }, [MrzReaderView, mrzLocked]);
-
   const selectedDocType = mrzLockedRef.current ? lockedDocTypeRef.current : scanMode;
   selectedDocTypeRef.current = selectedDocType;
-  // iOS: native reader sadece Pasaport. Kimlik (ID) seçiliyse her zaman Kamera/Galeri + backend kullan;
-  // backend TD1 (3 satır MRZ) destekliyor, böylece kimlik kartları güvenilir okunur.
-  const docTypeForReader = Platform.OS === 'ios' ? DocType.Passport : selectedDocType;
-  const useUnifiedFlow = USE_UNIFIED_MRZ_FLOW;
+  // Tek sistem: her zaman Pasaport modu ile oku (2 satır MRZ). Pasaport tutarlı okunsun; kimlik için kullanıcı "Kimlik"e geçebilir.
+  const docTypeForReader = selectedDocType;
 
   const toggleTorch = useCallback(() => {
     if (!TorchModule) {
@@ -1062,150 +1039,22 @@ export default function MrzScanScreen({ navigation }) {
     );
   }
 
-  // Girişte doğrudan kamera: pasaport/kimlik otomatik algılanır, seçenek butonları yok.
-  if (!MrzReaderView || useUnifiedFlow || showCameraFallback) {
-    logger.info('[MRZ] Expo Camera path (unified/fallback)', { hasMrzReader: !!MrzReaderView, useUnifiedFlow });
-    const handleDirectMrzCapture = async () => {
-      if (!mrzCameraRef.current || ocrLoading) return;
-      if (!permission?.granted) {
-        const { granted } = await requestPermission();
-        if (!granted) {
-          Toast.show({ type: 'error', text1: 'Kamera izni gerekli' });
-          return;
-        }
-        return;
-      }
-      try {
-        const photo = await mrzCameraRef.current.takePictureAsync({ quality: 0.95, base64: false });
-        if (photo?.uri) await uploadImageForMrz(photo.uri);
-      } catch (e) {
-        Toast.show({ type: 'error', text1: 'Fotoğraf alınamadı', text2: e?.message });
-      }
-    };
+  if (!MrzReaderView) {
     return (
       <SafeAreaView style={styles.container} edges={['top']}>
         <View style={styles.header}>
-          <TouchableOpacity
-            onPress={showCameraFallback && MrzReaderView ? () => setShowCameraFallback(false) : goBack}
-            style={styles.iconBtn}
-          >
+          <TouchableOpacity onPress={goBack} style={styles.iconBtn}>
             <Ionicons name="arrow-back" size={24} color="#fff" />
           </TouchableOpacity>
           <Text style={styles.title}>Kimlik / Pasaport</Text>
           <View style={styles.iconBtn} />
         </View>
-        {!(permission?.granted || permissionGrantedLocal) ? (
-          <View style={styles.mrzPickContainer}>
-            <Text style={styles.mrzPickHint}>Kamera izni gerekli. MRZ tarayabilmek için izin verin.</Text>
-            <TouchableOpacity
-              style={styles.mrzPickPrimaryBtn}
-              onPress={async () => {
-                try {
-                  const r = await requestPermission();
-                  if (r?.granted) {
-                    setPermissionGrantedLocal(true);
-                    setMrzCameraMountReady(true);
-                  } else {
-                    Toast.show({ type: 'error', text1: 'İzin reddedildi', text2: 'Ayarlar\'dan kamera iznini açabilirsiniz.' });
-                  }
-                } catch (e) {
-                  Toast.show({ type: 'error', text1: 'Kamera izni alınamadı', text2: e?.message || 'Tekrar deneyin.' });
-                }
-              }}
-              activeOpacity={0.8}
-            >
-              <Ionicons name="camera" size={36} color="#fff" />
-              <Text style={styles.mrzPickPrimaryBtnText}>İzin ver</Text>
-            </TouchableOpacity>
-          </View>
-        ) : (
-          <View
-            style={[StyleSheet.absoluteFill, styles.mrzCameraWrap]}
-            collapsable={false}
-            onLayout={(e) => {
-              const { width, height } = e.nativeEvent.layout;
-              logger.info('[MRZ] Kamera wrap onLayout', { width, height, cameraLayoutReady, platform: Platform.OS });
-              const hasValidSize = (width > 100 && height > 50) || (height > 100 && width > 50);
-              if (hasValidSize && !cameraLayoutReady) {
-                if (layoutFallbackTimeoutRef.current) {
-                  clearTimeout(layoutFallbackTimeoutRef.current);
-                  layoutFallbackTimeoutRef.current = null;
-                }
-                setCameraLayoutReady(true);
-              }
-              // iOS: Layout hazır olduktan 150ms sonra CameraView mount et; native katmanın hazır olması için (onCameraReady bazen ancak böyle tetikleniyor)
-              if (hasValidSize && Platform.OS === 'ios' && !cameraMountDelayDone) {
-                if (cameraMountDelayRef.current) clearTimeout(cameraMountDelayRef.current);
-                cameraMountDelayRef.current = setTimeout(() => {
-                  cameraMountDelayRef.current = null;
-                  if (mounted.current) {
-                    logger.info('[MRZ] iOS: layout sonrası CameraView mount (150ms gecikme)');
-                    setCameraMountDelayDone(true);
-                  }
-                }, 150);
-              }
-            }}
-          >
-            {cameraMountDelayDone && (
-              <CameraView
-                key={`mrz-cam-${cameraKey}`}
-                ref={mrzCameraRef}
-                style={StyleSheet.absoluteFill}
-                facing="back"
-                onCameraReady={() => {
-                  logger.info('[MRZ] CameraView onCameraReady – kamera gerçekten hazır');
-                  if (cameraReadyTimeoutRef.current) {
-                    clearTimeout(cameraReadyTimeoutRef.current);
-                    cameraReadyTimeoutRef.current = null;
-                  }
-                  setCameraPreviewReady(true);
-                  setCameraOpenFailed(false);
-                }}
-                onMountError={(e) => {
-                  const msg = e?.nativeEvent?.message || e?.message || String(e);
-                  logger.warn('[MRZ] CameraView onMountError', { message: msg, event: e?.nativeEvent });
-                  if (cameraReadyTimeoutRef.current) {
-                    clearTimeout(cameraReadyTimeoutRef.current);
-                    cameraReadyTimeoutRef.current = null;
-                  }
-                  setCameraPreviewReady(false);
-                  setCameraOpenFailed(true);
-                }}
-              />
-            )}
-            {/* Kamera mount edildi ama onCameraReady gelmediyse veya henüz gelmediyse "Kamera hazırlanıyor" göster (siyah ekran yerine). pointerEvents="none" ile alttaki "Galeriden seç" tıklanabilir kalır. */}
-            {(!cameraMountDelayDone || (!cameraPreviewReady && !cameraOpenFailed)) && (
-              <View style={[StyleSheet.absoluteFill, styles.mrzPickLoading, { justifyContent: 'center', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.5)' }]} pointerEvents="none">
-                <ActivityIndicator size="large" color="#fff" />
-                <Text style={styles.mrzPickLoadingText}>
-                  {!cameraMountDelayDone ? 'Kamera açılıyor…' : 'Kamera hazırlanıyor…'}
-                </Text>
-              </View>
-            )}
-            {cameraOpenFailed && (
-              <View style={styles.cameraSlowBanner} pointerEvents="box-none">
-                <Text style={styles.cameraSlowBannerText}>Kamera açılamadı.</Text>
-                <TouchableOpacity style={styles.cameraSlowBannerBtn} onPress={() => { setCameraOpenFailed(false); setCameraPreviewReady(false); if (cameraReadyTimeoutRef.current) { clearTimeout(cameraReadyTimeoutRef.current); cameraReadyTimeoutRef.current = null; } setMrzCameraMountReady(false); setCameraKey((k) => k + 1); setTimeout(() => setMrzCameraMountReady(true), 500); }} activeOpacity={0.8}>
-                  <Ionicons name="refresh" size={20} color="#fff" />
-                  <Text style={styles.cameraSlowBannerBtnText}>Tekrar dene</Text>
-                </TouchableOpacity>
-              </View>
-            )}
-            {ocrLoading ? (
-              <View style={[StyleSheet.absoluteFill, styles.mrzPickLoading, { justifyContent: 'center', alignItems: 'center' }]}>
-                <ActivityIndicator size="large" color="#fff" />
-                <Text style={styles.mrzPickLoadingText}>Okunuyor…</Text>
-              </View>
-            ) : !cameraOpenFailed ? (
-              <View style={styles.directMrzOverlay} pointerEvents="box-none">
-                <Text style={styles.directMrzHint}>MRZ alanını kameraya gösterip dokunun – otomatik okunur</Text>
-                <TouchableOpacity style={styles.directMrzCaptureBtn} onPress={handleDirectMrzCapture} disabled={ocrLoading} activeOpacity={0.9}>
-                  <Ionicons name="camera" size={40} color="#fff" />
-                </TouchableOpacity>
-              </View>
-            ) : null}
-          </View>
-        )}
+        <View style={styles.mrzPickContainer}>
+          <Text style={styles.mrzPickHint}>MRZ okuyucu bu cihazda kullanılamıyor. Lütfen manuel giriş kullanın.</Text>
+          <TouchableOpacity style={styles.mrzPickSecondaryBtn} onPress={goBack}>
+            <Text style={styles.mrzPickSecondaryBtnText}>Geri</Text>
+          </TouchableOpacity>
+        </View>
       </SafeAreaView>
     );
   }
@@ -1282,16 +1131,13 @@ export default function MrzScanScreen({ navigation }) {
                 <Text style={[styles.docTypeBtnText, selectedDocType === DocType.ID && styles.docTypeBtnTextActive]}>Kimlik</Text>
               </TouchableOpacity>
             </View>
-            <Text style={styles.docTypeHint}>MRZ göründüğü anda okunur · Yatay veya dikey tutabilirsiniz</Text>
+            <Text style={styles.docTypeHint}>MRZ göründüğü anda okunur · Kamerayı yan çevirip de okuyabilirsiniz</Text>
           </View>
         )}
         <View style={styles.overlayBackBtn} />
       </View>
       <View style={[styles.overlayBottom, { paddingBottom: insets.bottom + 20 }]} pointerEvents="box-none">
-        <TouchableOpacity style={[styles.overlayBottomBtn, styles.photoFallbackBtn]} onPress={handleTakePhoto} activeOpacity={0.8}>
-          <Ionicons name="camera-outline" size={24} color="#fff" />
-          <Text style={styles.photoFallbackBtnText}>Fotoğraf ile oku</Text>
-        </TouchableOpacity>
+        <View style={styles.overlayBottomBtn} />
         {TorchModule ? (
           <TouchableOpacity style={[styles.overlayBottomBtn, styles.torchBtnRound, torchOn && styles.torchBtnRoundOn]} onPress={toggleTorch} activeOpacity={0.8}>
             <Ionicons name={torchOn ? 'flash' : 'flash-outline'} size={28} color="#fff" />

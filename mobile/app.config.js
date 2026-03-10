@@ -87,6 +87,7 @@ export default {
       // favicon: "./assets/favicon.png" // Asset dosyası oluşturulana kadar yorum satırı
     },
     plugins: [
+      ["expo-screen-orientation", { "initialOrientation": "PORTRAIT_UP" }],
       "expo-camera",
       [
         "react-native-iap",
