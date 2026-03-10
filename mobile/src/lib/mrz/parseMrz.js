@@ -185,18 +185,31 @@ export function fixMrzOcrErrors(raw) {
   return lines.join('\n');
 }
 
-/** Ham MRZ'ı satırlara böl. TD1 kimlik: 3x30 (86-94 karakter tek blok); TD3 pasaport: 2x44 (88); TD2: 2x36 (72). */
+/** Ham MRZ'ı satırlara böl. OCR birleşik satır: önce tek blok temizle, TD1 3x30 / TD3 2x44 ayır. */
 function normalizeMrzLines(raw) {
-  const one = raw.trim().toUpperCase().replace(/\s/g, '').replace(/[^A-Z0-9<]/g, '');
-  // Kimlik (TD1): 3 satır — 88 karakter (30+30+28) I/A ile başlarsa kimlik; 88 ve P ise pasaport aşağıda
+  const one = raw.trim().toUpperCase().replace(/\s+/g, '').replace(/[^A-Z0-9<]/g, '');
   const isIdCard = one[0] === 'I' || one[0] === 'A';
+  // Birleşik satır: newline yok, uzunluk TD1 veya TD3 aralığında
+  const noNewline = !/[\n\r]/.test(raw.trim());
+  if (noNewline && one.length >= 86 && one.length <= 94 && isIdCard) {
+    const s1 = one.slice(0, 30).padEnd(30, '<');
+    const s2 = one.slice(30, 60).padEnd(30, '<');
+    const s3 = one.slice(60).padEnd(30, '<');
+    return [s1, s2, s3];
+  }
+  if (noNewline && one.length >= 88 && one.length <= 100) {
+    const s1 = one.slice(0, 44).padEnd(44, '<');
+    const s2 = one.slice(44, 88).padEnd(44, '<');
+    return [s1, s2];
+  }
+  // Kimlik (TD1): 3 satır — 86–94 karakter I/A ile başlarsa
   if (one.length >= 86 && one.length <= 94 && (one.length !== 88 || isIdCard)) {
     const s1 = one.slice(0, 30).padEnd(30, '<');
     const s2 = one.slice(30, 60).padEnd(30, '<');
     const s3 = one.slice(60).padEnd(30, '<');
     return [s1, s2, s3];
   }
-  // Pasaport (TD3): 2×44 — 66–100 karakter (88 ve P ile başlarsa veya 88 değilse)
+  // Pasaport (TD3): 2×44 — 66–100 karakter
   if (one.length >= 66 && one.length <= 100) {
     const s1 = one.slice(0, 44).padEnd(44, '<');
     const s2 = one.slice(44).padEnd(44, '<');

@@ -119,6 +119,26 @@ function parseDG1ToPayload(dg1Bytes) {
 
   const rawMrz = unwrapDG1ToMRZ(dg1Bytes);
   if (rawMrz && rawMrz.length >= 44) {
+    const mrzStr = Array.isArray(rawMrz) ? bytesToUtf8(rawMrz) : String(rawMrz);
+    // Türk kimlik TD1: 3x30 karakter (86–94). Önce lib/mrz parseMrz ile dene.
+    if (mrzStr.length >= 86 && mrzStr.length <= 94) {
+      try {
+        const { parseMrz } = require('../../lib/mrz');
+        const parsed = parseMrz(mrzStr);
+        if (parsed && (parsed.surname || parsed.givenNames)) {
+          payload.ad = parsed.givenNames || '';
+          payload.soyad = parsed.surname || '';
+          const doc = (parsed.passportNumber || '').trim();
+          payload.kimlikNo = /^\d{11}$/.test(doc) ? doc : null;
+          payload.pasaportNo = payload.kimlikNo ? null : (doc || null);
+          payload.dogumTarihi = parsed.birthDate ? formatDDMMYYYY(parsed.birthDate) : null;
+          payload.uyruk = (parsed.nationality || 'TÜRK').trim();
+          payload.cinsiyet = parsed.sex || null;
+          payload.sonKullanma = parsed.expiryDate ? formatDDMMYYYY(parsed.expiryDate) : null;
+          return payload;
+        }
+      } catch (_) {}
+    }
     const parsed = parseMRZICAO9303(rawMrz);
     if (parsed) {
       payload.ad = parsed.givenNames || '';

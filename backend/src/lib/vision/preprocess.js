@@ -275,6 +275,33 @@ async function preprocessForInvertedMrz(filePath) {
 }
 
 /**
+ * MRZ bölgesi ön işleme: alt kısım crop, kontrast/parlaklık artır, gri ton, keskinleştir.
+ * Gölge ve yansımayı azaltıp OCR okunabilirliğini artırır.
+ * @param {string} filePath - Görüntü dosya yolu
+ * @param {object} [opts] - { mrzFraction: 0.3, contrast: 0.3, brightness: 0.2 }
+ * @returns {Promise<string>} filePath
+ */
+async function preprocessMrzImage(filePath, opts = {}) {
+  if (!filePath || !fs.existsSync(filePath)) return filePath;
+  const { mrzFraction = 0.3, contrast = 0.3, brightness = 0.2 } = opts;
+  try {
+    const Jimp = (await import('jimp')).default;
+    let image = await Jimp.read(filePath);
+    const w = image.bitmap.width;
+    const h = image.bitmap.height;
+    const mrzHeight = Math.max(1, Math.floor(h * Math.min(1, Math.max(0.15, mrzFraction))));
+    const y = Math.max(0, h - mrzHeight);
+    image = image.crop(0, y, w, mrzHeight);
+    image = image.greyscale().normalize().contrast(contrast).brightness(brightness);
+    image = applySharpenKernel(image);
+    await image.write(filePath);
+    return filePath;
+  } catch (e) {
+    return filePath;
+  }
+}
+
+/**
  * Görüntünün alt %40'ından 3 farklı alt ROI döndürür (bottom 25%, 30%, 35% of that band).
  * Kimlik MRZ bant konumu değişebildiği için adaptif crop; her biri ayrı dosyaya yazılır.
  * @param {string} filePath - Kaynak görüntü
@@ -349,6 +376,7 @@ module.exports = {
   preprocessForPaperMrz,
   preprocessForFadedMrz,
   preprocessForInvertedMrz,
+  preprocessMrzImage,
   cropMrzCandidates,
   rotateImage,
   applyOrientationRotation,

@@ -137,6 +137,39 @@ function getFailureReasonMessage(checksReason, failCount) {
   return 'Işık ve hizayı kontrol edin veya manuel giriş ile devam edin.';
 }
 
+/** OCR / native okuyucu bazen satırları birleştirir; birleşik MRZ'yi satırlara ayır. */
+function cleanMrzMergedLines(rawMrzText) {
+  if (!rawMrzText || typeof rawMrzText !== 'string') return rawMrzText;
+  const trimmed = rawMrzText.trim();
+  const hasNewline = /\n|\r/.test(trimmed);
+  const cleaned = trimmed.replace(/\s+/g, '').toUpperCase().replace(/[^A-Z0-9<]/g, '');
+  if (cleaned.length < 44) return rawMrzText;
+  if (hasNewline) return rawMrzText;
+  if (cleaned.length > 100) {
+    const firstLine = cleaned.substring(0, 44);
+    const secondLine = cleaned.substring(44, 88);
+    const fixed = `${firstLine}\n${secondLine}`;
+    if (__DEV__) logger.info('[MRZ] Birleşik MRZ düzeltildi (2 satır)', { len: cleaned.length });
+    return fixed;
+  }
+  if (cleaned.length >= 86 && cleaned.length <= 94 && (cleaned[0] === 'I' || cleaned[0] === 'A')) {
+    const s1 = cleaned.substring(0, 30);
+    const s2 = cleaned.substring(30, 60);
+    const s3 = cleaned.substring(60);
+    const fixed = `${s1}\n${s2}\n${s3}`;
+    if (__DEV__) logger.info('[MRZ] Birleşik MRZ düzeltildi (TD1 3 satır)', { len: cleaned.length });
+    return fixed;
+  }
+  if (cleaned.length >= 88 && cleaned.length <= 100) {
+    const firstLine = cleaned.substring(0, 44);
+    const secondLine = cleaned.substring(44, 88);
+    const fixed = `${firstLine}\n${secondLine}`;
+    if (__DEV__) logger.info('[MRZ] Birleşik MRZ düzeltildi (TD3 2 satır)', { len: cleaned.length });
+    return fixed;
+  }
+  return rawMrzText;
+}
+
 /** Tek MRZ sistemi: sadece native MrzReaderView. Diğer (expo-camera + backend) kaldırıldı. */
 
 export default function MrzScanScreen({ navigation }) {
@@ -273,9 +306,16 @@ export default function MrzScanScreen({ navigation }) {
         hasMrzReader: !!MrzReaderView,
         platform: Platform.OS,
       });
-      if (!USE_UNIFIED_AUTO_SCAN && Platform.OS !== 'ios') {
-        const SO = getScreenOrientation();
-        if (SO) SO.unlockAsync().catch(() => {});
+      // Android dev client'ta ExpoScreenOrientation native modülü sıklıkla yok; sadece iOS'ta veya production build'de kullan
+      if (!USE_UNIFIED_AUTO_SCAN && Platform.OS === 'ios') {
+        try {
+          const SO = getScreenOrientation();
+          if (SO && typeof SO.unlockAsync === 'function') {
+            try {
+              SO.unlockAsync().catch(() => {});
+            } catch (_) {}
+          }
+        } catch (_) {}
       }
       mounted.current = true;
       hasLeftScreenRef.current = false;
@@ -307,8 +347,15 @@ export default function MrzScanScreen({ navigation }) {
       if (permission?.granted) {
         setMrzCameraMountReady(true);
         setCameraLayoutReady(true);
-        // iOS: CameraView'ı layout ölçüldükten sonra mount et (onLayout'ta gecikmeyle set edilecek). Android'de hemen mount.
-        if (Platform.OS !== 'ios') setCameraMountDelayDone(true);
+        // iOS: CameraView layout'tan sonra mount. Android: kısa gecikme ile mount (kamera başlatma sorununu azaltır).
+        if (Platform.OS === 'ios') {
+          // iOS onLayout'ta set edilecek
+        } else {
+          cameraMountDelayRef.current = setTimeout(() => {
+            cameraMountDelayRef.current = null;
+            if (mounted.current) setCameraMountDelayDone(true);
+          }, Platform.OS === 'android' ? 400 : 0);
+        }
       }
 
       return () => {
@@ -325,9 +372,16 @@ export default function MrzScanScreen({ navigation }) {
           clearTimeout(unifiedMountDelayRef.current);
           unifiedMountDelayRef.current = null;
         }
-        if (!USE_UNIFIED_AUTO_SCAN && Platform.OS !== 'ios') {
-          const SOCleanup = getScreenOrientation();
-          if (SOCleanup) SOCleanup.lockAsync(SOCleanup.OrientationLock?.PORTRAIT_UP ?? 1).catch(() => {});
+        if (!USE_UNIFIED_AUTO_SCAN && Platform.OS === 'ios') {
+          try {
+            const SOCleanup = getScreenOrientation();
+            if (SOCleanup && typeof SOCleanup.lockAsync === 'function') {
+              try {
+                const lock = SOCleanup.OrientationLock?.PORTRAIT_UP ?? 1;
+                SOCleanup.lockAsync(lock).catch(() => {});
+              } catch (_) {}
+            }
+          } catch (_) {}
         }
         hasLeftScreenRef.current = true;
         setIsScreenFocused(false);
@@ -570,14 +624,16 @@ export default function MrzScanScreen({ navigation }) {
       const raw = typeof data === 'string' ? data : (data?.nativeEvent?.mrz ?? data?.mrz ?? '');
       if (!raw || !mounted.current) return;
       if (acceptedRawRef.current === raw) return;
+      const rawCleaned = cleanMrzMergedLines(raw);
+      if (__DEV__ && rawCleaned !== raw) logger.info('[MRZ] HAM MRZ (native)', { raw: raw.slice(0, 60) + '…', cleaned: rawCleaned.slice(0, 60) + '…' });
       const scanDurationMs = Date.now() - scanStartTimeRef.current;
-      let payload = parseMrz(raw);
+      let payload = parseMrz(rawCleaned);
       const docNumFirst = (payload.passportNumber || '').trim();
       const hasMinimalFromFirst = (docNumFirst && (payload.birthDate || payload.expiryDate)) || (ACCEPT_MINIMAL_DOC_NUMBER_ONLY && docNumFirst);
-      if (!payload.checks?.ok && raw && !hasMinimalFromFirst) {
-        let fixed = raw;
+      if (!payload.checks?.ok && rawCleaned && !hasMinimalFromFirst) {
+        let fixed = rawCleaned;
         for (let pass = 0; pass < 3; pass++) {
-          fixed = fixMrzOcrErrors(fixed || raw);
+          fixed = fixMrzOcrErrors(fixed || rawCleaned);
           const next = parseMrz(fixed);
           if (next?.checks?.ok) {
             payload = next;
@@ -638,7 +694,7 @@ export default function MrzScanScreen({ navigation }) {
       if (payload.checks?.ok) {
         setMrzCheckFailed(false);
         setLastMrzChecksReason('');
-        const enriched = processNewMrz(payload, { source: 'native', raw });
+        const enriched = processNewMrz(payload, { source: 'native', raw: rawCleaned });
         if (!enriched) {
           Toast.show({ type: 'info', text1: 'Aynı belge', text2: 'Bu belge zaten okundu' });
           return;
@@ -662,7 +718,7 @@ export default function MrzScanScreen({ navigation }) {
       if (ACCEPT_ON_CHECK_FAIL && hasMinimalData) {
         setLastMrzChecksReason('');
         setMrzCheckFailed(true);
-        const enriched = processNewMrz(payload, { source: 'native', raw });
+        const enriched = processNewMrz(payload, { source: 'native', raw: rawCleaned });
         if (!enriched) {
           Toast.show({ type: 'info', text1: 'Aynı belge', text2: 'Bu belge zaten okundu' });
           return;
@@ -706,9 +762,11 @@ export default function MrzScanScreen({ navigation }) {
   const processMrzRaw = useCallback(
     (raw) => {
       if (!raw || !mounted.current) return;
-      let payload = parseMrz(raw);
-      if (!payload.checks?.ok && raw) {
-        const fixed = fixMrzOcrErrors(raw);
+      const rawCleaned = cleanMrzMergedLines(raw);
+      if (__DEV__ && rawCleaned !== raw) logger.info('[MRZ] HAM MRZ (processMrzRaw)', { raw: raw.slice(0, 50) + '…' });
+      let payload = parseMrz(rawCleaned);
+      if (!payload.checks?.ok && rawCleaned) {
+        const fixed = fixMrzOcrErrors(rawCleaned);
         if (fixed !== raw) payload = parseMrz(fixed);
       }
       setLastMrzRaw(raw.slice(0, 30) + '…');
@@ -717,7 +775,7 @@ export default function MrzScanScreen({ navigation }) {
         payload.checks?.ok ||
         (ACCEPT_ON_CHECK_FAIL && ((docNum && (payload.birthDate || '').trim()) || (ACCEPT_MINIMAL_DOC_NUMBER_ONLY && docNum)));
       if (hasMinimal) {
-        const enriched = processNewMrz(payload, { source: 'backend', raw });
+        const enriched = processNewMrz(payload, { source: 'backend', raw: rawCleaned });
         if (!enriched) {
           Toast.show({ type: 'info', text1: 'Aynı belge', text2: 'Bu belge zaten okundu' });
           return;
@@ -1207,9 +1265,9 @@ export default function MrzScanScreen({ navigation }) {
     };
   }, [USE_UNIFIED_AUTO_SCAN, unifiedCameraMountReady, unifiedCameraReady, unifiedCameraError]);
 
-  // Kamera önizlemesi hazır olmazsa (onCameraReady gelmezse) timeout sonunda fallback (unified + iOS'ta MrzReaderView kendi kamerasını kullanır, timeout yok)
+  // Kamera önizlemesi hazır olmazsa (onCameraReady gelmezse) timeout sonunda fallback. Android'de native MrzReaderView kamera hazır sinyali göndermediği için timeout çalıştırma (siyah ekran yanlış tetiklemesin).
   useEffect(() => {
-    if (USE_UNIFIED_AUTO_SCAN || Platform.OS === 'ios' || !mrzCameraMountReady || !permission?.granted || cameraPreviewReady) return;
+    if (USE_UNIFIED_AUTO_SCAN || Platform.OS === 'ios' || (Platform.OS === 'android' && !USE_UNIFIED_AUTO_SCAN) || !mrzCameraMountReady || !permission?.granted || cameraPreviewReady) return;
     logger.info('[MRZ] Kamera timeout başlatıldı (onCameraReady bekleniyor)', { ms: CAMERA_READY_TIMEOUT_MS, platform: Platform.OS });
     cameraReadyTimeoutRef.current = setTimeout(() => {
       cameraReadyTimeoutRef.current = null;
@@ -1597,15 +1655,23 @@ export default function MrzScanScreen({ navigation }) {
     );
   }
 
+  const showNativeCamera = Platform.OS !== 'android' || cameraMountDelayDone;
   return (
     <View style={styles.container}>
-      <MrzReaderView
-        key={`mrz-cam-${cameraKey}-${docTypeForReader}`}
-        style={StyleSheet.absoluteFill}
-        docType={docTypeForReader}
-        cameraSelector={CameraSelector.Back}
-        onMRZRead={handleMRZRead}
-      />
+      {showNativeCamera ? (
+        <MrzReaderView
+          key={`mrz-cam-${cameraKey}-${docTypeForReader}`}
+          style={StyleSheet.absoluteFill}
+          docType={docTypeForReader}
+          cameraSelector={CameraSelector.Back}
+          onMRZRead={handleMRZRead}
+        />
+      ) : (
+        <View style={[StyleSheet.absoluteFill, styles.unifiedCameraPlaceholder]}>
+          <ActivityIndicator size="large" color="#fff" />
+          <Text style={styles.mrzPickLoadingText}>Kamera hazırlanıyor…</Text>
+        </View>
+      )}
       <View style={[styles.overlayTop, { paddingTop: insets.top + 6 }]} pointerEvents="box-none">
         <TouchableOpacity onPress={goBack} style={styles.overlayBackBtn} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }} activeOpacity={0.8}>
           <Ionicons name="arrow-back" size={26} color="#fff" />
@@ -1634,6 +1700,14 @@ export default function MrzScanScreen({ navigation }) {
         </View>
         <View style={styles.overlayBackBtn} />
       </View>
+      <View style={styles.guideOverlay} pointerEvents="none">
+        <View style={styles.mrzFrame}>
+          <View style={styles.mrzLine1} />
+          <View style={styles.mrzLine2} />
+        </View>
+        <Text style={styles.guideText}>MRZ'yi çerçeveye hizala</Text>
+        <Text style={styles.guideSubtext}>Işık yansıması olmasın, belgeyi düz tutun</Text>
+      </View>
       <View style={[styles.overlayBottom, { paddingBottom: insets.bottom + 20 }]} pointerEvents="box-none">
         <View style={styles.overlayBottomBtn} />
         {TorchModule ? (
@@ -1644,8 +1718,23 @@ export default function MrzScanScreen({ navigation }) {
           <View style={styles.overlayBottomBtn} />
         )}
       </View>
+      {Platform.OS === 'android' && (
+        <View style={[styles.androidFallbackBar, { bottom: insets.bottom + 72 }]} pointerEvents="box-none">
+          <Text style={styles.androidFallbackLabel}>Kamera okumuyor mu?</Text>
+          <View style={styles.androidFallbackRow}>
+            <TouchableOpacity style={styles.androidFallbackBtn} onPress={handlePickImage} disabled={ocrLoading} activeOpacity={0.8}>
+              <Ionicons name="images-outline" size={20} color="#fff" />
+              <Text style={styles.androidFallbackBtnText}>Galeriden seç</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.androidFallbackBtn} onPress={handleTakePhotoWithSystemCamera} disabled={ocrLoading} activeOpacity={0.8}>
+              <Ionicons name="camera-outline" size={20} color="#fff" />
+              <Text style={styles.androidFallbackBtnText}>Fotoğraf çek</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      )}
       {(timeoutWarning || (failCount > 0 && lastMrzChecksReason)) && (
-        <View style={[styles.bannerFloating, { bottom: insets.bottom + 80 }]}>
+        <View style={[styles.bannerFloating, { bottom: insets.bottom + (Platform.OS === 'android' ? 130 : 80) }]}>
           <Ionicons name="warning-outline" size={18} color={theme.colors.warning} />
           <Text style={styles.bannerText}>
             {lastMrzChecksReason === 'invalid_format'
@@ -1782,6 +1871,17 @@ const styles = StyleSheet.create({
   torchBtnRoundOn: { backgroundColor: 'rgba(255,180,0,0.85)' },
   bannerFloating: { position: 'absolute', left: 12, right: 12, flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.75)', padding: 10, borderRadius: 8 },
   bannerText: { marginLeft: theme.spacing.sm, color: '#fff', fontSize: theme.typography.fontSize.sm, flex: 1 },
+  androidFallbackBar: { position: 'absolute', left: 12, right: 12, alignItems: 'center', zIndex: 10 },
+  androidFallbackLabel: { color: 'rgba(255,255,255,0.9)', fontSize: 12, marginBottom: 6 },
+  androidFallbackRow: { flexDirection: 'row', gap: 12 },
+  androidFallbackBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: 'rgba(0,0,0,0.6)', paddingVertical: 10, paddingHorizontal: 16, borderRadius: 10 },
+  androidFallbackBtnText: { color: '#fff', fontSize: 13, fontWeight: '600' },
+  guideOverlay: { position: 'absolute', left: 0, right: 0, bottom: '35%', alignItems: 'center', justifyContent: 'center', zIndex: 5 },
+  mrzFrame: { width: SCREEN_WIDTH * 0.88, paddingVertical: 14, paddingHorizontal: 10, borderWidth: 2, borderColor: 'rgba(255,255,255,0.6)', borderRadius: 8 },
+  mrzLine1: { height: 2, backgroundColor: 'rgba(255,255,255,0.4)', marginBottom: 8, width: '100%' },
+  mrzLine2: { height: 2, backgroundColor: 'rgba(255,255,255,0.4)', width: '100%' },
+  guideText: { color: 'rgba(255,255,255,0.95)', fontSize: 15, fontWeight: '600', marginTop: 12 },
+  guideSubtext: { color: 'rgba(255,255,255,0.75)', fontSize: 12, marginTop: 4 },
   nfcIndicator: {
     position: 'absolute',
     top: 100,

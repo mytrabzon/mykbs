@@ -15,6 +15,7 @@ const {
   preprocessForPhotocopyMrz,
   preprocessForFadedMrz,
   preprocessForInvertedMrz,
+  preprocessMrzImage,
   cropMrzCandidates,
   rotateImage,
 } = require('../lib/vision/preprocess');
@@ -296,6 +297,7 @@ async function runMrzPipeline(filePath) {
     const worker = await Tesseract.createWorker('eng', 1, { logger: () => {} });
 
     const preprocessVariants = [
+      { fn: (p) => preprocessMrzImage(p, { mrzFraction: 0.3, contrast: 0.3, brightness: 0.2 }), name: 'mrzCrop' },
       { fn: (p) => preprocessForKimlikMrz(p, { contrast: 0.45 }), name: 'kimlikLow' },
       { fn: (p) => preprocessForKimlikMrz(p, { contrast: 0.55 }), name: 'kimlik' },
       { fn: (p) => preprocessForKimlikMrz(p, { contrast: 0.65 }), name: 'kimlikMid' },
@@ -968,9 +970,9 @@ function parseMrzToPayload(raw) {
     expiryDate = normalizeYYMMDD(l2.substring(21, 27));
     issuingCountry = l1.substring(2, 5).replace(/</g, '').trim();
     const nameBlock = l1.substring(5, 44);
-    const parts = nameBlock.split('<<').filter(Boolean);
-    surname = (parts[0] || '').replace(/</g, ' ').trim();
-    givenNames = (parts[1] || '').replace(/</g, ' ').trim();
+    const parts = nameBlock.split(/<+/).map((s) => s.replace(/</g, ' ').trim()).filter(Boolean);
+    surname = (parts[0] || '').trim();
+    givenNames = (parts.slice(1).join(' ') || '').trim();
   } else if (lines.length >= 2 && lines[0].length >= 34 && lines[0].length <= 36) {
     const l2 = (lines[1] || '').padEnd(36, '<');
     docNumber = l2.substring(0, 9).replace(/</g, '').trim();
@@ -978,9 +980,9 @@ function parseMrzToPayload(raw) {
     expiryDate = normalizeYYMMDD(l2.substring(21, 27));
     issuingCountry = (lines[0] || '').substring(2, 5).replace(/</g, '').trim();
     const nameBlock = (lines[0] || '').substring(5, 36);
-    const parts = nameBlock.split('<<').filter(Boolean);
-    surname = (parts[0] || '').replace(/</g, ' ').trim();
-    givenNames = (parts[1] || '').replace(/</g, ' ').trim();
+    const parts = nameBlock.split(/<+/).map((s) => s.replace(/</g, ' ').trim()).filter(Boolean);
+    surname = (parts[0] || '').trim();
+    givenNames = (parts.slice(1).join(' ') || '').trim();
   } else if (lines.length >= 3 && lines[0].length >= 26) {
     const l1 = (lines[0] || '').padEnd(30, '<');
     const l2 = (lines[1] || '').padEnd(30, '<');
@@ -989,8 +991,8 @@ function parseMrzToPayload(raw) {
     birthDate = normalizeYYMMDD(l2.substring(0, 6));
     expiryDate = normalizeYYMMDD(l2.substring(8, 14));
     issuingCountry = l1.substring(2, 5).replace(/</g, '').trim();
-    const nameBlock = l3.replace(/</g, ' ').trim();
-    const nameParts = nameBlock.split(/\s{2,}/).filter(Boolean);
+    // TD1 satır 3: SOYAD<<AD — OCR bazen tek < okur; /<+/ ile her iki durumda doğru ayrışır
+    const nameParts = l3.split(/<+/).map((s) => s.trim()).filter(Boolean);
     surname = (nameParts[0] || '').trim();
     givenNames = (nameParts.slice(1).join(' ') || '').trim();
   } else {
@@ -1022,10 +1024,8 @@ function mergeMrzAndFront(mrzPayload, parsed) {
     merged.ulkeKodu = mrzPayload.issuingCountry || merged.ulkeKodu;
     const mrzUyruk = (mrzPayload.nationality || mrzPayload.issuingCountry || '').trim().toUpperCase();
     if (mrzUyruk) merged.uyruk = mrzUyruk;
-    if (mrzPayload.surname || mrzPayload.givenNames) {
-      merged.soyad = mrzPayload.surname || merged.soyad;
-      merged.ad = mrzPayload.givenNames || merged.ad;
-    }
+    if (mrzPayload.surname != null && mrzPayload.surname !== '') merged.soyad = String(mrzPayload.surname).trim();
+    if (mrzPayload.givenNames != null && mrzPayload.givenNames !== '') merged.ad = String(mrzPayload.givenNames).trim();
   }
   if (parsed?.kimlikNo) merged.kimlikNo = parsed.kimlikNo;
   if (parsed?.pasaportNo && !merged.belgeNo) merged.pasaportNo = parsed.pasaportNo;

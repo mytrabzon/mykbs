@@ -44,9 +44,9 @@ export default function NfcReadScreen() {
       if (result?.success && result?.data) {
         const d = result.data;
         Toast.show({ type: 'success', text1: 'Okundu', text2: `${d.ad || ''} ${d.soyad || ''}`.trim() || 'Kimlik bilgisi alındı.' });
-        // MrzResult beklediği payload formatı: givenNames, surname, passportNumber, birthDate, nationality
+        // Sonuç ekranına geç (Kaydet / Onayla) — replace ile NfcRead yerine MrzResult gösterilir
         const birthIso = d.dogumTarihi ? d.dogumTarihi.split('.').reverse().join('-') : null;
-        navigation.navigate('MrzResult', {
+        navigation.replace('MrzResult', {
           payload: {
             givenNames: d.ad || '',
             surname: d.soyad || '',

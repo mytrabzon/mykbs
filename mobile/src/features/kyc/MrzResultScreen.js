@@ -26,7 +26,7 @@ export default function MrzResultScreen({ route, navigation }) {
   const [savedToOkutulan, setSavedToOkutulan] = useState(false);
 
   const validation = fromNfc
-    ? { valid: !!(payload?.givenNames || payload?.surname) }
+    ? { valid: !!((payload?.givenNames || payload?.ad) && (payload?.surname || payload?.soyad)) }
     : (payload ? validateMrz(payload) : { valid: false, reason: 'no_payload' });
   const minimal = payload
     ? (fromNfc
@@ -52,8 +52,8 @@ export default function MrzResultScreen({ route, navigation }) {
   const handleKaydetOkutulan = useCallback(async () => {
     if (!payload) return;
     const num = (payload.passportNumber || '').trim();
-    const ad = (payload.givenNames || '').trim();
-    const soyad = (payload.surname || '').trim();
+    const ad = (payload.givenNames || payload.ad || '').trim();
+    const soyad = (payload.surname || payload.soyad || '').trim();
     if (!ad || !soyad) {
       Toast.show({ type: 'error', text1: 'Eksik bilgi', text2: 'Ad ve soyad olmadan kaydedilemez.' });
       return;
@@ -111,8 +111,8 @@ export default function MrzResultScreen({ route, navigation }) {
         <Row label="Ülke" value={payload.issuingCountry} />
         <Row label="Doğum" value={payload.birthDate} />
         <Row label="Son kullanma" value={payload.expiryDate} />
-        <Row label="Soyad" value={payload.surname} />
-        <Row label="Ad" value={payload.givenNames} />
+        <Row label="Soyad" value={payload.surname || payload.soyad} />
+        <Row label="Ad" value={payload.givenNames || payload.ad} />
         <Text style={styles.masked}>MRZ (maske): {maskMrz(raw)}</Text>
       </View>
       <TouchableOpacity
