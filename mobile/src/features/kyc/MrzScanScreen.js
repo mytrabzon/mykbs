@@ -89,8 +89,8 @@ const ACCEPT_MINIMAL_DOC_NUMBER_ONLY = true; // Sadece belge no ile de hemen kab
 
 /** Android: otomatik algılama — expo-camera + backend OCR. iOS: native MrzReaderView. */
 const USE_UNIFIED_AUTO_SCAN = Platform.OS === 'android';
-/** Otomatik algılama için periyodik çekim aralığı (kısa = daha hızlı algılama). */
-const UNIFIED_CAPTURE_INTERVAL_MS = 1600;
+/** Otomatik algılama için periyodik çekim aralığı. Backend rate limit (~1.1s) ile uyumlu; 429 önlenir. */
+const UNIFIED_CAPTURE_INTERVAL_MS = 1800;
 /** İzin verildikten sonra kamera mount gecikmesi (Android siyah ekran önlemi). */
 const UNIFIED_CAMERA_MOUNT_DELAY_MS = Platform.OS === 'android' ? 350 : 150;
 /** Kamera bileşenini her zaman bu süre sonra mount et (onLayout'a güvenmeden). */
@@ -421,10 +421,10 @@ export default function MrzScanScreen({ navigation }) {
       if (!cam || typeof cam.takePictureAsync !== 'function') return;
       try {
         setOcrLoading(true);
-        const photo = await cam.takePictureAsync({ quality: 0.85, base64: true, skipProcessing: false });
+        const photo = await cam.takePictureAsync({ quality: 0.9, base64: true, skipProcessing: true });
         if (!photo?.base64 || !mounted.current) return;
         if (hasAcceptedForUnifiedRef.current) return;
-        const res = await api.post('/ocr/document-base64', { imageBase64: photo.base64 });
+        const res = await api.post('/ocr/document-base64', { imageBase64: photo.base64, paperMode: true });
         const data = res?.data;
         if (!mounted.current || hasAcceptedForUnifiedRef.current) return;
         const mrzRaw = data?.mrz;
@@ -492,13 +492,21 @@ export default function MrzScanScreen({ navigation }) {
             scannedAt: enriched.scannedAt,
           });
           setScanDurationMs(scanStartTimeRef.current ? Date.now() - scanStartTimeRef.current : 0);
+          return;
+        }
+        const failureReason = data?.mrzFailureReason;
+        if (failureReason && mounted.current && !hasAcceptedForUnifiedRef.current) {
+          Toast.show({ type: 'info', text1: 'MRZ tespit edilemedi', text2: failureReason.length > 70 ? failureReason.slice(0, 67) + '…' : failureReason });
         }
       } catch (e) {
         if (mounted.current && !hasAcceptedForUnifiedRef.current) {
           logger.warn('[Unified scan] document-base64 hatası', e?.message);
+          const status = e?.response?.status;
           const msg = e?.response?.data?.message || e?.response?.data?.error || e?.message;
-          const text2 = msg && msg.length > 60 ? msg.slice(0, 57) + '…' : (msg || 'Bağlantı veya sunucu hatası. Tekrar deneyin.');
-          Toast.show({ type: 'error', text1: 'Okuma hatası', text2 });
+          const text2 = status === 429
+            ? 'Çok sık deneme. Birkaç saniye bekleyip belgeyi net tutun.'
+            : (msg && msg.length > 60 ? msg.slice(0, 57) + '…' : (msg || 'Bağlantı veya sunucu hatası. Tekrar deneyin.'));
+          Toast.show({ type: 'error', text1: status === 429 ? 'Bekleyin' : 'Okuma hatası', text2 });
         }
       } finally {
         if (mounted.current) setOcrLoading(false);
@@ -1616,9 +1624,14 @@ export default function MrzScanScreen({ navigation }) {
             <Text style={[styles.frameHint, { marginTop: 12 }]}>Okunuyor…</Text>
           </View>
         )}
+        <View style={[StyleSheet.absoluteFill, styles.mrzBandOverlay]} pointerEvents="none">
+          <View style={styles.mrzBandFrame}>
+            <Text style={styles.mrzBandLabel}>MRZ bandını veya ön yüzü bu alana hizalayın</Text>
+          </View>
+        </View>
         <View style={[styles.bannerFloating, { bottom: insets.bottom + 80 }]} pointerEvents="box-none">
           <Text style={[styles.bannerText, { marginLeft: 0 }]}>
-            Otomatik algılama: belgeyi kameraya tutun (MRZ veya ön yüz), butona basmayın
+            Otomatik algılama: kimlik/pasaport arka MRZ çizgileri veya ön yüz net görünsün
           </Text>
         </View>
         <View style={[styles.androidFallbackBar, { bottom: insets.bottom + 72 }]} pointerEvents="box-none">
@@ -1844,6 +1857,20 @@ const styles = StyleSheet.create({
   nfcBtnRound: { backgroundColor: 'rgba(6,182,212,0.6)' },
   torchBtnRound: {},
   torchBtnRoundOn: { backgroundColor: 'rgba(255,180,0,0.85)' },
+  mrzBandOverlay: { justifyContent: 'flex-end', alignItems: 'center', paddingHorizontal: 24 },
+  mrzBandFrame: {
+    width: '100%',
+    height: SCREEN_HEIGHT * 0.22,
+    borderWidth: 2,
+    borderColor: 'rgba(255,255,255,0.6)',
+    borderStyle: 'dashed',
+    borderRadius: 12,
+    marginBottom: SCREEN_HEIGHT * 0.18,
+    backgroundColor: 'rgba(0,0,0,0.25)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  mrzBandLabel: { color: 'rgba(255,255,255,0.9)', fontSize: 13, textAlign: 'center', paddingHorizontal: 16 },
   bannerFloating: { position: 'absolute', left: 12, right: 12, flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.75)', padding: 10, borderRadius: 8 },
   bannerText: { marginLeft: theme.spacing.sm, color: '#fff', fontSize: theme.typography.fontSize.sm, flex: 1 },
   androidFallbackBar: { position: 'absolute', left: 12, right: 12, alignItems: 'center', zIndex: 10 },

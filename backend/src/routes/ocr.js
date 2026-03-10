@@ -25,9 +25,9 @@ const { parseMrzRaw } = require('../lib/vision/mrz');
 const router = express.Router();
 const KIMLIK_UPLOAD_DIR = path.join(__dirname, '../../uploads/kimlikler');
 
-/** document-base64: aynı client'tan çok hızlı tekrar istek (fotokopi/A4 aynı MRZ) engelleme. */
+/** document-base64: aynı client'tan çok hızlı tekrar istek (fotokopi/A4 aynı MRZ) engelleme. Android otomatik MRZ her ~1.6s çekim yaptığı için 5s çok agresif; ~1s ile her çekim geçer. */
 const documentBase64RateLimit = new Map();
-const DOCUMENT_BASE64_TTL_MS = 5000;
+const DOCUMENT_BASE64_TTL_MS = 1100;
 
 // Resim kaydetme için storage yapılandırması
 const storage = multer.diskStorage({
