@@ -119,7 +119,7 @@ export default function MrzScanScreen({ navigation }) {
   const [frontLoading, setFrontLoading] = useState(false);
   const [torchOn, setTorchOn] = useState(false);
   const [mrzDocType, setMrzDocType] = useState(Platform.OS === 'android' ? DocType.ID : DocType.Passport);
-  const [scanMode, setScanMode] = useState(DocType.ID); // ID_CARD ↔ Passport döngü (lock öncesi)
+  const [scanMode, setScanMode] = useState(DocType.Passport); // Varsayılan pasaport (daha sık okunur)
   const [mrzLocked, setMrzLocked] = useState(false); // Sonuç gelince true, toggle durur
   const [cameraKey, setCameraKey] = useState(0); // Ekrana her girişte artır → kamera yeniden mount (siyah ekran önlemi)
   const [scanDurationMs, setScanDurationMs] = useState(0); // Milisaniye cinsinden tarama süresi
@@ -192,7 +192,7 @@ export default function MrzScanScreen({ navigation }) {
       acceptedRawRef.current = '';
       mrzLockedRef.current = false;
       setMrzLocked(false);
-      setScanMode(DocType.ID);
+      setScanMode(DocType.Passport);
       setFailCount(0);
       setLastMrzChecksReason('');
       setInstantPayload(null);
@@ -282,8 +282,16 @@ export default function MrzScanScreen({ navigation }) {
       const scanDurationMs = Date.now() - scanStartTimeRef.current;
       let payload = parseMrz(raw);
       if (!payload.checks?.ok && raw) {
-        const fixed = fixMrzOcrErrors(raw);
-        if (fixed !== raw) payload = parseMrz(fixed);
+        let fixed = raw;
+        for (let pass = 0; pass < 3; pass++) {
+          fixed = fixMrzOcrErrors(fixed || raw);
+          const next = parseMrz(fixed);
+          if (next?.checks?.ok) {
+            payload = next;
+            break;
+          }
+          if (next?.passportNumber && (next?.birthDate || next?.expiryDate)) payload = next;
+        }
       }
       const docNum = (payload.passportNumber || '').trim();
       const hasBirth = !!(payload.birthDate || '').trim();
@@ -1055,7 +1063,7 @@ export default function MrzScanScreen({ navigation }) {
   }
 
   // Girişte doğrudan kamera: pasaport/kimlik otomatik algılanır, seçenek butonları yok.
-  if (!MrzReaderView || useUnifiedFlow) {
+  if (!MrzReaderView || useUnifiedFlow || showCameraFallback) {
     logger.info('[MRZ] Expo Camera path (unified/fallback)', { hasMrzReader: !!MrzReaderView, useUnifiedFlow });
     const handleDirectMrzCapture = async () => {
       if (!mrzCameraRef.current || ocrLoading) return;
@@ -1077,7 +1085,10 @@ export default function MrzScanScreen({ navigation }) {
     return (
       <SafeAreaView style={styles.container} edges={['top']}>
         <View style={styles.header}>
-          <TouchableOpacity onPress={goBack} style={styles.iconBtn}>
+          <TouchableOpacity
+            onPress={showCameraFallback && MrzReaderView ? () => setShowCameraFallback(false) : goBack}
+            style={styles.iconBtn}
+          >
             <Ionicons name="arrow-back" size={24} color="#fff" />
           </TouchableOpacity>
           <Text style={styles.title}>Kimlik / Pasaport</Text>
@@ -1277,7 +1288,10 @@ export default function MrzScanScreen({ navigation }) {
         <View style={styles.overlayBackBtn} />
       </View>
       <View style={[styles.overlayBottom, { paddingBottom: insets.bottom + 20 }]} pointerEvents="box-none">
-        <View style={styles.overlayBottomBtn} />
+        <TouchableOpacity style={[styles.overlayBottomBtn, styles.photoFallbackBtn]} onPress={handleTakePhoto} activeOpacity={0.8}>
+          <Ionicons name="camera-outline" size={24} color="#fff" />
+          <Text style={styles.photoFallbackBtnText}>Fotoğraf ile oku</Text>
+        </TouchableOpacity>
         {TorchModule ? (
           <TouchableOpacity style={[styles.overlayBottomBtn, styles.torchBtnRound, torchOn && styles.torchBtnRoundOn]} onPress={toggleTorch} activeOpacity={0.8}>
             <Ionicons name={torchOn ? 'flash' : 'flash-outline'} size={28} color="#fff" />

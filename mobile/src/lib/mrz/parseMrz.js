@@ -171,8 +171,8 @@ function fixLineDigitPositions(line, digitRanges) {
 export function fixMrzOcrErrors(raw) {
   if (!raw || typeof raw !== 'string') return raw;
   const lines = normalizeMrzLines(raw);
-  if (lines.length >= 2 && lines[0].length >= 40) {
-    // TD3: line2 doc 0-9, birth 13-19, expiry 21-27
+  if (lines.length >= 2 && lines[0].length >= 37) {
+    // TD3 pasaport: line2 doc 0-9, birth 13-19, expiry 21-27
     lines[1] = fixLineDigitPositions(lines[1], [[0, 10], [13, 20], [21, 28]]);
   } else if (lines.length >= 2 && lines[0].length >= 34 && lines[0].length <= 36) {
     lines[1] = fixLineDigitPositions(lines[1], [[0, 10], [13, 20], [21, 28]]);
@@ -194,11 +194,14 @@ function normalizeMrzLines(raw) {
     const s3 = one.slice(60).padEnd(30, '<');
     return [s1, s2, s3];
   }
-  // Pasaport (TD3): 2 satır × 44 karakter
-  if (one.length >= 80 && one.length <= 96 && /^[A-Z0-9<]+$/.test(one)) {
+  // Pasaport (TD3): 2 satır × 44 karakter — OCR hataları için 76–98 karakter kabul
+  if (one.length >= 76 && one.length <= 98 && /^[A-Z0-9<]+$/.test(one)) {
     const s1 = one.slice(0, 44).padEnd(44, '<');
     const s2 = one.slice(44).padEnd(44, '<');
     return [s1, s2];
+  }
+  if (one.length >= 70 && one.length <= 74 && /^[A-Z0-9<]+$/.test(one)) {
+    return [one.slice(0, 36).padEnd(36, '<'), one.slice(36, 72).padEnd(36, '<')];
   }
   if (one.length === 72 && /^[A-Z0-9<]+$/.test(one)) {
     return [one.slice(0, 36), one.slice(36, 72)];
@@ -211,8 +214,8 @@ export function parseMrz(raw) {
     return { docType: 'OTHER', issuingCountry: '', surname: '', givenNames: '', passportNumber: '', nationality: '', birthDate: '', sex: 'U', expiryDate: '', raw: '', checks: { ok: false, reason: 'empty_input' } };
   }
   const lines = normalizeMrzLines(raw);
-  if (lines.length >= 2 && lines[0].length >= 38) return parseTD3(lines);
   if (lines.length >= 2 && lines[0].length >= 34 && lines[0].length <= 36) return parseTD2(lines);
+  if (lines.length >= 2 && lines[0].length >= 37) return parseTD3(lines);
   if (lines.length >= 3 && lines[0].length >= 28) return parseTD1(lines);
   return { docType: 'OTHER', issuingCountry: '', surname: '', givenNames: '', passportNumber: '', nationality: '', birthDate: '', sex: 'U', expiryDate: '', raw, checks: { ok: false, reason: 'invalid_format' } };
 }
