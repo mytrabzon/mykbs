@@ -99,8 +99,8 @@ function getFailureReasonMessage(checksReason, failCount) {
   return 'Işık ve hizayı kontrol edin veya manuel giriş ile devam edin.';
 }
 
-/** Tek kamera akışı: Kimlik ve pasaport için expo-camera. Galeri kaldırıldı, tıklayınca direkt kamera açılır. */
-const USE_UNIFIED_MRZ_FLOW = true;
+/** false = native MrzReaderView (Android, canlı okuma); true = expo-camera (çekim). Native daha stabil, önce denenir. */
+const USE_UNIFIED_MRZ_FLOW = false;
 
 export default function MrzScanScreen({ navigation }) {
   const route = useRoute();
@@ -808,10 +808,9 @@ export default function MrzScanScreen({ navigation }) {
       const t = setTimeout(() => {
         if (mounted.current) {
           setCameraLayoutReady(true);
-          // iOS: cameraMountDelayDone sadece onLayout + 150ms ile set edilsin (yukarıdaki useFocusEffect içinde iOS'ta set etmiyoruz)
-          if (Platform.OS !== 'ios') setCameraMountDelayDone(true);
+          setCameraMountDelayDone(true);
         }
-      }, 50);
+      }, Platform.OS === 'ios' ? 100 : 30);
       return () => clearTimeout(t);
     }, [permission?.granted, permissionGrantedLocal])
   );
@@ -825,18 +824,18 @@ export default function MrzScanScreen({ navigation }) {
     if (mounted.current && Platform.OS !== 'ios') setCameraMountDelayDone(true);
   }, [cameraLayoutReady]);
 
-  // iOS: Layout hiç geç gelmezse 1 sn sonra yine de CameraView mount et (fallback)
+  // iOS: Layout geç gelirse 500ms sonra CameraView mount et (fallback)
   useEffect(() => {
     if (Platform.OS !== 'ios' || !permission?.granted) return;
     const t = setTimeout(() => {
       if (mounted.current) {
         setCameraLayoutReady(true);
         setCameraMountDelayDone((done) => {
-          if (!done) logger.info('[MRZ] iOS: 1 sn fallback – CameraView mount');
+          if (!done) logger.info('[MRZ] iOS: fallback – CameraView mount');
           return true;
         });
       }
-    }, 1000);
+    }, 500);
     return () => clearTimeout(t);
   }, [permission?.granted, Platform.OS]);
 
@@ -873,7 +872,7 @@ export default function MrzScanScreen({ navigation }) {
   // iOS: native reader sadece Pasaport. Kimlik (ID) seçiliyse her zaman Kamera/Galeri + backend kullan;
   // backend TD1 (3 satır MRZ) destekliyor, böylece kimlik kartları güvenilir okunur.
   const docTypeForReader = Platform.OS === 'ios' ? DocType.Passport : selectedDocType;
-  const useUnifiedFlow = USE_UNIFIED_MRZ_FLOW || (selectedDocType === DocType.ID);
+  const useUnifiedFlow = USE_UNIFIED_MRZ_FLOW;
 
   const { width: screenWidth } = Dimensions.get('window');
   const frameWidth = screenWidth * 0.9;
@@ -1239,6 +1238,42 @@ export default function MrzScanScreen({ navigation }) {
   }
 
   logger.info('[MRZ] Native MrzReaderView path', { docTypeForReader });
+  if (!(permission?.granted || permissionGrantedLocal)) {
+    return (
+      <SafeAreaView style={styles.container} edges={['top']}>
+        <View style={styles.header}>
+          <TouchableOpacity onPress={goBack} style={styles.iconBtn}>
+            <Ionicons name="arrow-back" size={24} color="#fff" />
+          </TouchableOpacity>
+          <Text style={styles.title}>Kimlik / Pasaport</Text>
+          <View style={styles.iconBtn} />
+        </View>
+        <View style={styles.mrzPickContainer}>
+          <Text style={styles.mrzPickHint}>Kamera izni gerekli. MRZ tarayabilmek için izin verin.</Text>
+          <TouchableOpacity
+            style={styles.mrzPickPrimaryBtn}
+            onPress={async () => {
+              try {
+                const r = await requestPermission();
+                if (r?.granted) {
+                  setPermissionGrantedLocal(true);
+                  setMrzCameraMountReady(true);
+                } else {
+                  Toast.show({ type: 'error', text1: 'İzin reddedildi', text2: 'Ayarlar\'dan kamera iznini açabilirsiniz.' });
+                }
+              } catch (e) {
+                Toast.show({ type: 'error', text1: 'Kamera izni alınamadı', text2: e?.message || 'Tekrar deneyin.' });
+              }
+            }}
+            activeOpacity={0.8}
+          >
+            <Ionicons name="camera" size={36} color="#fff" />
+            <Text style={styles.mrzPickPrimaryBtnText}>İzin ver</Text>
+          </TouchableOpacity>
+        </View>
+      </SafeAreaView>
+    );
+  }
   return (
     <View style={styles.container}>
       <MrzReaderView

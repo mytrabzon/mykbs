@@ -41,10 +41,11 @@ function extractMrzFromOcr(text) {
     const s2 = padMrzLine(one.slice(36, 72), 36);
     return s1 + '\n' + s2;
   }
-  if (/^[A-Z0-9<]+$/.test(one) && one.length >= 89 && one.length <= 91) {
+  // TD1 (Türk kimlik): 3×30 karakter — 86–94 aralığı (88 pasaport ile çakışmasın)
+  if (/^[A-Z0-9<]+$/.test(one) && one.length >= 86 && one.length <= 94 && one.length !== 88) {
     const s1 = padMrzLine(one.slice(0, 30), 30);
     const s2 = padMrzLine(one.slice(30, 60), 30);
-    const s3 = padMrzLine(one.slice(60, 90), 30);
+    const s3 = padMrzLine(one.slice(60), 30);
     return s1 + '\n' + s2 + '\n' + s3;
   }
   const lines = text.split(/\r\n|\r|\n/).map((l) => l.trim().toUpperCase().replace(/\s/g, ''));
@@ -188,8 +189,8 @@ function parseTD1(lines) {
   const expiryDateCheck = l2[14];
   const nationality = l2.substring(15, 18).replace(/</g, '').trim();
   const l3 = (lines[2] || '').padEnd(TD1_LINE_LEN, '<');
-  const nameBlock = l3.replace(/</g, ' ').trim();
-  const nameParts = nameBlock.split(/\s{2,}/).filter(Boolean);
+  // TD1 satır 3: SURNAME<<GIVENNAMES — Türk kimlik: ACAR<<HAKAN. OCR bazen tek < okur, split(/<+/) ile her iki durumda çalışır
+  const nameParts = l3.split(/<+/).map((s) => s.trim()).filter(Boolean);
   const surname = (nameParts[0] || '').trim();
   const givenNames = (nameParts.slice(1).join(' ') || '').trim();
 
@@ -214,9 +215,9 @@ function parseTD1(lines) {
   };
 }
 
-/** 86-90 karakter tek blok: önce 3x30 (TD1), başarısızsa 2x44 (TD3) dene (kimlik ve pasaport aynı uzunlukta olabilir). */
+/** 86-94 karakter tek blok (88 hariç): önce 3x30 (TD1 kimlik), başarısızsa 2x44 (TD3) dene. */
 function parseMrzRawAmbiguous(one) {
-  if (!one || one.length < 86 || one.length > 90) return null;
+  if (!one || one.length < 86 || one.length > 94 || one.length === 88) return null;
   const asTd1 = [
     one.slice(0, 30).padEnd(30, '<'),
     one.slice(30, 60).padEnd(30, '<'),
@@ -239,7 +240,7 @@ function parseMrzRawAmbiguous(one) {
 function parseMrzRaw(mrzRaw) {
   if (!mrzRaw || typeof mrzRaw !== 'string') return null;
   const one = mrzRaw.trim().toUpperCase().replace(/\s/g, '');
-  if (one.length >= 86 && one.length <= 90 && /^[A-Z0-9<]+$/.test(one)) {
+  if (one.length >= 86 && one.length <= 94 && one.length !== 88 && /^[A-Z0-9<]+$/.test(one)) {
     const ambiguous = parseMrzRawAmbiguous(one);
     if (ambiguous) return ambiguous;
   }

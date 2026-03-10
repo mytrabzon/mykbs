@@ -114,8 +114,8 @@ function parseTD1(lines) {
   const expiryDateRaw = l2.substring(8, 14);
   const expiryDateCheck = l2[14];
   const nationality = l2.substring(15, 18).replace(/</g, '').trim();
-  const nameBlock = l3.replace(/</g, ' ').trim();
-  const nameParts = nameBlock.split(/\s{2,}/).filter(Boolean);
+  // TD1 satır 3: SURNAME<<GIVENNAMES — OCR bazen tek < okur, split(/<+/) ile her iki durumda çalışır
+  const nameParts = l3.split(/<+/).map((s) => s.trim()).filter(Boolean);
   const surname = (nameParts[0] || '').trim();
   const givenNames = (nameParts.slice(1).join(' ') || '').trim();
   const docNoCheckOk = docNumberCheck === '<' || parseInt(docNumberCheck, 10) === checkDigit(docNumber);
