@@ -267,6 +267,7 @@ const styles = StyleSheet.create({
 import { AuthProvider, useAuth } from './src/context/AuthContext';
 import { ThemeProvider, useTheme } from './src/context/ThemeContext';
 import { CreditsProvider, useCredits } from './src/context/CreditsContext';
+import { CameraProvider } from './src/context/CameraContext';
 import CreditsBanner from './src/components/CreditsBanner';
 import PaywallModal from './src/components/PaywallModal';
 const Tab = createBottomTabNavigator();
@@ -670,12 +671,14 @@ export default function App() {
   return (
     <ErrorBoundary>
       <ThemeProvider>
-        <AuthProvider>
-          <CreditsProvider>
-            <AppNavigator />
-            <Toast />
-          </CreditsProvider>
-        </AuthProvider>
+        <CameraProvider>
+          <AuthProvider>
+            <CreditsProvider>
+              <AppNavigator />
+              <Toast />
+            </CreditsProvider>
+          </AuthProvider>
+        </CameraProvider>
       </ThemeProvider>
     </ErrorBoundary>
   );

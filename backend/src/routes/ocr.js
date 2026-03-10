@@ -23,6 +23,10 @@ const { parseMrzRaw } = require('../lib/vision/mrz');
 const router = express.Router();
 const KIMLIK_UPLOAD_DIR = path.join(__dirname, '../../uploads/kimlikler');
 
+/** document-base64: aynı client'tan çok hızlı tekrar istek (fotokopi/A4 aynı MRZ) engelleme. */
+const documentBase64RateLimit = new Map();
+const DOCUMENT_BASE64_TTL_MS = 5000;
+
 // Resim kaydetme için storage yapılandırması
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
@@ -544,7 +548,16 @@ router.post('/document-base64', authenticateTesisOrSupabase, tenantMiddleware, e
   const base64 = req.body?.imageBase64;
   let filePath = null;
   const logPrefix = '[document-base64]';
+  const clientId = req.headers['x-client-id'] || req.ip || 'unknown';
+
   try {
+    const lastRequest = documentBase64RateLimit.get(clientId);
+    if (lastRequest && Date.now() - lastRequest < DOCUMENT_BASE64_TTL_MS) {
+      console.log(logPrefix, 'Çok hızlı tekrar istek, engellendi', { clientId: clientId.slice(0, 20) });
+      return res.status(429).json({ error: 'Çok hızlı istek', retryAfter: 1 });
+    }
+    documentBase64RateLimit.set(clientId, Date.now());
+
     if (!base64 || typeof base64 !== 'string') {
       console.warn(logPrefix, "Storage'a yazılmadı: body.imageBase64 yok veya string değil. Neden: istek gövdesinde imageBase64 alanı eksik veya geçersiz tipte.");
       return res.status(400).json({ message: 'imageBase64 gerekli' });
@@ -597,7 +610,9 @@ router.post('/document-base64', authenticateTesisOrSupabase, tenantMiddleware, e
       console.warn(logPrefix, 'Tesseract ön yüz OCR hatası (sunucu çökmemesi için yakalandı):', ocrErr.message);
     }
     const merged = mergeMrzAndFront(mrzPayload, front);
-    console.log(logPrefix, 'tamamlandı', { mrzRawLen: mrzRaw?.length ?? 0, mergedKeys: Object.keys(merged || {}) });
+    const scanId = Date.now();
+    const timestamp = new Date().toISOString();
+    console.log(logPrefix, 'tamamlandı', { mrzRawLen: mrzRaw?.length ?? 0, mergedKeys: Object.keys(merged || {}), scanId });
     res.json({
       success: true,
       rawText: text,
@@ -606,6 +621,8 @@ router.post('/document-base64', authenticateTesisOrSupabase, tenantMiddleware, e
       mrzFailureReason: mrzFailureReason || undefined,
       front,
       merged,
+      scanId,
+      timestamp,
     });
   } catch (error) {
     console.error(logPrefix, 'hata:', error.message);
@@ -615,6 +632,7 @@ router.post('/document-base64', authenticateTesisOrSupabase, tenantMiddleware, e
     if (filePath && fs.existsSync(filePath)) {
       try { fs.unlinkSync(filePath); } catch (_) {}
     }
+    setTimeout(() => documentBase64RateLimit.delete(clientId), DOCUMENT_BASE64_TTL_MS * 2);
   }
 });
 
