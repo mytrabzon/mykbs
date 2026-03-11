@@ -9,9 +9,106 @@ const { authenticateTesisOrSupabase } = require('../../middleware/authTesisOrSup
 const { errorResponse } = require('../../lib/errorResponse');
 const { createOutbox } = require('../../repo/kbsOutboxRepo');
 const { attemptSendOutbox } = require('../../worker/kbsOutboxWorker');
+const { createKBSService } = require('../../services/kbs');
 
 const router = express.Router();
 router.use(authenticateTesisOrSupabase);
+
+/**
+ * POST /api/kbs/test-baglanti
+ * Body: { tesisKodu?, sifre?, tur? } — boşsa branch KBS bilgisi kullanılır. Gecikme (ms) ve sonuç döner.
+ */
+router.post('/kbs/test-baglanti', async (req, res) => {
+  try {
+    const body = req.body || {};
+    const tur = (body.tur || (req.branch && req.branch.kbs_turu) || 'jandarma').toLowerCase();
+    let tesisLike;
+    if (body.tesisKodu && body.sifre) {
+      tesisLike = { kbsTuru: tur, kbsTesisKodu: String(body.tesisKodu).trim(), kbsWebServisSifre: body.sifre, ipAdresleri: [] };
+    } else if (req.branch && req.branch.kbs_turu && req.branch.kbs_tesis_kodu && req.branch.kbs_web_servis_sifre) {
+      tesisLike = { kbsTuru: req.branch.kbs_turu, kbsTesisKodu: req.branch.kbs_tesis_kodu, kbsWebServisSifre: req.branch.kbs_web_servis_sifre, ipAdresleri: [] };
+    } else {
+      return res.status(400).json({ success: false, mesaj: 'Tesis kodu ve şifre gerekli veya şube KBS bilgisi eksik.' });
+    }
+    const kbsService = createKBSService(tesisLike);
+    const start = Date.now();
+    const testResult = await kbsService.testBaglanti();
+    const gecikme = Date.now() - start;
+    if (testResult.success) {
+      return res.json({ success: true, gecikme: `${gecikme}ms`, mesaj: 'Bağlantı başarılı', sunucu: tur === 'jandarma' ? 'Jandarma KBS' : 'Polis KBS' });
+    }
+    res.status(500).json({
+      success: false,
+      gecikme: `${gecikme}ms`,
+      mesaj: testResult.message || 'Bağlantı başarısız',
+      sunucu: tur === 'jandarma' ? 'Jandarma KBS' : 'Polis KBS',
+      cozum: ['Tesis kodu ve şifreyi kontrol edin', 'IP adresinizi KBS sistemine tanımladınız mı?', 'Güvenlik duvarı ayarlarını kontrol edin']
+    });
+  } catch (err) {
+    console.error('[kbs/test-baglanti]', err);
+    return res.status(500).json({ success: false, mesaj: err?.message || 'Test başarısız' });
+  }
+});
+
+/**
+ * GET /api/checkin/aktif-misafirler
+ * Branch'taki çıkış yapmamış misafirler (KBS'ye bildirdiğimiz kayıtlar). Oda bazlı gruplu, milisaniyeler içinde.
+ */
+router.get('/aktif-misafirler', async (req, res) => {
+  try {
+    const branchId = req.branchId;
+    if (!branchId) {
+      return res.status(409).json({ message: 'Tesis/şube bilgisi yüklenemedi.' });
+    }
+    if (!supabaseAdmin) {
+      return res.status(503).json({ message: 'Supabase yapılandırılmamış' });
+    }
+
+    const { data: misafirler, error } = await supabaseAdmin
+      .from('guests')
+      .select('id, full_name, nationality, document_type, document_no, room_number, checkin_at, birth_date')
+      .eq('branch_id', branchId)
+      .is('checkout_at', null)
+      .order('checkin_at', { ascending: false });
+
+    if (error) {
+      console.error('[aktif-misafirler]', error);
+      return res.status(500).json({ message: error.message || 'Liste alınamadı' });
+    }
+
+    const list = misafirler || [];
+    const odalar = {};
+    for (const m of list) {
+      const odaNo = (m.room_number || '').toString().trim() || '—';
+      if (!odalar[odaNo]) odalar[odaNo] = [];
+      odalar[odaNo].push({
+        id: m.id,
+        ad: (m.full_name || '').split(' ').slice(0, -1).join(' ') || m.full_name,
+        soyad: (m.full_name || '').split(' ').slice(-1)[0] || '—',
+        full_name: m.full_name,
+        belge_turu: m.document_type === 'tc' ? 'K' : 'P', // K=kimlik, P=pasaport
+        belge_no: m.document_no,
+        document_type: m.document_type,
+        document_no: m.document_no,
+        oda_no: odaNo,
+        room_number: m.room_number,
+        giris_tarihi: m.checkin_at,
+        uyruk: m.nationality,
+        dogum_tarihi: m.birth_date
+      });
+    }
+
+    res.json({
+      toplam: list.length,
+      doluOda: Object.keys(odalar).length,
+      odalar,
+      misafirler: list
+    });
+  } catch (err) {
+    console.error('[aktif-misafirler]', err);
+    return res.status(500).json({ message: err?.message || 'Sunucu hatası' });
+  }
+});
 
 /**
  * POST /api/checkin

@@ -6,6 +6,50 @@ import Link from 'next/link'
 import toast from 'react-hot-toast'
 import { api } from '@/services/api'
 
+function KBSSyncBlock({ tesisId, onSyncDone }: { tesisId: string; onSyncDone: () => void }) {
+  const [syncing, setSyncing] = useState(false)
+  const [result, setResult] = useState<{ success: boolean; message: string; count?: number } | null>(null)
+  const handleSync = async () => {
+    setSyncing(true)
+    setResult(null)
+    try {
+      const res = await api.post<{ success: boolean; count?: number; message?: string }>(`/admin/tesis/${tesisId}/kbs-sync`)
+      const data = res.data
+      setResult({
+        success: true,
+        message: data.message ?? `${data.count ?? 0} kayıt senkronize edildi`,
+        count: data.count
+      })
+      if ((data.count ?? 0) > 0) onSyncDone()
+      toast.success(data.message ?? 'Senkronizasyon tamamlandı')
+    } catch (err: unknown) {
+      const e = err as { response?: { data?: { message?: string } } }
+      const msg = e.response?.data?.message ?? 'Senkronizasyon başarısız'
+      setResult({ success: false, message: msg })
+      toast.error(msg)
+    } finally {
+      setSyncing(false)
+    }
+  }
+  return (
+    <div className="flex items-center gap-4 flex-wrap">
+      <button
+        type="button"
+        onClick={handleSync}
+        disabled={syncing}
+        className="kbs-btn-primary admin-tesis-detail-btn"
+      >
+        {syncing ? 'Senkronize ediliyor...' : 'KBS geçmişini çek'}
+      </button>
+      {result && (
+        <span className={result.success ? 'text-green-600' : 'text-red-600'} style={{ fontSize: '0.9rem' }}>
+          {result.message}
+        </span>
+      )}
+    </div>
+  )
+}
+
 interface TesisKullanici {
   id: string
   adSoyad: string
@@ -141,6 +185,14 @@ export default function TesisDetayPage() {
             Yeni aktivasyon şifresi
           </button>
         )}
+      </div>
+
+      <div className="kbs-card admin-tesis-info-card" style={{ marginBottom: '1rem' }}>
+        <h3 className="kbs-card-title" style={{ marginBottom: '0.5rem' }}>KBS Senkronizasyon</h3>
+        <p className="kbs-page-sub" style={{ marginBottom: '0.75rem' }}>
+          KBS geçmişini çekip bu tesise aktarır (KBS türü liste destekliyorsa).
+        </p>
+        <KBSSyncBlock tesisId={tesis.id} onSyncDone={load} />
       </div>
 
       <div className="kbs-card admin-tesis-info-card">

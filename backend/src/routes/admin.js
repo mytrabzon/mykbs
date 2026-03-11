@@ -200,6 +200,92 @@ router.get('/tesis/:tesisId', async (req, res) => {
 });
 
 /**
+ * KBS geçmişini çek (tesis Prisma kaydına göre). Jandarma/Polis listesi desteklemiyorsa imported: 0 döner.
+ */
+router.post('/tesis/:tesisId/kbs-sync', async (req, res) => {
+  try {
+    const { tesisId } = req.params;
+    const tesis = await prisma.tesis.findUnique({
+      where: { id: tesisId }
+    });
+    if (!tesis) {
+      return res.status(404).json({ message: 'Tesis bulunamadı' });
+    }
+    if (!tesis.kbsTuru || !tesis.kbsTesisKodu || !tesis.kbsWebServisSifre) {
+      return res.status(400).json({ message: 'Bu tesisin KBS bilgileri eksik. Önce KBS türü, tesis kodu ve şifre girilmeli.' });
+    }
+    const createKBSService = require('../services/kbs').createKBSService;
+    const tesisLike = {
+      kbsTuru: tesis.kbsTuru,
+      kbsTesisKodu: tesis.kbsTesisKodu,
+      kbsWebServisSifre: tesis.kbsWebServisSifre,
+      ipAdresleri: []
+    };
+    const kbsService = createKBSService(tesisLike);
+    const result = await kbsService.misafirListesiGetir();
+
+    if (!result.success || !result.misafirler || result.misafirler.length === 0) {
+      return res.json({
+        success: true,
+        count: 0,
+        message: result.message || 'KBS\'ten misafir listesi alınamadı veya liste boş. (Jandarma KBS liste sorgulama desteklemiyor olabilir.)'
+      });
+    }
+
+    let imported = 0;
+    let skipped = 0;
+    for (const g of result.misafirler) {
+      if (!g.ad && !g.soyad) continue;
+      if (!g.kimlikNo && !g.pasaportNo) { skipped++; continue; }
+      const odaNumarasi = (g.odaNumarasi || '').toString().trim() || 'Bilinmeyen';
+      let oda = await prisma.oda.findFirst({ where: { tesisId, odaNumarasi } });
+      if (!oda) {
+        oda = await prisma.oda.create({
+          data: { tesisId, odaNumarasi, odaTipi: 'Standart', kapasite: 2, durum: 'bos' }
+        });
+      }
+      const orConditions = [];
+      if (g.kimlikNo && String(g.kimlikNo).trim()) orConditions.push({ kimlikNo: String(g.kimlikNo).trim() });
+      if (g.pasaportNo && String(g.pasaportNo).trim()) orConditions.push({ pasaportNo: String(g.pasaportNo).trim() });
+      if (orConditions.length === 0) { skipped++; continue; }
+      const existing = await prisma.misafir.findFirst({
+        where: { tesisId, cikisTarihi: null, OR: orConditions }
+      });
+      if (existing) { skipped++; continue; }
+      const dogumTarihi = g.dogumTarihi ? new Date(g.dogumTarihi) : new Date(1990, 0, 1);
+      const girisTarihi = g.girisTarihi ? new Date(g.girisTarihi) : new Date();
+      const cikisTarihi = g.cikisTarihi ? new Date(g.cikisTarihi) : null;
+      await prisma.misafir.create({
+        data: {
+          tesisId,
+          odaId: oda.id,
+          ad: (g.ad || '').trim() || 'Misafir',
+          soyad: (g.soyad || '').trim() || '—',
+          kimlikNo: (g.kimlikNo || '').trim() || '—',
+          pasaportNo: (g.pasaportNo || '').trim() || null,
+          dogumTarihi,
+          uyruk: (g.uyruk || 'TÜRK').trim(),
+          girisTarihi,
+          cikisTarihi
+        }
+      });
+      if (!cikisTarihi && oda.durum !== 'dolu') {
+        await prisma.oda.update({ where: { id: oda.id }, data: { durum: 'dolu' } });
+      }
+      imported++;
+    }
+
+    const message = imported > 0
+      ? `${imported} kayıt senkronize edildi.${skipped > 0 ? ` ${skipped} zaten kayıtlıydı.` : ''}`
+      : (skipped > 0 ? `Tüm kayıtlar zaten mevcut (${skipped}).` : 'Aktarım tamamlandı.');
+    res.json({ success: true, count: imported, skipped, message });
+  } catch (error) {
+    console.error('KBS sync hatası:', error);
+    res.status(500).json({ message: error?.message || 'Senkronizasyon başarısız' });
+  }
+});
+
+/**
  * Tesis odaları listesi (admin panel odalar sayfası)
  */
 router.get('/tesis/:tesisId/odalar', async (req, res) => {

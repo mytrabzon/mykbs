@@ -298,6 +298,19 @@ export const api = {
         throwIfNotOk(r, data as Record<string, unknown>, 'Liste alınamadı');
         return toResponse(data);
       }
+      if (pathname === '/aktif-misafirler' || pathname === '/checkin/aktif-misafirler' || pathname === 'aktif-misafirler') {
+        const backendUrl = getBackendUrl();
+        if (backendUrl && token) {
+          const r = await fetchWithLog(`${backendUrl}/api/aktif-misafirler`, {
+            method: 'GET',
+            headers: { Authorization: `Bearer ${token}` },
+          });
+          const data = await r.json().catch(() => ({}));
+          if (!r.ok) throw Object.assign(new Error((data as { message?: string }).message || 'Aktif misafirler alınamadı'), { response: { status: r.status, data } });
+          return toResponse(data);
+        }
+        return toResponse({ toplam: 0, doluOda: 0, odalar: {}, misafirler: [] });
+      }
       if (pathname === '/oda' || pathname === 'oda') {
         const filtre = query.filtre || 'tumu';
         const backendUrl = getBackendUrl();

@@ -692,8 +692,45 @@ class DataService {
       }
 
       logger.log('Fetching misafirler from API');
-      // TODO: Backend'de misafirler endpoint'i eklenmeli
-      // Şimdilik odalardan misafirleri çıkarıyoruz
+      // Önce gerçek zamanlı KBS kaynaklı aktif misafirler (Supabase guests) dene
+      const backendUrl = getApiBaseUrl();
+      const accessToken = await getAccessToken();
+      if (backendUrl && accessToken) {
+        try {
+          const r = await fetch(`${backendUrl}/api/aktif-misafirler`, {
+            method: 'GET',
+            headers: { Authorization: `Bearer ${accessToken}` },
+          });
+          const data = (await r.json().catch(() => ({}))) as { toplam?: number; misafirler?: Array<{ id: string; full_name?: string; room_number?: string; checkin_at?: string; document_type?: string; document_no?: string; nationality?: string; birth_date?: string }> };
+          const list = data?.misafirler ?? [];
+          if (r.ok && list.length >= 0) {
+            const misafirler: MisafirData[] = list.map((m) => {
+              const parts = (m.full_name || '').trim().split(/\s+/);
+              const ad = parts.slice(0, -1).join(' ') || m.full_name || '';
+              const soyad = parts.slice(-1)[0] || '—';
+              return {
+                id: m.id,
+                ad,
+                soyad,
+                kimlikNo: m.document_type === 'tc' ? (m.document_no || '') : '',
+                pasaportNo: m.document_type === 'pasaport' ? m.document_no : undefined,
+                dogumTarihi: m.birth_date || '',
+                uyruk: m.nationality || '',
+                girisTarihi: m.checkin_at || '',
+                cikisTarihi: undefined,
+                odaId: m.id,
+                odaNumarasi: (m.room_number || '').toString().trim() || '—',
+              };
+            });
+            this.misafirlerCache = misafirler;
+            await this.saveCache();
+            this.emit('misafirler:updated', misafirler);
+            return misafirler;
+          }
+        } catch (_) {
+          // Aktif-misafirler yoksa veya hata verirse odalardan türet
+        }
+      }
       const odalar = await this.getOdalar('tumu', forceRefresh);
       const misafirler: MisafirData[] = odalar
         .filter((oda) => oda.misafir)
