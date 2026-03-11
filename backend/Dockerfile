@@ -16,5 +16,7 @@ RUN npx prisma generate
 EXPOSE 8080
 ENV PORT=8080
 ENV NODE_ENV=production
+# Suppress Node deprecation warnings (e.g. punycode) from deps in logs
+ENV NODE_OPTIONS="--no-deprecation"
 
 CMD ["node", "src/server.js"]

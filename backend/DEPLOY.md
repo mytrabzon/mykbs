@@ -62,7 +62,8 @@ Bundan sonra `main`’e (veya `backend/` altında değişiklik içeren) push’l
 
 ## Build / npm uyarıları
 
-- **`npm warn config production Use --omit=dev instead`:** Proje kökünden deploy ediyorsanız root `postinstall` zaten production’da `--omit=dev` kullanıyor. Root Directory = `backend` ise Railway’de Build Command’ı `npm install --omit=dev` yaparak uyarıyı kaldırabilirsiniz.
+- **`npm warn config production Use --omit=dev instead`:** `backend/railway.json` içinde build command zaten `npm install --omit=dev` olarak tanımlı; Root Directory = `backend` ise bu dosya kullanılır ve uyarı kaybolur. Manuel ayarlıyorsanız Build Command = `npm install --omit=dev` yapın.
+- **`(node) [DEP0040] DeprecationWarning: The punycode module is deprecated`:** Bağımlılıklardan (örn. nodemailer) gelir. `backend/package.json` içinde `overrides.punycode` ile userland paketi kullanılır; hâlâ görürseniz Railway’de **Variables**’a `NODE_OPTIONS=--no-deprecation` ekleyin veya Docker deploy kullanın (Dockerfile’da bu ayar var).
 
 ## Sorun giderme
 
@@ -99,8 +100,8 @@ Mobil uygulama `EXPO_PUBLIC_BACKEND_URL` ile `/health` adresine istek atar. Ceva
 
 3. **Railway ayarları:**  
    - **Root Directory:** `backend` (repo kökü değil).  
-   - **Build Command:** (boş bırakılabilir; Nixpacks varsayılanı `npm install` + `npm run build` veya sadece `npm install`).  
-   - **Start Command:** `npm start` veya `node src/server.js`. Migration’ı her deploy’da çalıştırmak istersen: `npm run migrate:deploy && npm start` (Prisma tabloları güncel kalır).  
+   - **Build Command:** Boş bırakılırsa `backend/railway.json` kullanılır (`npm install --omit=dev`). Manuel: `npm install --omit=dev`.
+   - **Start Command:** `npm start` veya `node src/server.js`. Deprecation log’larını kapatmak için: `NODE_OPTIONS=--no-deprecation node src/server.js` veya Variables’da `NODE_OPTIONS=--no-deprecation`. Migration’ı her deploy’da çalıştırmak istersen: `npm run migrate:deploy && npm start` (Prisma tabloları güncel kalır).  
    - **PORT:** Sabit yazmayın; Railway `PORT` env ile verir. Backend zaten `process.env.PORT || 8080` kullanıyor.  
    - **Teşhis:** `GET /health` → backend ayakta; `GET /health/db` → veritabanı bağlantısı. Log’da `[Startup] DATABASE_URL: host=... db=...` ile env kontrol edilir.
 
