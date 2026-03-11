@@ -95,7 +95,8 @@ router.get('/', async (req, res) => {
           soyad: maskedName.soyad,
           girisTarihi: misafir.girisTarihi
         } : null,
-        kbsDurumu: bildirim ? bildirim.durum : null
+        kbsDurumu: bildirim ? bildirim.durum : null,
+        kbsHataMesaji: bildirim && bildirim.durum === 'hatali' ? bildirim.hataMesaji : null
       };
     });
 

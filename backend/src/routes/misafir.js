@@ -487,14 +487,15 @@ router.post('/checkout/:misafirId', async (req, res) => {
 
     const tesisForCikis = getTesisOrBranch(req);
     if (tesisForCikis.kbsTuru && tesisForCikis.kbsTesisKodu && tesisForCikis.kbsWebServisSifre) {
-      const misafirCopy = { kimlikNo: misafir.kimlikNo, pasaportNo: misafir.pasaportNo };
+      const misafirCopy = {
+        kimlikNo: misafir.kimlikNo || null,
+        pasaportNo: misafir.pasaportNo || null,
+        cikisTarihi: cikisTarihi.toISOString ? cikisTarihi.toISOString() : String(cikisTarihi)
+      };
       setImmediate(async () => {
         try {
           const kbsService = createKBSService(tesisForCikis);
-          await kbsService.cikisBildir({
-            ...misafirCopy,
-            cikisTarihi
-          });
+          await kbsService.cikisBildir(misafirCopy);
         } catch (error) {
           console.error('KBS çıkış bildirimi hatası:', error);
         }

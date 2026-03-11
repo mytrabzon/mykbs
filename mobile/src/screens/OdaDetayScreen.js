@@ -298,15 +298,22 @@ export default function OdaDetayScreen() {
                         Giriş: {new Date(m.girisTarihi).toLocaleDateString('tr-TR')}
                       </Text>
                       {sonBildirim && (
-                        <View style={styles.bildirimRow}>
-                          <Ionicons
-                            name={sonBildirim.durum === 'basarili' ? 'checkmark-circle' : sonBildirim.durum === 'hatali' ? 'warning' : 'time'}
-                            size={14}
-                            color={sonBildirim.durum === 'basarili' ? colors.success : sonBildirim.durum === 'hatali' ? colors.error : colors.textSecondary}
-                          />
-                          <Text style={[styles.bildirimText, { color: colors.textSecondary }]}>
-                            Bildirim: {getBildirimDurumLabel(sonBildirim.durum)} · {new Date(sonBildirim.createdAt).toLocaleString('tr-TR')}
-                          </Text>
+                        <View style={styles.bildirimBlock}>
+                          <View style={styles.bildirimRow}>
+                            <Ionicons
+                              name={sonBildirim.durum === 'basarili' ? 'checkmark-circle' : sonBildirim.durum === 'hatali' ? 'warning' : 'time'}
+                              size={14}
+                              color={sonBildirim.durum === 'basarili' ? colors.success : sonBildirim.durum === 'hatali' ? colors.error : colors.textSecondary}
+                            />
+                            <Text style={[styles.bildirimText, { color: colors.textSecondary }]}>
+                              Bildirim: {getBildirimDurumLabel(sonBildirim.durum)} · {new Date(sonBildirim.createdAt).toLocaleString('tr-TR')}
+                            </Text>
+                          </View>
+                          {sonBildirim.durum === 'hatali' && sonBildirim.hataMesaji ? (
+                            <Text style={[styles.bildirimHataText, { color: colors.error }]} numberOfLines={3}>
+                              Sebep: {sonBildirim.hataMesaji}
+                            </Text>
+                          ) : null}
                         </View>
                       )}
                     </View>
@@ -529,8 +536,10 @@ const styles = StyleSheet.create({
   misafirInfo: { flex: 1 },
   guestName: { fontSize: 17, fontWeight: '600', marginBottom: 4 },
   infoText: { fontSize: 13, marginBottom: 2 },
-  bildirimRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 6 },
+  bildirimBlock: { marginTop: 6 },
+  bildirimRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   bildirimText: { fontSize: 12 },
+  bildirimHataText: { fontSize: 11, marginTop: 4, marginLeft: 20 },
   actionRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 12 },
   smallBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingVertical: 8, paddingHorizontal: 10, borderRadius: 10 },
   smallBtnText: { fontSize: 12, fontWeight: '600' },

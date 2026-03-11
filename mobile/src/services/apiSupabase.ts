@@ -973,10 +973,10 @@ export const api = {
       }
       const checkoutMatch = pathname.match(/^\/?misafir\/checkout\/([^/]+)$/);
       if (checkoutMatch) {
-        const guestId = checkoutMatch[1];
+        const misafirId = checkoutMatch[1];
         const backendUrl = getBackendUrl();
         if (backendUrl && token) {
-          const r = await fetchWithLog(`${backendUrl}/api/checkout/${guestId}`, {
+          const r = await fetchWithLog(`${backendUrl}/api/misafir/checkout/${misafirId}`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
             body: JSON.stringify({}),
@@ -989,7 +989,7 @@ export const api = {
           }
           return toResponse({ success: true, message: (data as { message?: string })?.message || 'Çıkış yapıldı' });
         }
-        const res = await callFn('checkout', { misafirId: guestId }, token);
+        const res = await callFn('checkout', { misafirId }, token);
         return toResponse(res);
       }
       // Misafir hesabı oluştur — backend (auth gerekmez; cihaz başına tek hesap)

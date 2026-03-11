@@ -4,6 +4,7 @@
 import React, { useState, useCallback } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, RefreshControl, ActivityIndicator } from 'react-native';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import * as offlineKbs from '../services/offlineKbsDB';
 import { sync } from '../services/kbsSyncWorker';
@@ -12,8 +13,10 @@ import { theme } from '../theme';
 
 export default function ReceptionistPanelScreen() {
   const navigation = useNavigation();
+  const insets = useSafeAreaInsets();
   const [pending, setPending] = useState(0);
   const [failed, setFailed] = useState(0);
+  const [pendingList, setPendingList] = useState([]);
   const [failedList, setFailedList] = useState([]);
   const [syncing, setSyncing] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
@@ -23,11 +26,16 @@ export default function ReceptionistPanelScreen() {
       const stats = await offlineKbs.getQueueStats();
       setPending(stats.pending);
       setFailed(stats.failed);
-      const list = await offlineKbs.getFailedQueue();
-      setFailedList(list);
+      const [pendingItems, failedItems] = await Promise.all([
+        offlineKbs.getPendingQueue(50),
+        offlineKbs.getFailedQueue()
+      ]);
+      setPendingList(pendingItems);
+      setFailedList(failedItems);
     } catch (e) {
       setPending(0);
       setFailed(0);
+      setPendingList([]);
       setFailedList([]);
     }
   }, []);
@@ -86,24 +94,40 @@ export default function ReceptionistPanelScreen() {
     }
   }, [loadStats]);
 
+  const cancelOne = useCallback(async (id) => {
+    try {
+      await offlineKbs.deleteFromQueue(id);
+      await loadStats();
+      Toast.show({ type: 'success', text1: 'Kuyruktan kaldırıldı' });
+    } catch (e) {
+      Toast.show({ type: 'error', text1: e?.message });
+    }
+  }, [loadStats]);
+
   return (
     <ScrollView
       style={styles.container}
-      contentContainerStyle={styles.content}
+      contentContainerStyle={[styles.content, { paddingTop: insets.top + 16 }]}
       refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
     >
-      <View style={styles.statusCard}>
+      <TouchableOpacity
+        style={styles.statusCard}
+        onPress={() => { if (pending > 0 && !syncing) handleManualSync(); }}
+        activeOpacity={pending > 0 ? 0.7 : 1}
+        disabled={pending === 0 || syncing}
+      >
         <View style={styles.statusRow}>
           <View style={styles.statusItem}>
             <Text style={styles.statusLabel}>Bekleyen senkronizasyon</Text>
             <Text style={[styles.statusValue, pending > 0 && styles.statusWarning]}>{pending}</Text>
+            {pending > 0 && !syncing && <Text style={styles.statusHint}>Dokun: senkronize et</Text>}
           </View>
           <View style={styles.statusItem}>
             <Text style={styles.statusLabel}>Başarısız</Text>
             <Text style={[styles.statusValue, failed > 0 && styles.statusError]}>{failed}</Text>
           </View>
         </View>
-      </View>
+      </TouchableOpacity>
 
       <View style={styles.actionRow}>
         <TouchableOpacity
@@ -124,6 +148,26 @@ export default function ReceptionistPanelScreen() {
         )}
       </View>
 
+      {pendingList.length > 0 && (
+        <>
+          <Text style={styles.sectionTitle}>Bildirilmek için sırada olanlar</Text>
+          {pendingList.slice(0, 30).map((item) => (
+            <View key={item.id} style={styles.pendingItem}>
+              <View style={styles.failedContent}>
+                <Text style={styles.failedName}>
+                  {item.misafir_data?.ad} {item.misafir_data?.soyad}
+                </Text>
+                <Text style={styles.failedMeta}>Oda {item.oda_no} · {new Date(item.created_at).toLocaleTimeString('tr-TR')}</Text>
+              </View>
+              <TouchableOpacity style={styles.cancelBtn} onPress={() => cancelOne(item.id)}>
+                <Ionicons name="close-circle-outline" size={22} color={theme.colors?.textSecondary || '#6B7280'} />
+                <Text style={styles.cancelBtnText}>İptal</Text>
+              </TouchableOpacity>
+            </View>
+          ))}
+        </>
+      )}
+
       <Text style={styles.sectionTitle}>Açıklama</Text>
       <Text style={styles.helpText}>
         Her check-in önce cihazda saklanır. İnternet varken otomatik gönderilir; yoksa bekler. Bu ekrandan manuel senkronize edebilir veya hata alan kayıtları tekrar deneyebilirsiniz.
@@ -141,9 +185,15 @@ export default function ReceptionistPanelScreen() {
                 <Text style={styles.failedMeta}>Oda {item.oda_no} · {new Date(item.created_at).toLocaleTimeString('tr-TR')}</Text>
                 {item.last_error ? <Text style={styles.failedError} numberOfLines={2}>{item.last_error}</Text> : null}
               </View>
-              <TouchableOpacity style={styles.retrySmall} onPress={() => retryOne(item.id)}>
-                <Ionicons name="refresh" size={22} color={theme.colors?.primary || '#007AFF'} />
-              </TouchableOpacity>
+              <View style={styles.failedActions}>
+                <TouchableOpacity style={styles.retrySmall} onPress={() => retryOne(item.id)}>
+                  <Ionicons name="refresh" size={22} color={theme.colors?.primary || '#007AFF'} />
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.cancelBtn} onPress={() => cancelOne(item.id)}>
+                  <Ionicons name="close-circle-outline" size={22} color={theme.colors?.textSecondary || '#6B7280'} />
+                  <Text style={styles.cancelBtnText}>İptal</Text>
+                </TouchableOpacity>
+              </View>
             </View>
           ))}
         </>
@@ -174,6 +224,7 @@ const styles = StyleSheet.create({
   statusItem: { alignItems: 'center' },
   statusLabel: { fontSize: 12, color: '#6B7280', marginBottom: 4 },
   statusValue: { fontSize: 24, fontWeight: '700', color: '#111' },
+  statusHint: { fontSize: 10, color: '#059669', marginTop: 2 },
   statusWarning: { color: '#F59E0B' },
   statusError: { color: '#EF4444' },
   actionRow: { flexDirection: 'row', gap: 12, marginBottom: 24 },
@@ -209,5 +260,18 @@ const styles = StyleSheet.create({
   failedName: { fontWeight: '600', color: '#111', fontSize: 14 },
   failedMeta: { fontSize: 12, color: '#6B7280', marginTop: 2 },
   failedError: { fontSize: 11, color: '#EF4444', marginTop: 4 },
-  retrySmall: { padding: 8 }
+  failedActions: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  retrySmall: { padding: 8 },
+  pendingItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#fff',
+    padding: 12,
+    borderRadius: 8,
+    marginBottom: 8,
+    borderLeftWidth: 4,
+    borderLeftColor: '#059669'
+  },
+  cancelBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingVertical: 6, paddingHorizontal: 8 },
+  cancelBtnText: { fontSize: 12, color: '#6B7280', fontWeight: '500' },
 });
