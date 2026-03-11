@@ -200,6 +200,8 @@ router.get('/', async (req, res) => {
           uyruk: r.uyruk,
           photoUrl,
           portraitPhotoUrl: portraitPhotoUrl || undefined,
+          odaNo: r.odaNo ?? null,
+          bildirildi: r.bildirildi ?? false,
           createdAt: r.createdAt,
         };
       })
@@ -212,6 +214,29 @@ router.get('/', async (req, res) => {
   } catch (e) {
     console.error('[okutulan-belgeler] GET error:', e);
     return errorResponse(req, res, 500, 'LIST_FAILED', e.message || 'Liste alınamadı.');
+  }
+});
+
+/** PUT /api/okutulan-belgeler/:id/oda — oda ata (body: { odaId }) */
+router.put('/:id/oda', express.json(), async (req, res) => {
+  try {
+    const tesisId = getTesisId(req);
+    if (!tesisId) return errorResponse(req, res, 401, 'UNAUTHORIZED', 'Tesis bilgisi bulunamadı.');
+    const { id } = req.params;
+    const { odaId } = req.body || {};
+    if (!odaId) return errorResponse(req, res, 400, 'MISSING_ODA', 'odaId gerekli.');
+    const belge = await prisma.okutulanBelge.findFirst({ where: { id, tesisId } });
+    if (!belge) return errorResponse(req, res, 404, 'NOT_FOUND', 'Kayıt bulunamadı.');
+    const oda = await prisma.oda.findFirst({ where: { id: odaId, tesisId } });
+    if (!oda) return errorResponse(req, res, 404, 'ODA_NOT_FOUND', 'Oda bulunamadı.');
+    await prisma.okutulanBelge.update({
+      where: { id },
+      data: { odaNo: oda.odaNumarasi },
+    });
+    return res.json({ ok: true, odaNo: oda.odaNumarasi });
+  } catch (e) {
+    console.error('[okutulan-belgeler] PUT oda error:', e);
+    return errorResponse(req, res, 500, 'UPDATE_FAILED', e.message || 'Oda atanamadı.');
   }
 });
 
@@ -353,6 +378,11 @@ router.post('/:id/bildir', express.json(), async (req, res) => {
         }
       });
     }
+
+    await prisma.okutulanBelge.update({
+      where: { id: belge.id },
+      data: { bildirildi: true, odaNo: oda.odaNumarasi },
+    });
 
     return res.status(201).json({
       ok: true,

@@ -1092,6 +1092,19 @@ export const api = {
         const res = await callFn('settings_update', (body || {}) as Record<string, unknown>, token);
         return toResponse(res);
       }
+      if (pathname.startsWith('/okutulan-belgeler/') && pathname.endsWith('/oda')) {
+        const backendUrl = getBackendUrl();
+        if (backendUrl && token) {
+          const r = await fetchWithLog(pathname.replace(/^\/?/, `${backendUrl}/api/`), {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+            body: JSON.stringify(body || {}),
+          });
+          const data = await r.json().catch(() => ({}));
+          throwIfNotOk(r, data as Record<string, unknown>, 'Oda atanamadı');
+          return toResponse(data);
+        }
+      }
       logger.warn('[apiSupabase] Unmapped PUT', path);
       return toResponse(await callFn('settings_update', (body || {}) as Record<string, unknown>, token));
     } catch (e) {

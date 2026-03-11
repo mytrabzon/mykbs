@@ -288,6 +288,12 @@ export default function PrimeHomeView({
           color="#F59E0B"
           onPress={() => onFilterChange?.('tumu')}
         />
+        <QuickAction
+          title={t('home.quickKaydedilenler')}
+          icon="document-text-outline"
+          color="#6B7280"
+          onPress={() => navigation?.navigate('Kaydedilenler')}
+        />
       </View>
 
       {/* Filtreler */}
@@ -410,7 +416,7 @@ const styles = StyleSheet.create({
   menuButton: { padding: 8, marginLeft: -8 },
   greeting: { fontSize: 14 },
   hotelName: { fontSize: 24, fontWeight: 'bold' },
-  headerRight: { flexDirection: 'row', alignItems: 'center', gap: 12, flexShrink: 0, marginLeft: 'auto' },
+  headerRight: { flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', gap: 12, flexShrink: 0, marginLeft: 'auto', paddingLeft: 24 },
   adminButtonWrap: { position: 'relative', padding: 8 },
   adminBadge: {
     position: 'absolute',

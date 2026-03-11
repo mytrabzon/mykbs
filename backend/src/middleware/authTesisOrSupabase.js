@@ -83,6 +83,17 @@ async function authenticateTesisOrSupabase(req, res, next) {
         if (isSupabaseExpired) {
           return errorResponse(req, res, 401, 'TOKEN_EXPIRED', 'Oturum süresi doldu. Lütfen tekrar giriş yapın.');
         }
+        if (!user) {
+          const msgLower = msg.toLowerCase();
+          const likelyDeleted = /not found|deleted|invalid user|user.*removed/.test(msgLower);
+          return errorResponse(
+            req,
+            res,
+            401,
+            likelyDeleted ? 'ACCOUNT_DELETED' : 'INVALID_TOKEN',
+            likelyDeleted ? 'Hesabınız silindi. Destek talebi oluşturuldu; yönetici inceleyecektir.' : 'Geçersiz oturum. Tekrar giriş yapın.'
+          );
+        }
         let issuer = 'n/a';
         try {
           const parts = (token || '').split('.');

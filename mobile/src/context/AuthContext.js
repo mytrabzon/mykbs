@@ -107,9 +107,13 @@ async function fetchMeAndSetState(accessToken, setUser, setTesis, setToken, getT
   } catch (e) {
     const status = e?.response?.status;
     const code = e?.response?.data?.code;
+    const serverMessage = e?.response?.data?.message || '';
     if (status === 401 || status === 404 || (status === 500 && code === 'GUEST_SETUP_FAILED')) {
       if (status === 404) {
         logger.warn('AuthContext fetch /me: kullanıcı bulunamadı (404), oturum temizleniyor');
+      }
+      if (code === 'ACCOUNT_DELETED' && typeof setAuthError === 'function') {
+        setAuthError(serverMessage || 'Hesabınız silindi. Destek talebiniz oluşturuldu; yönetici inceleyecektir.');
       }
       try {
         await supabase?.auth?.signOut();
@@ -118,7 +122,7 @@ async function fetchMeAndSetState(accessToken, setUser, setTesis, setToken, getT
       setToken(null);
       setUser(null);
       setTesis(null);
-      if (typeof setAuthError === 'function') setAuthError(null);
+      if (code !== 'ACCOUNT_DELETED' && typeof setAuthError === 'function') setAuthError(null);
       return false;
     }
     if (status === 409 && (code === 'BRANCH_NOT_ASSIGNED' || code === 'BRANCH_LOAD_FAILED')) {
@@ -543,8 +547,9 @@ export const AuthProvider = ({ children }) => {
       return { success: false, message: res.data?.message || 'Giriş başarısız' };
     } catch (err) {
       const msg = err?.response?.data?.message || err?.message;
+      const code = err?.response?.data?.code;
       logger.error('Login with password error', err);
-      return { success: false, message: msg || 'Giriş başarısız' };
+      return { success: false, message: msg || 'Giriş başarısız', code };
     }
   };
 
@@ -575,6 +580,7 @@ export const AuthProvider = ({ children }) => {
       return {
         success: false,
         message: error.response?.data?.message || error.message || 'Giriş başarısız',
+        code: error.response?.data?.code,
       };
     }
   };

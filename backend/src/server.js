@@ -10,7 +10,7 @@ const crypto = require('crypto');
 const isProduction = process.env.NODE_ENV === 'production';
 if (isProduction && !process.env.JWT_SECRET) {
   console.error('[server] Production ortamında JWT_SECRET zorunludur.');
-  console.error('[server] Deploy platformunda ortam değişkeni olarak tanımlayın: Supabase Dashboard → Project Settings → Edge Functions → Secrets veya Railway Variables.');
+  console.error('[server] Deploy platformunda ortam değişkeni olarak ekleyin: Railway → Service → Variables → JWT_SECRET (en az 32 karakter). Örnek: openssl rand -base64 32');
   process.exit(1);
 }
 process.env.JWT_SECRET = process.env.JWT_SECRET || "mykbs-super-secret-jwt-key-2024-change-this";

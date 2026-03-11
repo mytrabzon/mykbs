@@ -194,7 +194,7 @@ async function readPassportWithoutMRZ() {
  * Türk kimlik yapısı farklı olabilir; ortak eMRTD tag'leri kullanıyoruz.
  */
 async function readIDCard() {
-  const { readDG1, readDG2, readDG11, parseDG1ToPayload, extractFieldFromTLV } = require('./IdCardReader');
+  const { readDG1, readDG2, readDG11, parseDG1ToPayload, extractFieldFromTLV, extractFaceImageFromDG2 } = require('./IdCardReader');
   const dg1 = await readDG1(transceive);
   logger.info('[NFC] DG1 okundu', { length: dg1?.length ?? 0 });
   const payload = parseDG1ToPayload(dg1);
@@ -203,8 +203,14 @@ async function readIDCard() {
   try {
     const dg2 = await readDG2(transceive);
     if (dg2 && dg2.length > 0) {
-      chipPhotoBase64 = bytesToBase64(dg2);
-      logger.info('[NFC] DG2 (foto) okundu', { length: dg2.length, hasBase64: !!chipPhotoBase64 });
+      const jpegBytes = extractFaceImageFromDG2(dg2);
+      if (jpegBytes && jpegBytes.length > 0) {
+        chipPhotoBase64 = bytesToBase64(jpegBytes);
+        logger.info('[NFC] DG2 (foto) JPEG çıkarıldı', { length: jpegBytes.length, hasBase64: !!chipPhotoBase64 });
+      } else {
+        chipPhotoBase64 = bytesToBase64(dg2);
+        logger.info('[NFC] DG2 (foto) ham okundu', { length: dg2.length, hasBase64: !!chipPhotoBase64 });
+      }
     }
   } catch (_) {}
   let dogumYeri = null;

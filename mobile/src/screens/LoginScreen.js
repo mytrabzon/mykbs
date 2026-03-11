@@ -82,7 +82,11 @@ export default function LoginScreen({ route }) {
       const result = await loginWithPassword(em, sifreTrim);
       setLoading(false);
       if (result?.success) Toast.show({ type: 'success', text1: 'Giriş başarılı' });
-      else Toast.show({ type: 'error', text1: 'Giriş başarısız', text2: result?.message });
+      else Toast.show({
+        type: 'error',
+        text1: result?.code === 'ACCOUNT_DELETED' ? 'Hesabınız silindi' : 'Giriş başarısız',
+        text2: result?.message,
+      });
     } catch (e) {
       setLoading(false);
       setErrorDetails({ message: e?.message });

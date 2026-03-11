@@ -97,6 +97,18 @@ model Tesis {
   @@index([tenantId])
 }
 
+// Silinen hesaplar (Supabase Auth) — giriş denemelerinde "Hesabınız silindi" + otomatik destek talebi
+model DeletedAccount {
+  id         String   @id @default(cuid())
+  email      String?  // Supabase auth email
+  phone      String?  // Supabase auth phone
+  deletedAt  DateTime @default(now()) @map("deleted_at")
+
+  @@index([email])
+  @@index([phone])
+  @@map("deleted_accounts")
+}
+
 // Destek talepleri — mobil/hamburger menüden gönderilir, admin panelde listelenir
 model SupportTicket {
   id           String   @id @default(cuid())

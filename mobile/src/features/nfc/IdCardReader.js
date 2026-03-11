@@ -9,34 +9,77 @@ function isSuccessResponse(bytes) {
   return len >= 2 && bytes[len - 2] === 0x90 && bytes[len - 1] === 0x00;
 }
 
+/** 61 XX = başarı, XX byte GET RESPONSE ile alınacak */
+function isGetResponseNeeded(bytes) {
+  if (!bytes || bytes.length < 2) return null;
+  const sw1 = bytes[bytes.length - 2];
+  const sw2 = bytes[bytes.length - 1];
+  if (sw1 === 0x61) return sw2; // Le
+  return null;
+}
+
 function getDataBytes(response) {
   if (!response || response.length <= 2) return [];
   return response.slice(0, -2);
 }
 
 /**
+ * GET DATA yanıtı 61 XX ise GET RESPONSE (00 C0 00 00 XX) gönder; birleştir. Türk kimlik çipleri sık 61 XX döner.
+ */
+async function getDataWithResponse(transceiveFn, cmd) {
+  const res = await transceiveFn(cmd);
+  const le = isGetResponseNeeded(res);
+  if (le != null && le > 0) {
+    try {
+      const getResponse = [0x00, 0xc0, 0x00, 0x00, le & 0xff];
+      const res2 = await transceiveFn(getResponse);
+      if (isSuccessResponse(res2)) {
+        return getDataBytes(res2);
+      }
+    } catch (_) {}
+  }
+  if (isSuccessResponse(res)) {
+    const bytes = getDataBytes(res);
+    if (bytes && bytes.length > 0) return bytes;
+  }
+  return [];
+}
+
+/**
  * GET DATA ile DG1 oku (eMRTD).
- * Önce 0x0100, 0x6100; yoksa READ BINARY (SELECT FILE + Read Binary) dene.
+ * Önce 0x0100, 0x6100, 0x0101; 61 XX dönerse GET RESPONSE ile al. Yoksa READ BINARY dene.
  */
 async function readDG1(transceiveFn) {
   if (typeof transceiveFn !== 'function') throw new Error('transceiveFn gerekli');
   const getDataAttempts = [
     [0x00, 0xca, 0x01, 0x00, 0x00],
     [0x00, 0xca, 0x61, 0x00, 0x00],
+    [0x00, 0xca, 0x01, 0x01, 0x00],
   ];
   for (const cmd of getDataAttempts) {
     try {
-      const res = await transceiveFn(cmd);
-      if (isSuccessResponse(res)) {
-        const bytes = getDataBytes(res);
-        if (bytes && bytes.length > 0) return bytes;
-      }
+      const bytes = await getDataWithResponse(transceiveFn, cmd);
+      if (bytes && bytes.length > 0) return bytes;
     } catch (_) {}
   }
   return await readDG1ViaReadBinary(transceiveFn);
 }
 
-/** SELECT FILE (EF.DG1) + READ BINARY ile DG1 oku; bazı çipler GET DATA vermez */
+/** SELECT FILE (EF.DG1) + READ BINARY ile DG1 oku; bazı çipler GET DATA vermez. 61 XX dönerse GET RESPONSE kullan. */
+async function readBinaryWithResponse(transceiveFn, readCmd) {
+  const res = await transceiveFn(readCmd);
+  const le = isGetResponseNeeded(res);
+  if (le != null && le > 0) {
+    try {
+      const getResponse = [0x00, 0xc0, 0x00, 0x00, le & 0xff];
+      const res2 = await transceiveFn(getResponse);
+      if (isSuccessResponse(res2)) return getDataBytes(res2);
+    } catch (_) {}
+  }
+  if (isSuccessResponse(res)) return getDataBytes(res);
+  return [];
+}
+
 async function readDG1ViaReadBinary(transceiveFn) {
   try {
     const selectEf = [0x00, 0xa4, 0x02, 0x0c, 0x02, 0x01, 0x01];
@@ -47,9 +90,7 @@ async function readDG1ViaReadBinary(transceiveFn) {
     const maxChunks = 8;
     for (let i = 0; i < maxChunks; i++) {
       const readCmd = [0x00, 0xb0, (offset >> 8) & 0xff, offset & 0xff, 0xff];
-      const res = await transceiveFn(readCmd);
-      if (!isSuccessResponse(res)) break;
-      const data = getDataBytes(res);
+      const data = await readBinaryWithResponse(transceiveFn, readCmd);
       if (!data || data.length === 0) break;
       chunks.push(data);
       offset += data.length;
@@ -63,14 +104,36 @@ async function readDG1ViaReadBinary(transceiveFn) {
 }
 
 /**
- * GET DATA ile DG2 oku (fotoğraf).
+ * GET DATA ile DG2 oku (fotoğraf). 61 XX dönerse GET RESPONSE ile al.
  */
 async function readDG2(transceiveFn) {
   if (typeof transceiveFn !== 'function') throw new Error('transceiveFn gerekli');
   const GET_DATA_DG2 = [0x00, 0xca, 0x02, 0x00, 0x00];
-  const res = await transceiveFn(GET_DATA_DG2);
-  if (!isSuccessResponse(res)) return [];
-  return getDataBytes(res);
+  const bytes = await getDataWithResponse(transceiveFn, GET_DATA_DG2);
+  return bytes || [];
+}
+
+/** DG2 ham baytlarından yüz fotoğrafı (JPEG) çıkar. ICAO 9303: JPEG SOI 0xFF 0xD8 ... EOI 0xFF 0xD9 */
+function extractFaceImageFromDG2(dg2Bytes) {
+  if (!dg2Bytes || !Array.isArray(dg2Bytes) || dg2Bytes.length < 4) return null;
+  const data = dg2Bytes;
+  let soi = -1;
+  for (let i = 0; i < data.length - 1; i++) {
+    if (data[i] === 0xff && data[i + 1] === 0xd8) {
+      soi = i;
+      break;
+    }
+  }
+  if (soi < 0) return null;
+  let eoi = -1;
+  for (let j = soi + 2; j < data.length - 1; j++) {
+    if (data[j] === 0xff && data[j + 1] === 0xd9) {
+      eoi = j + 2;
+      break;
+    }
+  }
+  if (eoi < 0) return null;
+  return data.slice(soi, eoi);
 }
 
 /**
@@ -119,20 +182,21 @@ function parseDG1ToPayload(dg1Bytes) {
 
   const rawMrz = unwrapDG1ToMRZ(dg1Bytes);
   if (rawMrz && rawMrz.length >= 44) {
-    const mrzStr = Array.isArray(rawMrz) ? bytesToUtf8(rawMrz) : String(rawMrz);
-    // Türk kimlik TD1: 3x30 karakter (86–94). Önce lib/mrz parseMrz ile dene.
+    let mrzStr = Array.isArray(rawMrz) ? bytesToUtf8(rawMrz) : String(rawMrz);
+    mrzStr = mrzStr.replace(/\0/g, '').replace(/\s+/g, '').trim().toUpperCase();
+    // Türk kimlik TD1: 3x30 karakter (90). Önce lib/mrz parseMrz ile dene.
     if (mrzStr.length >= 86 && mrzStr.length <= 94) {
       try {
         const { parseMrz } = require('../../lib/mrz');
         const parsed = parseMrz(mrzStr);
-        if (parsed && (parsed.surname || parsed.givenNames)) {
+        if (parsed && (parsed.surname || parsed.givenNames || parsed.passportNumber)) {
           payload.ad = parsed.givenNames || '';
           payload.soyad = parsed.surname || '';
           const doc = (parsed.passportNumber || '').trim();
           payload.kimlikNo = /^\d{11}$/.test(doc) ? doc : null;
           payload.pasaportNo = payload.kimlikNo ? null : (doc || null);
           payload.dogumTarihi = parsed.birthDate ? formatDDMMYYYY(parsed.birthDate) : null;
-          payload.uyruk = (parsed.nationality || 'TÜRK').trim();
+          payload.uyruk = (parsed.nationality || parsed.issuingCountry || 'TÜRK').trim();
           payload.cinsiyet = parsed.sex || null;
           payload.sonKullanma = parsed.expiryDate ? formatDDMMYYYY(parsed.expiryDate) : null;
           return payload;
@@ -189,9 +253,19 @@ function parseDG1ToPayload(dg1Bytes) {
   return payload;
 }
 
+/** BER length: 81 XX = 1 byte, 82 XX XX = 2 byte */
+function readBerLength(data, offset) {
+  if (offset >= data.length) return { len: 0, next: offset };
+  const b = data[offset];
+  if (b < 0x80) return { len: b, next: offset + 1 };
+  if (b === 0x81 && offset + 2 <= data.length) return { len: data[offset + 1], next: offset + 2 };
+  if (b === 0x82 && offset + 3 <= data.length) return { len: (data[offset + 1] << 8) | data[offset + 2], next: offset + 3 };
+  return { len: 0, next: offset + 1 };
+}
+
 /**
  * DG1 ASN.1/TLV sarmalayıcıyı aç; içerideki MRZ ham metnini döndür (byte array).
- * Tag 0x61 (application template) veya 0x5F1F (MRZ) içinde MRZ olabilir.
+ * Tag 0x61 (application template) veya 0x5F1F (MRZ) içinde MRZ olabilir. BER length (81/82) destekli.
  */
 function unwrapDG1ToMRZ(bytes) {
   if (!bytes || bytes.length < 10) return null;
@@ -199,15 +273,27 @@ function unwrapDG1ToMRZ(bytes) {
   let pos = 0;
   while (pos < data.length) {
     const tag1 = data[pos];
-    let tagLen = 1;
-    let len = data[pos + 1];
-    let valueStart = pos + 2;
-    if (tag1 === 0x5f && data[pos + 1] >= 0x1f) {
-      tagLen = 2;
-      len = data[pos + 2];
-      valueStart = pos + 3;
+    let valueStart;
+    let len;
+    if (tag1 === 0x5f && pos + 2 < data.length) {
+      const lenInfo = readBerLength(data, pos + 2);
+      len = lenInfo.len;
+      valueStart = lenInfo.next;
+    } else if (tag1 === 0x61 && pos + 1 < data.length) {
+      const lenInfo = readBerLength(data, pos + 1);
+      len = lenInfo.len;
+      valueStart = lenInfo.next;
+    } else {
+      if (pos + 2 > data.length) break;
+      len = data[pos + 1];
+      valueStart = pos + 2;
+      if (len >= 0x80) {
+        const lenInfo = readBerLength(data, pos + 1);
+        len = lenInfo.len;
+        valueStart = lenInfo.next;
+      }
     }
-    if (len === undefined || valueStart + len > data.length) break;
+    if (valueStart + len > data.length) break;
     const value = data.slice(valueStart, valueStart + len);
     if (tag1 === 0x5f && data[pos + 1] === 0x1f && len >= 44) return value;
     if (tag1 === 0x61 && len >= 2) {
@@ -371,26 +457,60 @@ function parseMRZFromString(str) {
   };
 }
 
-/** TLV parse: 2-byte tag (0x5F 0x1E = ad, 0x5F 0x1F = soyad vb.). Türk eID DG1 ICAO 9303 2-byte tag kullanır. */
+/** TLV parse: 2-byte tag (0x5F 0x1E = ad, 0x5F 0x1F = soyad vb.). 0x61 (application template) içini özyinelemeli parse et — Türk eID DG1 böyle sarılı. */
 function parseTLV(bytes, payload) {
+  if (!bytes || !Array.isArray(bytes)) return;
   let i = 0;
   while (i + 2 <= bytes.length) {
-    if (bytes[i] === 0x5f && i + 3 <= bytes.length) {
+    const tag = bytes[i];
+    if (tag === 0x5f && i + 3 <= bytes.length) {
       const tagByte2 = bytes[i + 1];
-      const len = bytes[i + 2];
-      const valueStart = i + 3;
+      let len = bytes[i + 2];
+      let valueStart = i + 3;
+      if (len === 0x81 && valueStart + 1 <= bytes.length) {
+        len = bytes[valueStart];
+        valueStart += 1;
+      } else if (len === 0x82 && valueStart + 2 <= bytes.length) {
+        len = (bytes[valueStart] << 8) | bytes[valueStart + 1];
+        valueStart += 2;
+      }
       if (valueStart + len > bytes.length) break;
       const value = bytes.slice(valueStart, valueStart + len);
-      const str = bytesToUtf8(value).trim();
+      const str = bytesToUtf8(value).replace(/\0/g, '').trim();
       if (tagByte2 === 0x1e && str) payload.ad = str;
       else if (tagByte2 === 0x1f && str) payload.soyad = str;
       else if (tagByte2 === 0x20 && str) payload.kimlikNo = str || null;
       else if (tagByte2 === 0x2b && str) payload.dogumTarihi = str || null;
+      else if (tagByte2 === 0x2c && str) payload.uyruk = str || payload.uyruk;
+      i = valueStart + len;
+    } else if (tag === 0x61 && i + 2 <= bytes.length) {
+      let len = bytes[i + 1];
+      let valueStart = i + 2;
+      if (len === 0x81 && valueStart + 1 <= bytes.length) {
+        len = bytes[valueStart];
+        valueStart += 1;
+      } else if (len === 0x82 && valueStart + 2 <= bytes.length) {
+        len = (bytes[valueStart] << 8) | bytes[valueStart + 1];
+        valueStart += 2;
+      }
+      if (valueStart + len <= bytes.length) {
+        const inner = bytes.slice(valueStart, valueStart + len);
+        parseTLV(inner, payload);
+      }
       i = valueStart + len;
     } else {
       i += 1;
-      const len = bytes[i];
-      i += 1 + (len || 0);
+      let len = bytes[i];
+      if (len === 0x81 && i + 2 <= bytes.length) {
+        len = bytes[i + 1];
+        i += 2;
+      } else if (len === 0x82 && i + 3 <= bytes.length) {
+        len = (bytes[i + 1] << 8) | bytes[i + 2];
+        i += 3;
+      } else {
+        i += 1;
+      }
+      i += len || 0;
       if (i > bytes.length) break;
     }
   }
@@ -402,4 +522,5 @@ module.exports = {
   readDG11,
   parseDG1ToPayload,
   extractFieldFromTLV,
+  extractFaceImageFromDG2,
 };

@@ -64,6 +64,7 @@ import KycSubmitScreen from './src/features/kyc/KycSubmitScreen';
 import KycManualEntryScreen from './src/features/kyc/KycManualEntryScreen';
 import NfcIntroScreen from './src/features/kyc/NfcIntroScreen';
 import NfcReadScreen from './src/features/nfc/NfcReadScreen';
+import NfcResultScreen from './src/features/nfc/NfcResultScreen';
 import QuickNfcScanScreen from './src/screens/QuickNfcScanScreen';
 import DocumentHubScreen from './src/features/documentRead/DocumentHubScreen';
 import FrontDocumentScanScreen from './src/features/documentRead/FrontDocumentScanScreen';
@@ -350,6 +351,7 @@ function MainStack() {
       <Stack.Screen name="ReceptionistPanel" component={ReceptionistPanelScreen} options={{ title: 'KBS Senkronizasyon' }} />
       <Stack.Screen name="MrzScan" component={MrzScanScreen} />
       <Stack.Screen name="NfcRead" component={NfcReadScreen} />
+      <Stack.Screen name="NfcResult" component={NfcResultScreen} />
       <Stack.Screen name="QuickNfcScan" component={QuickNfcScanScreen} />
       <Stack.Screen name="MrzResult" component={MrzResultScreen} />
       <Stack.Screen name="KycSubmit" component={KycSubmitScreen} />

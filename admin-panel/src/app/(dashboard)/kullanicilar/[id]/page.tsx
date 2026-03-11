@@ -6,6 +6,12 @@ import Link from 'next/link'
 import toast from 'react-hot-toast'
 import { api } from '@/services/api'
 
+interface OkutulanBelgeOzeti {
+  toplam: number
+  bildirildi: number
+  bildirilmedi: number
+}
+
 interface Kullanici {
   id: string
   tesisId: string
@@ -26,7 +32,8 @@ interface Kullanici {
   avatarUrl: string | null
   createdAt: string
   updatedAt: string
-  tesis?: { id: string; tesisAdi: string; tesisKodu: string; paket?: string; trialEndsAt?: string | null; createdAt?: string }
+  okutulanBelgeOzeti?: OkutulanBelgeOzeti
+  tesis?: { id: string; tesisAdi: string; tesisKodu: string; paket?: string; trialEndsAt?: string | null; createdAt?: string; kbsTuru?: string | null }
 }
 
 const ROL_OPTIONS = [
@@ -43,6 +50,12 @@ export default function KullaniciDuzenlePage() {
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
+  const [activityOpen, setActivityOpen] = useState(false)
+  const [activity, setActivity] = useState<{
+    loglar: Array<{ id: string; islem: string; detay: string | null; basarili: boolean; createdAt: string }>
+    hatalar: Array<{ id: string; hataTipi: string; hataMesaji: string; durum: string; createdAt: string }>
+  } | null>(null)
+  const [activityLoading, setActivityLoading] = useState(false)
   const [form, setForm] = useState({
     adSoyad: '',
     telefon: '',
@@ -54,6 +67,8 @@ export default function KullaniciDuzenlePage() {
     bilgiDuzenlemeYetki: true,
     girisOnaylandi: false,
     pin: '',
+    sifre: '',
+    sifreTekrar: '',
   })
 
   useEffect(() => {
@@ -78,6 +93,8 @@ export default function KullaniciDuzenlePage() {
         bilgiDuzenlemeYetki: u.bilgiDuzenlemeYetki ?? true,
         girisOnaylandi: u.girisOnaylandi ?? false,
         pin: '',
+        sifre: '',
+        sifreTekrar: '',
       })
     } catch (e: unknown) {
       const err = e as { response?: { status?: number; data?: { message?: string } }; message?: string }
@@ -112,15 +129,37 @@ export default function KullaniciDuzenlePage() {
         girisOnaylandi: form.girisOnaylandi,
       }
       if (form.pin.trim()) body.pin = form.pin
+      if (form.sifre.trim()) {
+        if (form.sifre !== form.sifreTekrar) {
+          toast.error('Şifre ve tekrarı eşleşmiyor')
+          return
+        }
+        body.sifre = form.sifre
+        body.sifreTekrar = form.sifreTekrar
+      }
       await api.patch(`/app-admin/kullanicilar/${id}`, body)
       toast.success('Kullanıcı güncellendi')
-      setForm((f) => ({ ...f, pin: '' }))
+      setForm((f) => ({ ...f, pin: '', sifre: '', sifreTekrar: '' }))
       load()
     } catch (err: unknown) {
       const e = err as { response?: { data?: { message?: string } } }
       toast.error(e.response?.data?.message || 'Kaydedilemedi')
     } finally {
       setSaving(false)
+    }
+  }
+
+  const loadActivity = async () => {
+    if (!id) return
+    setActivityLoading(true)
+    try {
+      const res = await api.get<{ loglar: unknown[]; hatalar: unknown[] }>(`/app-admin/kullanicilar/${id}/activity`)
+      setActivity({ loglar: res.data.loglar as NonNullable<typeof activity>['loglar'], hatalar: res.data.hatalar as NonNullable<typeof activity>['hatalar'] })
+      setActivityOpen(true)
+    } catch (e) {
+      toast.error('Aktivite yüklenemedi')
+    } finally {
+      setActivityLoading(false)
     }
   }
 
@@ -160,6 +199,8 @@ export default function KullaniciDuzenlePage() {
   const tesisPaket = k.tesis?.paket ?? '—'
   const trialBitis = k.tesis?.trialEndsAt ? new Date(k.tesis.trialEndsAt).toLocaleDateString('tr-TR') : null
   const tesisKayit = k.tesis?.createdAt ? new Date(k.tesis.createdAt).toLocaleDateString('tr-TR') : null
+  const kbsTuru = k.tesis?.kbsTuru ? (k.tesis.kbsTuru === 'polis' ? 'Polis' : k.tesis.kbsTuru === 'jandarma' ? 'Jandarma' : k.tesis.kbsTuru) : '—'
+  const ob = k.okutulanBelgeOzeti
 
   return (
     <div className="admin-page">
@@ -196,10 +237,30 @@ export default function KullaniciDuzenlePage() {
           <dd className="admin-tesis-info-dd">{k.email ? <a href={`mailto:${k.email}`}>{k.email}</a> : '—'}</dd>
           <dt className="admin-tesis-info-dt">Telefon</dt>
           <dd className="admin-tesis-info-dd"><a href={`tel:${k.telefon}`}>{k.telefon}</a></dd>
-          <dt className="admin-tesis-info-dt">Tesis</dt>
+          <dt className="admin-tesis-info-dt">Görünen ad</dt>
+          <dd className="admin-tesis-info-dd">{k.displayName || '—'}</dd>
+          <dt className="admin-tesis-info-dt">Ünvan</dt>
+          <dd className="admin-tesis-info-dd">{k.title || '—'}</dd>
+          <dt className="admin-tesis-info-dt">Rol</dt>
+          <dd className="admin-tesis-info-dd">{k.rol}</dd>
+          <dt className="admin-tesis-info-dt">Otel / Tesis adı</dt>
           <dd className="admin-tesis-info-dd">
             {k.tesisId ? <Link href={`/tesisler/${k.tesisId}`} className="kbs-link-accent">{k.tesis?.tesisAdi || k.tesisId}</Link> : '—'}
           </dd>
+          <dt className="admin-tesis-info-dt">Tesis kodu</dt>
+          <dd className="admin-tesis-info-dd">{k.tesis?.tesisKodu ?? '—'}</dd>
+          <dt className="admin-tesis-info-dt">KBS türü</dt>
+          <dd className="admin-tesis-info-dd">{kbsTuru}</dd>
+          <dt className="admin-tesis-info-dt">Kimlik / pasaport (okutulan)</dt>
+          <dd className="admin-tesis-info-dd">
+            {ob ? (
+              <span>Toplam: <strong>{ob.toplam}</strong>, KBS’ye bildirildi: <strong>{ob.bildirildi}</strong>, bildirilmedi: <strong>{ob.bildirilmedi}</strong></span>
+            ) : '—'}
+          </dd>
+          <dt className="admin-tesis-info-dt">Son giriş</dt>
+          <dd className="admin-tesis-info-dd">{k.girisTalepAt ? new Date(k.girisTalepAt).toLocaleString('tr-TR') : '—'}</dd>
+          <dt className="admin-tesis-info-dt">Telefon işletim sistemi</dt>
+          <dd className="admin-tesis-info-dd">Cihaz bilgisi push kaydı ile gelir; bu kullanıcı için ayrıca gösterilmiyor.</dd>
           <dt className="admin-tesis-info-dt">Tesis paketi</dt>
           <dd className="admin-tesis-info-dd">{tesisPaket}</dd>
           {trialBitis && (
@@ -214,11 +275,69 @@ export default function KullaniciDuzenlePage() {
               <dd className="admin-tesis-info-dd">{tesisKayit}</dd>
             </>
           )}
-          <dt className="admin-tesis-info-dt">Rol</dt>
-          <dd className="admin-tesis-info-dd">{k.rol}</dd>
-          <dt className="admin-tesis-info-dt">Giriş talebi</dt>
+          <dt className="admin-tesis-info-dt">Giriş talebi (son)</dt>
           <dd className="admin-tesis-info-dd">{k.girisTalepAt ? new Date(k.girisTalepAt).toLocaleString('tr-TR') : '—'}</dd>
         </dl>
+        <div className="kbs-card" style={{ marginTop: '1rem' }}>
+          <h3 className="kbs-card-title">Aktivite &amp; hata logu</h3>
+          <p className="kbs-page-sub">Bu kullanıcının yaptığı işlemler (başarılı/başarısız) ve tesise ait hatalar.</p>
+          <button type="button" className="kbs-btn-primary" onClick={loadActivity} disabled={activityLoading}>
+            {activityLoading ? 'Yükleniyor...' : 'Log / Aktivite aç'}
+          </button>
+        </div>
+        {activityOpen && activity && (
+          <div className="kbs-card" style={{ marginTop: '1rem' }}>
+            <h3 className="kbs-card-title">İşlem logları (son 100)</h3>
+            <div className="kbs-table-wrap">
+              <table className="kbs-table">
+                <thead>
+                  <tr>
+                    <th>Tarih</th>
+                    <th>İşlem</th>
+                    <th>Detay</th>
+                    <th>Durum</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {activity.loglar.length === 0 && <tr><td colSpan={4}>Kayıt yok.</td></tr>}
+                  {activity.loglar.map((l) => (
+                    <tr key={l.id}>
+                      <td>{new Date(l.createdAt).toLocaleString('tr-TR')}</td>
+                      <td>{l.islem}</td>
+                      <td>{l.detay || '—'}</td>
+                      <td>{l.basarili ? 'Başarılı' : 'Hata'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <h3 className="kbs-card-title" style={{ marginTop: '1.5rem' }}>Hatalar (tesis, son 50)</h3>
+            <div className="kbs-table-wrap">
+              <table className="kbs-table">
+                <thead>
+                  <tr>
+                    <th>Tarih</th>
+                    <th>Tip</th>
+                    <th>Mesaj</th>
+                    <th>Durum</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {activity.hatalar.length === 0 && <tr><td colSpan={4}>Kayıt yok.</td></tr>}
+                  {activity.hatalar.map((h) => (
+                    <tr key={h.id}>
+                      <td>{new Date(h.createdAt).toLocaleString('tr-TR')}</td>
+                      <td>{h.hataTipi}</td>
+                      <td>{h.hataMesaji}</td>
+                      <td>{h.durum}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <button type="button" className="admin-btn secondary" style={{ marginTop: '0.5rem' }} onClick={() => setActivityOpen(false)}>Kapat</button>
+          </div>
+        )}
       </div>
 
       <h2 className="kbs-card-title admin-form-section-title">Düzenle</h2>
@@ -249,6 +368,14 @@ export default function KullaniciDuzenlePage() {
           <label className="kbs-field-label">
             Yeni PIN (değiştirmek için doldurun, boş bırakırsanız mevcut PIN kalır)
             <input type="password" className="kbs-input" value={form.pin} onChange={(e) => setForm((f) => ({ ...f, pin: e.target.value }))} autoComplete="new-password" />
+          </label>
+          <label className="kbs-field-label">
+            Yeni şifre (e-posta/telefon ile girişte kullanılır; değiştirmek için her iki alanı doldurun)
+            <input type="password" className="kbs-input" value={form.sifre} onChange={(e) => setForm((f) => ({ ...f, sifre: e.target.value }))} placeholder="En az 6 karakter" autoComplete="new-password" />
+          </label>
+          <label className="kbs-field-label">
+            Yeni şifre tekrar
+            <input type="password" className="kbs-input" value={form.sifreTekrar} onChange={(e) => setForm((f) => ({ ...f, sifreTekrar: e.target.value }))} placeholder="Aynı şifreyi yazın" autoComplete="new-password" />
           </label>
         </div>
 

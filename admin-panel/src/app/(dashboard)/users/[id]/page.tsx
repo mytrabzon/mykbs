@@ -22,6 +22,10 @@ export default function UserDetayPage() {
   const userId = params?.id as string
   const [logs, setLogs] = useState<AuditRow[]>([])
   const [loading, setLoading] = useState(true)
+  const [password, setPassword] = useState('')
+  const [passwordConfirm, setPasswordConfirm] = useState('')
+  const [savingPassword, setSavingPassword] = useState(false)
+  const [deleting, setDeleting] = useState(false)
 
   useEffect(() => {
     if (!userId) return
@@ -39,6 +43,44 @@ export default function UserDetayPage() {
       setLogs([])
     } finally {
       setLoading(false)
+    }
+  }
+
+  const handleSetPassword = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!password.trim() || password.length < 6) {
+      toast.error('Şifre en az 6 karakter olmalı')
+      return
+    }
+    if (password !== passwordConfirm) {
+      toast.error('Şifre ve tekrarı eşleşmiyor')
+      return
+    }
+    setSavingPassword(true)
+    try {
+      await api.post(`/app-admin/users/${userId}/set-password`, { password, passwordConfirm })
+      toast.success('Şifre güncellendi. Kullanıcı bir dahaki girişte bu şifreyi kullanacak.')
+      setPassword('')
+      setPasswordConfirm('')
+    } catch (err: unknown) {
+      const e = err as { response?: { data?: { message?: string } } }
+      toast.error(e.response?.data?.message || 'Şifre güncellenemedi')
+    } finally {
+      setSavingPassword(false)
+    }
+  }
+
+  const handleDeleteUser = async () => {
+    if (!confirm('Bu kullanıcıyı kalıcı olarak silmek istediğinize emin misiniz? Oturumu derhal sonlanır; giriş denemelerinde "Hesabınız silindi" mesajı ve otomatik destek talebi oluşturulur.')) return
+    setDeleting(true)
+    try {
+      await api.post(`/app-admin/users/${userId}/delete`)
+      toast.success('Kullanıcı silindi')
+      router.push('/users')
+    } catch (err: unknown) {
+      const e = err as { response?: { data?: { message?: string } } }
+      toast.error(e.response?.data?.message || 'Silinemedi')
+      setDeleting(false)
     }
   }
 
@@ -64,6 +106,34 @@ export default function UserDetayPage() {
       <p className="kbs-page-sub">
         User ID: <code className="admin-detail-code">{userId}</code>
       </p>
+
+      <div className="kbs-card admin-form-max" style={{ marginBottom: '1.5rem' }}>
+        <h2 className="kbs-card-title">Şifre değiştir</h2>
+        <p className="kbs-page-sub">Kullanıcı bir dahaki girişte bu şifreyi kullanacak.</p>
+        <form onSubmit={handleSetPassword} className="kbs-form-grid" style={{ maxWidth: '400px' }}>
+          <label className="kbs-field-label">
+            Yeni şifre (en az 6 karakter)
+            <input type="password" className="kbs-input" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="new-password" />
+          </label>
+          <label className="kbs-field-label">
+            Şifre tekrar
+            <input type="password" className="kbs-input" value={passwordConfirm} onChange={(e) => setPasswordConfirm(e.target.value)} autoComplete="new-password" />
+          </label>
+          <button type="submit" className="kbs-btn-primary" disabled={savingPassword}>
+            {savingPassword ? 'Kaydediliyor...' : 'Şifreyi güncelle'}
+          </button>
+        </form>
+      </div>
+
+      <div className="kbs-card admin-user-danger-zone" style={{ marginBottom: '1.5rem' }}>
+        <h2 className="kbs-card-title admin-danger-title">Hesabı sil</h2>
+        <p className="admin-tesis-summary-sm">
+          Bu kullanıcıyı kalıcı siler. Oturumu derhal sonlanır (lobiye döner). Giriş yapmaya çalışırsa &quot;Hesabınız silindi&quot; mesajı gösterilir ve otomatik destek talebi açılır.
+        </p>
+        <button type="button" className="admin-btn secondary" style={{ background: '#c53030', color: '#fff', border: 'none' }} onClick={handleDeleteUser} disabled={deleting}>
+          {deleting ? 'Siliniyor...' : 'Kullanıcıyı kalıcı sil'}
+        </button>
+      </div>
 
       <div className="kbs-card">
         <div className="kbs-table-wrap">

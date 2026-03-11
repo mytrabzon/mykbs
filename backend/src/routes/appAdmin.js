@@ -707,12 +707,54 @@ router.post('/users/:id/force-logout', async (req, res) => {
 });
 
 /**
- * Kullanıcıyı kalıcı sil (Supabase Auth deleteUser).
+ * Supabase Auth kullanıcısının şifresini admin ile değiştir (bir dahaki girişte yeni şifre geçerli).
+ */
+router.post('/users/:id/set-password', express.json(), async (req, res) => {
+  try {
+    const userId = req.params.id;
+    const { password, passwordConfirm } = req.body || {};
+    if (!supabaseAdmin) return res.status(503).json({ message: 'Supabase yapılandırılmamış' });
+    const pw = typeof password === 'string' ? password.trim() : '';
+    const pw2 = typeof passwordConfirm === 'string' ? passwordConfirm.trim() : '';
+    if (!pw || pw.length < 6) return res.status(400).json({ message: 'Şifre en az 6 karakter olmalı' });
+    if (pw !== pw2) return res.status(400).json({ message: 'Şifre ve tekrarı eşleşmiyor' });
+    const { error } = await supabaseAdmin.auth.admin.updateUserById(userId, { password: pw });
+    if (error) return res.status(500).json({ message: 'Şifre güncellenemedi', error: error.message });
+    res.json({ message: 'Şifre güncellendi. Kullanıcı bir dahaki girişte bu şifreyi kullanacak.' });
+  } catch (err) {
+    console.error('[appAdmin] set-password', err);
+    res.status(500).json({ message: 'İşlem başarısız', error: err.message });
+  }
+});
+
+/**
+ * Kullanıcıyı kalıcı sil (Supabase Auth deleteUser). Silinen e-posta/telefon deleted_accounts'a yazılır;
+ * giriş denemelerinde "Hesabınız silindi" mesajı ve otomatik destek talebi oluşturulur.
  */
 router.post('/users/:id/delete', async (req, res) => {
   try {
     const userId = req.params.id;
     if (!supabaseAdmin) return res.status(503).json({ message: 'Supabase yapılandırılmamış' });
+    let email = null;
+    let phone = null;
+    try {
+      const { data: { user } } = await supabaseAdmin.auth.admin.getUserById(userId);
+      if (user) {
+        email = (user.email || '').trim() || null;
+        phone = (user.phone || user.user_metadata?.phone || '').trim() || null;
+      }
+    } catch (e) {
+      console.warn('[appAdmin] getUserById before delete', e?.message);
+    }
+    if (email || phone) {
+      try {
+        await prisma.deletedAccount.create({
+          data: { email: email || null, phone: phone || null },
+        });
+      } catch (e) {
+        console.warn('[appAdmin] deleted_accounts insert', e?.message);
+      }
+    }
     const { error } = await supabaseAdmin.auth.admin.deleteUser(userId);
     if (error) return res.status(500).json({ message: 'Kullanıcı silinemedi', error: error.message });
     try {
@@ -720,7 +762,7 @@ router.post('/users/:id/delete', async (req, res) => {
     } catch (e) {
       console.warn('[appAdmin] user_profiles delete', e?.message);
     }
-    res.json({ message: 'Kullanıcı silindi' });
+    res.json({ message: 'Kullanıcı silindi. Oturumu derhal sonlanır; giriş denemelerinde "Hesabınız silindi" gösterilir.' });
   } catch (err) {
     console.error('[appAdmin] users delete', err);
     res.status(500).json({ message: 'İşlem başarısız', error: err.message });
@@ -814,20 +856,71 @@ router.patch('/tesis/:tesisId/misafirler/:misafirId', async (req, res) => {
 });
 
 /**
- * GET /app-admin/kullanicilar/:id — Tek Kullanıcı detay (PIN hash gösterilmez)
+ * GET /app-admin/kullanicilar/:id — Tek Kullanıcı detay (PIN hash gösterilmez).
+ * Ek: okutulanBelgeOzeti (toplam, bildirildi, bildirilmedi), tesis.kbsTuru (polis/jandarma).
  */
 router.get('/kullanicilar/:id', async (req, res) => {
   try {
     const k = await prisma.kullanici.findUnique({
       where: { id: req.params.id },
-      include: { tesis: { select: { id: true, tesisAdi: true, tesisKodu: true, paket: true, trialEndsAt: true, createdAt: true } } },
+      include: { tesis: { select: { id: true, tesisAdi: true, tesisKodu: true, paket: true, trialEndsAt: true, createdAt: true, kbsTuru: true } } },
     });
     if (!k) return res.status(404).json({ message: 'Kullanıcı bulunamadı' });
     const { pin, sifre, ...rest } = k;
-    res.json({ kullanici: { ...rest, hasPin: !!pin, hasSifre: !!sifre } });
+
+    let okutulanBelgeOzeti = { toplam: 0, bildirildi: 0, bildirilmedi: 0 };
+    try {
+      const [toplam, bildirildi] = await Promise.all([
+        prisma.okutulanBelge.count({ where: { tesisId: k.tesisId, kullaniciId: k.id } }),
+        prisma.okutulanBelge.count({ where: { tesisId: k.tesisId, kullaniciId: k.id, bildirildi: true } }),
+      ]);
+      okutulanBelgeOzeti = { toplam, bildirildi, bildirilmedi: toplam - bildirildi };
+    } catch (e) {
+      console.warn('[appAdmin] okutulanBelge count', e?.message);
+    }
+
+    res.json({
+      kullanici: {
+        ...rest,
+        hasPin: !!pin,
+        hasSifre: !!sifre,
+        okutulanBelgeOzeti,
+      },
+    });
   } catch (err) {
     console.error('[appAdmin] kullanici detail', err);
     res.status(500).json({ message: 'Kullanıcı alınamadı', error: err.message });
+  }
+});
+
+/**
+ * GET /app-admin/kullanicilar/:id/activity — Kullanıcının işlem logları ve tesise ait hatalar (nerede hata aldı / sorun yok).
+ */
+router.get('/kullanicilar/:id/activity', async (req, res) => {
+  try {
+    const k = await prisma.kullanici.findUnique({
+      where: { id: req.params.id },
+      select: { id: true, tesisId: true },
+    });
+    if (!k) return res.status(404).json({ message: 'Kullanıcı bulunamadı' });
+
+    const [loglar, hatalar] = await Promise.all([
+      prisma.log.findMany({
+        where: { tesisId: k.tesisId, kullaniciId: k.id },
+        orderBy: { createdAt: 'desc' },
+        take: 100,
+      }),
+      prisma.hata.findMany({
+        where: { tesisId: k.tesisId },
+        orderBy: { createdAt: 'desc' },
+        take: 50,
+      }),
+    ]);
+
+    res.json({ loglar, hatalar });
+  } catch (err) {
+    console.error('[appAdmin] kullanici activity', err);
+    res.status(500).json({ message: 'Aktivite alınamadı', error: err.message });
   }
 });
 
@@ -851,6 +944,8 @@ router.patch('/kullanicilar/:id', async (req, res) => {
       bilgiDuzenlemeYetki,
       girisOnaylandi,
       pin,
+      sifre,
+      sifreTekrar,
     } = req.body;
 
     const data = {};
@@ -865,6 +960,15 @@ router.patch('/kullanicilar/:id', async (req, res) => {
     if (typeof girisOnaylandi === 'boolean') data.girisOnaylandi = girisOnaylandi;
     if (pin !== undefined && pin !== null && String(pin).trim() !== '') {
       data.pin = await bcrypt.hash(String(pin).trim(), 10);
+    }
+    if (sifre !== undefined && sifreTekrar !== undefined) {
+      const s1 = String(sifre || '').trim();
+      const s2 = String(sifreTekrar || '').trim();
+      if (s1 || s2) {
+        if (s1 !== s2) return res.status(400).json({ message: 'Şifre ve tekrarı eşleşmiyor' });
+        if (s1.length < 6) return res.status(400).json({ message: 'Şifre en az 6 karakter olmalı' });
+        data.sifre = await bcrypt.hash(s1, 10);
+      }
     }
 
     await prisma.kullanici.update({ where: { id }, data });

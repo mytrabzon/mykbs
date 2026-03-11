@@ -75,9 +75,6 @@ export default function AyarlarScreen() {
   const [kbsImportLoading, setKbsImportLoading] = useState(false);
   const [kbsImportResult, setKbsImportResult] = useState(null);
   const [kbsServerIp, setKbsServerIp] = useState(null);
-  const [okutulanBelgeler, setOkutulanBelgeler] = useState([]);
-  const [okutulanBelgelerLoading, setOkutulanBelgelerLoading] = useState(false);
-  const [okutulanBelgeDetail, setOkutulanBelgeDetail] = useState(null);
   const [nfcEnabled, setNfcEnabledState] = useState(false);
   const [ttsEnabled, setTtsEnabledState] = useState(true);
   const [hapticEnabled, setHapticEnabledState] = useState(true);
@@ -96,18 +93,6 @@ export default function AyarlarScreen() {
   const [localAvatarUri, setLocalAvatarUri] = useState(null);
   const [profileSaving, setProfileSaving] = useState(false);
   const [profileLoaded, setProfileLoaded] = useState(false);
-
-  const loadOkutulanBelgeler = async () => {
-    setOkutulanBelgelerLoading(true);
-    try {
-      const res = await api.get('/okutulan-belgeler?limit=50');
-      setOkutulanBelgeler(res.data?.items ?? []);
-    } catch (_) {
-      setOkutulanBelgeler([]);
-    } finally {
-      setOkutulanBelgelerLoading(false);
-    }
-  };
 
   const loadCredentialStatus = async () => {
     try {
@@ -151,7 +136,6 @@ export default function AyarlarScreen() {
           loadKBSSettings(),
           loadCredentialStatus(),
           loadKbsServerIp(),
-          loadOkutulanBelgeler(),
         ]);
         if (!cancelled) dataService.getTesis(true).then((t) => setTesisDetail(t)).catch(() => {});
       } catch (e) {
@@ -598,6 +582,19 @@ export default function AyarlarScreen() {
     );
   };
 
+  const sectionCard = (leftColor) => [
+    styles.sectionCard,
+    { backgroundColor: colors.surface, borderLeftColor: leftColor },
+  ];
+  const sectionHeader = (icon, title) => (
+    <View style={styles.sectionHeaderRow}>
+      <View style={[styles.sectionIconWrap, { backgroundColor: colors.primarySoft }]}>
+        <Ionicons name={icon} size={22} color={colors.primary} />
+      </View>
+      <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>{title}</Text>
+    </View>
+  );
+
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       <AppHeader
@@ -607,8 +604,8 @@ export default function AyarlarScreen() {
         onNotification={() => navigation.navigate('Bildirimler')}
       />
       <ScrollView style={styles.scroll} contentContainerStyle={styles.content}>
-        <View style={[styles.section, { backgroundColor: colors.surface }]}>
-          <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>Profil</Text>
+        <View style={sectionCard(colors.primary)}>
+          {sectionHeader('person-circle', 'Profil')}
           <Text style={[styles.label, { color: colors.textSecondary }]}>Avatar</Text>
           <TouchableOpacity onPress={pickAvatar} style={[styles.avatarWrap, { backgroundColor: colors.background }]}>
             {(localAvatarUri || avatarUrl) ? (
@@ -656,7 +653,7 @@ export default function AyarlarScreen() {
             onPress={handleProfileSave}
             loading={profileSaving}
             disabled={profileSaving}
-            style={{ marginTop: spacing.sm }}
+            style={[styles.actionBtn, { marginTop: spacing.sm }]}
           >
             Profil bilgilerini kaydet
           </Button>
@@ -665,27 +662,27 @@ export default function AyarlarScreen() {
             onPress={() => navigation.navigate('ProfilIletisim')}
           >
             <Text style={[styles.menuRowText, { color: colors.textPrimary }]}>Telefon ve e-posta bağla / değiştir</Text>
-            <Ionicons name="chevron-forward" size={20} color={colors.textSecondary} />
+            <Ionicons name="chevron-forward" size={20} color={colors.primary} />
           </TouchableOpacity>
         </View>
 
-        <View style={[styles.section, { backgroundColor: colors.surface }]}>
-          <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>İzinler</Text>
-          <Text style={[styles.infoText, { color: colors.textSecondary, marginBottom: spacing.sm }]}>
+        <View style={sectionCard(colors.accent)}>
+          {sectionHeader('shield-checkmark', 'İzinler')}
+          <Text style={[styles.sectionDesc, { color: colors.textSecondary }]}>
             Kamera, galeri ve bildirim izinlerini görüntüleyin, verin veya ayarlardan kaldırın.
           </Text>
           <TouchableOpacity
-            style={[styles.menuRow, { borderBottomWidth: 0 }]}
+            style={[styles.menuRow, styles.menuRowSingle, { borderColor: colors.border }]}
             onPress={() => navigation.navigate('Izinler')}
           >
             <Text style={[styles.menuRowText, { color: colors.textPrimary }]}>İzinleri yönet</Text>
-            <Ionicons name="chevron-forward" size={20} color={colors.textSecondary} />
+            <Ionicons name="chevron-forward" size={20} color={colors.primary} />
           </TouchableOpacity>
         </View>
 
-        <View style={[styles.section, { backgroundColor: colors.surface }]}>
-          <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>Kimlik / Pasaport</Text>
-          <Text style={[styles.infoText, { color: colors.textSecondary }]}>
+        <View style={sectionCard(colors.accent)}>
+          {sectionHeader('id-card', 'Kimlik / Pasaport')}
+          <Text style={[styles.sectionDesc, { color: colors.textSecondary }]}>
             Belge okuma için öncelik MRZ (kamera) ile okumadır. İsterseniz NFC ile okumayı açabilirsiniz.
           </Text>
           <View style={[styles.switchRow, { borderColor: colors.border }]}>
@@ -703,8 +700,8 @@ export default function AyarlarScreen() {
           </View>
         </View>
 
-        <View style={[styles.section, { backgroundColor: colors.surface }]}>
-          <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>Kullanım kolaylığı</Text>
+        <View style={sectionCard(colors.success)}>
+          {sectionHeader('accessibility', 'Kullanım kolaylığı')}
           <View style={[styles.switchRow, { borderColor: colors.border }]}>
             <Text style={[styles.label, { color: colors.textPrimary }]}>Titreşimli geri bildirim</Text>
             <Switch
@@ -723,14 +720,14 @@ export default function AyarlarScreen() {
               thumbColor={ttsEnabled ? colors.primary : colors.textSecondary}
             />
           </View>
-          <View style={[styles.menuRow, { borderBottomWidth: 0 }]}>
+          <View style={[styles.menuRow, styles.menuRowNoBorder]}>
             <Text style={[styles.label, { color: colors.textPrimary }]}>{t('settings.language')}</Text>
-            <View style={{ flexDirection: 'row', gap: 8, flexWrap: 'wrap' }}>
+            <View style={styles.langChipRow}>
               {Object.entries(languageLabels || {}).map(([code, label]) => (
                 <TouchableOpacity
                   key={code}
                   onPress={() => setLanguage(code)}
-                  style={[styles.langChip, { backgroundColor: language === code ? colors.primary + '25' : colors.background, borderColor: colors.border }]}
+                  style={[styles.langChip, { backgroundColor: language === code ? colors.primarySoft : colors.background, borderColor: language === code ? colors.primary : colors.border }]}
                 >
                   <Text style={[styles.langChipText, { color: language === code ? colors.primary : colors.textPrimary }]}>{label}</Text>
                 </TouchableOpacity>
@@ -739,10 +736,10 @@ export default function AyarlarScreen() {
           </View>
         </View>
 
-        <View style={[styles.section, { backgroundColor: colors.surface }]}>
-          <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>Raporlar ve yedek</Text>
+        <View style={sectionCard(colors.success)}>
+          {sectionHeader('document-text', 'Raporlar ve yedek')}
           <TouchableOpacity
-            style={[styles.menuRow, { borderColor: colors.border }]}
+            style={[styles.menuRow, { borderBottomColor: colors.border }]}
             onPress={async () => {
               if (exportLoading) return;
               setExportLoading(true);
@@ -758,10 +755,10 @@ export default function AyarlarScreen() {
             disabled={exportLoading}
           >
             <Text style={[styles.menuRowText, { color: colors.textPrimary }]}>{exportLoading ? 'Hazırlanıyor...' : "Excel'e aktar"}</Text>
-            {exportLoading ? <ActivityIndicator size="small" color={colors.primary} /> : <Ionicons name="download-outline" size={20} color={colors.textSecondary} />}
+            {exportLoading ? <ActivityIndicator size="small" color={colors.primary} /> : <Ionicons name="download-outline" size={22} color={colors.primary} />}
           </TouchableOpacity>
           <TouchableOpacity
-            style={[styles.menuRow, { borderColor: colors.border }]}
+            style={[styles.menuRow, styles.menuRowSingle, { borderBottomColor: colors.border }]}
             onPress={async () => {
               if (backupLoading) return;
               setBackupLoading(true);
@@ -777,58 +774,12 @@ export default function AyarlarScreen() {
             disabled={backupLoading}
           >
             <Text style={[styles.menuRowText, { color: colors.textPrimary }]}>{backupLoading ? 'Hazırlanıyor...' : 'Yedekle'}</Text>
-            {backupLoading ? <ActivityIndicator size="small" color={colors.primary} /> : <Ionicons name="cloud-upload-outline" size={20} color={colors.textSecondary} />}
+            {backupLoading ? <ActivityIndicator size="small" color={colors.primary} /> : <Ionicons name="cloud-upload-outline" size={22} color={colors.primary} />}
           </TouchableOpacity>
         </View>
 
-        <View style={[styles.section, { backgroundColor: colors.surface }]}>
-          <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>Okutulan kimlikler</Text>
-          <Text style={[styles.infoText, { color: colors.textSecondary, marginBottom: spacing.sm }]}>
-            Kimlik veya pasaport okuttuktan sonra "Kaydet" ile kaydettiğiniz belgeler burada listelenir.
-          </Text>
-          {okutulanBelgelerLoading ? (
-            <Text style={[styles.infoText, { color: colors.textSecondary }]}>Yükleniyor...</Text>
-          ) : okutulanBelgeler.length === 0 ? (
-            <Text style={[styles.infoText, { color: colors.textSecondary }]}>Henüz kayıt yok.</Text>
-          ) : (
-            okutulanBelgeler.slice(0, 30).map((b) => {
-              const baseUrl = getApiBaseUrl();
-              const thumbPath = b.portraitPhotoUrl || b.photoUrl;
-              const thumbUri = thumbPath
-                ? (thumbPath.startsWith('http') ? thumbPath : `${(baseUrl || '').replace(/\/$/, '')}${thumbPath}`)
-                : null;
-              return (
-                <TouchableOpacity
-                  key={b.id}
-                  style={[styles.okutulanBelgeRow, { borderBottomColor: colors.border }]}
-                  onPress={() => setOkutulanBelgeDetail(b)}
-                  activeOpacity={0.7}
-                >
-                  {thumbUri ? (
-                    <Image source={{ uri: thumbUri }} style={styles.okutulanBelgeThumb} resizeMode="cover" />
-                  ) : (
-                    <View style={[styles.okutulanBelgeThumbPlaceholder, { backgroundColor: colors.border }]} />
-                  )}
-                  <View style={styles.okutulanBelgeMain}>
-                    <Text style={[styles.okutulanBelgeName, { color: colors.textPrimary }]}>
-                      {b.ad} {b.soyad}
-                    </Text>
-                    <Text style={[styles.infoText, { color: colors.textSecondary }]}>
-                      {b.belgeTuru === 'kimlik' ? 'Kimlik' : 'Pasaport'}
-                      {(b.kimlikNo || b.pasaportNo || b.belgeNo) && ` · ${b.kimlikNo || b.pasaportNo || b.belgeNo}`}
-                      {' · '}
-                      {b.createdAt ? new Date(b.createdAt).toLocaleDateString('tr-TR') : ''}
-                    </Text>
-                  </View>
-                  <Ionicons name="chevron-forward" size={20} color={colors.textSecondary} />
-                </TouchableOpacity>
-              );
-            })
-          )}
-        </View>
-
-        <View style={[styles.section, { backgroundColor: colors.surface }]}>
-          <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>Tesis Bilgileri</Text>
+        <View style={sectionCard(colors.primary)}>
+          {sectionHeader('business', 'Tesis Bilgileri')}
           {canEditTesis ? (
             <>
               <Input
@@ -842,6 +793,8 @@ export default function AyarlarScreen() {
                 onPress={handleTesisAdiSave}
                 loading={tesisAdiSaving}
                 disabled={tesisAdiSaving || (tesisAdiEdit || '').trim() === '' || (tesisAdiEdit || '').trim() === (tesis?.tesisAdi || '')}
+                style={[styles.actionBtnSecondary, { borderColor: colors.primary }]}
+                textStyle={{ color: colors.primary }}
               >
                 Tesis adını kaydet
               </Button>
@@ -855,9 +808,9 @@ export default function AyarlarScreen() {
           </Text>
         </View>
 
-        <View style={[styles.section, { backgroundColor: colors.surface }]}>
-          <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>Güvenlik & Giriş</Text>
-          <Text style={[styles.infoText, { color: colors.textSecondary }]}>
+        <View style={sectionCard(colors.success)}>
+          {sectionHeader('lock-closed', 'Güvenlik & Giriş')}
+          <Text style={[styles.sectionDesc, { color: colors.textSecondary }]}>
             Uygulamaya sadece telefon veya e-posta + şifre ile giriş yapılır. Şifrenizi buradan güncelleyebilirsiniz.
           </Text>
           <Text style={[styles.label, { color: colors.textPrimary, marginTop: spacing.lg }]}>Yeni Şifre</Text>
@@ -868,13 +821,15 @@ export default function AyarlarScreen() {
             onPress={handleSifreSave}
             loading={sifreLoading}
             disabled={sifreLoading || sifreValue.length < 6 || sifreValue !== sifreTekrar}
+            style={[styles.actionBtnSecondary, { borderColor: colors.primary }]}
+            textStyle={{ color: colors.primary }}
           >
             Şifreyi Güncelle
           </Button>
         </View>
 
-        <View style={[styles.section, { backgroundColor: colors.surface }]}>
-          <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>KBS Ayarları (Tesis Bilgileri)</Text>
+        <View style={sectionCard(colors.primary)}>
+          {sectionHeader('server', 'KBS Ayarları')}
           {credentialState === 'PENDING' && (
             <View style={[styles.badge, { backgroundColor: colors.textSecondary }]}>
               <Ionicons name="time-outline" size={18} color="#fff" />
@@ -942,7 +897,7 @@ export default function AyarlarScreen() {
             </View>
           ) : null}
 
-          <Button variant="secondary" onPress={handleKBSTest} loading={testLoading} disabled={testLoading}>
+          <Button variant="secondary" onPress={handleKBSTest} loading={testLoading} disabled={testLoading} style={[styles.actionBtnSecondary, { borderColor: colors.primary }]} textStyle={{ color: colors.primary }}>
             Bağlantıyı test et
           </Button>
           {testResult && (
@@ -976,7 +931,8 @@ export default function AyarlarScreen() {
             onPress={handleKBSImport}
             loading={kbsImportLoading}
             disabled={kbsImportLoading || !kbsSettings.kbsTesisKodu?.trim()}
-            style={{ marginTop: spacing.sm }}
+            style={[styles.actionBtnSecondary, { marginTop: spacing.sm, borderColor: colors.primary }]}
+            textStyle={{ color: colors.primary }}
           >
             Senkronize et
           </Button>
@@ -1002,17 +958,17 @@ export default function AyarlarScreen() {
           )}
 
           {credentialState !== 'PENDING' && (
-            <Button variant="primary" onPress={handleSave} loading={loading} disabled={loading} style={styles.saveBtn}>
+            <Button variant="primary" onPress={handleSave} loading={loading} disabled={loading} style={[styles.saveBtn, styles.actionBtn]}>
               {credentialState === 'APPROVED' || tesisDetail?.kbsConnected ? 'Güncelle' : 'Kaydet'}
             </Button>
           )}
 
           {credentialState === 'APPROVED' && (
             <View style={styles.kbsTalepRow}>
-              <Button variant="secondary" onPress={() => handleKbsTalep('change')} style={styles.kbsTalepBtn} disabled={credentialLoading}>
+              <Button variant="secondary" onPress={() => handleKbsTalep('change')} style={[styles.kbsTalepBtn, styles.actionBtnSecondary, { borderColor: colors.primary }]} textStyle={{ color: colors.primary }} disabled={credentialLoading}>
                 Değiştir
               </Button>
-              <Button variant="secondary" onPress={() => handleKbsTalep('remove')} style={[styles.kbsTalepBtn, { borderColor: colors.error }]} disabled={credentialLoading}>
+              <Button variant="secondary" onPress={() => handleKbsTalep('remove')} style={[styles.kbsTalepBtn, { borderColor: colors.error }]} textStyle={{ color: colors.error }} disabled={credentialLoading}>
                 Sil
               </Button>
             </View>
@@ -1020,10 +976,10 @@ export default function AyarlarScreen() {
 
           {credentialState !== 'APPROVED' && credentialState !== 'PENDING' && (
             <View style={styles.kbsTalepRow}>
-              <Button variant="secondary" onPress={() => handleKbsTalep('change')} style={styles.kbsTalepBtn}>
+              <Button variant="secondary" onPress={() => handleKbsTalep('change')} style={[styles.kbsTalepBtn, styles.actionBtnSecondary, { borderColor: colors.primary }]} textStyle={{ color: colors.primary }}>
                 Değişiklik talebi
               </Button>
-              <Button variant="secondary" onPress={() => handleKbsTalep('remove')} style={[styles.kbsTalepBtn, { borderColor: colors.error }]}>
+              <Button variant="secondary" onPress={() => handleKbsTalep('remove')} style={[styles.kbsTalepBtn, { borderColor: colors.error }]} textStyle={{ color: colors.error }}>
                 Kaldırma talebi
               </Button>
             </View>
@@ -1033,74 +989,6 @@ export default function AyarlarScreen() {
             Kaydet'e bastığınızda KBS tesis kodu ve şifre kaydedilir, KBS'ye bağlanmış sayılırsınız. Yeni bildirimler Odalar → check-in ile yapılır.
           </Text>
         </View>
-
-        <Modal visible={!!okutulanBelgeDetail} transparent animationType="fade">
-          <TouchableOpacity
-            style={styles.modalOverlay}
-            activeOpacity={1}
-            onPress={() => setOkutulanBelgeDetail(null)}
-          >
-            <TouchableOpacity
-              style={[styles.modalContent, styles.okutulanDetailModal, { backgroundColor: colors.surface }]}
-              activeOpacity={1}
-              onPress={(e) => e.stopPropagation()}
-            >
-              <View style={styles.okutulanDetailHeader}>
-                <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>Belge detayı (KBS bildirim bilgileri)</Text>
-                <TouchableOpacity onPress={() => setOkutulanBelgeDetail(null)} hitSlop={16}>
-                  <Ionicons name="close" size={28} color={colors.textSecondary} />
-                </TouchableOpacity>
-              </View>
-              {okutulanBelgeDetail && (
-                <ScrollView style={styles.okutulanDetailScroll} showsVerticalScrollIndicator={false}>
-                  {(() => {
-                    const baseUrl = getApiBaseUrl();
-                    const path = okutulanBelgeDetail.photoUrl || okutulanBelgeDetail.portraitPhotoUrl;
-                    const photoUri = path
-                      ? (path.startsWith('http') ? path : `${(baseUrl || '').replace(/\/$/, '')}${path}`)
-                      : null;
-                    return photoUri ? (
-                      <View style={styles.okutulanDetailPhotoWrap}>
-                        <Image source={{ uri: photoUri }} style={styles.okutulanDetailPhoto} resizeMode="cover" />
-                      </View>
-                    ) : null;
-                  })()}
-                  <View style={styles.okutulanDetailFields}>
-                    <Text style={[styles.label, { color: colors.textPrimary }]}>Ad</Text>
-                    <Text style={[styles.infoText, { color: colors.textSecondary, marginBottom: spacing.sm }]}>{okutulanBelgeDetail.ad || '—'}</Text>
-                    <Text style={[styles.label, { color: colors.textPrimary }]}>Soyad</Text>
-                    <Text style={[styles.infoText, { color: colors.textSecondary, marginBottom: spacing.sm }]}>{okutulanBelgeDetail.soyad || '—'}</Text>
-                    <Text style={[styles.label, { color: colors.textPrimary }]}>Belge türü</Text>
-                    <Text style={[styles.infoText, { color: colors.textSecondary, marginBottom: spacing.sm }]}>
-                      {okutulanBelgeDetail.belgeTuru === 'kimlik' ? 'Kimlik' : 'Pasaport'}
-                    </Text>
-                    <Text style={[styles.label, { color: colors.textPrimary }]}>
-                      {okutulanBelgeDetail.belgeTuru === 'kimlik' ? 'Kimlik no' : 'Pasaport no'}
-                    </Text>
-                    <Text style={[styles.infoText, { color: colors.textSecondary, marginBottom: spacing.sm }]}>
-                      {okutulanBelgeDetail.kimlikNo || okutulanBelgeDetail.pasaportNo || okutulanBelgeDetail.belgeNo || '—'}
-                    </Text>
-                    <Text style={[styles.label, { color: colors.textPrimary }]}>Doğum tarihi</Text>
-                    <Text style={[styles.infoText, { color: colors.textSecondary, marginBottom: spacing.sm }]}>
-                      {okutulanBelgeDetail.dogumTarihi || '—'}
-                    </Text>
-                    <Text style={[styles.label, { color: colors.textPrimary }]}>Uyruk</Text>
-                    <Text style={[styles.infoText, { color: colors.textSecondary, marginBottom: spacing.sm }]}>
-                      {okutulanBelgeDetail.uyruk || '—'}
-                    </Text>
-                    <Text style={[styles.label, { color: colors.textPrimary }]}>Kayıt tarihi</Text>
-                    <Text style={[styles.infoText, { color: colors.textSecondary }]}>
-                      {okutulanBelgeDetail.createdAt ? new Date(okutulanBelgeDetail.createdAt).toLocaleString('tr-TR') : '—'}
-                    </Text>
-                  </View>
-                  <Button variant="secondary" onPress={() => setOkutulanBelgeDetail(null)} style={{ marginTop: spacing.md }}>
-                    Kapat
-                  </Button>
-                </ScrollView>
-              )}
-            </TouchableOpacity>
-          </TouchableOpacity>
-        </Modal>
 
         <Modal visible={changeModalVisible} transparent animationType="fade">
           <View style={styles.modalOverlay}>
@@ -1116,9 +1004,9 @@ export default function AyarlarScreen() {
           </View>
         </Modal>
 
-        <View style={[styles.section, { backgroundColor: colors.surface }]}>
-          <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>Hesap</Text>
-          <Text style={[styles.infoText, { color: colors.textSecondary, marginBottom: spacing.md }]}>
+        <View style={sectionCard(colors.error)}>
+          {sectionHeader('person-remove', 'Hesap')}
+          <Text style={[styles.sectionDesc, { color: colors.textSecondary, marginBottom: spacing.md }]}>
             Hesabınızı silmek 7 gün içinde tüm verilerinizin (belgeler, işlemler, KBS kayıtları) kalıcı olarak silinmesini başlatır. Bu sürede giriş yaparak talebi iptal edebilirsiniz.
           </Text>
           <Button
@@ -1126,13 +1014,14 @@ export default function AyarlarScreen() {
             onPress={handleRequestAccountDeletion}
             loading={deleteAccountLoading}
             disabled={deleteAccountLoading}
+            style={styles.actionBtn}
           >
             Hesabı sil
           </Button>
         </View>
 
-        <View style={[styles.section, { backgroundColor: colors.surface }]}>
-          <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>İletişim</Text>
+        <View style={sectionCard(colors.accent)}>
+          {sectionHeader('call', 'İletişim')}
           <Text style={[styles.contactLabel, { color: colors.textSecondary }]}>Destek e-posta:</Text>
           <TouchableOpacity onPress={() => Linking.openURL(`mailto:${supportEmail}`)}>
             <Text style={[styles.contactLink, { color: colors.primary }]}>{supportEmail}</Text>
@@ -1143,8 +1032,8 @@ export default function AyarlarScreen() {
           </TouchableOpacity>
         </View>
 
-        <View style={styles.section}>
-          <Button variant="destructive" onPress={handleLogout}>
+        <View style={[styles.sectionCard, styles.logoutCard, { backgroundColor: colors.surface, borderLeftColor: colors.border }]}>
+          <Button variant="destructive" onPress={handleLogout} style={styles.actionBtn}>
             Çıkış Yap
           </Button>
         </View>
@@ -1157,15 +1046,47 @@ const styles = StyleSheet.create({
   container: { flex: 1 },
   scroll: { flex: 1 },
   content: { padding: spacing.screenPadding, paddingBottom: 120 },
-  section: {
+  sectionCard: {
     borderRadius: 16,
     padding: spacing.lg,
     marginBottom: spacing.lg,
+    borderLeftWidth: 4,
+    ...spacing.shadow.base,
+  },
+  sectionHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: spacing.md,
+    gap: spacing.sm,
+  },
+  sectionIconWrap: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   sectionTitle: {
     fontSize: typography.text.h2.fontSize,
-    fontWeight: typography.fontWeight.semibold,
-    marginBottom: spacing.md,
+    fontWeight: '700',
+    flex: 1,
+  },
+  sectionDesc: {
+    fontSize: typography.text.body.fontSize,
+    lineHeight: 22,
+    marginBottom: spacing.sm,
+  },
+  actionBtn: {
+    minHeight: 48,
+    borderRadius: 12,
+  },
+  actionBtnSecondary: {
+    minHeight: 48,
+    borderRadius: 12,
+    borderWidth: 1.5,
+  },
+  logoutCard: {
+    borderLeftWidth: 4,
   },
   infoText: { fontSize: typography.text.body.fontSize, marginBottom: spacing.xs },
   label: {
@@ -1236,20 +1157,6 @@ const styles = StyleSheet.create({
   },
   contactLabel: { fontSize: typography.text.body.fontSize, marginBottom: 4 },
   contactLink: { fontSize: typography.text.body.fontSize },
-  okutulanDetailModal: { maxHeight: '85%' },
-  okutulanDetailScroll: { maxHeight: 400 },
-  okutulanDetailHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing.md },
-  okutulanDetailPhotoWrap: {
-    alignSelf: 'center',
-    width: 140,
-    height: 180,
-    borderRadius: 8,
-    overflow: 'hidden',
-    backgroundColor: '#f0f0f0',
-    marginBottom: spacing.lg,
-  },
-  okutulanDetailPhoto: { width: '100%', height: '100%' },
-  okutulanDetailFields: { marginBottom: spacing.sm },
   avatarWrap: {
     width: 100,
     height: 100,
@@ -1286,28 +1193,17 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.md,
     borderBottomWidth: 1,
   },
-  menuRowText: { fontSize: typography.text.body.fontSize },
-  okutulanBelgeRow: {
+  menuRowSingle: {
+    borderBottomWidth: 0,
+  },
+  menuRowNoBorder: {
+    borderBottomWidth: 0,
+    flexWrap: 'wrap',
+  },
+  langChipRow: {
     flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: spacing.sm,
-    borderBottomWidth: 1,
+    gap: 8,
+    flexWrap: 'wrap',
   },
-  okutulanBelgeThumb: {
-    width: 44,
-    height: 44,
-    borderRadius: 6,
-    marginRight: spacing.sm,
-  },
-  okutulanBelgeThumbPlaceholder: {
-    width: 44,
-    height: 44,
-    borderRadius: 6,
-    marginRight: spacing.sm,
-  },
-  okutulanBelgeMain: { flex: 1 },
-  okutulanBelgeName: {
-    fontSize: typography.text.body.fontSize,
-    fontWeight: typography.fontWeight.semibold,
-  },
+  menuRowText: { fontSize: typography.text.body.fontSize },
 });

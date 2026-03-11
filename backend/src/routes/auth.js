@@ -672,6 +672,58 @@ router.post('/giris/yeni', async (req, res) => {
       return res.status(400).json({ message: 'Email/telefon ve şifre gereklidir' });
     }
 
+    // Silinmiş hesap: destek talebi aç, 403 döndür
+    const emailStr = email ? String(email).trim().toLowerCase() : null;
+    const phoneStr = telefon ? String(telefon).trim() : null;
+    if (emailStr) {
+      const deleted = await prisma.deletedAccount.findFirst({ where: { email: emailStr } }).catch(() => null);
+      if (deleted) {
+        try {
+          await prisma.supportTicket.create({
+            data: {
+              authorName: emailStr,
+              authorEmail: emailStr,
+              subject: 'Hesap silindi - giriş denemesi',
+              message: 'Bu e-posta ile kayıtlı hesap kapatılmış. Kullanıcı giriş yapmaya çalıştı.',
+              status: 'acik',
+            },
+          });
+        } catch (e) {
+          console.warn('[auth] deleted ticket', e?.message);
+        }
+        return res.status(403).json({
+          code: 'ACCOUNT_DELETED',
+          message: 'Hesabınız silindi. Destek talebiniz oluşturuldu; yönetici inceleyecektir.',
+        });
+      }
+    }
+    if (phoneStr) {
+      const digits = phoneStr.replace(/\D/g, '');
+      const variants = digits.startsWith('90') ? [phoneStr, '+' + digits, '0' + digits.slice(2)] : ['+90' + digits.slice(digits.startsWith('0') ? 1 : 0), phoneStr];
+      for (const p of variants) {
+        const deleted = await prisma.deletedAccount.findFirst({ where: { phone: p } }).catch(() => null);
+        if (deleted) {
+          try {
+            await prisma.supportTicket.create({
+              data: {
+                authorName: p,
+                authorEmail: null,
+                subject: 'Hesap silindi - giriş denemesi',
+                message: 'Bu telefon ile kayıtlı hesap kapatılmış. Kullanıcı giriş yapmaya çalıştı.',
+                status: 'acik',
+              },
+            });
+          } catch (e) {
+            console.warn('[auth] deleted ticket', e?.message);
+          }
+          return res.status(403).json({
+            code: 'ACCOUNT_DELETED',
+            message: 'Hesabınız silindi. Destek talebiniz oluşturuldu; yönetici inceleyecektir.',
+          });
+        }
+      }
+    }
+
     // Kullanıcıyı bul
     let kullanici;
     try {
