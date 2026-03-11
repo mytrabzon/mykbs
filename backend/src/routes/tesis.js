@@ -273,9 +273,16 @@ router.put('/kbs', async (req, res) => {
         updateData.kbs_web_servis_sifre = kbsWebServisSifre;
       }
       if (Object.keys(updateData).length === 0) return res.json({ message: 'KBS ayarları güncellendi' });
+      // Kaydedince KBS'ye bağlı say: tesis kodu + şifre yazıldığında kbs_configured ve kbs_approved = true
+      const hasCredentials = (updateData.kbs_tesis_kodu ?? req.branch?.kbs_tesis_kodu) && ((updateData.kbs_web_servis_sifre !== undefined && updateData.kbs_web_servis_sifre !== '') || req.branch?.kbs_web_servis_sifre);
+      if (hasCredentials) {
+        updateData.kbs_configured = true;
+        updateData.kbs_approved = true;
+        updateData.kbs_approved_at = new Date().toISOString();
+      }
       const { error } = await supabaseAdmin.from('branches').update(updateData).eq('id', req.branchId).select().single();
       if (error) return errorResponse(req, res, 500, 'UNHANDLED_ERROR', error?.message || 'Ayarlar güncellenemedi');
-      return res.json({ message: 'KBS ayarları güncellendi' });
+      return res.json({ message: 'KBS ayarları kaydedildi. KBS\'ye bağlandınız.' });
     }
 
     if (!['sahip', 'yonetici'].includes(req.user.rol)) {

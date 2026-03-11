@@ -20,6 +20,7 @@ import { showKimlikBildirimInProgress, dismissKimlikBildirimNotification } from 
 import Toast from 'react-native-toast-message';
 import { logger } from '../utils/logger';
 import { getNfcEnabled } from '../utils/nfcSetting';
+import { useIndependentNfcReader } from '../features/nfc/IndependentNfcReader';
 import { Ionicons, MaterialIcons } from '@expo/vector-icons';
 import { theme } from '../theme';
 import { useCredits } from '../context/CreditsContext';
@@ -74,6 +75,7 @@ export default function CheckInScreen({ navigation, route }) {
   const nfcTechRequestedRef = useRef(false);
   const nfcProcessingRef = useRef(false);
   const processNfcTagRef = useRef(null);
+  const { readNfcDirect, isReading: nfcChipReading } = useIndependentNfcReader();
 
   useEffect(() => {
     logger.log('CheckInScreen mounted');
@@ -202,50 +204,46 @@ export default function CheckInScreen({ navigation, route }) {
     }
   };
 
-  /** NFC tag verisini API'ye gönderip formu günceller; hem manuel Okut hem otomatik okuma kullanır */
-  const processNfcTag = async (tag, options = {}) => {
-    const { cancelAfter = false } = options;
+  /** Tam NFC çip okuması (DG1/DG2) — cihazda okunur, API'ye ham tag gönderilmez. */
+  const processNfcChipRead = async () => {
     try {
-      logger.api('POST', '/nfc/okut', { nfcData: tag });
-      const response = await api.post('/nfc/okut', { nfcData: tag });
-      logger.api('POST', '/nfc/okut', null, { status: response?.status, success: response?.data?.success });
-
-      if (response?.data?.success && response?.data?.parsed) {
-        logger.log('NFC read successful, updating form data');
-        const parsed = response.data.parsed;
-        setFormData((prev) => ({ ...prev, ...parsed }));
-        setDocumentExpiryFromMrz(parsed.expiryDate ? new Date(parsed.expiryDate) : null);
+      const result = await readNfcDirect();
+      if (result.success && result.data) {
+        const d = result.data;
+        logger.log('NFC chip read successful', { ad: d.ad, soyad: d.soyad });
+        setFormData((prev) => ({
+          ...prev,
+          ad: d.ad || prev.ad,
+          ad2: d.ad2 || prev.ad2,
+          soyad: d.soyad || prev.soyad,
+          kimlikNo: (d.kimlikNo || d.pasaportNo || '').trim() || prev.kimlikNo,
+          pasaportNo: (d.pasaportNo || '').trim() || prev.pasaportNo,
+          dogumTarihi: d.dogumTarihi || prev.dogumTarihi,
+          uyruk: d.uyruk || prev.uyruk,
+        }));
+        setDocumentExpiryFromMrz(null);
         setStep(3);
         setSavedOnly(false);
         feedbackReadSuccess(ttsLocale);
         Toast.show({ type: 'success', text1: 'Kimlik okundu', text2: 'Bilgiler dolduruldu.' });
       } else {
-        logger.warn('NFC read failed or no parsed data', response?.data);
+        const errMsg = result?.error || 'Veri çıkarılamadı.';
         Toast.show({
           type: 'info',
-          text1: 'NFC okundu',
-          text2: 'Veri çıkarılamadı. MRZ veya manuel giriş kullanın.',
+          text1: 'NFC okunamadı',
+          text2: errMsg.includes('MRZ') ? errMsg : (errMsg + ' MRZ veya kamera deneyin.'),
         });
       }
     } catch (error) {
-      logger.error('NFC process error', error);
-      const msg = error?.message || '';
+      logger.error('NFC chip read error', error);
       Toast.show({
         type: 'error',
         text1: 'NFC Hatası',
-        text2: msg.includes('cancel') ? 'Okuma iptal edildi.' : (msg || 'Kimlik okunamadı. MRZ veya kamera deneyin.'),
+        text2: error?.message?.includes('cancel') ? 'Okuma iptal edildi.' : (error?.message || 'Kimlik okunamadı. MRZ veya kamera deneyin.'),
       });
-    } finally {
-      if (cancelAfter) {
-        try {
-          NfcManager.cancelTechnologyRequest();
-        } catch (e) {
-          logger.warn('NFC cancelTechnologyRequest', e?.message);
-        }
-      }
     }
   };
-  processNfcTagRef.current = processNfcTag;
+  processNfcTagRef.current = processNfcChipRead;
 
   // Kimlik Okuma (step 2): registerTagEvent + DiscoverTag ile kimlik yaklaştığında otomatik oku (Android/iOS event tabanlı).
   useEffect(() => {
@@ -260,10 +258,11 @@ export default function CheckInScreen({ navigation, route }) {
       if (nfcSessionCancelledRef.current) return;
       if (nfcProcessingRef.current) return;
       nfcProcessingRef.current = true;
-      logger.log('NFC tag discovered (event)', { tagId: tag?.id });
+      logger.log('NFC tag discovered (event), starting chip read', { tagId: tag?.id });
+      NfcManager.unregisterTagEvent().catch(() => {});
       const fn = processNfcTagRef.current;
       if (fn) {
-        fn(tag, { cancelAfter: false }).finally(() => {
+        fn().finally(() => {
           nfcProcessingRef.current = false;
         });
       } else {
@@ -307,36 +306,16 @@ export default function CheckInScreen({ navigation, route }) {
   }, [step, nfcSupported, nfcEnabledInSettings, ttsLocale]);
 
   const handleNFCRead = async () => {
-    let techRequested = false;
     try {
-      logger.log('NFC read started (manual)');
-      const NfcTech = NfcManager.NfcTech;
-      if (!NfcTech) {
-        throw new Error('NFC bu cihazda desteklenmiyor.');
-      }
-      const tech = NfcTech.IsoDep ?? NfcTech.NfcA ?? NfcTech.Ndef;
-      await NfcManager.requestTechnology(tech);
-      techRequested = true;
-      const tag = await NfcManager.getTag();
-      logger.log('NFC tag read', { tagId: tag?.id });
-      await processNfcTag(tag, { cancelAfter: false });
+      logger.log('NFC read started (manual, full chip read)');
+      await processNfcChipRead();
     } catch (error) {
       logger.error('NFC read error', error);
-      const msg = error?.message || '';
       Toast.show({
         type: 'error',
         text1: 'NFC Hatası',
-        text2: msg.includes('cancel') ? 'Okuma iptal edildi.' : (msg || 'Kimlik okunamadı. MRZ veya kamera deneyin.'),
+        text2: error?.message?.includes('cancel') ? 'Okuma iptal edildi.' : (error?.message || 'Kimlik okunamadı. MRZ veya kamera deneyin.'),
       });
-    } finally {
-      if (techRequested) {
-        try {
-          NfcManager.cancelTechnologyRequest();
-          logger.log('NFC technology request cancelled');
-        } catch (e) {
-          logger.warn('NFC cancelTechnologyRequest', e?.message);
-        }
-      }
     }
   };
 
@@ -730,8 +709,9 @@ export default function CheckInScreen({ navigation, route }) {
             )}
 
             <TouchableOpacity 
-              style={[styles.okutButton, (nfcSupported && nfcEnabledInSettings) ? styles.okutButtonNFC : styles.okutButtonCamera, { minHeight: MIN_BUTTON_SIZE }]}
+              style={[styles.okutButton, (nfcSupported && nfcEnabledInSettings) ? styles.okutButtonNFC : styles.okutButtonCamera, { minHeight: MIN_BUTTON_SIZE, opacity: nfcChipReading ? 0.7 : 1 }]}
               onPress={handleOkut}
+              disabled={nfcChipReading}
             >
               <Ionicons 
                 name={(nfcSupported && nfcEnabledInSettings) ? "hardware-chip-outline" : "camera"} 
@@ -740,7 +720,7 @@ export default function CheckInScreen({ navigation, route }) {
                 style={styles.okutButtonIcon}
               />
               <Text style={styles.okutButtonText}>
-                {(nfcSupported && nfcEnabledInSettings) ? (nfcListening ? 'Yeniden oku' : 'NFC ile Okut') : 'Kamera ile Okut'}
+                {(nfcSupported && nfcEnabledInSettings) ? (nfcChipReading ? 'Okunuyor…' : (nfcListening ? 'Yeniden oku' : 'NFC ile Okut')) : 'Kamera ile Okut'}
               </Text>
             </TouchableOpacity>
 
@@ -772,7 +752,7 @@ export default function CheckInScreen({ navigation, route }) {
               <View style={styles.nfcInfo}>
                 <Ionicons name="information-circle-outline" size={16} color={theme.colors.warning} />
                 <Text style={styles.nfcInfoText}>
-                  NFC desteği için development build gereklidir. Şu anda kamera kullanılıyor.
+                  NFC, Expo Go'da çalışmaz; EAS development build veya release build gerekir. Cihazda NFC kapalıysa ayarlardan açın. Şu anda kamera kullanılıyor.
                 </Text>
               </View>
             )}

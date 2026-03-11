@@ -118,6 +118,13 @@ router.get('/status', async (req, res) => {
     let state = 'NONE';
     if (pendingRequest) state = 'PENDING';
     else if (approvedRow) state = 'APPROVED';
+    // Supabase: branch üzerinde KBS bilgisi kayıtlıysa doğrudan bağlı say (kaydedince bağlanır)
+    else if (effectiveBranchId && req.authSource === 'supabase' && req.branch) {
+      const b = req.branch;
+      if (b.kbs_tesis_kodu && String(b.kbs_tesis_kodu).trim() && b.kbs_web_servis_sifre && String(b.kbs_web_servis_sifre).trim()) {
+        state = 'APPROVED';
+      }
+    }
 
     res.json({
       state,

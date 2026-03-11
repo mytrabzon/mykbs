@@ -158,9 +158,8 @@ class PolisKBS {
   }
 
   /**
-   * KBS'te tesisin daha önce bildirdiği (aktif veya son çıkan) misafirleri listele.
-   * Resmi Polis KBS API'de bu endpoint varsa kullanılır; yoksa { success: false, misafirler: [] } döner.
-   * Kullanıcı farklı sistemden geçince "KBS bilgilerini yazınca" mevcut misafirleri çekip sistemimize aktarabilir.
+   * KBS'te tesisin daha önce bildirdiği misafirleri listele.
+   * Polis (EMN) KBS resmi servisi misafir listesi sorgulama sunmuyorsa boş dönülür; kullanıcıya açıklama gider.
    */
   async misafirListesiGetir() {
     if (!this.baseURL) {
@@ -183,7 +182,7 @@ class PolisKBS {
       if (response.status === 404 || response.status === 501 || response.status === 400) {
         return {
           success: false,
-          message: 'Bu KBS türünde misafir listesi sorgulama desteklenmiyor veya yapılandırılmamış.',
+          message: 'Polis (EMN) KBS servisi misafir listesi sorgulaması sunmuyor. Mevcut misafirleri uygulamaya aktarmak için Odalar ekranından manuel check-in kullanın.',
           misafirler: []
         };
       }
@@ -191,7 +190,7 @@ class PolisKBS {
       if (response.status !== 200 || !response.data) {
         return {
           success: false,
-          message: response.data?.message || 'Liste alınamadı',
+          message: response.data?.message || 'Liste alınamadı.',
           misafirler: []
         };
       }

@@ -85,6 +85,8 @@ export default function AyarlarScreen() {
   const [backupLoading, setBackupLoading] = useState(false);
   const { language, setLanguage, t, languageLabels } = useLanguage();
   const settingsLoadedRef = useRef(false);
+  const kbsTestInProgressRef = useRef(false);
+  const kbsImportInProgressRef = useRef(false);
   // Profil (birleştirilmiş profil düzenleme)
   const [displayName, setDisplayName] = useState(() => (user?.adSoyad || '').trim());
   const [title, setTitle] = useState('');
@@ -133,7 +135,7 @@ export default function AyarlarScreen() {
     });
   }, []);
 
-  // Tek seferde tüm ayar verilerini yükle (429 rate limit önlemi: aynı anda 4+ istek yerine tek batch)
+  // Tek seferde tüm ayar verilerini yükle (sonsuz döngü yok: ref ile bir kez, sadece token varken)
   useEffect(() => {
     if (!token) {
       settingsLoadedRef.current = false;
@@ -142,6 +144,7 @@ export default function AyarlarScreen() {
     if (settingsLoadedRef.current) return;
     settingsLoadedRef.current = true;
     setLoading(true);
+    let cancelled = false;
     const loadAll = async () => {
       try {
         await Promise.all([
@@ -150,14 +153,15 @@ export default function AyarlarScreen() {
           loadKbsServerIp(),
           loadOkutulanBelgeler(),
         ]);
-        dataService.getTesis(true).then((t) => setTesisDetail(t)).catch(() => {});
+        if (!cancelled) dataService.getTesis(true).then((t) => setTesisDetail(t)).catch(() => {});
       } catch (e) {
-        console.error('Ayarlar veri yüklenemedi:', e);
+        if (!cancelled) console.error('Ayarlar veri yüklenemedi:', e);
       } finally {
-        setLoading(false);
+        if (!cancelled) setLoading(false);
       }
     };
     loadAll();
+    return () => { cancelled = true; };
   }, [token]);
 
   useEffect(() => {
@@ -369,6 +373,7 @@ export default function AyarlarScreen() {
   };
 
   const handleKBSTest = async () => {
+    if (kbsTestInProgressRef.current) return;
     const kbsTuru = kbsSettings.kbsTuru || 'jandarma';
     const kbsTesisKodu = (kbsSettings.kbsTesisKodu || '').trim();
     const kbsWebServisSifre = kbsSettings.kbsWebServisSifre || '';
@@ -376,6 +381,7 @@ export default function AyarlarScreen() {
       Toast.show({ type: 'error', text1: 'Eksik alan', text2: 'KBS tesis kodu ve web servis şifresini girin.' });
       return;
     }
+    kbsTestInProgressRef.current = true;
     setTestLoading(true);
     setTestResult(null);
     try {
@@ -399,11 +405,13 @@ export default function AyarlarScreen() {
       Toast.show({ type: 'error', text1: isNetwork ? 'Bağlantı hatası' : 'Hata', text2: userMsg });
       setTestResult({ success: false, message: userMsg });
     } finally {
+      kbsTestInProgressRef.current = false;
       setTestLoading(false);
     }
   };
 
   const handleKBSImport = async () => {
+    if (kbsImportInProgressRef.current) return;
     const kbsTuru = kbsSettings.kbsTuru || 'jandarma';
     const kbsTesisKodu = (kbsSettings.kbsTesisKodu || '').trim();
     const kbsWebServisSifre = kbsSettings.kbsWebServisSifre || '';
@@ -411,6 +419,7 @@ export default function AyarlarScreen() {
       Toast.show({ type: 'error', text1: 'Eksik alan', text2: 'KBS tesis kodu ve web servis şifresini girin.' });
       return;
     }
+    kbsImportInProgressRef.current = true;
     setKbsImportLoading(true);
     setKbsImportResult(null);
     try {
@@ -423,7 +432,8 @@ export default function AyarlarScreen() {
       setKbsImportResult(data);
       const msg = data.message || (data.imported > 0 ? `${data.imported} misafir aktarıldı.` : 'Aktarım tamamlandı.');
       if (data.imported > 0) {
-        dataService.clearCache().catch(() => {});
+        await dataService.clearCache().catch(() => {});
+        await dataService.getOdalar('tumu', true).catch(() => {});
         Toast.show({ type: 'success', text1: 'KBS aktarımı', text2: msg, visibilityTime: 5000 });
       } else {
         Toast.show({ type: 'info', text1: 'KBS aktarımı', text2: msg, visibilityTime: 5000 });
@@ -433,28 +443,28 @@ export default function AyarlarScreen() {
       setKbsImportResult({ error: errMsg });
       Toast.show({ type: 'error', text1: 'KBS aktarımı', text2: errMsg, visibilityTime: 5000 });
     } finally {
+      kbsImportInProgressRef.current = false;
       setKbsImportLoading(false);
     }
   };
 
   const handleSave = async () => {
+    const tesisKodu = (kbsSettings.kbsTesisKodu || '').trim();
+    const sifre = kbsSettings.kbsWebServisSifre || '';
+    if (!tesisKodu || !sifre || sifre === '********') {
+      Toast.show({ type: 'error', text1: 'Eksik alan', text2: 'KBS tesis kodu ve web servis şifresini girin.' });
+      return;
+    }
     setLoading(true);
     try {
-      if (credentialState === 'NONE' || credentialState === null) {
-        await api.post('/kbs/credentials/request', {
-          action: 'create',
-          tesis_kodu: kbsSettings.kbsTesisKodu,
-          web_servis_sifre: kbsSettings.kbsWebServisSifre,
-        });
-        Toast.show({ type: 'success', text1: 'Talep iletildi', text2: 'Onay bekleniyor', visibilityTime: 4000 });
-        await loadCredentialStatus();
-      } else {
-        await api.put('/tesis/kbs', {
-          ...kbsSettings,
-          kbsWebServisSifre: kbsSettings.kbsWebServisSifre,
-        });
-        Toast.show({ type: 'success', text1: 'Başarılı', text2: 'Ayarlar kaydedildi' });
-      }
+      await api.put('/tesis/kbs', {
+        ...kbsSettings,
+        kbsWebServisSifre: sifre,
+      });
+      Toast.show({ type: 'success', text1: 'Kaydedildi', text2: 'KBS\'ye bağlandınız. Test veya senkronizasyon yapabilirsiniz.', visibilityTime: 5000 });
+      await loadCredentialStatus();
+      await loadKBSSettings();
+      dataService.getTesis(true).then((t) => setTesisDetail(t)).catch(() => {});
     } catch (e) {
       Toast.show({ type: 'error', text1: 'Hata', text2: e?.response?.data?.message || 'İşlem başarısız' });
     } finally {
@@ -845,16 +855,16 @@ export default function AyarlarScreen() {
               <Text style={styles.badgeText}>Onay bekleniyor</Text>
             </View>
           )}
-          {credentialState === 'APPROVED' && (
+          {(credentialState === 'APPROVED' || (tesisDetail?.kbsConnected === true)) && (
             <View style={[styles.badge, { backgroundColor: colors.success || '#22c55e' }]}>
               <Ionicons name="checkmark-circle" size={18} color="#fff" />
-              <Text style={styles.badgeText}>Onaylandı</Text>
+              <Text style={styles.badgeText}>KBS'ye bağlı</Text>
             </View>
           )}
           {tesisDetail && tesisDetail.kbsConnected === false && credentialState !== 'APPROVED' && (
             <Banner
               type="info"
-              message="Kimlik bildirimi (KBS) bu tesis için henüz yapılandırılmadı. Bağlantı kurulduğunda bu bölümden test edebilirsiniz."
+              message="KBS otel tesis kodu ve web servis şifresini yazıp Kaydet'e basın. Kaydedince KBS'ye bağlanmış olursunuz; isterseniz mevcut bildirilmiş kişileri çekin (Senkronize et), isterseniz yeni bildirim yapın."
             />
           )}
 
@@ -933,7 +943,7 @@ export default function AyarlarScreen() {
           )}
 
           <Text style={[styles.infoText, { color: colors.textSecondary, marginTop: spacing.md }]}>
-            Farklı bir sistemden geçtiyseniz, KBS bilgilerinizi kaydettikten sonra aşağıdaki butonla daha önce KBS'e bildirdiğiniz misafirleri uygulamaya aktarabilirsiniz.
+            KBS'ye bağlandıktan sonra: mevcut bildirilmiş kişileri çekmek için "Senkronize et", yeni misafir bildirimi için Odalar ekranından check-in kullanın.
           </Text>
           <Button
             variant="secondary"
@@ -942,8 +952,11 @@ export default function AyarlarScreen() {
             disabled={kbsImportLoading || !kbsSettings.kbsTesisKodu?.trim()}
             style={{ marginTop: spacing.sm }}
           >
-            KBS'ten mevcut misafirleri getir
+            Senkronize et
           </Button>
+          <Text style={[styles.infoText, { color: colors.textSecondary, marginTop: 4, fontSize: 12 }]}>
+            KBS'de daha önce bildirdiğiniz misafirleri uygulamaya çeker; odalara göre listelenir. Jandarma/Polis resmi KBS servisi misafir listesi sorgulaması sunmuyorsa bu işlem boş döner; yeni misafirler için Odalar → check-in kullanın.
+          </Text>
           {kbsImportResult && (
             <View
               style={[
@@ -961,13 +974,10 @@ export default function AyarlarScreen() {
               )}
             </View>
           )}
-          <Text style={[styles.infoText, { color: colors.textSecondary, marginTop: 6 }]}>
-            KBS'ten getirilen misafirler Odalar ekranında, her odanın misafir listesinde listelenir.
-          </Text>
 
           {credentialState !== 'PENDING' && (
             <Button variant="primary" onPress={handleSave} loading={loading} disabled={loading} style={styles.saveBtn}>
-              {credentialState === 'APPROVED' ? 'Güncelle (talep açar)' : 'Kaydet'}
+              {credentialState === 'APPROVED' || tesisDetail?.kbsConnected ? 'Güncelle' : 'Kaydet'}
             </Button>
           )}
 
@@ -994,7 +1004,7 @@ export default function AyarlarScreen() {
           )}
 
           <Text style={[styles.infoText, { color: colors.textSecondary, marginTop: spacing.lg }]}>
-            KBS tesis kodu ve şifresi talep sonrası admin onayı ile geçerli olur. Değiştir/Sil de onay gerektirir.
+            Kaydet'e bastığınızda KBS tesis kodu ve şifre kaydedilir, KBS'ye bağlanmış sayılırsınız. Yeni bildirimler Odalar → check-in ile yapılır.
           </Text>
         </View>
 
