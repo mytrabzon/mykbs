@@ -401,6 +401,23 @@ export const api = {
         const data = await r.json().catch(() => ({}));
         return toResponse(data);
       }
+      // Paket sipariş geçmişi + kredi özeti (tesis bazlı)
+      if (pathname === '/siparis' || pathname === 'siparis') {
+        const backendUrl = getBackendUrl();
+        if (!backendUrl || !token) {
+          const err = new Error('Giriş gerekli') as Error & { response?: { status: number; data: unknown } };
+          err.response = { status: 401, data: { message: 'Token bulunamadı' } };
+          throw err;
+        }
+        const qs = path.includes('?') ? path.slice(path.indexOf('?')) : '';
+        const r = await fetchWithLog(`${backendUrl}/api/siparis${qs}`, {
+          method: 'GET',
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        const data = await r.json().catch(() => ({})) as Record<string, unknown>;
+        throwIfNotOk(r, data, 'Sipariş geçmişi alınamadı');
+        return toResponse(data);
+      }
       logger.warn('[apiSupabase] Unmapped GET', path);
       const res = await callFn('facilities_list', {}, token);
       return toResponse(res);
@@ -1006,6 +1023,19 @@ export const api = {
         return toResponse(data);
       }
       // Paket siparişi (Satın Al) — backend JWT ile tesis bilgisi gerekir
+      // IAP doğrulama — Apple/Google ile satın alımda onay beklemeden kredi tanımlanır
+      if (pathname === '/siparis/iap-verify' || pathname === 'siparis/iap-verify') {
+        const backendUrl = getBackendUrl();
+        if (!backendUrl || !token) throw Object.assign(new Error('Giriş gerekli'), { response: { status: 401, data: {} } });
+        const r = await fetchWithLog(`${backendUrl}/api/siparis/iap-verify`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+          body: JSON.stringify(payload || {}),
+        });
+        const data = await r.json().catch(() => ({})) as Record<string, unknown>;
+        if (!r.ok) throw Object.assign(new Error((data as { message?: string })?.message || 'IAP doğrulanamadı'), { response: { status: r.status, data } });
+        return toResponse(data);
+      }
       if (pathname === '/siparis' || pathname === 'siparis') {
         const backendUrl = getBackendUrl();
         if (!backendUrl || !token) throw Object.assign(new Error('Giriş gerekli'), { response: { status: 401, data: {} } });
@@ -1029,6 +1059,21 @@ export const api = {
         });
         const data = await r.json().catch(() => ({}));
         if (!r.ok) throw Object.assign(new Error((data as { message?: string })?.message || 'Talep gönderilemedi'), { response: { status: r.status, data } });
+        return toResponse(data);
+      }
+      // KBS bildirim tekrar dene — Node backend POST /api/bildirim/:id/tekrar-dene
+      const tekrarDeneMatch = pathname.match(/^\/?bildirim\/([^/]+)\/tekrar-dene$/);
+      if (tekrarDeneMatch) {
+        const bildirimId = tekrarDeneMatch[1];
+        const backendUrl = getBackendUrl();
+        if (!backendUrl || !token) throw Object.assign(new Error('Giriş gerekli'), { response: { status: 401, data: {} } });
+        const r = await fetchWithLog(`${backendUrl}/api/bildirim/${bildirimId}/tekrar-dene`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+          body: JSON.stringify(payload || {}),
+        });
+        const data = await r.json().catch(() => ({}));
+        if (!r.ok) throw Object.assign(new Error((data as { message?: string })?.message || 'Bildirim tekrar gönderilemedi'), { response: { status: r.status, data } });
         return toResponse(data);
       }
       // Manuel KBS bildirimi — Node backend POST /api/misafir/manuel-bildirim (Supabase'ta Edge Function yok)

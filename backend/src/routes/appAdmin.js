@@ -1157,8 +1157,10 @@ router.post('/satislar/:id/odendi', async (req, res) => {
     if (siparis.durum === 'odendi') return res.status(400).json({ message: 'Sipariş zaten ödendi' });
     if (siparis.durum === 'iptal') return res.status(400).json({ message: 'Sipariş iptal' });
 
-    const kredi = getPackageCredits(siparis.paket);
+    const kredi = siparis.kredi ?? getPackageCredits(siparis.paket);
     const now = new Date();
+    const mevcutKota = siparis.tesis.kota ?? 0;
+    const yeniKota = mevcutKota + kredi;
 
     await prisma.$transaction([
       prisma.siparis.update({
@@ -1170,8 +1172,8 @@ router.post('/satislar/:id/odendi', async (req, res) => {
         data: {
           paket: siparis.paket,
           trialEndsAt: null,
-          kota: kredi,
-          kullanilanKota: 0,
+          kota: yeniKota,
+          // kullanilanKota değiştirme — biriken kredi üzerinden harcama devam eder
         },
       }),
     ]);

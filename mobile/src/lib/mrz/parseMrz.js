@@ -180,8 +180,8 @@ const OCR_DATE_FIXES = {
   B: '8', R: '8',
   P: '9',
 };
-/** Belge no / check digit – sadece yaygın karışıklıklar. */
-const OCR_DIGIT_SAFE = { O: '0', Q: '0', I: '1', L: '1', '|': '1', S: '5', B: '8', Z: '2' };
+/** Belge no / check digit – yaygın karışıklıklar (0/O, 1/I/L, 5/S, 8/B, 2/Z, 6/G). */
+const OCR_DIGIT_SAFE = { O: '0', Q: '0', I: '1', L: '1', '|': '1', J: '1', S: '5', B: '8', Z: '2', G: '6', C: '6' };
 function fixLineDigitPositions(line, digitRanges) {
   if (!line) return line;
   const arr = line.split('');
@@ -199,17 +199,18 @@ function fixLineDigitPositions(line, digitRanges) {
 
 export function fixMrzOcrErrors(raw) {
   if (!raw || typeof raw !== 'string') return raw;
-  const lines = normalizeMrzLines(raw);
-  if (lines.length >= 2 && lines[0].length >= 30) {
-    // TD3 pasaport: 2. satır doc 0-9, birth 13-19, expiry 21-27 (aynı kağıttaki farklı MRZ için)
-    lines[1] = fixLineDigitPositions(lines[1], [[0, 10], [13, 20], [21, 28]]);
-  }
-  if (lines.length >= 2 && lines[0].length >= 34 && lines[0].length <= 36) {
-    lines[1] = fixLineDigitPositions(lines[1], [[0, 10], [13, 20], [21, 28]]);
-  } else if (lines.length >= 3 && lines[0].length >= 28) {
-    // TD1: line1 doc 5-15, line2 birth 0-7, expiry 8-15
-    lines[0] = fixLineDigitPositions(lines[0], [[5, 15]]);
-    lines[1] = fixLineDigitPositions(lines[1], [[0, 8], [8, 15]]);
+  let lines = normalizeMrzLines(raw);
+  for (let pass = 0; pass < 2; pass++) {
+    if (lines.length >= 2 && lines[0].length >= 30) {
+      // TD3 pasaport: 2. satır doc 0-9, birth 13-19, expiry 21-27
+      lines[1] = fixLineDigitPositions(lines[1], [[0, 10], [13, 20], [21, 28]]);
+    }
+    if (lines.length >= 2 && lines[0].length >= 34 && lines[0].length <= 36) {
+      lines[1] = fixLineDigitPositions(lines[1], [[0, 10], [13, 20], [21, 28]]);
+    } else if (lines.length >= 3 && lines[0].length >= 28) {
+      lines[0] = fixLineDigitPositions(lines[0], [[5, 15]]);
+      lines[1] = fixLineDigitPositions(lines[1], [[0, 8], [8, 15]]);
+    }
   }
   return lines.join('\n');
 }
@@ -268,6 +269,17 @@ function normalizeMrzLines(raw) {
       return [lines[0].padEnd(44, '<').slice(0, 44), lines[1].padEnd(44, '<').slice(0, 44)];
     }
   }
+  // OCR bazen satırları yanlış böler (örn. 20+64). Toplam 66–100 ise birleştirip 44 veya 42’ye böl.
+  if (lines.length >= 2) {
+    const joined = lines.join('').replace(/[^A-Z0-9<]/g, '');
+    if (joined.length >= 66 && joined.length <= 100 && (lines[0].length < 28 || lines[1].length < 28)) {
+      for (const splitAt of [44, 42, 43, 45, 41, 40]) {
+        if (splitAt < joined.length && joined.length - splitAt >= 28) {
+          return [joined.slice(0, splitAt).padEnd(44, '<').slice(0, 44), joined.slice(splitAt).padEnd(44, '<').slice(0, 44)];
+        }
+      }
+    }
+  }
   return lines;
 }
 
@@ -301,14 +313,22 @@ export function parseMrz(raw) {
   let result = parseMrzWithLines(lines);
   if (result) return result;
   const one = cleaned.replace(/\s/g, '');
-  // İran vb. pasaportlar: farklı bölme noktaları dene (tek satır 66–100 karakter)
+  // İran vb. pasaportlar: farklı bölme noktaları dene (tek satır 66–100 karakter). 42 karakter bazı pasaportlarda kullanılır.
   if (one.length >= 66 && one.length <= 100) {
-    for (const splitAt of [44, 43, 45, 42, 46, 41, 40]) {
+    for (const splitAt of [44, 42, 43, 45, 46, 41, 40, 39]) {
       if (splitAt >= one.length) continue;
       const l1 = one.slice(0, splitAt).padEnd(44, '<');
       const l2 = one.slice(splitAt).padEnd(44, '<');
       result = parseMrzWithLines([l1, l2]);
       if (result && result.passportNumber) return result;
+    }
+    // Check digit hatalı olsa bile veri doluysa döndür (kullanıcı sonuç ekranında düzeltebilir)
+    for (const splitAt of [44, 42, 43]) {
+      if (splitAt >= one.length) continue;
+      const l1 = one.slice(0, splitAt).padEnd(44, '<');
+      const l2 = one.slice(splitAt).padEnd(44, '<');
+      result = parseMrzWithLines([l1, l2]);
+      if (result && result.passportNumber && (result.birthDate || result.expiryDate)) return result;
     }
   }
   return { ...emptyResult, raw: cleaned || raw, checks: { ok: false, reason: 'invalid_format' } };

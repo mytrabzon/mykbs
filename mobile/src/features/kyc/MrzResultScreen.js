@@ -1,5 +1,6 @@
 import React, { useState, useCallback } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, ActivityIndicator, Image } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import Toast from 'react-native-toast-message';
 import * as FileSystem from 'expo-file-system/legacy';
@@ -19,6 +20,7 @@ function isoToDDMMYYYY(iso) {
  * MRZ okuma sonucu – confirm ekranı. Kaydet ile okutulan kimlikler listesine eklenir (Ayarlar'da görünür).
  */
 export default function MrzResultScreen({ route, navigation }) {
+  const insets = useSafeAreaInsets();
   const payload = route?.params?.payload ?? null;
   const raw = payload?.raw ?? '';
   const scanDurationMs = route?.params?.scanDurationMs ?? 0;
@@ -27,6 +29,11 @@ export default function MrzResultScreen({ route, navigation }) {
   const portraitBase64 = route?.params?.portraitBase64 ?? null;
   const [savingOkutulan, setSavingOkutulan] = useState(false);
   const [savedToOkutulan, setSavedToOkutulan] = useState(false);
+
+  const handleGeri = () => {
+    if (navigation.canGoBack()) navigation.goBack();
+    else navigation.replace('MrzScan');
+  };
 
   const chipPhotoBase64 = payload?.chipPhotoBase64 && typeof payload.chipPhotoBase64 === 'string' ? payload.chipPhotoBase64 : null;
   const displayPhotoUri = portraitBase64 ? `data:image/jpeg;base64,${portraitBase64}` : chipPhotoBase64 ? `data:image/jpeg;base64,${chipPhotoBase64}` : photoUri;
@@ -108,7 +115,16 @@ export default function MrzResultScreen({ route, navigation }) {
   }
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
+    <View style={styles.container}>
+      <View style={[styles.header, { paddingTop: insets.top + 8, paddingBottom: 8 }]}>
+        <TouchableOpacity onPress={handleGeri} style={styles.headerBack} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
+          <Ionicons name="arrow-back" size={24} color={theme.colors.textPrimary} />
+          <Text style={styles.headerBackText}>Geri</Text>
+        </TouchableOpacity>
+        <Text style={styles.headerTitle}>Belge sonucu</Text>
+        <View style={styles.headerPlaceholder} />
+      </View>
+      <ScrollView style={styles.scroll} contentContainerStyle={styles.content}>
       <View style={styles.card}>
         <View style={styles.row}>
           <Ionicons name={validation.valid ? 'checkmark-circle' : 'warning'} size={32} color={validation.valid ? theme.colors.success : theme.colors.warning} />
@@ -167,7 +183,8 @@ export default function MrzResultScreen({ route, navigation }) {
           <Text style={styles.buttonSecondaryText}>Kaydedilenler sayfasına git</Text>
         </TouchableOpacity>
       )}
-    </ScrollView>
+      </ScrollView>
+    </View>
   );
 }
 
@@ -183,6 +200,12 @@ function Row({ label, value, mask }) {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: theme.colors.background },
+  header: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: theme.spacing.base, borderBottomWidth: 1, borderBottomColor: theme.colors.border },
+  headerBack: { flexDirection: 'row', alignItems: 'center', paddingVertical: 8, paddingRight: 8 },
+  headerBackText: { fontSize: theme.typography.fontSize.base, color: theme.colors.textPrimary, marginLeft: 4 },
+  headerTitle: { flex: 1, textAlign: 'center', fontSize: theme.typography.fontSize.lg, fontWeight: theme.typography.fontWeight.semibold, color: theme.colors.textPrimary },
+  headerPlaceholder: { width: 80 },
+  scroll: { flex: 1 },
   content: { padding: theme.spacing.lg, paddingBottom: 40 },
   center: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: theme.spacing.lg },
   card: { ...theme.styles.card, marginBottom: theme.spacing.lg },

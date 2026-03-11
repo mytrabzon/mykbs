@@ -353,6 +353,7 @@ export default function MrzScanScreen({ navigation }) {
       setCameraMountDelayDone(false);
       setUnifiedCameraMountKey(0);
       setUnifiedCameraError(false);
+      if (USE_UNIFIED_AUTO_SCAN && permission?.granted) setTorchOn(true);
       if (permission?.granted) {
         setMrzCameraMountReady(true);
         setCameraLayoutReady(true);
@@ -941,17 +942,11 @@ export default function MrzScanScreen({ navigation }) {
             Toast.show({ type: 'info', text1: 'Okuma tam net olmayabilir', text2: 'Lütfen bilgileri kontrol edin.' });
           }
         } else {
-          if (TorchModule && qualityHints?.suggestTorch === 'on') {
-            try {
-              TorchModule.switchState(true);
-              setTorchOn(true);
-              Toast.show({ type: 'info', text1: 'Işık yetersiz', text2: 'Fener açıldı, tekrar deneyin.' });
-            } catch (_) {}
-          } else if (TorchModule && qualityHints?.suggestTorch === 'off') {
-            try {
-              TorchModule.switchState(false);
-              setTorchOn(false);
-            } catch (_) {}
+          if (qualityHints?.suggestTorch === 'on') {
+            setTorchOn(true);
+            Toast.show({ type: 'info', text1: 'Işık yetersiz', text2: 'Fener açıldı, tekrar deneyin.' });
+          } else if (qualityHints?.suggestTorch === 'off') {
+            setTorchOn(false);
           }
           const reasonText = failureReason || 'Sistem en iyi sonucu almaya çalıştı. Gerekirse manuel girin veya tekrar çekin.';
           Toast.show({ type: 'error', text1: 'MRZ okunamadı', text2: reasonText });
@@ -1026,6 +1021,43 @@ export default function MrzScanScreen({ navigation }) {
           processMrzRaw(mrzRaw);
           return;
         }
+        if (mrzPayload && (mrzPayload.documentNumber || mrzPayload.passportNumber)) {
+          const docNo = (mrzPayload.documentNumber || mrzPayload.passportNumber || '').trim();
+          const minimalPayload = {
+            passportNumber: docNo,
+            birthDate: mrzPayload.birthDate || '',
+            givenNames: (mrzPayload.givenNames || '').trim(),
+            surname: (mrzPayload.surname || '').trim(),
+            nationality: (mrzPayload.nationality || mrzPayload.issuingCountry || 'TÜRK').trim(),
+          };
+          const enriched = processNewMrz(minimalPayload, { source: 'backend', raw: '' });
+          if (!enriched) {
+            logger.info('[MRZ okuma] galeri – mrzPayload ile aynı belge (duplicate)');
+            Toast.show({ type: 'info', text1: 'Aynı belge', text2: 'Bu belge zaten okundu' });
+            if (mounted.current) setOcrLoading(false);
+            return;
+          }
+          logger.info('[MRZ okuma] galeri – mrzPayload ile okundu');
+          triggerReadSuccessFeedback();
+          setFrontImageUri(uri);
+          setPortraitBase64(data?.portraitBase64 || null);
+          setMergedPayload(merged || {
+            ad: minimalPayload.givenNames,
+            soyad: minimalPayload.surname,
+            kimlikNo: /^\d{11}$/.test(docNo) ? docNo : null,
+            pasaportNo: /^\d{11}$/.test(docNo) ? null : docNo,
+            dogumTarihi: minimalPayload.birthDate ? minimalPayload.birthDate.split('-').reverse().join('.') : null,
+            uyruk: minimalPayload.nationality,
+          });
+          setInstantPayload({
+            ...minimalPayload,
+            scanId: enriched.scanId,
+            scannedAt: enriched.scannedAt,
+          });
+          setScanDurationMs(scanStartTimeRef.current ? Date.now() - scanStartTimeRef.current : 0);
+          if (mounted.current) setOcrLoading(false);
+          return;
+        }
         const mrzFailureReason = data?.mrzFailureReason;
         if (mrzFailureReason) {
           Toast.show({ type: 'error', text1: 'MRZ okunamadı', text2: mrzFailureReason });
@@ -1082,7 +1114,7 @@ export default function MrzScanScreen({ navigation }) {
         if (mounted.current) setOcrLoading(false);
       }
     },
-    [processMrzRaw]
+    [processMrzRaw, processNewMrz]
   );
 
   const handlePickImage = useCallback(async () => {
@@ -1410,18 +1442,8 @@ export default function MrzScanScreen({ navigation }) {
   const docTypeForReader = Platform.OS === 'ios' ? DocType.Passport : selectedDocType;
 
   const toggleTorch = useCallback(() => {
-    if (!TorchModule) {
-      Toast.show({ type: 'info', text1: 'Fener', text2: 'Bu cihazda fener desteği yok.' });
-      return;
-    }
-    try {
-      const next = !torchOn;
-      TorchModule.switchState(next);
-      setTorchOn(next);
-    } catch (e) {
-      Toast.show({ type: 'error', text1: 'Fener açılamadı', text2: e?.message || 'Cihaz feneri desteklemiyor olabilir.' });
-    }
-  }, [torchOn]);
+    setTorchOn((prev) => !prev);
+  }, []);
 
   // Siyah ekranda kalmayı önle: her durumda geri butonu göster (focus/exit geçişinde de)
   if (!isScreenFocused || isExiting) {
@@ -1468,8 +1490,9 @@ export default function MrzScanScreen({ navigation }) {
       <SafeAreaView style={whiteResultStyles.container} edges={['top']}>
         <ScrollView contentContainerStyle={whiteResultStyles.scroll}>
           <View style={whiteResultStyles.header}>
-            <TouchableOpacity onPress={() => { acceptedRawRef.current = ''; mrzLockedRef.current = false; setMrzLocked(false); setScanMode(DocType.ID); setInstantPayload(null); setMergedPayload(null); setFrontImageUri(null); setPortraitBase64(null); setMrzCheckFailed(false); setSavedToOkutulan(false); setScanDurationMs(0); }} style={whiteResultStyles.backBtn}>
+            <TouchableOpacity onPress={() => { acceptedRawRef.current = ''; mrzLockedRef.current = false; setMrzLocked(false); setScanMode(DocType.ID); setInstantPayload(null); setMergedPayload(null); setFrontImageUri(null); setPortraitBase64(null); setMrzCheckFailed(false); setSavedToOkutulan(false); setScanDurationMs(0); }} style={whiteResultStyles.backBtn} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
               <Ionicons name="arrow-back" size={24} color="#111" />
+              <Text style={whiteResultStyles.backBtnText}>Geri</Text>
             </TouchableOpacity>
             <Text style={whiteResultStyles.headerTitle}>{isKimlik ? 'Kimlik bilgileri' : 'Pasaport bilgileri'}</Text>
             <View style={whiteResultStyles.backBtn} />
@@ -1696,7 +1719,7 @@ export default function MrzScanScreen({ navigation }) {
               ref={unifiedCameraRef}
               style={[StyleSheet.absoluteFill, styles.unifiedCameraSize]}
               facing="back"
-              enableTorch={torchOn}
+              enableTorch={unifiedCameraReady && torchOn}
               onCameraReady={() => {
                 if (unifiedCameraReadyTimeoutRef.current) {
                   clearTimeout(unifiedCameraReadyTimeoutRef.current);
@@ -1754,11 +1777,13 @@ export default function MrzScanScreen({ navigation }) {
           <View style={styles.overlayBackBtn} />
         </View>
         <View style={[styles.overlayBottom, styles.overlayZIndex, { paddingBottom: insets.bottom + 20 }]} pointerEvents="box-none">
-          <View style={styles.overlayBottomBtn} />
-          <TouchableOpacity style={[styles.overlayBottomBtn, styles.torchBtnRound, torchOn && styles.torchBtnRoundOn]} onPress={toggleTorch} activeOpacity={0.8}>
-            <Ionicons name={torchOn ? 'flash' : 'flash-outline'} size={28} color="#fff" />
+          <TouchableOpacity style={[styles.overlayBottomBtn]} onPress={handlePickImage} disabled={ocrLoading} activeOpacity={0.8}>
+            <Ionicons name="images-outline" size={28} color="#fff" />
           </TouchableOpacity>
           <View style={styles.overlayBottomBtn} />
+          <TouchableOpacity style={[styles.overlayBottomBtn, styles.torchBtnRound, torchOn && styles.torchBtnRoundOn]} onPress={toggleTorch} activeOpacity={0.8} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
+            <Ionicons name={torchOn ? 'flash' : 'flash-outline'} size={28} color="#fff" />
+          </TouchableOpacity>
         </View>
         {ocrLoading && (
           <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'center', alignItems: 'center' }]} pointerEvents="none">
@@ -1840,14 +1865,13 @@ export default function MrzScanScreen({ navigation }) {
         <View style={styles.overlayBackBtn} />
       </View>
       <View style={[styles.overlayBottom, styles.overlayZIndex, { paddingBottom: insets.bottom + 20 }]} pointerEvents="box-none">
+        <TouchableOpacity style={[styles.overlayBottomBtn]} onPress={handlePickImage} disabled={ocrLoading} activeOpacity={0.8}>
+          <Ionicons name="images-outline" size={28} color="#fff" />
+        </TouchableOpacity>
         <View style={styles.overlayBottomBtn} />
-        {TorchModule ? (
-          <TouchableOpacity style={[styles.overlayBottomBtn, styles.torchBtnRound, torchOn && styles.torchBtnRoundOn]} onPress={toggleTorch} activeOpacity={0.8}>
-            <Ionicons name={torchOn ? 'flash' : 'flash-outline'} size={28} color="#fff" />
-          </TouchableOpacity>
-        ) : (
-          <View style={styles.overlayBottomBtn} />
-        )}
+        <TouchableOpacity style={[styles.overlayBottomBtn, styles.torchBtnRound, torchOn && styles.torchBtnRoundOn]} onPress={toggleTorch} activeOpacity={0.8} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
+          <Ionicons name={torchOn ? 'flash' : 'flash-outline'} size={28} color="#fff" />
+        </TouchableOpacity>
       </View>
       {Platform.OS === 'android' && (
         <View style={[styles.androidFallbackBar, { bottom: insets.bottom + 72 }]} pointerEvents="box-none">
@@ -2130,7 +2154,8 @@ const whiteResultStyles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#FFFFFF' },
   scroll: { paddingHorizontal: theme.spacing.lg, paddingBottom: 40 },
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: theme.spacing.sm, marginBottom: 8 },
-  backBtn: { padding: theme.spacing.sm, minWidth: 44 },
+  backBtn: { flexDirection: 'row', alignItems: 'center', padding: theme.spacing.sm, minWidth: 44 },
+  backBtnText: { fontSize: theme.typography.fontSize.base, color: '#111', marginLeft: 4 },
   headerTitle: { fontSize: theme.typography.fontSize.xl, fontWeight: '700', color: '#111' },
   scanTimeBadge: { alignSelf: 'center', paddingVertical: 6, paddingHorizontal: 12, backgroundColor: '#E8F5E9', borderRadius: 8, marginBottom: theme.spacing.sm },
   scanTimeText: { fontSize: theme.typography.fontSize.sm, color: '#2E7D32', fontWeight: '600' },

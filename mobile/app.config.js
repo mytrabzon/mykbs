@@ -27,7 +27,7 @@ export default {
     slug: "mykbs",
     owner: "luvolive",
     scheme: "kbsprime",
-    version: "1.0.0",
+    version: "1.0.4",
     orientation: "default",
     icon: "./assets/icon.png",
     userInterfaceStyle: "light",

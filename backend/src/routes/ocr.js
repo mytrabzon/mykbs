@@ -1075,11 +1075,25 @@ function normalizeMrzLinesBackend(raw) {
   return (raw || '').replace(/\r\n/g, '\n').replace(/\r/g, '\n').split('\n').map((l) => l.trim().toUpperCase().replace(/\s/g, '')).filter(Boolean);
 }
 
+/** Pasaport/kimlik MRZ'de OCR sık harf–rakam karıştırır (0/O, 1/I, 5/S). Tarih alanı 6 karakterde bunları düzelt. */
+function fixMrzDateOcrChars(s) {
+  if (!s || s.length < 6) return s;
+  const map = { O: '0', Q: '0', D: '0', I: '1', L: '1', Z: '2', S: '5', B: '8', G: '6' };
+  return s.substring(0, 6).split('').map((c) => map[c] || c).join('');
+}
+
+/** MRZ tarih alanı sadece 6 rakam (YYMMDD). OCR hatalı okuyunca harf/< gelirse boş dön; rastgele tarih üretme. */
 function normalizeYYMMDD(yymmdd) {
-  if (!yymmdd || yymmdd.length < 6) return '';
-  const yy = parseInt(yymmdd.substring(0, 2), 10);
-  const mm = yymmdd.substring(2, 4);
-  const dd = yymmdd.substring(4, 6);
+  if (!yymmdd || typeof yymmdd !== 'string' || yymmdd.length < 6) return '';
+  let raw = yymmdd.substring(0, 6).replace(/</g, '0');
+  raw = fixMrzDateOcrChars(raw);
+  if (!/^\d{6}$/.test(raw)) return '';
+  const yy = parseInt(raw.substring(0, 2), 10);
+  const mm = raw.substring(2, 4);
+  const dd = raw.substring(4, 6);
+  const mmNum = parseInt(mm, 10);
+  const ddNum = parseInt(dd, 10);
+  if (mmNum < 1 || mmNum > 12 || ddNum < 1 || ddNum > 31) return '';
   const year = yy <= 30 ? 2000 + yy : 1900 + yy;
   return year + '-' + mm + '-' + dd;
 }
@@ -1094,8 +1108,8 @@ function parseMrzToPayload(raw) {
   let givenNames = '';
   let issuingCountry = '';
   if (lines.length >= 2 && lines[0].length >= 38) {
-    const l1 = (lines[0] || '').padEnd(44, '<');
-    const l2 = (lines[1] || '').padEnd(44, '<');
+    const l1 = (lines[0] || '').slice(0, 44).padEnd(44, '<');
+    const l2 = (lines[1] || '').slice(0, 44).padEnd(44, '<');
     docNumber = l2.substring(0, 9).replace(/</g, '').trim();
     birthDate = normalizeYYMMDD(l2.substring(13, 19));
     expiryDate = normalizeYYMMDD(l2.substring(21, 27));

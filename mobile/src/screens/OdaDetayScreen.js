@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   View,
   Text,
@@ -166,9 +166,19 @@ export default function OdaDetayScreen() {
     );
   };
 
+  const tekrarBildirMountedRef = useRef(true);
+  useEffect(() => {
+    tekrarBildirMountedRef.current = true;
+    return () => { tekrarBildirMountedRef.current = false; };
+  }, []);
+
   const handleTekrarBildir = async (bildirimId) => {
     if (tekrarBildirLoading) return;
     setTekrarBildirLoading(bildirimId);
+    const safeClear = () => {
+      if (tekrarBildirMountedRef.current) setTekrarBildirLoading(null);
+    };
+    const timeoutId = setTimeout(safeClear, 20000); // en fazla 20 sn, sonra loading kaldır
     try {
       await api.post(`/bildirim/${bildirimId}/tekrar-dene`);
       Toast.show({ type: 'success', text1: 'Bildirim tekrar gönderildi' });
@@ -176,7 +186,8 @@ export default function OdaDetayScreen() {
     } catch (err) {
       Toast.show({ type: 'error', text1: 'Hata', text2: err?.response?.data?.message || 'Bildirim gönderilemedi' });
     } finally {
-      setTekrarBildirLoading(null);
+      clearTimeout(timeoutId);
+      safeClear();
     }
   };
 

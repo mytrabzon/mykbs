@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   View,
   Text,
@@ -10,6 +10,7 @@ import {
   ActivityIndicator,
   Alert,
   Dimensions,
+  Platform,
 } from 'react-native';
 import { useTheme } from '../context/ThemeContext';
 import { Ionicons } from '@expo/vector-icons';
@@ -18,6 +19,7 @@ import {
   CREDITS_DEPLETED_MESSAGE,
   TRIAL_END_MESSAGE,
 } from '../constants/packages';
+import { getProductIdForPackage } from '../constants/iapProducts';
 import { api } from '../services/api';
 import { getApiErrorMessage } from '../services/apiSupabase';
 
@@ -40,18 +42,129 @@ export default function PaywallModal({ visible, onClose, reason = 'no_credits' }
   const fromMenu = reason === 'menu';
   const message =
     reason === 'trial_ended' ? TRIAL_END_MESSAGE : CREDITS_DEPLETED_MESSAGE;
+  const isIapSuccess = success && success.iap === true;
   const title = success
-    ? 'Siparişiniz alındı'
+    ? isIapSuccess
+      ? 'Kredi tanımlandı'
+      : 'Siparişiniz alındı'
     : fromMenu
       ? 'Bildirim paketleri'
       : 'Bildirim hakkın doldu';
   const subtitleText = success
-    ? `Sipariş no: ${success.siparisNo}. Ödeme bilgisi e-posta veya SMS ile iletilecektir. (${success.tutarTL} ₺)`
+    ? isIapSuccess
+      ? `Sipariş no: ${success.siparisNo}. ${success.kredi != null ? success.kredi + ' bildirim kredisi hesabınıza eklendi.' : ''} ${success.kalanKredi != null ? 'Kalan: ' + success.kalanKredi : ''}`
+      : `Sipariş no: ${success.siparisNo}. Ödeme bilgisi e-posta veya SMS ile iletilecektir. (${success.tutarTL} ₺)`
     : fromMenu
       ? 'İhtiyacına uygun paketi seç'
       : message;
 
+  const pendingIapRef = useRef(null);
+  const iapListenerRef = useRef(null);
+
+  useEffect(() => {
+    if (Platform.OS !== 'ios' && Platform.OS !== 'android') return;
+    let RNIap;
+    try {
+      RNIap = require('react-native-iap');
+    } catch (_) {
+      return;
+    }
+    const purchaseErrorSub = RNIap.purchaseErrorListener?.((err) => {
+      if (pendingIapRef.current) {
+        setLoading(false);
+        setLoadingPackageId(null);
+        pendingIapRef.current = null;
+        if (err?.code !== 'E_USER_CANCELLED') {
+          Alert.alert('Satın alma hatası', err?.message || 'İşlem başarısız.');
+        }
+      }
+    });
+
+    const sub = RNIap.purchaseUpdatedListener(async (purchase) => {
+      const pending = pendingIapRef.current;
+      if (!pending) return;
+      try {
+        const platform = Platform.OS;
+        const productId = purchase.productId || purchase.productIdentifier;
+        const body =
+          platform === 'ios'
+            ? {
+                platform: 'ios',
+                receipt: purchase.transactionReceipt || purchase.transactionReceiptIOS,
+                productId,
+              }
+            : {
+                platform: 'android',
+                productId,
+                purchaseToken: purchase.purchaseToken,
+                packageName: 'com.litxtech.mykbs',
+              };
+        if (!body.receipt && !body.purchaseToken) {
+          Alert.alert('Hata', 'Satın alma bilgisi alınamadı.');
+          return;
+        }
+        const { data } = await api.post('/siparis/iap-verify', body);
+        setSuccess({
+          iap: true,
+          siparisNo: data.siparisNo,
+          kredi: data.kredi,
+          kalanKredi: data.ozet?.kalanKredi,
+        });
+        try {
+          await RNIap.finishTransaction?.({ purchase }, true);
+        } catch (_) {}
+      } catch (err) {
+        Alert.alert('Doğrulama hatası', getApiErrorMessage(err));
+      } finally {
+        setLoading(false);
+        setLoadingPackageId(null);
+        pendingIapRef.current = null;
+      }
+    });
+    iapListenerRef.current = { sub, purchaseErrorSub };
+    return () => {
+      sub?.remove?.();
+      purchaseErrorSub?.remove?.();
+      iapListenerRef.current = null;
+    };
+  }, []);
+
   const handleSatınAl = async (pkg) => {
+    setLoading(true);
+    setLoadingPackageId(pkg.id);
+    setSuccess(null);
+    const platform = Platform.OS;
+    const useIap = platform === 'ios' || platform === 'android';
+
+    if (useIap) {
+      try {
+        const RNIap = require('react-native-iap');
+        const productId = getProductIdForPackage(pkg.id, platform);
+        if (!productId) {
+          throw new Error('Bu paket için mağaza ürünü tanımlı değil.');
+        }
+        let connected = false;
+        try {
+          await RNIap.initConnection?.();
+          connected = true;
+        } catch (_) {}
+        if (!connected) throw new Error('Mağaza bağlantısı kurulamadı.');
+        pendingIapRef.current = { pkg };
+        await RNIap.requestPurchase({ sku: productId });
+        return;
+      } catch (err) {
+        const msg = err?.message || getApiErrorMessage(err);
+        Alert.alert('Satın alınamadı', msg, [{ text: 'Tamam', style: 'cancel' }]);
+        setLoading(false);
+        setLoadingPackageId(null);
+        return;
+      }
+    }
+
+    await handleManualOrder(pkg);
+  };
+
+  const handleManualOrder = async (pkg) => {
     setLoading(true);
     setLoadingPackageId(pkg.id);
     setSuccess(null);
@@ -120,13 +233,16 @@ export default function PaywallModal({ visible, onClose, reason = 'no_credits' }
                 <Ionicons name="checkmark-circle" size={48} color={colors.success} />
               </View>
               <Text style={[styles.successTitle, { color: colors.textPrimary }]}>
-                Siparişiniz alındı
+                {title}
               </Text>
               <Text style={[styles.successSub, { color: colors.textSecondary }]}>
                 Sipariş no: {success.siparisNo}
               </Text>
-              <Text style={[styles.successSub, { color: colors.textSecondary }]}>
-                {success.tutarTL} ₺ — Ödeme bilgisi e-posta veya SMS ile iletilecektir.
+              <Text style={[styles.successSub, { color: colors.textSecondary }]} numberOfLines={3}>
+                {isIapSuccess
+                  ? (success.kredi != null ? success.kredi + ' bildirim kredisi hesabınıza eklendi. ' : '') +
+                    (success.kalanKredi != null ? 'Kalan: ' + success.kalanKredi : '')
+                  : success.tutarTL + ' ₺ — Ödeme bilgisi e-posta veya SMS ile iletilecektir.'}
               </Text>
               <TouchableOpacity
                 style={[styles.ctaPrimary, { backgroundColor: colors.primary }]}

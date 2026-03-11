@@ -50,6 +50,7 @@ import LisanslarScreen from './src/screens/LisanslarScreen';
 import PendingUsersScreen from './src/screens/PendingUsersScreen';
 import UsersStack from './src/screens/UsersStack';
 import PaymentsScreen from './src/screens/PaymentsScreen';
+import PaketGecmisiScreen from './src/screens/PaketGecmisiScreen';
 import DestekScreen from './src/screens/DestekScreen';
 import AuditLogScreen from './src/screens/AuditLogScreen';
 import DrawerMenu from './src/components/DrawerMenu';
@@ -320,6 +321,7 @@ function DahaFazlaStack() {
   return (
     <Stack.Navigator screenOptions={{ headerShown: false }}>
       <Stack.Screen name="DahaFazlaMenu" component={DahaFazlaScreen} />
+      <Stack.Screen name="PaketGecmisi" component={PaketGecmisiScreen} />
       <Stack.Screen name="Ayarlar" component={AyarlarScreen} />
       <Stack.Screen name="Izinler" component={IzinlerScreen} />
       <Stack.Screen name="ReceptionistPanel" component={ReceptionistPanelScreen} />

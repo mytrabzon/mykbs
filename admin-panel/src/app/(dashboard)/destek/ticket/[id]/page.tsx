@@ -113,11 +113,12 @@ export default function DestekTicketDetayPage() {
     )
   }
   if (error || !ticket) {
+    const displayError = (error ?? 'Geçersiz id').replace(/\s*SMS ile oluştur[^.]*\.?\s*/gi, '').trim() || 'Geçersiz id'
     return (
       <div className="admin-page">
         <header className="admin-page-header">
           <h1 className="admin-page-title">Talep bulunamadı</h1>
-          <p className="admin-muted">{error ?? 'Geçersiz id'}</p>
+          <p className="admin-muted">{displayError}</p>
         </header>
         <Link href="/destek" className="admin-btn secondary">
           ← Listeye dön

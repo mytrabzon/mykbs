@@ -926,6 +926,22 @@ export default function CheckInScreen({ navigation, route }) {
         <ScrollView style={styles.scrollView} contentContainerStyle={styles.content}>
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>
+              <Ionicons name="bed-outline" size={20} color={theme.colors.primary} /> Oda seçimi
+            </Text>
+            <Text style={styles.sectionSubtitle}>
+              {selectedOda ? `Oda ${selectedOda.odaNumarasi} seçili` : 'Oda seçilmedi'}
+            </Text>
+            <TouchableOpacity
+              style={[styles.odaChangeButton, { minHeight: MIN_BUTTON_SIZE }]}
+              onPress={() => setStep(1)}
+              activeOpacity={0.8}
+            >
+              <Ionicons name="swap-horizontal-outline" size={20} color={theme.colors.primary} />
+              <Text style={styles.odaChangeButtonText}>{selectedOda ? 'Oda değiştir' : 'Oda seç'}</Text>
+            </TouchableOpacity>
+          </View>
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>
               <Ionicons name="id-card-outline" size={20} color={theme.colors.primary} /> Okunan kimlik
             </Text>
             <Text style={styles.sectionSubtitle}>
@@ -1324,6 +1340,24 @@ const styles = StyleSheet.create({
   sectionSubtitle: {
     fontSize: theme.typography.fontSize.sm,
     color: theme.colors.textSecondary,
+  },
+  odaChangeButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: theme.spacing.sm,
+    marginTop: theme.spacing.sm,
+    paddingVertical: theme.spacing.base,
+    paddingHorizontal: theme.spacing.lg,
+    borderRadius: theme.spacing.borderRadius?.button ?? 12,
+    borderWidth: 2,
+    borderColor: theme.colors.primary,
+    backgroundColor: theme.colors.primary + '12',
+  },
+  odaChangeButtonText: {
+    fontSize: theme.typography.fontSize.base,
+    fontWeight: theme.typography.fontWeight.semibold,
+    color: theme.colors.primary,
   },
   emptyContainer: {
     alignItems: 'center',

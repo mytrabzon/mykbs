@@ -327,6 +327,15 @@ export default function LoginScreen({ route }) {
             <TouchableOpacity onPress={() => navigation.navigate('ForgotPassword')}>
               <Text style={[styles.footerLink, { color: colors.primary }]}>Şifremi unuttum</Text>
             </TouchableOpacity>
+            <View style={styles.legalLinksRow}>
+              <TouchableOpacity onPress={() => navigation.navigate('PrivacyConsent')}>
+                <Text style={[styles.footerLink, { color: colors.primary }]}>Gizlilik Politikası</Text>
+              </TouchableOpacity>
+              <Text style={[styles.footerSupport, { color: colors.textSecondary }]}> · </Text>
+              <TouchableOpacity onPress={() => navigation.navigate('TermsConsent')}>
+                <Text style={[styles.footerLink, { color: colors.primary }]}>Kullanım Koşulları</Text>
+              </TouchableOpacity>
+            </View>
             <Text style={[styles.footerSupport, { color: colors.textSecondary }]}>
               Destek:{' '}
               <Text style={{ color: colors.primary }} onPress={() => Linking.openURL(`mailto:${SUPPORT_EMAIL}`)}>{SUPPORT_EMAIL}</Text>
@@ -488,6 +497,13 @@ const styles = StyleSheet.create({
     paddingTop: spacing.lg,
     borderTopWidth: 1,
     alignItems: 'center',
+  },
+  legalLinksRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: spacing.sm,
+    flexWrap: 'wrap',
   },
   footerLink: { fontSize: typography.text.body.fontSize, fontWeight: '600' },
   footerSupport: {

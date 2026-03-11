@@ -2,7 +2,7 @@
  * Otomatik / manuel yedek: Offline kuyruk + (opsiyonel) önbellek verisi.
  * Her gece otomatik yedek için expo-task veya uygulama açılışında "son yedek" kontrolü kullanılabilir.
  */
-import * as FileSystem from 'expo-file-system';
+import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
 import { getPendingQueue } from '../services/offlineKbsDB';
 import AsyncStorage from '@react-native-async-storage/async-storage';

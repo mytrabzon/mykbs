@@ -13,6 +13,7 @@ import { spacing, typography } from '../theme';
 
 const MENU_ITEMS_BASE = [
   { key: 'PaketSatınAl', label: 'Paket satın al', icon: 'pricetag-outline', action: 'paywall' },
+  { key: 'PaketGecmisi', label: 'Paket & Kredi geçmişi', icon: 'receipt-outline', route: 'PaketGecmisi' },
   { key: 'Ayarlar', label: 'Profil ve Ayarlar', icon: 'person-circle-outline', route: 'Ayarlar' },
   { key: 'ReceptionistPanel', label: 'KBS Senkronizasyon', icon: 'sync-outline', route: 'ReceptionistPanel' },
   { key: 'AdminPanel', label: 'Admin Panel', icon: 'shield-outline', route: 'AdminPanel', adminOnly: true },

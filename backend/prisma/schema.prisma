@@ -159,20 +159,21 @@ model OkutulanBelge {
   @@index([createdAt])
 }
 
-// Sipariş (Paket satışı) — mobil "Satın Al" veya admin manuel atama
+// Sipariş (Paket satışı) — mobil "Satın Al" veya admin manuel atama; IAP ile alınanlarda onay yok, doğrudan odendi
 model Siparis {
-  id          String   @id @default(cuid())
-  siparisNo  String   @unique  // Okunabilir: ORD-2024-0001
-  tesisId    String
-  paket      String   // starter, pro, business, enterprise
-  tutarTL    Int      // Kuruş değil, TL
-  kredi      Int      // Bildirim kotası
-  durum      String   @default("pending") // pending, odendi, iptal
-  odemeAt    DateTime? // Ödeme alındığında
-  adminNot   String?  // Admin notu (havale ref no vb.)
-  tesis      Tesis    @relation(fields: [tesisId], references: [id], onDelete: Cascade)
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  id                 String    @id @default(cuid())
+  siparisNo          String    @unique  // Okunabilir: ORD-2024-0001
+  tesisId            String
+  paket              String    // starter, pro, business, enterprise
+  tutarTL            Int      // Kuruş değil, TL
+  kredi              Int      // Bildirim kotası
+  durum              String   @default("pending") // pending, odendi, iptal
+  odemeAt            DateTime? // Ödeme alındığında
+  adminNot           String?  // Admin notu (havale ref no vb.)
+  iapTransactionId   String?   @unique @map("iap_transaction_id") // Apple transactionId veya Google purchaseToken — çift tanımlamayı önler
+  tesis              Tesis    @relation(fields: [tesisId], references: [id], onDelete: Cascade)
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
   @@index([tesisId])
   @@index([durum])
   @@index([createdAt])

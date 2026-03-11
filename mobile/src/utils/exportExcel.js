@@ -1,7 +1,7 @@
 /**
  * Bildirilen misafirleri Excel'e aktar (xlsx) ve paylaş
  */
-import * as FileSystem from 'expo-file-system';
+import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
 import XLSX from 'xlsx';
 import { dataService } from '../services/dataService';

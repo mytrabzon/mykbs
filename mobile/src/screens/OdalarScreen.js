@@ -66,7 +66,7 @@ function LiveDotPulse() {
 export default function OdalarScreen() {
   const navigation = useNavigation();
   const { colors } = useTheme();
-  const { tesis, token, user, isLoading: authLoading, logout, needsPrivacyConsent, needsTermsConsent } = useAuth();
+  const { tesis, token, user, isLoading: authLoading, logout } = useAuth();
   const [odalar, setOdalar] = useState([]);
   const [ozet, setOzet] = useState(null);
   const [filtre, setFiltre] = useState('tumu');
@@ -892,18 +892,6 @@ export default function OdalarScreen() {
         getStatusLabel={getStatusLabel}
         getKBSDurumText={getKBSDurumText}
       />
-      {(needsPrivacyConsent || needsTermsConsent) ? (
-        <TouchableOpacity
-          style={[styles.consentBar, { backgroundColor: colors.primary + '20', borderColor: colors.primary }]}
-          onPress={() => navigation.navigate('ConsentGate')}
-          activeOpacity={0.8}
-        >
-          <Ionicons name="document-text-outline" size={20} color={colors.primary} />
-          <Text style={[styles.consentBarText, { color: colors.primary }]}>
-            Gizlilik politikası ve kullanım şartları
-          </Text>
-        </TouchableOpacity>
-      ) : null}
     </View>
   );
 }
@@ -912,24 +900,6 @@ const { width } = Dimensions.get('window');
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  consentBar: {
-    position: 'absolute',
-    left: theme.spacing.screenPadding,
-    right: theme.spacing.screenPadding,
-    bottom: 90,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    borderRadius: 12,
-    borderWidth: 1,
-    gap: 8,
-  },
-  consentBarText: {
-    fontSize: 14,
-    fontWeight: '600',
-  },
   loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   loadingContent: { alignItems: 'center' },
   loadingText: { marginTop: theme.spacing.base, fontSize: theme.typography.fontSize.base },

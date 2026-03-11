@@ -70,11 +70,25 @@ function extractMrzFromOcr(text) {
   return '';
 }
 
+/** Pasaport/kimlik MRZ'de OCR sık harf–rakam karıştırır (0/O, 1/I, 5/S). Tarih alanı 6 karakterde bunları düzelt. */
+function fixMrzDateOcrChars(s) {
+  if (!s || s.length < 6) return s;
+  const map = { O: '0', Q: '0', D: '0', I: '1', L: '1', Z: '2', S: '5', B: '8', G: '6' };
+  return s.substring(0, 6).split('').map((c) => map[c] || c).join('');
+}
+
+/** MRZ tarih alanı sadece 6 rakam (YYMMDD). OCR hatalı okuyunca harf/< gelirse boş dön; rastgele tarih üretme. */
 function normalizeYYMMDD(yymmdd) {
-  if (!yymmdd || yymmdd.length < 6) return '';
-  const yy = parseInt(yymmdd.substring(0, 2), 10);
-  const mm = yymmdd.substring(2, 4);
-  const dd = yymmdd.substring(4, 6);
+  if (!yymmdd || typeof yymmdd !== 'string' || yymmdd.length < 6) return '';
+  let raw = yymmdd.substring(0, 6).replace(/</g, '0');
+  raw = fixMrzDateOcrChars(raw);
+  if (!/^\d{6}$/.test(raw)) return '';
+  const yy = parseInt(raw.substring(0, 2), 10);
+  const mm = raw.substring(2, 4);
+  const dd = raw.substring(4, 6);
+  const mmNum = parseInt(mm, 10);
+  const ddNum = parseInt(dd, 10);
+  if (mmNum < 1 || mmNum > 12 || ddNum < 1 || ddNum > 31) return '';
   const year = yy <= 30 ? 2000 + yy : 1900 + yy;
   return year + '-' + mm + '-' + dd;
 }
@@ -108,10 +122,10 @@ function normalizeMrzLines(raw) {
   return lines;
 }
 
-/** Parse TD3 (passport) and return fields + checks. */
+/** Parse TD3 (passport) and return fields + checks. Satır 2 tam 44 karaktere kesilir; OCR fazla karakter okursa pozisyon kaymasın. */
 function parseTD3(lines) {
-  const l1 = (lines[0] || '').padEnd(TD3_LINE_LEN, '<');
-  const l2 = (lines[1] || '').padEnd(TD3_LINE_LEN, '<');
+  const l1 = (lines[0] || '').padEnd(TD3_LINE_LEN, '<').slice(0, TD3_LINE_LEN);
+  const l2 = (lines[1] || '').slice(0, TD3_LINE_LEN).padEnd(TD3_LINE_LEN, '<');
   const issuingCountry = l1.substring(2, 5).replace(/</g, '').trim();
   const nameBlock = l1.substring(5, 44);
   const nameParts = nameBlock.split('<<').filter(Boolean);
