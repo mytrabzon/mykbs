@@ -30,6 +30,7 @@ import QRRoomScanScreen from './src/screens/QRRoomScanScreen';
 import KaydedilenlerScreen from './src/screens/KaydedilenlerScreen';
 import ManuelBildirimScreen from './src/screens/ManuelBildirimScreen';
 import AyarlarScreen from './src/screens/AyarlarScreen';
+import IzinlerScreen from './src/screens/IzinlerScreen';
 import OdaDetayScreen from './src/screens/OdaDetayScreen';
 import AdminPanelScreen from './src/screens/AdminPanelScreen';
 import TesisListScreen from './src/screens/TesisListScreen';
@@ -58,6 +59,7 @@ import KycSubmitScreen from './src/features/kyc/KycSubmitScreen';
 import KycManualEntryScreen from './src/features/kyc/KycManualEntryScreen';
 import NfcIntroScreen from './src/features/kyc/NfcIntroScreen';
 import NfcReadScreen from './src/features/nfc/NfcReadScreen';
+import QuickNfcScanScreen from './src/screens/QuickNfcScanScreen';
 import DocumentHubScreen from './src/features/documentRead/DocumentHubScreen';
 import FrontDocumentScanScreen from './src/features/documentRead/FrontDocumentScanScreen';
 import GallerySingleDocumentScreen from './src/features/documentRead/GallerySingleDocumentScreen';
@@ -312,6 +314,7 @@ function DahaFazlaStack() {
     <Stack.Navigator screenOptions={{ headerShown: false }}>
       <Stack.Screen name="DahaFazlaMenu" component={DahaFazlaScreen} />
       <Stack.Screen name="Ayarlar" component={AyarlarScreen} />
+      <Stack.Screen name="Izinler" component={IzinlerScreen} />
       <Stack.Screen name="ReceptionistPanel" component={ReceptionistPanelScreen} />
       <Stack.Screen name="Topluluk" component={ToplulukScreen} />
       <Stack.Screen name="AdminPanel" component={AdminPanelScreen} />
@@ -334,6 +337,7 @@ function MainStack() {
       <Stack.Screen name="PostDetay" component={PostDetayScreen} />
       <Stack.Screen name="PaylasimEkle" component={PaylasimEkleScreen} />
       <Stack.Screen name="ProfilIletisim" component={ProfilIletisimScreen} />
+      <Stack.Screen name="Izinler" component={IzinlerScreen} />
       <Stack.Screen name="ToplulukProfil" component={ToplulukProfilScreen} />
       <Stack.Screen name="AdminPanel" component={AdminPanelScreen} />
       <Stack.Screen name="TesisList" component={TesisListScreen} />
@@ -341,6 +345,7 @@ function MainStack() {
       <Stack.Screen name="ReceptionistPanel" component={ReceptionistPanelScreen} options={{ title: 'KBS Senkronizasyon' }} />
       <Stack.Screen name="MrzScan" component={MrzScanScreen} />
       <Stack.Screen name="NfcRead" component={NfcReadScreen} />
+      <Stack.Screen name="QuickNfcScan" component={QuickNfcScanScreen} />
       <Stack.Screen name="MrzResult" component={MrzResultScreen} />
       <Stack.Screen name="KycSubmit" component={KycSubmitScreen} />
       <Stack.Screen name="KycManualEntry" component={KycManualEntryScreen} />
@@ -517,6 +522,7 @@ function ConnectionErrorScreen({ message, onRetry }) {
 }
 
 function AppNavigator() {
+  const { language } = useLanguage();
   const { isAuthenticated, isLoading, authError, clearAuthError, refreshMe, recoverySessionPending, clearRecoveryPending, needsPrivacyConsent, needsTermsConsent, accountPendingDeletion } = useAuth();
   const hasPrivacyAccepted = !needsPrivacyConsent;
   const hasTermsAccepted = !needsTermsConsent;
@@ -571,7 +577,7 @@ function AppNavigator() {
   const showRecovery = !isAuthenticated && recoverySessionPending;
 
   return (
-    <NavigationContainer>
+    <NavigationContainer key={language}>
       {isAuthenticated && <CreditsOverlay />}
       <Stack.Navigator
         screenOptions={{ headerShown: false }}

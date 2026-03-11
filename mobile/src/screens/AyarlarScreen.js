@@ -670,6 +670,20 @@ export default function AyarlarScreen() {
         </View>
 
         <View style={[styles.section, { backgroundColor: colors.surface }]}>
+          <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>İzinler</Text>
+          <Text style={[styles.infoText, { color: colors.textSecondary, marginBottom: spacing.sm }]}>
+            Kamera, galeri ve bildirim izinlerini görüntüleyin, verin veya ayarlardan kaldırın.
+          </Text>
+          <TouchableOpacity
+            style={[styles.menuRow, { borderBottomWidth: 0 }]}
+            onPress={() => navigation.navigate('Izinler')}
+          >
+            <Text style={[styles.menuRowText, { color: colors.textPrimary }]}>İzinleri yönet</Text>
+            <Ionicons name="chevron-forward" size={20} color={colors.textSecondary} />
+          </TouchableOpacity>
+        </View>
+
+        <View style={[styles.section, { backgroundColor: colors.surface }]}>
           <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>Kimlik / Pasaport</Text>
           <Text style={[styles.infoText, { color: colors.textSecondary }]}>
             Belge okuma için öncelik MRZ (kamera) ile okumadır. İsterseniz NFC ile okumayı açabilirsiniz.

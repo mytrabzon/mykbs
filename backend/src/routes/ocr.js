@@ -106,7 +106,7 @@ function extractMrzLinesFromOcr(text) {
   const rawLines = text.split(/\r\n|\r|\n/)
     .map((l) => l.trim().toUpperCase().replace(/\s/g, '').replace(/[\u00AB\u2039\u203A\u00BB]/g, '<'))
     .map((l) => l.replace(/[^A-Z0-9<]/g, ''))
-    .filter((l) => l.length >= 14);
+    .filter((l) => l.length >= 10);
   // Fotokopi: ardışık kısa satırları birleştir (örn. 15+15 → 30, 22+22 → 44)
   const merged = [];
   let i = 0;
@@ -172,7 +172,8 @@ function extractMrzFromOcr(text) {
   }
   const normalized = normalizeOcrTextForMrz(text);
   const one = normalized.trim();
-  if (one.length >= 78 && one.length <= 96 && /^[A-Z0-9<]+$/.test(one)) {
+  // 88 karakter = pasaport (TD3 2×44); TD1 (3×30) ile çakışmasın
+  if (one.length >= 78 && one.length <= 96 && one.length !== 88 && /^[A-Z0-9<]+$/.test(one)) {
     const a = 30, b = 60;
     const s1 = padMrzLine(one.slice(0, a), 30);
     const s2 = padMrzLine(one.slice(a, b), 30);
@@ -204,6 +205,30 @@ function extractMrzFromOcr(text) {
   }
   if (lines.length >= 3) return lines.slice(0, 3).map((l) => padMrzLine(l, 30)).join('\n');
   if (lines.length === 1 && lines[0].length >= 20) return padMrzLine(lines[0], 30);
+
+  // Kağıt/fotokopi: OCR tüm sayfayı tek blok verince "one" 80–96 olmaz. Uzun metinde MRZ benzeri alt dizi ara.
+  if (one.length >= 80) {
+    let match;
+    const td3Re = /[A-Z0-9<]{80,96}/g;
+    while ((match = td3Re.exec(one)) !== null) {
+      const block = match[0];
+      if (block.length === 88 || (block.length >= 80 && block.length <= 96 && (block.match(/</g) || []).length >= 2)) {
+        const s1 = padMrzLine(block.slice(0, 44), 44);
+        const s2 = padMrzLine(block.slice(44, 88), 44);
+        return s1 + '\n' + s2;
+      }
+    }
+    const td1Re = /[A-Z0-9<]{86,94}/g;
+    while ((match = td1Re.exec(one)) !== null) {
+      const block = match[0];
+      if (block.length !== 88 && (block.match(/</g) || []).length >= 2) {
+        const s1 = padMrzLine(block.slice(0, 30), 30);
+        const s2 = padMrzLine(block.slice(30, 60), 30);
+        const s3 = padMrzLine(block.slice(60), 30);
+        return s1 + '\n' + s2 + '\n' + s3;
+      }
+    }
+  }
   return '';
 }
 

@@ -846,8 +846,17 @@ export default function OdalarScreen() {
         />
       )}
 
-      {/* FAB + half-sheet menü */}
+      {/* NFC (ayarda açıksa) + FAB — tab menü ile artı butonu arasında */}
       <View style={[styles.fabContainer, { zIndex: 20 }]}>
+        {nfcEnabledInSettings && (
+          <TouchableOpacity
+            style={[styles.nfcFab, { backgroundColor: colors.surface, borderColor: colors.primary }]}
+            onPress={() => navigation.navigate('QuickNfcScan')}
+            activeOpacity={0.8}
+          >
+            <Ionicons name="hardware-chip-outline" size={26} color={colors.primary} />
+          </TouchableOpacity>
+        )}
         <TouchableOpacity
           style={[styles.fab, { backgroundColor: colors.primary }]}
           onPress={() => setFabSheetVisible(true)}
@@ -1329,7 +1338,18 @@ const styles = StyleSheet.create({
     position: 'absolute',
     right: theme.spacing.screenPadding,
     bottom: 130,
+    flexDirection: 'row',
     alignItems: 'center',
+    gap: 12,
+  },
+  nfcFab: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    borderWidth: 2,
+    justifyContent: 'center',
+    alignItems: 'center',
+    ...theme.spacing.shadow.lg,
   },
   fab: {
     width: 56,

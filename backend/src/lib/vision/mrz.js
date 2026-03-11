@@ -27,41 +27,42 @@ function padMrzLine(line, targetLen) {
   return line.padEnd(targetLen, '<').slice(0, targetLen);
 }
 
-/** Extract MRZ-like lines from OCR text (TD1 3x30, TD2 2x36, TD3 2x44). */
+/** Extract MRZ-like lines from OCR text (TD1 3x30, TD2 2x36, TD3 2x44). Fotokopi/farklı pasaportlarda OCR uzunluğu 80–96 arası değişebilir; tek blok TD3 aralığı buna göre geniş. */
 function extractMrzFromOcr(text) {
   if (!text || typeof text !== 'string') return '';
-  const one = text.replace(/\s/g, '').trim().toUpperCase();
-  if (/^[A-Z0-9<]+$/.test(one) && one.length >= 88 && one.length <= 92) {
-    const s1 = padMrzLine(one.slice(0, 44), 44);
-    const s2 = padMrzLine(one.slice(44, 88), 44);
-    return s1 + '\n' + s2;
-  }
-  if (/^[A-Z0-9<]+$/.test(one) && one.length >= 70 && one.length <= 74) {
+  const one = text.replace(/\s/g, '').trim().toUpperCase().replace(/[^A-Z0-9<]/g, '');
+  if (one.length >= 70 && one.length <= 74) {
     const s1 = padMrzLine(one.slice(0, 36), 36);
     const s2 = padMrzLine(one.slice(36, 72), 36);
     return s1 + '\n' + s2;
   }
-  // TD1 (Türk kimlik): 3×30 karakter — 86–94 aralığı (88 pasaport ile çakışmasın)
-  if (/^[A-Z0-9<]+$/.test(one) && one.length >= 86 && one.length <= 94 && one.length !== 88) {
+  // TD1 (kimlik 3×30): 90 karakter; 86–94 aralığı (88 = pasaport, atla). TD3’ten önce kontrol et.
+  if (one.length >= 86 && one.length <= 94 && one.length !== 88) {
     const s1 = padMrzLine(one.slice(0, 30), 30);
     const s2 = padMrzLine(one.slice(30, 60), 30);
     const s3 = padMrzLine(one.slice(60), 30);
     return s1 + '\n' + s2 + '\n' + s3;
   }
-  const lines = text.split(/\r\n|\r|\n/).map((l) => l.trim().toUpperCase().replace(/\s/g, ''));
-  const mrzLike = lines.filter((l) => /^[A-Z0-9<]+$/.test(l) && l.length >= 26 && l.length <= 46);
+  // TD3 (pasaport 2×44): 88 ideal; fotokopi/farklı ülkelerde OCR 80–96 dönebilir
+  if (one.length >= 80 && one.length <= 96) {
+    const s1 = padMrzLine(one.slice(0, 44), 44);
+    const s2 = padMrzLine(one.slice(44, 88), 44);
+    return s1 + '\n' + s2;
+  }
+  const lines = text.split(/\r\n|\r|\n/).map((l) => l.trim().toUpperCase().replace(/\s/g, '').replace(/[^A-Z0-9<]/g, ''));
+  const mrzLike = lines.filter((l) => l.length >= 26 && l.length <= 46);
   if (mrzLike.length >= 3 && mrzLike.every((l) => l.length >= 28 && l.length <= 32)) {
     return mrzLike.slice(0, 3).map((l) => padMrzLine(l, 30)).join('\n');
   }
   if (mrzLike.length >= 2 && mrzLike.every((l) => l.length >= 34 && l.length <= 38)) {
     return mrzLike.slice(0, 2).map((l) => padMrzLine(l, 36)).join('\n');
   }
-  if (mrzLike.length >= 2 && mrzLike.every((l) => l.length >= 38 && l.length <= 46)) {
+  if (mrzLike.length >= 2 && mrzLike.every((l) => l.length >= 34 && l.length <= 46)) {
     return mrzLike.slice(0, 2).map((l) => padMrzLine(l, 44)).join('\n');
   }
   if (mrzLike.length >= 2) {
     const l0 = mrzLike[0].length, l1 = mrzLike[1].length;
-    if (l0 >= 40 && l1 >= 40) return padMrzLine(mrzLike[0], 44) + '\n' + padMrzLine(mrzLike[1], 44);
+    if (l0 >= 34 && l1 >= 34 && (l0 >= 38 || l1 >= 38)) return padMrzLine(mrzLike[0], 44) + '\n' + padMrzLine(mrzLike[1], 44);
     if (l0 >= 34 && l1 >= 34) return padMrzLine(mrzLike[0], 36) + '\n' + padMrzLine(mrzLike[1], 36);
     if (l0 >= 28 && l1 >= 28) return padMrzLine(mrzLike[0], 30) + '\n' + padMrzLine(mrzLike[1], 30);
   }
@@ -94,7 +95,17 @@ function normalizeMrzLines(raw) {
   if (one.length >= 70 && one.length <= 74 && /^[A-Z0-9<]+$/.test(one)) {
     return [one.slice(0, 36).padEnd(36, '<'), one.slice(36, 72).padEnd(36, '<')];
   }
-  return (raw || '').replace(/\r\n/g, '\n').replace(/\r/g, '\n').split('\n').map((l) => l.trim().toUpperCase().replace(/\s/g, '')).filter(Boolean);
+  const lines = (raw || '').replace(/\r\n/g, '\n').replace(/\r/g, '\n').split('\n').map((l) => l.trim().toUpperCase().replace(/\s/g, '').replace(/[^A-Z0-9<]/g, '')).filter(Boolean);
+  // TD1 (Türk kimlik): 3 satır — her biri 30 karaktere pad et
+  if (lines.length >= 3 && (lines[0][0] === 'I' || lines[0][0] === 'A')) {
+    const l1 = (lines[0] || '').padEnd(TD1_LINE_LEN, '<').slice(0, TD1_LINE_LEN);
+    const l2 = (lines[1] || '').padEnd(TD1_LINE_LEN, '<').slice(0, TD1_LINE_LEN);
+    const l3 = (lines[2] || '').padEnd(TD1_LINE_LEN, '<').slice(0, TD1_LINE_LEN);
+    if (l1.length >= 28 && l2.length >= 28 && l3.length >= 10) {
+      return [l1, l2, l3];
+    }
+  }
+  return lines;
 }
 
 /** Parse TD3 (passport) and return fields + checks. */
@@ -177,10 +188,12 @@ function parseTD2(lines) {
 
 /** Parse TD1 (ID card). */
 function parseTD1(lines) {
-  const l1 = (lines[0] || '').padEnd(TD1_LINE_LEN, '<');
-  const l2 = (lines[1] || '').padEnd(TD1_LINE_LEN, '<');
+  const l1 = (lines[0] || '').padEnd(TD1_LINE_LEN, '<').slice(0, TD1_LINE_LEN);
+  const l2 = (lines[1] || '').padEnd(TD1_LINE_LEN, '<').slice(0, TD1_LINE_LEN);
   const issuingCountry = l1.substring(2, 5).replace(/</g, '').trim();
-  const documentNumber = l1.substring(5, 14).replace(/</g, '').trim();
+  // Belge no 5-13 (9 kar), check 14. Türk kimlik bazen 10 karakter basar; BAC için ilk 9.
+  let documentNumber = l1.substring(5, 14).replace(/</g, '').trim();
+  if (documentNumber.length > 9) documentNumber = documentNumber.slice(0, 9);
   const docNumberCheck = l1[14];
   const birthDateRaw = l2.substring(0, 6);
   const birthDateCheck = l2[6];
@@ -249,6 +262,18 @@ function parseMrzRaw(mrzRaw, opts = {}) {
     if (ambiguous) return ambiguous;
   }
   const lines = normalizeMrzLines(mrzRaw);
+  if (process.env.DEBUG_MRZ !== '0' && lines.length >= 1) {
+    console.log('[MRZ] Gelen ham satır sayısı:', lines.length, '1. satır uzunluk:', lines[0]?.length, '2.:', lines[1]?.length, '3.:', lines[2]?.length);
+  }
+  // TD1 (Türk kimlik) önce — 3 satır
+  if (lines.length >= 3 && (lines[0][0] === 'I' || lines[0][0] === 'A') && lines[0].length >= 28) {
+    const td1Lines = [
+      (lines[0] || '').padEnd(TD1_LINE_LEN, '<').slice(0, TD1_LINE_LEN),
+      (lines[1] || '').padEnd(TD1_LINE_LEN, '<').slice(0, TD1_LINE_LEN),
+      (lines[2] || '').padEnd(TD1_LINE_LEN, '<').slice(0, TD1_LINE_LEN),
+    ];
+    return parseTD1(td1Lines);
+  }
   const preferId = opts.docTypeHint === 'id';
   if (preferId && lines.length >= 3 && lines[0].length >= 28) return parseTD1(lines);
   if (lines.length >= 2 && lines[0].length >= 38) return parseTD3(lines);

@@ -253,8 +253,9 @@ export default function MrzScanScreen({ navigation }) {
 
   const { readNfcDirect, isReading: nfcIndependentReading, progress: nfcIndependentProgress, closeNfc: closeIndependentNfc, isSupported: nfcReaderSupported } = useIndependentNfcReader();
 
+  /** MRZ ekranında NFC dinlemesi kapalı — NFC artık sadece Hızlı NFC Okuma / Check-in ekranında kullanılıyor */
   const { isScanning: nfcScanning, lastError: nfcError, isSupported: nfcSupported } = useNfcAutoScanner({
-    enabled: !!(permission?.granted || permissionGrantedLocal) && nfcEnabledInSettings,
+    enabled: false,
     alertMessage: 'Pasaport veya kimlik kartını telefonun arkasına yaklaştırın…',
     onTagDetected: (tag) => nfcHandlerRef.current?.(tag),
   });

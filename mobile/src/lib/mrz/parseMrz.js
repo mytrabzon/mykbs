@@ -101,12 +101,14 @@ function parseTD2(lines) {
 }
 
 function parseTD1(lines) {
-  const l1 = (lines[0] || '').padEnd(TD1_LINE_LEN, '<');
-  const l2 = (lines[1] || '').padEnd(TD1_LINE_LEN, '<');
-  const l3 = (lines[2] || '').padEnd(TD1_LINE_LEN, '<');
+  const l1 = (lines[0] || '').padEnd(TD1_LINE_LEN, '<').substring(0, TD1_LINE_LEN);
+  const l2 = (lines[1] || '').padEnd(TD1_LINE_LEN, '<').substring(0, TD1_LINE_LEN);
+  const l3 = (lines[2] || '').padEnd(TD1_LINE_LEN, '<').substring(0, TD1_LINE_LEN);
   const docType = l1[0] === 'I' || l1[0] === 'A' ? 'ID' : 'OTHER';
   const issuingCountry = l1.substring(2, 5).replace(/</g, '').trim();
-  const docNumber = l1.substring(5, 14).replace(/</g, '').trim();
+  // TD1: belge no 5-13 (9 karakter), check digit 14. Türk kimlik bazen 10 karakter basar; BAC için ilk 9 kullanılır.
+  let docNumber = l1.substring(5, 14).replace(/</g, '').trim();
+  if (docNumber.length > 9) docNumber = docNumber.substring(0, 9);
   const docNumberCheck = l1[14];
   const birthDateRaw = l2.substring(0, 6);
   const birthDateCheck = l2[6];
@@ -220,6 +222,16 @@ function normalizeMrzLines(raw) {
   }
   const lines = raw.replace(/\r\n/g, '\n').replace(/\r/g, '\n').split('\n')
     .map((l) => l.trim().toUpperCase().replace(/\s/g, '').replace(/[^A-Z0-9<]/g, '')).filter(Boolean);
+
+  // TD1 (Türk kimlik): 3 satır — her biri 30 karaktere pad et
+  if (lines.length >= 3 && (lines[0][0] === 'I' || lines[0][0] === 'A')) {
+    const l1 = (lines[0] || '').padEnd(TD1_LINE_LEN, '<').substring(0, TD1_LINE_LEN);
+    const l2 = (lines[1] || '').padEnd(TD1_LINE_LEN, '<').substring(0, TD1_LINE_LEN);
+    const l3 = (lines[2] || '').padEnd(TD1_LINE_LEN, '<').substring(0, TD1_LINE_LEN);
+    if (l1.length >= 28 && l2.length >= 28 && l3.length >= 10) {
+      return [l1, l2, l3];
+    }
+  }
   if (lines.length >= 2 && lines[0].length >= 28 && lines[1].length >= 28) {
     const total = lines[0].length + lines[1].length;
     if (total >= 72 && total <= 76 && lines[0].length >= 34 && lines[0].length <= 36) {
@@ -233,8 +245,17 @@ function normalizeMrzLines(raw) {
 }
 
 function parseMrzWithLines(lines) {
+  // TD1 (Türk kimlik) önce — 3 satır, her biri 28+ karakter
+  if (lines.length >= 3 && (lines[0][0] === 'I' || lines[0][0] === 'A') && lines[0].length >= 28) {
+    const td1Lines = [
+      (lines[0] || '').padEnd(TD1_LINE_LEN, '<').substring(0, TD1_LINE_LEN),
+      (lines[1] || '').padEnd(TD1_LINE_LEN, '<').substring(0, TD1_LINE_LEN),
+      (lines[2] || '').padEnd(TD1_LINE_LEN, '<').substring(0, TD1_LINE_LEN),
+    ];
+    return parseTD1(td1Lines);
+  }
   if (lines.length >= 2 && lines[0].length >= 34 && lines[0].length <= 36) return parseTD2(lines);
-  // TD3 pasaport: 28+ satır uzunluğu (İran vb. farklı font/uzunluk)
+  // TD3 pasaport: 2 satır 28+
   if (lines.length >= 2 && lines[0].length >= 28) return parseTD3(lines);
   if (lines.length >= 3 && lines[0].length >= 28) return parseTD1(lines);
   return null;
