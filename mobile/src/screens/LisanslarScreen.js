@@ -31,9 +31,9 @@ export default function LisanslarScreen() {
         <View style={[styles.iconWrap, { backgroundColor: colors.primary + '18' }]}>
           <Ionicons name="card-outline" size={56} color={colors.primary} />
         </View>
-        <Text style={[styles.message, { color: colors.textPrimary }]}>Lisans listesi uygulama içinde gösterilecek.</Text>
+        <Text style={[styles.message, { color: colors.textPrimary }]}>Lisanslar</Text>
         <Text style={[styles.sub, { color: colors.textSecondary }]}>
-          Bu bölüm hazırlanıyor; veriler backend API üzerinden uygulama içinde listelenecektir.
+          Henüz kayıt yok. Liste burada görüntülenecektir.
         </Text>
       </View>
     </View>

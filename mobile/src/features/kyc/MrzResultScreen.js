@@ -1,7 +1,8 @@
 import React, { useState, useCallback } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, ActivityIndicator, Image } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import Toast from 'react-native-toast-message';
+import * as FileSystem from 'expo-file-system/legacy';
 import { theme } from '../../theme';
 import { validateMrz, toMinimalPayload } from '../../lib/mrz';
 import { maskMrz } from '../../lib/security/maskMrz';
@@ -22,8 +23,13 @@ export default function MrzResultScreen({ route, navigation }) {
   const raw = payload?.raw ?? '';
   const scanDurationMs = route?.params?.scanDurationMs ?? 0;
   const fromNfc = route?.params?.fromNfc === true;
+  const photoUri = route?.params?.photoUri ?? null;
+  const portraitBase64 = route?.params?.portraitBase64 ?? null;
   const [savingOkutulan, setSavingOkutulan] = useState(false);
   const [savedToOkutulan, setSavedToOkutulan] = useState(false);
+
+  const chipPhotoBase64 = payload?.chipPhotoBase64 && typeof payload.chipPhotoBase64 === 'string' ? payload.chipPhotoBase64 : null;
+  const displayPhotoUri = portraitBase64 ? `data:image/jpeg;base64,${portraitBase64}` : chipPhotoBase64 ? `data:image/jpeg;base64,${chipPhotoBase64}` : photoUri;
 
   const validation = fromNfc
     ? { valid: !!((payload?.givenNames || payload?.ad) && (payload?.surname || payload?.soyad)), reason: null }
@@ -70,6 +76,14 @@ export default function MrzResultScreen({ route, navigation }) {
       dogumTarihi,
       uyruk: (payload.nationality || payload.uyruk || 'TÜRK').trim(),
     };
+    if (photoUri && typeof photoUri === 'string') {
+      try {
+        const base64 = await FileSystem.readAsStringAsync(photoUri, { encoding: FileSystem.EncodingType.Base64 });
+        if (base64) body.photoBase64 = base64;
+      } catch (_) {}
+    }
+    const portrait = portraitBase64 || chipPhotoBase64;
+    if (portrait && typeof portrait === 'string') body.portraitPhotoBase64 = portrait;
     setSavingOkutulan(true);
     try {
       await api.post('/okutulan-belgeler', body);
@@ -80,7 +94,7 @@ export default function MrzResultScreen({ route, navigation }) {
     } finally {
       setSavingOkutulan(false);
     }
-  }, [payload]);
+  }, [payload, photoUri, portraitBase64, chipPhotoBase64]);
 
   if (!payload) {
     return (
@@ -111,6 +125,12 @@ export default function MrzResultScreen({ route, navigation }) {
         {fromNfc && !validation.valid && (
           <Text style={styles.warningText}>Ad/soyad çipten okunamadı. Kaydetmek için MRZ ile tekrar okuyabilir veya belge no ile kaydedebilirsiniz.</Text>
         )}
+        {displayPhotoUri ? (
+          <View style={styles.photoWrap}>
+            <Image source={{ uri: displayPhotoUri }} style={styles.photo} resizeMode="cover" />
+            <Text style={styles.photoLabel}>{(portraitBase64 || chipPhotoBase64) ? 'Kimlik resmi' : 'Belge'}</Text>
+          </View>
+        ) : null}
         <Row label="Belge no" value={payload.passportNumber || payload.kimlikNo || payload.pasaportNo} mask />
         <Row label="Ülke" value={payload.issuingCountry || payload.nationality || payload.uyruk} />
         <Row label="Doğum" value={payload.birthDate || payload.dogumTarihi} />
@@ -174,6 +194,9 @@ const styles = StyleSheet.create({
   rowLine: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: theme.spacing.xs, borderBottomWidth: 1, borderBottomColor: theme.colors.border },
   label: { fontSize: theme.typography.fontSize.sm, color: theme.colors.textSecondary },
   value: { fontSize: theme.typography.fontSize.base, color: theme.colors.textPrimary },
+  photoWrap: { alignSelf: 'center', width: 120, height: 150, borderRadius: 8, overflow: 'hidden', backgroundColor: theme.colors.gray100 || '#f0f0f0', marginBottom: theme.spacing.base },
+  photo: { width: '100%', height: '100%' },
+  photoLabel: { fontSize: 11, color: theme.colors.textSecondary, textAlign: 'center', marginTop: 4 },
   masked: { fontSize: 12, color: theme.colors.textSecondary, marginTop: theme.spacing.sm },
   errorText: { marginBottom: theme.spacing.lg, color: theme.colors.error },
   button: { ...theme.styles.button.primary, marginBottom: theme.spacing.sm },

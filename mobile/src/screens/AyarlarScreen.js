@@ -791,27 +791,39 @@ export default function AyarlarScreen() {
           ) : okutulanBelgeler.length === 0 ? (
             <Text style={[styles.infoText, { color: colors.textSecondary }]}>Henüz kayıt yok.</Text>
           ) : (
-            okutulanBelgeler.slice(0, 30).map((b) => (
-              <TouchableOpacity
-                key={b.id}
-                style={[styles.okutulanBelgeRow, { borderBottomColor: colors.border }]}
-                onPress={() => setOkutulanBelgeDetail(b)}
-                activeOpacity={0.7}
-              >
-                <View style={styles.okutulanBelgeMain}>
-                  <Text style={[styles.okutulanBelgeName, { color: colors.textPrimary }]}>
-                    {b.ad} {b.soyad}
-                  </Text>
-                  <Text style={[styles.infoText, { color: colors.textSecondary }]}>
-                    {b.belgeTuru === 'kimlik' ? 'Kimlik' : 'Pasaport'}
-                    {(b.kimlikNo || b.pasaportNo || b.belgeNo) && ` · ${b.kimlikNo || b.pasaportNo || b.belgeNo}`}
-                    {' · '}
-                    {b.createdAt ? new Date(b.createdAt).toLocaleDateString('tr-TR') : ''}
-                  </Text>
-                </View>
-                <Ionicons name="chevron-forward" size={20} color={colors.textSecondary} />
-              </TouchableOpacity>
-            ))
+            okutulanBelgeler.slice(0, 30).map((b) => {
+              const baseUrl = getApiBaseUrl();
+              const thumbPath = b.portraitPhotoUrl || b.photoUrl;
+              const thumbUri = thumbPath
+                ? (thumbPath.startsWith('http') ? thumbPath : `${(baseUrl || '').replace(/\/$/, '')}${thumbPath}`)
+                : null;
+              return (
+                <TouchableOpacity
+                  key={b.id}
+                  style={[styles.okutulanBelgeRow, { borderBottomColor: colors.border }]}
+                  onPress={() => setOkutulanBelgeDetail(b)}
+                  activeOpacity={0.7}
+                >
+                  {thumbUri ? (
+                    <Image source={{ uri: thumbUri }} style={styles.okutulanBelgeThumb} resizeMode="cover" />
+                  ) : (
+                    <View style={[styles.okutulanBelgeThumbPlaceholder, { backgroundColor: colors.border }]} />
+                  )}
+                  <View style={styles.okutulanBelgeMain}>
+                    <Text style={[styles.okutulanBelgeName, { color: colors.textPrimary }]}>
+                      {b.ad} {b.soyad}
+                    </Text>
+                    <Text style={[styles.infoText, { color: colors.textSecondary }]}>
+                      {b.belgeTuru === 'kimlik' ? 'Kimlik' : 'Pasaport'}
+                      {(b.kimlikNo || b.pasaportNo || b.belgeNo) && ` · ${b.kimlikNo || b.pasaportNo || b.belgeNo}`}
+                      {' · '}
+                      {b.createdAt ? new Date(b.createdAt).toLocaleDateString('tr-TR') : ''}
+                    </Text>
+                  </View>
+                  <Ionicons name="chevron-forward" size={20} color={colors.textSecondary} />
+                </TouchableOpacity>
+              );
+            })
           )}
         </View>
 
@@ -1041,9 +1053,12 @@ export default function AyarlarScreen() {
               </View>
               {okutulanBelgeDetail && (
                 <ScrollView style={styles.okutulanDetailScroll} showsVerticalScrollIndicator={false}>
-                  {okutulanBelgeDetail.photoUrl && (() => {
+                  {(() => {
                     const baseUrl = getApiBaseUrl();
-                    const photoUri = baseUrl ? `${baseUrl.replace(/\/$/, '')}${okutulanBelgeDetail.photoUrl}` : null;
+                    const path = okutulanBelgeDetail.photoUrl || okutulanBelgeDetail.portraitPhotoUrl;
+                    const photoUri = path
+                      ? (path.startsWith('http') ? path : `${(baseUrl || '').replace(/\/$/, '')}${path}`)
+                      : null;
                     return photoUri ? (
                       <View style={styles.okutulanDetailPhotoWrap}>
                         <Image source={{ uri: photoUri }} style={styles.okutulanDetailPhoto} resizeMode="cover" />
@@ -1277,6 +1292,18 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingVertical: spacing.sm,
     borderBottomWidth: 1,
+  },
+  okutulanBelgeThumb: {
+    width: 44,
+    height: 44,
+    borderRadius: 6,
+    marginRight: spacing.sm,
+  },
+  okutulanBelgeThumbPlaceholder: {
+    width: 44,
+    height: 44,
+    borderRadius: 6,
+    marginRight: spacing.sm,
   },
   okutulanBelgeMain: { flex: 1 },
   okutulanBelgeName: {

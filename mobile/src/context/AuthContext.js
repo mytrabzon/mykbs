@@ -1,4 +1,5 @@
 import React, { createContext, useState, useContext, useEffect, useRef, useCallback } from 'react';
+import { AppState } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { api, setApiTokenProvider, setOnUnauthorized } from '../services/api';
 import { dataService, setDataServiceTokenProvider } from '../services/dataService';
@@ -397,6 +398,31 @@ export const AuthProvider = ({ children }) => {
       if (timeoutId) clearTimeout(timeoutId);
       if (sub?.unsubscribe) sub.unsubscribe();
     };
+  }, []);
+
+  // Uygulama ön plana geldiğinde sessizce token yenile (arka plandan dönünce 401 önlenir)
+  useEffect(() => {
+    if (!supabase) return;
+    const refreshTokenSilently = async () => {
+      try {
+        const { data: { session: refreshed }, error } = await refreshSessionWithRetry();
+        if (!mounted.current || error || !refreshed?.access_token) return;
+        await AsyncStorage.setItem(AUTH_STORAGE_KEYS.TOKEN, refreshed.access_token);
+        await AsyncStorage.setItem(AUTH_STORAGE_KEYS.SUPABASE_TOKEN, refreshed.access_token);
+        setToken(refreshed.access_token);
+        setApiTokenProvider(() => Promise.resolve(refreshed.access_token));
+        setDataServiceTokenProvider(() => Promise.resolve(refreshed.access_token));
+        const now = Date.now();
+        if (now - lastFetchMeAtRef.current >= ME_REFRESH_THROTTLE_MS) {
+          lastFetchMeAtRef.current = now;
+          fetchMeAndSetState(refreshed.access_token, setUser, setTesis, setToken, getSupabaseAwareTokenProvider, setPrivacyPolicyAcceptedAt, setTermsOfServiceAcceptedAt, setAccountPendingDeletion, setDeletionAt, setGuest, undefined, me429Options).catch(() => {});
+        }
+      } catch (_) {}
+    };
+    const subscription = AppState.addEventListener('change', (state) => {
+      if (state === 'active') refreshTokenSilently();
+    });
+    return () => subscription?.remove?.();
   }, []);
 
   // Önce canlı Supabase oturumunu kullan; yoksa storage'daki SUPABASE_TOKEN (backend sadece Supabase token dönmüşse geçerli).

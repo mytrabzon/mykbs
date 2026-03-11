@@ -1,8 +1,8 @@
 /**
  * Destek talebi — hamburger menüden açılır; konu + mesaj ile talebi backend'e gönderir.
- * Admin panelde destek talepleri listesinde anında görünür.
+ * Admin: Açılan talepler bu ekranda ve web panelde Destek sayfasında görünür.
  */
-import React, { useState } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import {
   View,
   Text,
@@ -13,21 +13,84 @@ import {
   KeyboardAvoidingView,
   Platform,
   ActivityIndicator,
+  RefreshControl,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../context/ThemeContext';
 import { useAuth } from '../context/AuthContext';
 import { api } from '../services/api';
+import { getBackendUrl } from '../services/apiSupabase';
+import { getEffectiveRole } from '../utils/adminAuth';
 import Toast from 'react-native-toast-message';
+
+function statusLabel(status) {
+  if (status === 'acik') return 'Açık';
+  if (status === 'cevaplandi') return 'Cevaplandı';
+  if (status === 'kapatildi') return 'Kapatıldı';
+  return status || '—';
+}
+
+function TicketCard({ item, colors }) {
+  const dateStr = item.createdAt
+    ? new Date(item.createdAt).toLocaleString('tr-TR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })
+    : '—';
+  return (
+    <View style={[styles.ticketCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+      <View style={styles.ticketHeader}>
+        <Text style={[styles.ticketId, { color: colors.textSecondary }]}>#{String(item.id).slice(-8)}</Text>
+        <Text style={[styles.ticketStatus, { color: colors.primary }]}>{statusLabel(item.status)}</Text>
+        <Text style={[styles.ticketDate, { color: colors.textSecondary }]}>{dateStr}</Text>
+      </View>
+      <Text style={[styles.ticketSubject, { color: colors.textPrimary }]} numberOfLines={1}>{item.subject}</Text>
+      {(item.tesisAdi || item.authorName) && (
+        <Text style={[styles.ticketMeta, { color: colors.textSecondary }]} numberOfLines={1}>
+          {[item.tesisAdi, item.authorName].filter(Boolean).join(' · ')}
+        </Text>
+      )}
+      <Text style={[styles.ticketMessage, { color: colors.textSecondary }]} numberOfLines={2}>{item.message}</Text>
+    </View>
+  );
+}
 
 export default function DestekScreen({ navigation }) {
   const insets = useSafeAreaInsets();
   const { colors } = useTheme();
-  const { tesis } = useAuth();
+  const { tesis, token, user } = useAuth();
+  const isAdmin = ['admin', 'super_admin'].includes(getEffectiveRole(user));
   const [subject, setSubject] = useState('');
   const [message, setMessage] = useState('');
   const [sending, setSending] = useState(false);
+  const [tickets, setTickets] = useState([]);
+  const [ticketsLoading, setTicketsLoading] = useState(false);
+  const [ticketsRefreshing, setTicketsRefreshing] = useState(false);
+
+  const fetchTickets = useCallback(async (isRefresh = false) => {
+    if (!isAdmin) return;
+    if (isRefresh) setTicketsRefreshing(true);
+    else setTicketsLoading(true);
+    const base = getBackendUrl();
+    if (!base || !token) {
+      setTicketsLoading(false);
+      setTicketsRefreshing(false);
+      return;
+    }
+    try {
+      const r = await fetch(`${base}/api/app-admin/support`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const json = await r.json().catch(() => ({}));
+      if (r.ok) setTickets(json.tickets || []);
+    } catch (_) {
+      setTickets([]);
+    }
+    setTicketsLoading(false);
+    setTicketsRefreshing(false);
+  }, [isAdmin, token]);
+
+  useEffect(() => {
+    if (isAdmin) fetchTickets();
+  }, [isAdmin, fetchTickets]);
 
   const handleBack = () => {
     if (navigation.canGoBack()) navigation.goBack();
@@ -88,7 +151,24 @@ export default function DestekScreen({ navigation }) {
           contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 24 }]}
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
+          refreshControl={isAdmin ? <RefreshControl refreshing={ticketsRefreshing} onRefresh={() => fetchTickets(true)} colors={[colors.primary]} /> : undefined}
         >
+          {isAdmin && (
+            <View style={styles.ticketsSection}>
+              <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>Açılan talepler</Text>
+              <Text style={[styles.sectionSub, { color: colors.textSecondary }]}>
+                Web panelde de: Giriş yap → Sol menü → Destek
+              </Text>
+              {ticketsLoading && tickets.length === 0 ? (
+                <ActivityIndicator size="small" color={colors.primary} style={styles.ticketsLoader} />
+              ) : tickets.length === 0 ? (
+                <Text style={[styles.ticketsEmpty, { color: colors.textSecondary }]}>Henüz talep yok</Text>
+              ) : (
+                tickets.slice(0, 20).map((t) => <TicketCard key={t.id} item={t} colors={colors} />)
+              )}
+            </View>
+          )}
+
           <View style={[styles.card, { backgroundColor: colors.surface, borderColor }]}>
             <View style={[styles.iconWrap, { backgroundColor: (colors.primary || '#06B6D4') + '18' }]}>
               <Ionicons name="help-buoy" size={40} color={colors.primary || '#06B6D4'} />
@@ -143,6 +223,11 @@ export default function DestekScreen({ navigation }) {
           {tesis?.tesisAdi && (
             <Text style={[styles.footerHint, { color: colors.textSecondary }]}>
               Talep tesisiniz ({tesis.tesisAdi}) ile ilişkilendirilecektir.
+            </Text>
+          )}
+          {!isAdmin && (
+            <Text style={[styles.footerHint, { color: colors.textSecondary }]}>
+              Açılan talepler admin tarafından web panelde (Destek sayfası) görüntülenir.
             </Text>
           )}
         </ScrollView>
@@ -202,4 +287,22 @@ const styles = StyleSheet.create({
   },
   submitText: { fontSize: 16, fontWeight: '600', color: '#fff' },
   footerHint: { fontSize: 12, textAlign: 'center', marginTop: 16 },
+  ticketsSection: { marginBottom: 24 },
+  sectionTitle: { fontSize: 18, fontWeight: '600', marginBottom: 4 },
+  sectionSub: { fontSize: 13, marginBottom: 12 },
+  ticketsLoader: { marginVertical: 16 },
+  ticketsEmpty: { fontSize: 14, marginVertical: 12 },
+  ticketCard: {
+    borderWidth: 1,
+    borderRadius: 12,
+    padding: 14,
+    marginBottom: 10,
+  },
+  ticketHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 6 },
+  ticketId: { fontSize: 12, marginRight: 8 },
+  ticketStatus: { fontSize: 12, fontWeight: '600', marginRight: 8 },
+  ticketDate: { fontSize: 11, flex: 1, textAlign: 'right' },
+  ticketSubject: { fontSize: 15, fontWeight: '600' },
+  ticketMeta: { fontSize: 12, marginTop: 4 },
+  ticketMessage: { fontSize: 13, marginTop: 6, lineHeight: 18 },
 });

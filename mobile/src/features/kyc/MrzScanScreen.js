@@ -213,6 +213,9 @@ export default function MrzScanScreen({ navigation }) {
   const acceptedRawRef = useRef(''); // Aynı MRZ ile çift tetiklemeyi engelle (anlık kabul)
   const mrzLockedRef = useRef(false);
   const lockedDocTypeRef = useRef(DocType.ID);
+  /** MrzResult'a fotoğraf taşımak için ref'ler (acceptAndNavigate callback içinde güncel değer lazım) */
+  const frontImageUriRef = useRef(null);
+  const portraitBase64Ref = useRef(null);
   const selectedDocTypeRef = useRef(DocType.ID);
   const hasLeftScreenRef = useRef(false);
   const scanStartTimeRef = useRef(0);
@@ -233,6 +236,12 @@ export default function MrzScanScreen({ navigation }) {
     if (!docNo) return;
     setLastMrzForBac({ documentNumber: docNo, passportNumber: docNo, birthDate: p.birthDate, expiryDate: p.expiryDate });
   }, [instantPayload]);
+
+  /** MrzResult'a fotoğraf taşımak için ref'leri state ile senkron tut */
+  useEffect(() => {
+    frontImageUriRef.current = frontImageUri;
+    portraitBase64Ref.current = portraitBase64;
+  }, [frontImageUri, portraitBase64]);
 
   /** Android'de onMountError sonrası yeniden denemek için key artırılır */
   const [unifiedCameraMountKey, setUnifiedCameraMountKey] = useState(0);
@@ -718,6 +727,8 @@ export default function MrzScanScreen({ navigation }) {
         lockedDocTypeRef.current = selectedDocTypeRef.current;
         setMrzLocked(true);
         if (timeoutRef.current) clearTimeout(timeoutRef.current);
+        const photoUriForNav = frontImageUriRef.current;
+        const portraitForNav = portraitBase64Ref.current;
         setFrontImageUri(null);
         setMergedPayload(null);
         if (p && (p.documentNumber || p.passportNumber) && p.birthDate && p.expiryDate) {
@@ -737,10 +748,16 @@ export default function MrzScanScreen({ navigation }) {
               dogumTarihi: p.birthDate || null,
               uyruk: (p.nationality || 'TÜRK').trim(),
             },
-            null
+            photoUriForNav || null,
+            portraitForNav || undefined
           );
         } else {
-          navigation.replace('MrzResult', { payload: p, scanDurationMs });
+          navigation.replace('MrzResult', {
+            payload: p,
+            scanDurationMs,
+            photoUri: photoUriForNav || undefined,
+            portraitBase64: portraitForNav || undefined,
+          });
         }
       };
 
@@ -754,6 +771,20 @@ export default function MrzScanScreen({ navigation }) {
         setMergedPayload(null);
         setInstantPayload(p);
         setScanDurationMs(scanDurationMs);
+      };
+
+      /** Native MRZ sonrası: kamera ref varsa bir kare çek, ref'e yaz; sonra acceptAndNavigate çağır. */
+      const tryCaptureThenAccept = (p) => {
+        (async () => {
+          const cam = unifiedCameraRef.current;
+          if (cam && typeof cam.takePictureAsync === 'function') {
+            try {
+              const photo = await cam.takePictureAsync({ quality: 0.9, base64: false });
+              if (photo?.uri) frontImageUriRef.current = photo.uri;
+            } catch (_) {}
+          }
+          acceptAndNavigate(p);
+        })();
       };
 
       if (payload.checks?.ok) {
@@ -775,10 +806,8 @@ export default function MrzScanScreen({ navigation }) {
         }
         if (SHOW_INSTANT_RESULT && fromCheckIn) {
           acceptInstant(enriched);
-        } else if (SHOW_INSTANT_RESULT && !fromCheckIn) {
-          acceptAndNavigate(enriched);
         } else {
-          acceptAndNavigate(enriched);
+          tryCaptureThenAccept(enriched);
         }
         return;
       }
@@ -801,7 +830,7 @@ export default function MrzScanScreen({ navigation }) {
         if (SHOW_INSTANT_RESULT && fromCheckIn) {
           acceptInstant(enriched);
         } else {
-          acceptAndNavigate(enriched);
+          tryCaptureThenAccept(enriched);
         }
         return;
       }
@@ -854,6 +883,8 @@ export default function MrzScanScreen({ navigation }) {
         logger.info('[MRZ okuma] backend/galeri okundu', { tip: kind });
         setMrzCheckFailed(!payload.checks?.ok);
         triggerReadSuccessFeedback();
+        const photoUriForNav = frontImageUriRef.current;
+        const portraitForNav = portraitBase64Ref.current;
         setFrontImageUri(null);
         setMergedPayload(null);
         const scanDurationMs = scanStartTimeRef.current ? Date.now() - scanStartTimeRef.current : 0;
@@ -861,8 +892,28 @@ export default function MrzScanScreen({ navigation }) {
           setInstantPayload(enriched);
         } else if (fromCheckIn) {
           navigation.replace('CheckIn', { mrzPayload: enriched, selectedOda: route.params?.selectedOda, scanDurationMs });
+          const num = (enriched.passportNumber || enriched.documentNumber || '').trim();
+          const isTc = /^\d{11}$/.test(num);
+          saveOkutulanBelgeAsync(
+            {
+              ad: (enriched.givenNames || '').trim(),
+              soyad: (enriched.surname || '').trim(),
+              kimlikNo: isTc ? num : null,
+              pasaportNo: !isTc ? num : null,
+              belgeNo: num || null,
+              dogumTarihi: enriched.birthDate || null,
+              uyruk: (enriched.nationality || 'TÜRK').trim(),
+            },
+            photoUriForNav || null,
+            portraitForNav || undefined
+          );
         } else {
-          navigation.replace('MrzResult', { payload: enriched, scanDurationMs });
+          navigation.replace('MrzResult', {
+            payload: enriched,
+            scanDurationMs,
+            photoUri: photoUriForNav || undefined,
+            portraitBase64: portraitForNav || undefined,
+          });
         }
       } else {
         setLastMrzChecksReason(payload.checks?.reason || 'invalid_format');

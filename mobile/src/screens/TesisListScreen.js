@@ -15,7 +15,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../context/ThemeContext';
 import { useAuth } from '../context/AuthContext';
 import { getBackendUrl } from '../services/apiSupabase';
-import { getIsAdminPanelUser } from '../utils/adminAuth';
+import { getIsAdminPanelUser, getEffectiveRole } from '../utils/adminAuth';
 
 const HIT_SLOP = { top: 12, bottom: 12, left: 12, right: 12 };
 const CARD_PADDING = 16;
@@ -51,7 +51,7 @@ export default function TesisListScreen() {
   const insets = useSafeAreaInsets();
   const { colors } = useTheme();
   const { user, token } = useAuth();
-  const isAdmin = getIsAdminPanelUser(user);
+  const isAdmin = getIsAdminPanelUser(user) || getEffectiveRole(user) === 'admin';
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState(null);

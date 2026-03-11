@@ -36,7 +36,7 @@ export default function LiveStreamScreen() {
         </View>
         <Text style={[styles.message, { color: colors.textPrimary }]}>Canlı olay akışı bu bölümde aktiftir.</Text>
         <Text style={[styles.sub, { color: colors.textSecondary }]}>
-          Alarm kuralları ve SSE/WebSocket entegrasyonu geliştirme aşamasındadır. Tüm veriler uygulama içinden takip edilecektir.
+          Alarm kuralları ve canlı olay akışı burada takip edilecektir.
         </Text>
       </View>
     </View>
