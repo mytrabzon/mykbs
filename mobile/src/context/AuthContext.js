@@ -3,6 +3,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { api, setApiTokenProvider, setOnUnauthorized } from '../services/api';
 import { dataService, setDataServiceTokenProvider } from '../services/dataService';
 import { logger } from '../utils/logger';
+import { getIsAdminPanelUser } from '../utils/adminAuth';
 import { supabase, refreshSessionWithRetry } from '../lib/supabase/supabase';
 
 const APP_PREFIX = 'mykbs';
@@ -58,7 +59,10 @@ async function fetchMeAndSetState(accessToken, setUser, setTesis, setToken, getT
       setDataServiceTokenProvider(getToken);
       const storedUser = await AsyncStorage.getItem(AUTH_STORAGE_KEYS.USER);
       const storedTesis = await AsyncStorage.getItem(AUTH_STORAGE_KEYS.TESIS);
-      if (storedUser) setUser(JSON.parse(storedUser));
+      if (storedUser) {
+        const parsed = JSON.parse(storedUser);
+        setUser({ ...parsed, isAdmin: getIsAdminPanelUser(parsed) });
+      }
       if (storedTesis) setTesis(JSON.parse(storedTesis));
       logger.warn('AuthContext fetch /me: 429 backoff, using cache');
     } catch (_) {}
@@ -74,8 +78,9 @@ async function fetchMeAndSetState(accessToken, setUser, setTesis, setToken, getT
     const res = await api.get('/auth/me', { timeout: 10000 });
     const { kullanici, tesis: tesisData, privacyPolicyAcceptedAt, termsOfServiceAcceptedAt, accountPendingDeletion, deletionAt } = res.data || {};
     if (kullanici) {
-      setUser(kullanici);
-      await AsyncStorage.setItem(AUTH_STORAGE_KEYS.USER, JSON.stringify(kullanici));
+      const userWithAdmin = { ...kullanici, isAdmin: getIsAdminPanelUser(kullanici) };
+      setUser(userWithAdmin);
+      await AsyncStorage.setItem(AUTH_STORAGE_KEYS.USER, JSON.stringify(userWithAdmin));
     }
     if (tesisData) {
       setTesis(tesisData);
@@ -120,7 +125,8 @@ async function fetchMeAndSetState(accessToken, setUser, setTesis, setToken, getT
         const storedUser = await AsyncStorage.getItem(AUTH_STORAGE_KEYS.USER);
         const storedTesis = await AsyncStorage.getItem(AUTH_STORAGE_KEYS.TESIS);
         if (storedUser) {
-          setUser(JSON.parse(storedUser));
+          const parsed = JSON.parse(storedUser);
+          setUser({ ...parsed, isAdmin: getIsAdminPanelUser(parsed) });
         }
         if (storedTesis) {
           setTesis(JSON.parse(storedTesis));
@@ -137,7 +143,10 @@ async function fetchMeAndSetState(accessToken, setUser, setTesis, setToken, getT
       try {
         const storedUser = await AsyncStorage.getItem(AUTH_STORAGE_KEYS.USER);
         const storedTesis = await AsyncStorage.getItem(AUTH_STORAGE_KEYS.TESIS);
-        if (storedUser) setUser(JSON.parse(storedUser));
+        if (storedUser) {
+          const parsed = JSON.parse(storedUser);
+          setUser({ ...parsed, isAdmin: getIsAdminPanelUser(parsed) });
+        }
         if (storedTesis) setTesis(JSON.parse(storedTesis));
         logger.warn('AuthContext fetch /me: 429 rate limit, using cached auth state');
       } catch (_) {}
@@ -148,7 +157,10 @@ async function fetchMeAndSetState(accessToken, setUser, setTesis, setToken, getT
       try {
         const storedUser = await AsyncStorage.getItem(AUTH_STORAGE_KEYS.USER);
         const storedTesis = await AsyncStorage.getItem(AUTH_STORAGE_KEYS.TESIS);
-        if (storedUser) setUser(JSON.parse(storedUser));
+        if (storedUser) {
+          const parsed = JSON.parse(storedUser);
+          setUser({ ...parsed, isAdmin: getIsAdminPanelUser(parsed) });
+        }
         if (storedTesis) setTesis(JSON.parse(storedTesis));
         logger.warn('AuthContext fetch /me: 500, using cached auth state');
       } catch (_) {}
@@ -277,7 +289,10 @@ export const AuthProvider = ({ children }) => {
           if (session?.access_token && mounted.current) {
             const storedUser = await AsyncStorage.getItem(AUTH_STORAGE_KEYS.USER);
             const storedTesis = await AsyncStorage.getItem(AUTH_STORAGE_KEYS.TESIS);
-            if (storedUser && mounted.current) setUser(JSON.parse(storedUser));
+            if (storedUser && mounted.current) {
+              const parsed = JSON.parse(storedUser);
+              setUser({ ...parsed, isAdmin: getIsAdminPanelUser(parsed) });
+            }
             if (storedTesis && mounted.current) setTesis(JSON.parse(storedTesis));
             await AsyncStorage.setItem(AUTH_STORAGE_KEYS.TOKEN, session.access_token);
             await AsyncStorage.setItem(AUTH_STORAGE_KEYS.SUPABASE_TOKEN, session.access_token);
@@ -299,7 +314,8 @@ export const AuthProvider = ({ children }) => {
             const storedTesis = await AsyncStorage.getItem(AUTH_STORAGE_KEYS.TESIS);
             if (storedToken && storedUser && mounted.current) {
               setToken(storedToken);
-              setUser(JSON.parse(storedUser));
+              const parsed = JSON.parse(storedUser);
+              setUser({ ...parsed, isAdmin: getIsAdminPanelUser(parsed) });
               setTesis(storedTesis ? JSON.parse(storedTesis) : null);
               const getToken = async () => await AsyncStorage.getItem(AUTH_STORAGE_KEYS.TOKEN);
               setApiTokenProvider(getToken);
@@ -307,7 +323,8 @@ export const AuthProvider = ({ children }) => {
               try {
                 const res = await api.get('/auth/me');
                 if (res?.data && mounted.current) {
-                  setUser(res.data.kullanici ?? res.data.user);
+                  const k = res.data.kullanici ?? res.data.user;
+                  setUser(k ? { ...k, isAdmin: getIsAdminPanelUser(k) } : null);
                   setTesis(res.data.tesis ?? res.data.tesisData ?? null);
                   if (res.data.privacyPolicyAcceptedAt != null) setPrivacyPolicyAcceptedAt(res.data.privacyPolicyAcceptedAt);
                   if (res.data.termsOfServiceAcceptedAt != null) setTermsOfServiceAcceptedAt(res.data.termsOfServiceAcceptedAt);
@@ -351,7 +368,8 @@ export const AuthProvider = ({ children }) => {
           const storedTesis = await AsyncStorage.getItem(AUTH_STORAGE_KEYS.TESIS);
           if (storedToken && storedUser) {
             setToken(storedToken);
-            setUser(JSON.parse(storedUser));
+            const parsed = JSON.parse(storedUser);
+            setUser({ ...parsed, isAdmin: getIsAdminPanelUser(parsed) });
             setTesis(storedTesis ? JSON.parse(storedTesis) : null);
             const getToken = async () => await AsyncStorage.getItem(AUTH_STORAGE_KEYS.TOKEN);
             setApiTokenProvider(getToken);
@@ -408,9 +426,10 @@ export const AuthProvider = ({ children }) => {
         if (res?.data && mounted.current) {
           const kullanici = res.data.kullanici ?? res.data.user;
           const tesisData = res.data.tesis ?? res.data.tesisData;
-          setUser(kullanici);
+          const userWithAdmin = kullanici ? { ...kullanici, isAdmin: getIsAdminPanelUser(kullanici) } : null;
+          setUser(userWithAdmin);
           setTesis(tesisData);
-          if (kullanici) await AsyncStorage.setItem(AUTH_STORAGE_KEYS.USER, JSON.stringify(kullanici));
+          if (userWithAdmin) await AsyncStorage.setItem(AUTH_STORAGE_KEYS.USER, JSON.stringify(userWithAdmin));
           if (tesisData) await AsyncStorage.setItem(AUTH_STORAGE_KEYS.TESIS, JSON.stringify(tesisData));
         }
       } catch (_) {}
@@ -448,8 +467,9 @@ export const AuthProvider = ({ children }) => {
       setApiTokenProvider(getToken);
       setDataServiceTokenProvider(getToken);
       if (kullanici) {
-        setUser(kullanici);
-        await AsyncStorage.setItem(AUTH_STORAGE_KEYS.USER, JSON.stringify(kullanici));
+        const userWithAdmin = { ...kullanici, isAdmin: getIsAdminPanelUser(kullanici) };
+        setUser(userWithAdmin);
+        await AsyncStorage.setItem(AUTH_STORAGE_KEYS.USER, JSON.stringify(userWithAdmin));
       }
       if (tesisData) {
         setTesis(tesisData);

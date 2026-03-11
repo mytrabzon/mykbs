@@ -61,7 +61,7 @@ export default function PendingUsersPage() {
 
   const handleReject = async () => {
     if (!rejectModal) return
-    const userId = rejectModal.user_id
+    const userId = rejectModal.userId
     setActing(userId)
     try {
       await api.post(`/app-admin/users/${userId}/reject`, { reason: rejectReason || undefined })
@@ -189,7 +189,7 @@ export default function PendingUsersPage() {
                 disabled={acting !== null}
                 onClick={handleReject}
               >
-                {acting === rejectModal.user_id ? '…' : 'Reddet'}
+                {acting === rejectModal.userId ? '…' : 'Reddet'}
               </button>
             </div>
           </div>

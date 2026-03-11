@@ -142,20 +142,20 @@ async function fetchWithLog(url: string, opts: RequestInit): Promise<Response> {
   return r;
 }
 
-/** Hata yakalayıp axios-benzeri error.response ile fırlat; 401 ise (ve zaten token varken) onUnauthorized çağır. Token yokken 401 = henüz yüklenmedi, lobiye atma. */
+/** Hata yakalayıp axios-benzeri error.response ile fırlat; 401 ise (ve zaten token varken) onUnauthorized çağır. Token yokken 401 = henüz yüklenmedi, lobiye atma. Backend fetch 401 de aynı şekilde logout tetikler. */
 async function wrapError(err: unknown): Promise<never> {
-  if (err instanceof EdgeFunctionError) {
-    const skipAuthRedirect = (err as EdgeFunctionError & { skipAuthRedirect?: boolean }).skipAuthRedirect;
-    if (err.status === 401 && !skipAuthRedirect && onUnauthorized) {
-      const hadToken = await getToken();
-      if (hadToken) {
-        try {
-          onUnauthorized();
-        } catch (e) {
-          logger.error('onUnauthorized error', e);
-        }
+  const status = (err as { response?: { status?: number } })?.response?.status;
+  if (status === 401 && onUnauthorized) {
+    const hadToken = await getToken();
+    if (hadToken) {
+      try {
+        onUnauthorized();
+      } catch (e) {
+        logger.error('onUnauthorized error', e);
       }
     }
+  }
+  if (err instanceof EdgeFunctionError) {
     throw Object.assign(new Error(err.message), {
       response: { status: err.status, data: err.data },
       message: err.message,
@@ -849,9 +849,9 @@ export const api = {
       }
       if (pathname === '/tesis/kbs/test' || pathname === 'tesis/kbs/test') {
         const backendUrl = getBackendUrl();
-        if (!backendUrl) {
-          throw Object.assign(new Error('KBS testi için backend adresi gerekli. EXPO_PUBLIC_BACKEND_URL tanımlayın.'), {
-            response: { status: 503, data: { message: 'EXPO_PUBLIC_BACKEND_URL tanımlı değil.' } },
+        if (!backendUrl || !/^https?:\/\//i.test(backendUrl)) {
+          throw Object.assign(new Error('Sunucu adresi tanımlı değil veya geçersiz. Ayarlarda EXPO_PUBLIC_BACKEND_URL kontrol edin.'), {
+            response: { status: 503, data: { message: 'Backend adresi geçerli değil.' } },
           });
         }
         if (!token) {
@@ -889,19 +889,24 @@ export const api = {
       }
       if (pathname === '/tesis/kbs/import' || pathname === 'tesis/kbs/import') {
         const backendUrl = getBackendUrl();
-        if (backendUrl && token) {
-          const r = await fetchWithLog(`${backendUrl}/api/tesis/kbs/import`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-            body: JSON.stringify(payload || {}),
+        if (!backendUrl || !/^https?:\/\//i.test(backendUrl)) {
+          throw Object.assign(new Error('Sunucu adresi tanımlı değil veya geçersiz. KBS aktarımı için EXPO_PUBLIC_BACKEND_URL gerekli.'), {
+            response: { status: 503, data: { message: 'Backend adresi geçerli değil.' } },
           });
-          const data = await r.json().catch(() => ({}));
-          if (!r.ok) {
-            throw Object.assign(new Error((data as { message?: string })?.message || 'KBS aktarımı başarısız'), { response: { status: r.status, data } });
-          }
-          return toResponse(data);
         }
-        throw new Error('Sunucu adresi tanımlı değil');
+        if (!token) {
+          throw Object.assign(new Error('Giriş gerekli'), { response: { status: 401, data: { message: 'Token yok' } } });
+        }
+        const r = await fetchWithLog(`${backendUrl}/api/tesis/kbs/import`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+          body: JSON.stringify(payload || {}),
+        });
+        const data = await r.json().catch(() => ({}));
+        if (!r.ok) {
+          throw Object.assign(new Error((data as { message?: string })?.message || 'KBS aktarımı başarısız'), { response: { status: r.status, data } });
+        }
+        return toResponse(data);
       }
       // KBS tesis bilgisi talep (create/update/delete) — admin onayına gider
       if (pathname === '/kbs/credentials/request' || pathname === 'kbs/credentials/request') {

@@ -4,6 +4,20 @@ Bu dokümanda KBS Prime uygulaması için **Apple App Store** ve **Google Play**
 
 ---
 
+## 0. Mevcut Akış (Canlıda Sorun Çıkarmaz)
+
+**Şu an uygulamada gerçek mağaza ödemesi (Apple/Google IAP) kullanılmıyor.**
+
+- **"Satın al" butonu** → Backend `POST /api/siparis` çağrılır → sipariş kaydı oluşturulur (`durum: pending`).
+- Kullanıcıya "Sipariş no: … Ödeme bilgisi e-posta/SMS ile iletilecektir" mesajı gösterilir.
+- Admin panelden ödeme alındığında sipariş onaylanır ve paket tesisine atanır.
+
+Bu akış **test ve canlıda aynı**; gerçek kart/App Store ödemesi yok. **Canlıda da sorun çıkarmaz**: sipariş oluşur, siz ödemeyi dışarıda alıp panelden onaylarsınız.
+
+İleride **App Store / Google Play üzerinden anında ödeme** (IAP) kullanmak isterseniz: Product ID’ler (`iapProducts.js`) ve bu dokümandaki mağaza ayarları hazır; uygulama tarafında `PaywallModal` içinde `react-native-iap` ile `requestPurchase` + makbuz doğrulama + backend’e bildirim akışı eklenmeli.
+
+---
+
 ## 1. Bundle / Package Değerleri (Tek Kaynak)
 
 Projede **tek bir uygulama kimliği** kullanılıyor; iOS ve Android aynı değerle tanımlanır:

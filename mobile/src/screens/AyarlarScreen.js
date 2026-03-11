@@ -880,7 +880,7 @@ export default function AyarlarScreen() {
             label="Web Servis Şifresi"
             value={kbsSettings.kbsWebServisSifre || ''}
             onChangeText={(t) => setKbsSettings((prev) => ({ ...prev, kbsWebServisSifre: t }))}
-            placeholder="Web Servis Şifresi"
+            placeholder={kbsSettings.kbsWebServisSifre === '********' ? 'Kaydedildi (değiştirmek için yeni şifre yazın)' : 'Web servis şifresi'}
             secureTextEntry={true}
             autoComplete="off"
             editable={credentialState !== 'PENDING'}
@@ -907,21 +907,33 @@ export default function AyarlarScreen() {
           ) : null}
 
           <Button variant="secondary" onPress={handleKBSTest} loading={testLoading} disabled={testLoading}>
-            Bağlantıyı Test Et
+            Bağlantıyı test et
           </Button>
           {testResult && (
             <View
               style={[
                 styles.testResult,
-                { backgroundColor: testResult.success ? colors.successSoft : colors.errorSoft },
+                { backgroundColor: testResult.mock ? (colors.textSecondary ? colors.textSecondary + '20' : 'rgba(100,100,100,0.15)') : (testResult.success ? colors.successSoft : colors.errorSoft) },
               ]}
             >
-              <Text style={[styles.testResultText, { color: colors.textPrimary }]}>{testResult.message}</Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 4 }}>
+                <Ionicons
+                  name={testResult.mock ? 'information-circle-outline' : (testResult.success ? 'checkmark-circle' : 'close-circle')}
+                  size={22}
+                  color={testResult.mock ? colors.textSecondary : (testResult.success ? (colors.success || '#22c55e') : (colors.error || '#dc2626'))}
+                />
+                <Text style={[styles.testResultText, { color: colors.textPrimary, marginLeft: 8, fontWeight: '600' }]}>
+                  {testResult.mock ? 'Yapılandırma bilgisi' : (testResult.success ? 'Bağlantı başarılı' : 'Bağlantı başarısız')}
+                </Text>
+              </View>
+              <Text style={[styles.testResultText, { color: colors.textSecondary }]}>
+                {testResult.message}
+              </Text>
             </View>
           )}
 
           <Text style={[styles.infoText, { color: colors.textSecondary, marginTop: spacing.md }]}>
-            Farklı bir sistemden geçtiyseniz, KBS bilgilerinizi kaydettikten sonra aşağıdaki butonla daha önce KBS'e bildirdiğiniz misafirleri sistemimize aktarabilirsiniz; kaldığınız yerden devam edersiniz.
+            Farklı bir sistemden geçtiyseniz, KBS bilgilerinizi kaydettikten sonra aşağıdaki butonla daha önce KBS'e bildirdiğiniz misafirleri uygulamaya aktarabilirsiniz.
           </Text>
           <Button
             variant="secondary"
@@ -942,8 +954,16 @@ export default function AyarlarScreen() {
               <Text style={[styles.testResultText, { color: colors.textPrimary }]}>
                 {kbsImportResult.error || kbsImportResult.message || (kbsImportResult.imported > 0 ? `${kbsImportResult.imported} misafir aktarıldı.` : 'İşlem tamamlandı.')}
               </Text>
+              {kbsImportResult.imported > 0 && (
+                <Text style={[styles.infoText, { color: colors.textSecondary, marginTop: 6 }]}>
+                  Aktarılan misafirler Odalar ekranında ilgili odalarda görünür.
+                </Text>
+              )}
             </View>
           )}
+          <Text style={[styles.infoText, { color: colors.textSecondary, marginTop: 6 }]}>
+            KBS'ten getirilen misafirler Odalar ekranında, her odanın misafir listesinde listelenir.
+          </Text>
 
           {credentialState !== 'PENDING' && (
             <Button variant="primary" onPress={handleSave} loading={loading} disabled={loading} style={styles.saveBtn}>

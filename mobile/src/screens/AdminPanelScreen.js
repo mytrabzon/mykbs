@@ -76,7 +76,7 @@ export default function AdminPanelScreen() {
   const navigation = useNavigation();
   const insets = useSafeAreaInsets();
   const { colors } = useTheme();
-  const { user, token } = useAuth();
+  const { user, token, isLoading: authLoading, logout } = useAuth();
   const isAdmin = getIsAdminPanelUser(user);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -84,6 +84,29 @@ export default function AdminPanelScreen() {
   const [data, setData] = useState(null);
   const [requests, setRequests] = useState([]);
   const [requestLoading, setRequestLoading] = useState(false);
+
+  // Token + admin kontrolü: yetkisizse geri dön (user yüklendikten sonra kontrol et)
+  useEffect(() => {
+    if (authLoading) return;
+    if (!token) {
+      Toast.show({ type: 'error', text1: 'Erişim Reddedildi', text2: 'Oturum bulunamadı. Tekrar giriş yapın.' });
+      if (navigation.canGoBack()) navigation.goBack();
+      else navigation.navigate('Main');
+      return;
+    }
+    if (user == null) return; // Henüz /auth/me dönmediyse bekle
+    if (!isAdmin) {
+      Toast.show({ type: 'error', text1: 'Erişim Reddedildi', text2: 'Admin yetkiniz bulunmuyor' });
+      if (navigation.canGoBack()) navigation.goBack();
+      else navigation.navigate('Main');
+    }
+  }, [authLoading, token, user, isAdmin, navigation]);
+
+  const getAdminHeaders = useCallback(() => ({
+    Authorization: `Bearer ${token}`,
+    'X-Admin-Access': 'true',
+    'X-User-ID': user?.id || '',
+  }), [token, user?.id]);
 
   const fetchDashboard = useCallback(async (isRefresh = false) => {
     if (isRefresh) setRefreshing(true);
@@ -104,10 +127,17 @@ export default function AdminPanelScreen() {
       }
       const r = await fetch(`${base}/api/app-admin/dashboard`, {
         method: 'GET',
-        headers: { Authorization: `Bearer ${token}` },
+        headers: getAdminHeaders(),
       });
       const json = await r.json().catch(() => ({}));
       if (!r.ok) {
+        if (r.status === 401) {
+          Toast.show({ type: 'error', text1: 'Oturum süresi doldu', text2: 'Lütfen tekrar giriş yapın' });
+          logout();
+          setLoading(false);
+          setRefreshing(false);
+          return;
+        }
         const msg = json.message || 'Dashboard yüklenemedi';
         if (r.status === 503 && (msg.includes('Supabase') || msg.includes('yapılandır'))) {
           setError('Admin paneli için sunucuda Supabase yapılandırması gerekiyor.');
@@ -128,7 +158,7 @@ export default function AdminPanelScreen() {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [token]);
+  }, [token, getAdminHeaders]);
 
   const fetchRequests = useCallback(async () => {
     const base = getBackendUrl();
@@ -136,7 +166,7 @@ export default function AdminPanelScreen() {
     setRequestLoading(true);
     try {
       const r = await fetch(`${base}/api/app-admin/requests?status=pending`, {
-        headers: { Authorization: `Bearer ${token}` },
+        headers: getAdminHeaders(),
       });
       const json = await r.json().catch(() => ({}));
       if (r.ok) setRequests(json.requests || []);
@@ -174,7 +204,7 @@ export default function AdminPanelScreen() {
     try {
       const r = await fetch(`${base}/api/app-admin/requests/${id}/reject`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        headers: { 'Content-Type': 'application/json', ...getAdminHeaders() },
         body: JSON.stringify({}),
       });
       const json = await r.json().catch(() => ({}));

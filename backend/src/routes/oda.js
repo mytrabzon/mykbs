@@ -34,9 +34,7 @@ const ODA_STEP = { START: 'oda_start', ENSURE_TESIS: 'oda_ensure_tesis', QUERY: 
 router.get('/', async (req, res) => {
   const requestId = req.requestId || '-';
   try {
-    console.log('[oda GET] step=START', { requestId, filtre: req.query?.filtre, authSource: req.authSource });
     if (req.authSource === 'supabase' && req.branch) {
-      console.log('[oda GET] step=ENSURE_TESIS', { requestId, branchId: req.branchId });
       await ensureTesisForBranch(prisma, req.branchId, req.branch.name);
     }
     const { filtre } = req.query; // tumu, bos, dolu, hatali
@@ -49,7 +47,6 @@ router.get('/', async (req, res) => {
       where.durum = 'dolu';
     }
 
-    console.log('[oda GET] step=QUERY', { requestId, tesisId, filtre });
     const odalar = await prisma.oda.findMany({
       where,
       include: {
@@ -67,7 +64,6 @@ router.get('/', async (req, res) => {
       },
       orderBy: { odaNumarasi: 'asc' }
     });
-    console.log('[oda GET] step=FILTER', { requestId, odalarCount: odalar.length, filtre });
 
     // Hatalı bildirim filtresi
     let filteredOdalar = odalar;
@@ -78,7 +74,7 @@ router.get('/', async (req, res) => {
       });
     }
 
-    console.log('[oda GET] step=FORMAT', { requestId, formattedCount: filteredOdalar.length });
+    console.log('[oda GET]', { requestId, tesisId, filtre, count: filteredOdalar.length });
     const formattedOdalar = filteredOdalar.map(oda => {
       const misafir = oda.misafirler[0];
       const bildirim = misafir?.bildirimler[0];

@@ -213,6 +213,7 @@ router.get('/kbs', async (req, res) => {
       return res.json({
         kbsTuru: b.kbs_turu || null,
         kbsTesisKodu: b.kbs_tesis_kodu || null,
+        kbsWebServisSifre: (b.kbs_web_servis_sifre && String(b.kbs_web_servis_sifre).trim()) ? '********' : null,
         ipKisitAktif: false,
         ipAdresleri: []
       });
@@ -222,12 +223,16 @@ router.get('/kbs', async (req, res) => {
       select: {
         kbsTuru: true,
         kbsTesisKodu: true,
+        kbsWebServisSifre: true,
         ipKisitAktif: true,
         ipAdresleri: true
       }
     });
-
-    res.json(tesis);
+    const out = tesis ? {
+      ...tesis,
+      kbsWebServisSifre: (tesis.kbsWebServisSifre && String(tesis.kbsWebServisSifre).trim()) ? '********' : null
+    } : null;
+    res.json(out);
   } catch (error) {
     const msg = error?.message || '';
     const isSchema = /column|relation|does not exist|no such column/i.test(msg);
@@ -264,7 +269,9 @@ router.put('/kbs', async (req, res) => {
       const updateData = {};
       if (kbsTuru !== undefined) updateData.kbs_turu = kbsTuru;
       if (kbsTesisKodu !== undefined) updateData.kbs_tesis_kodu = kbsTesisKodu;
-      if (kbsWebServisSifre !== undefined) updateData.kbs_web_servis_sifre = kbsWebServisSifre;
+      if (kbsWebServisSifre !== undefined && kbsWebServisSifre !== '' && kbsWebServisSifre !== '********') {
+        updateData.kbs_web_servis_sifre = kbsWebServisSifre;
+      }
       if (Object.keys(updateData).length === 0) return res.json({ message: 'KBS ayarları güncellendi' });
       const { error } = await supabaseAdmin.from('branches').update(updateData).eq('id', req.branchId).select().single();
       if (error) return errorResponse(req, res, 500, 'UNHANDLED_ERROR', error?.message || 'Ayarlar güncellenemedi');
@@ -278,7 +285,7 @@ router.put('/kbs', async (req, res) => {
     const updateData = {};
     if (kbsTuru) updateData.kbsTuru = kbsTuru;
     if (kbsTesisKodu) updateData.kbsTesisKodu = kbsTesisKodu;
-    if (kbsWebServisSifre) updateData.kbsWebServisSifre = kbsWebServisSifre;
+    if (kbsWebServisSifre && kbsWebServisSifre !== '********') updateData.kbsWebServisSifre = kbsWebServisSifre;
     if (ipKisitAktif !== undefined) updateData.ipKisitAktif = ipKisitAktif;
     if (ipAdresleri !== undefined) {
       updateData.ipAdresleri = Array.isArray(ipAdresleri)
@@ -401,7 +408,7 @@ router.post('/kbs/test', async (req, res) => {
     if (!kbsUrl) {
       return res.json({
         success: true,
-        message: 'Mock modunda. KBS bağlantı testi atlandı; check-in bildirimleri mock olarak işlenecek. Gerçek KBS için backend\'de JANDARMA_KBS_URL veya POLIS_KBS_URL tanımlayın.',
+        message: 'KBS sunucusu yapılandırılmamış. Test atlandı; check-in bildirimleri şu an mock işlenecek.',
         mock: true,
       });
     }
