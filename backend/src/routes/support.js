@@ -28,6 +28,43 @@ function getTesisId(req) {
 }
 
 /**
+ * GET /api/support — Giriş yapmış kullanıcının kendi talepleri (mobil: benim taleplerim)
+ */
+router.get('/', authenticateTesisOrSupabase, async (req, res) => {
+  try {
+    const where = {};
+    if (req.authSource === 'supabase' && req.user?.id) {
+      where.authorUserId = String(req.user.id);
+    } else if (req.authSource === 'prisma' && req.tesis?.id) {
+      where.tesisId = req.tesis.id;
+    } else {
+      return res.json({ tickets: [] });
+    }
+    const tickets = await prisma.supportTicket.findMany({
+      where,
+      orderBy: { createdAt: 'desc' },
+      include: { tesis: { select: { id: true, tesisAdi: true } } },
+    });
+    res.json({
+      tickets: tickets.map((t) => ({
+        id: t.id,
+        tesisAdi: t.tesis?.tesisAdi ?? null,
+        authorName: t.authorName,
+        subject: t.subject,
+        message: t.message,
+        status: t.status,
+        adminNote: t.adminNote,
+        createdAt: t.createdAt,
+        updatedAt: t.updatedAt,
+      })),
+    });
+  } catch (err) {
+    console.error('[support] list mine', err);
+    res.status(500).json({ message: 'Talepler alınamadı', error: err?.message || 'Server error' });
+  }
+});
+
+/**
  * POST /api/support — Destek talebi oluştur (mobil, giriş yapmış kullanıcı)
  * Body: { subject: string, message: string }
  */
@@ -42,10 +79,12 @@ router.post('/', authenticateTesisOrSupabase, express.json(), async (req, res) =
     }
     const { authorName, authorEmail } = getAuthorInfo(req);
     const tesisId = getTesisId(req);
+    const authorUserId = req.authSource === 'supabase' && req.user?.id ? String(req.user.id) : null;
 
     const ticket = await prisma.supportTicket.create({
       data: {
         tesisId,
+        authorUserId,
         authorName: authorName.trim(),
         authorEmail: (authorEmail && String(authorEmail).trim()) || null,
         subject: subject.trim().slice(0, 500),

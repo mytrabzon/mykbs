@@ -39,6 +39,8 @@ function statusLabel(status: string) {
   switch (status) {
     case 'acik':
       return { text: 'Açık', className: 'destek-status-acik' }
+    case 'isleme_alindi':
+      return { text: 'İşleme alındı', className: 'destek-status-isleme_alindi' }
     case 'cevaplandi':
       return { text: 'Cevaplandı', className: 'destek-status-cevaplandi' }
     case 'kapatildi':

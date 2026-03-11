@@ -180,6 +180,7 @@ router.get('/support', async (req, res) => {
         id: t.id,
         tesisId: t.tesisId,
         tesisAdi: t.tesis?.tesisAdi ?? null,
+        authorUserId: t.authorUserId,
         authorName: t.authorName,
         authorEmail: t.authorEmail,
         subject: t.subject,
@@ -193,6 +194,114 @@ router.get('/support', async (req, res) => {
   } catch (err) {
     console.error('[appAdmin] support list', err);
     res.status(500).json({ message: 'Destek talepleri alınamadı', error: err.message });
+  }
+});
+
+/**
+ * Tek destek talebi detayı (admin panel detay sayfası)
+ */
+router.get('/support/:id', async (req, res) => {
+  try {
+    const ticket = await prisma.supportTicket.findUnique({
+      where: { id: req.params.id },
+      include: { tesis: { select: { id: true, tesisAdi: true } } },
+    });
+    if (!ticket) {
+      return res.status(404).json({ message: 'Talep bulunamadı' });
+    }
+    res.json({
+      ticket: {
+        id: ticket.id,
+        tesisId: ticket.tesisId,
+        tesisAdi: ticket.tesis?.tesisAdi ?? null,
+        authorUserId: ticket.authorUserId,
+        authorName: ticket.authorName,
+        authorEmail: ticket.authorEmail,
+        subject: ticket.subject,
+        message: ticket.message,
+        status: ticket.status,
+        adminNote: ticket.adminNote,
+        createdAt: ticket.createdAt,
+        updatedAt: ticket.updatedAt,
+      },
+    });
+  } catch (err) {
+    console.error('[appAdmin] support get', err);
+    res.status(500).json({ message: 'Talep alınamadı', error: err.message });
+  }
+});
+
+/**
+ * Destek talebini güncelle: status, adminNote. Kullanıcıya push bildirimi gönderir (authorUserId varsa).
+ * PATCH /api/app-admin/support/:id — body: { status?: 'acik'|'isleme_alindi'|'cevaplandi'|'kapatildi', adminNote?: string }
+ */
+router.patch('/support/:id', express.json(), async (req, res) => {
+  try {
+    const { status, adminNote } = req.body || {};
+    const ticket = await prisma.supportTicket.findUnique({ where: { id: req.params.id } });
+    if (!ticket) {
+      return res.status(404).json({ message: 'Talep bulunamadı' });
+    }
+    const updates = {};
+    if (typeof status === 'string' && ['acik', 'isleme_alindi', 'cevaplandi', 'kapatildi'].includes(status)) {
+      updates.status = status;
+    }
+    if (typeof adminNote === 'string') {
+      updates.adminNote = adminNote.trim().slice(0, 5000) || null;
+    }
+    if (Object.keys(updates).length === 0) {
+      return res.json({ ticket: ticket, message: 'Değişiklik yok' });
+    }
+    const updated = await prisma.supportTicket.update({
+      where: { id: req.params.id },
+      data: updates,
+    });
+
+    // Kullanıcıya push: sorun çözüldü veya admin notu eklendi
+    const authorUserId = updated.authorUserId;
+    if (authorUserId && supabaseAdmin) {
+      let title = 'Destek';
+      let body = '';
+      if (['cevaplandi', 'kapatildi'].includes(updated.status)) {
+        body = updated.adminNote ? updated.adminNote.slice(0, 200) : 'Sorununuz çözüldü.';
+        if (!updated.adminNote) title = 'Destek: Sorununuz çözüldü';
+      } else if (updated.adminNote) {
+        body = updated.adminNote.slice(0, 200);
+        title = 'Destek notu';
+      }
+      if (body) {
+        try {
+          const { data: tokenRows } = await supabaseAdmin.from('user_push_tokens').select('token').eq('user_id', authorUserId);
+          const tokens = (tokenRows || []).map((r) => r.token).filter(Boolean);
+          if (tokens.length > 0) {
+            const expoMessages = tokens.map((to) => ({ to, title, body, sound: 'default', data: { screen: 'Destek', ticketId: updated.id } }));
+            const resExpo = await fetch('https://exp.host/--/api/v2/push/send', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(expoMessages),
+            });
+            if (!resExpo.ok) {
+              console.error('[appAdmin] support push failed', await resExpo.text());
+            }
+          }
+        } catch (pushErr) {
+          console.error('[appAdmin] support push', pushErr);
+        }
+      }
+    }
+
+    res.json({
+      ticket: {
+        id: updated.id,
+        status: updated.status,
+        adminNote: updated.adminNote,
+        updatedAt: updated.updatedAt,
+      },
+      message: 'Talep güncellendi',
+    });
+  } catch (err) {
+    console.error('[appAdmin] support patch', err);
+    res.status(500).json({ message: 'Güncellenemedi', error: err.message });
   }
 });
 

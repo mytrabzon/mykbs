@@ -575,6 +575,17 @@ body {
   color: var(--kbs-accent);
   font-weight: 500;
 }
+.kbs-table-row-clickable .kbs-table-cell-link-inner {
+  display: block;
+  margin: -0.85rem -1rem;
+  padding: 0.85rem 1rem;
+  color: inherit;
+  font-weight: inherit;
+  text-decoration: none;
+}
+.kbs-table-row-clickable .kbs-table-cell-link-inner:hover {
+  text-decoration: underline;
+}
 
 .kbs-table td:last-child {
   text-align: right;
@@ -1696,6 +1707,10 @@ body {
   background: rgba(52, 211, 153, 0.2);
   color: var(--kbs-success);
 }
+.destek-status-isleme_alindi {
+  background: rgba(251, 191, 36, 0.2);
+  color: var(--kbs-warning, #ca8a04);
+}
 .destek-status-kapatildi {
   background: var(--kbs-surface-elevated);
   color: var(--kbs-text-muted);
@@ -1758,5 +1773,90 @@ body {
   margin: 0;
 }
 .destek-retry-btn {
+  margin-top: 12px;
+}
+
+/* Destek ticket detay sayfası */
+.destek-detail-page .admin-page-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 1rem;
+}
+.destek-detail-card {
+  margin-bottom: 1.5rem;
+}
+.destek-detail-subject {
+  font-size: 1.25rem;
+  font-weight: 700;
+  margin: 0 0 0.75rem 0;
+  color: var(--kbs-text);
+}
+.destek-detail-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 1rem;
+  font-size: 0.85rem;
+  color: var(--kbs-text-muted);
+  margin-bottom: 1rem;
+}
+.destek-detail-message {
+  font-size: 0.95rem;
+  color: var(--kbs-text);
+}
+.destek-detail-message pre {
+  white-space: pre-wrap;
+  word-break: break-word;
+  margin: 0.5rem 0 0 0;
+  font-family: inherit;
+}
+.destek-actions-card {
+  max-width: 560px;
+}
+.destek-actions-title {
+  font-size: 1.1rem;
+  margin: 0 0 0.5rem 0;
+  color: var(--kbs-text);
+}
+.destek-actions-hint {
+  margin-bottom: 1.25rem;
+  font-size: 0.9rem;
+}
+.destek-form-group {
+  margin-bottom: 1.25rem;
+}
+.destek-label {
+  display: block;
+  font-size: 0.9rem;
+  font-weight: 500;
+  color: var(--kbs-text-muted);
+  margin-bottom: 0.5rem;
+}
+.destek-select {
+  width: 100%;
+  max-width: 280px;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--kbs-border);
+  border-radius: 8px;
+  background: var(--kbs-bg);
+  color: var(--kbs-text);
+  font-size: 1rem;
+}
+.destek-textarea {
+  width: 100%;
+  padding: 0.75rem;
+  border: 1px solid var(--kbs-border);
+  border-radius: 8px;
+  background: var(--kbs-bg);
+  color: var(--kbs-text);
+  font-size: 1rem;
+  font-family: inherit;
+  resize: vertical;
+}
+.destek-form-actions {
+  margin-top: 0.5rem;
+}
+.destek-save-message {
   margin-top: 12px;
 }

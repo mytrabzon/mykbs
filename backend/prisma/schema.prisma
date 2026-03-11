@@ -99,20 +99,22 @@ model Tesis {
 
 // Destek talepleri — mobil/hamburger menüden gönderilir, admin panelde listelenir
 model SupportTicket {
-  id          String   @id @default(cuid())
-  tesisId     String?  // Prisma tesis (legacy auth); Supabase auth'da null olabilir
-  authorName  String   @map("author_name")
-  authorEmail String?  @map("author_email")
-  subject     String
-  message     String   @db.Text
-  status      String   @default("acik") // acik, cevaplandi, kapatildi
-  adminNote   String?  @map("admin_note") @db.Text
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id           String   @id @default(cuid())
+  tesisId      String?  // Prisma tesis (legacy auth); Supabase auth'da null olabilir
+  authorUserId String?  @map("author_user_id") @db.Uuid // Supabase auth user id — bildirim için
+  authorName   String   @map("author_name")
+  authorEmail  String?  @map("author_email")
+  subject      String
+  message      String   @db.Text
+  status       String   @default("acik") // acik, isleme_alindi, cevaplandi, kapatildi
+  adminNote    String?  @map("admin_note") @db.Text
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 
-  tesis       Tesis?   @relation(fields: [tesisId], references: [id], onDelete: SetNull)
+  tesis        Tesis?   @relation(fields: [tesisId], references: [id], onDelete: SetNull)
 
   @@index([tesisId])
+  @@index([authorUserId])
   @@index([status])
   @@index([createdAt])
   @@map("support_tickets")
@@ -134,6 +136,8 @@ model OkutulanBelge {
   uyruk          String?
   photoUrl         String?  // Yüklenen belge/ön yüz foto path
   portraitPhotoUrl String?  // Belgeden kırpılan kimlik resmi (yüz fotoğrafı)
+  odaNo          String?  @map("oda_no")   // Atanan oda numarası (Oda Seç)
+  bildirildi     Boolean? @default(false) @map("bildirildi") // KBS'ye bildirildi mi
   createdAt        DateTime @default(now())
 
   tesis            Tesis    @relation(fields: [tesisId], references: [id], onDelete: Cascade)

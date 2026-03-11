@@ -26,12 +26,13 @@ import Toast from 'react-native-toast-message';
 
 function statusLabel(status) {
   if (status === 'acik') return 'Açık';
+  if (status === 'isleme_alindi') return 'İşleme alındı';
   if (status === 'cevaplandi') return 'Cevaplandı';
   if (status === 'kapatildi') return 'Kapatıldı';
   return status || '—';
 }
 
-function TicketCard({ item, colors }) {
+function TicketCard({ item, colors, showAdminNote = false }) {
   const dateStr = item.createdAt
     ? new Date(item.createdAt).toLocaleString('tr-TR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })
     : '—';
@@ -49,6 +50,12 @@ function TicketCard({ item, colors }) {
         </Text>
       )}
       <Text style={[styles.ticketMessage, { color: colors.textSecondary }]} numberOfLines={2}>{item.message}</Text>
+      {showAdminNote && item.adminNote ? (
+        <View style={[styles.adminNoteWrap, { backgroundColor: colors.primary + '18', borderColor: colors.primary + '40' }]}>
+          <Text style={[styles.adminNoteLabel, { color: colors.primary }]}>Destek notu:</Text>
+          <Text style={[styles.adminNoteText, { color: colors.textPrimary }]}>{item.adminNote}</Text>
+        </View>
+      ) : null}
     </View>
   );
 }
@@ -64,6 +71,9 @@ export default function DestekScreen({ navigation }) {
   const [tickets, setTickets] = useState([]);
   const [ticketsLoading, setTicketsLoading] = useState(false);
   const [ticketsRefreshing, setTicketsRefreshing] = useState(false);
+  const [myTickets, setMyTickets] = useState([]);
+  const [myTicketsLoading, setMyTicketsLoading] = useState(false);
+  const [myTicketsRefreshing, setMyTicketsRefreshing] = useState(false);
 
   const fetchTickets = useCallback(async (isRefresh = false) => {
     if (!isAdmin) return;
@@ -88,9 +98,24 @@ export default function DestekScreen({ navigation }) {
     setTicketsRefreshing(false);
   }, [isAdmin, token]);
 
+  const fetchMyTickets = useCallback(async (isRefresh = false) => {
+    if (isAdmin) return;
+    if (isRefresh) setMyTicketsRefreshing(true);
+    else setMyTicketsLoading(true);
+    try {
+      const res = await api.get('/support');
+      setMyTickets(res?.data?.tickets ?? []);
+    } catch (_) {
+      setMyTickets([]);
+    }
+    setMyTicketsLoading(false);
+    setMyTicketsRefreshing(false);
+  }, [isAdmin]);
+
   useEffect(() => {
     if (isAdmin) fetchTickets();
-  }, [isAdmin, fetchTickets]);
+    else fetchMyTickets();
+  }, [isAdmin, fetchTickets, fetchMyTickets]);
 
   const handleBack = () => {
     if (navigation.canGoBack()) navigation.goBack();
@@ -151,13 +176,17 @@ export default function DestekScreen({ navigation }) {
           contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 24 }]}
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
-          refreshControl={isAdmin ? <RefreshControl refreshing={ticketsRefreshing} onRefresh={() => fetchTickets(true)} colors={[colors.primary]} /> : undefined}
+          refreshControl={
+            isAdmin
+              ? <RefreshControl refreshing={ticketsRefreshing} onRefresh={() => fetchTickets(true)} colors={[colors.primary]} />
+              : <RefreshControl refreshing={myTicketsRefreshing} onRefresh={() => fetchMyTickets(true)} colors={[colors.primary]} />
+          }
         >
           {isAdmin && (
             <View style={styles.ticketsSection}>
               <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>Açılan talepler</Text>
               <Text style={[styles.sectionSub, { color: colors.textSecondary }]}>
-                Web panelde de: Giriş yap → Sol menü → Destek
+                Talepleri işlemek için web paneli kullanın: Giriş yap → Sol menü → Destek → Talebe tıklayın (durum, admin notu, bildirim).
               </Text>
               {ticketsLoading && tickets.length === 0 ? (
                 <ActivityIndicator size="small" color={colors.primary} style={styles.ticketsLoader} />
@@ -169,66 +198,76 @@ export default function DestekScreen({ navigation }) {
             </View>
           )}
 
-          <View style={[styles.card, { backgroundColor: colors.surface, borderColor }]}>
-            <View style={[styles.iconWrap, { backgroundColor: (colors.primary || '#06B6D4') + '18' }]}>
-              <Ionicons name="help-buoy" size={40} color={colors.primary || '#06B6D4'} />
-            </View>
-            <Text style={[styles.cardTitle, { color: colors.textPrimary }]}>Destek talebi gönderin</Text>
-            <Text style={[styles.cardSub, { color: colors.textSecondary }]}>
-              Sorunuzu veya talebinizi yazın; ekip en kısa sürede yanıtlayacaktır.
-            </Text>
-
-            <Text style={[styles.label, { color: colors.textSecondary }]}>Konu</Text>
-            <TextInput
-              style={[styles.input, { backgroundColor: inputBg, borderColor, color: colors.textPrimary }]}
-              placeholder="Örn: KBS bağlantı hatası"
-              placeholderTextColor={placeholderColor}
-              value={subject}
-              onChangeText={setSubject}
-              maxLength={500}
-              editable={!sending}
-            />
-
-            <Text style={[styles.label, { color: colors.textSecondary, marginTop: 16 }]}>Mesajınız</Text>
-            <TextInput
-              style={[styles.input, styles.textArea, { backgroundColor: inputBg, borderColor, color: colors.textPrimary }]}
-              placeholder="Sorununuzu veya talebinizi detaylı yazın..."
-              placeholderTextColor={placeholderColor}
-              value={message}
-              onChangeText={setMessage}
-              multiline
-              numberOfLines={5}
-              maxLength={10000}
-              textAlignVertical="top"
-              editable={!sending}
-            />
-
-            <TouchableOpacity
-              style={[styles.submitBtn, { backgroundColor: colors.primary || '#06B6D4' }]}
-              onPress={handleSubmit}
-              disabled={sending}
-              activeOpacity={0.8}
-            >
-              {sending ? (
-                <ActivityIndicator size="small" color="#fff" />
-              ) : (
-                <>
-                  <Ionicons name="send" size={20} color="#fff" />
-                  <Text style={styles.submitText}>Gönder</Text>
-                </>
-              )}
-            </TouchableOpacity>
-          </View>
-
-          {tesis?.tesisAdi && (
-            <Text style={[styles.footerHint, { color: colors.textSecondary }]}>
-              Talep tesisiniz ({tesis.tesisAdi}) ile ilişkilendirilecektir.
-            </Text>
-          )}
           {!isAdmin && (
-            <Text style={[styles.footerHint, { color: colors.textSecondary }]}>
-              Açılan talepler admin tarafından web panelde (Destek sayfası) görüntülenir.
-            </Text>
+            <>
+              <View style={styles.ticketsSection}>
+                <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>Taleplerim</Text>
+                {myTicketsLoading && myTickets.length === 0 ? (
+                  <ActivityIndicator size="small" color={colors.primary} style={styles.ticketsLoader} />
+                ) : myTickets.length === 0 ? (
+                  <Text style={[styles.ticketsEmpty, { color: colors.textSecondary }]}>Henüz talep göndermediniz.</Text>
+                ) : (
+                  myTickets.map((t) => <TicketCard key={t.id} item={t} colors={colors} showAdminNote />)
+                )}
+              </View>
+
+              <View style={[styles.card, { backgroundColor: colors.surface, borderColor }]}>
+                <View style={[styles.iconWrap, { backgroundColor: (colors.primary || '#06B6D4') + '18' }]}>
+                  <Ionicons name="help-buoy" size={40} color={colors.primary || '#06B6D4'} />
+                </View>
+                <Text style={[styles.cardTitle, { color: colors.textPrimary }]}>Yeni destek talebi</Text>
+                <Text style={[styles.cardSub, { color: colors.textSecondary }]}>
+                  Sorunuzu veya talebinizi yazın; ekip en kısa sürede yanıtlayacaktır. Çözüm veya not eklendiğinde bildirim alırsınız.
+                </Text>
+
+                <Text style={[styles.label, { color: colors.textSecondary }]}>Konu</Text>
+                <TextInput
+                  style={[styles.input, { backgroundColor: inputBg, borderColor, color: colors.textPrimary }]}
+                  placeholder="Örn: KBS bağlantı hatası"
+                  placeholderTextColor={placeholderColor}
+                  value={subject}
+                  onChangeText={setSubject}
+                  maxLength={500}
+                  editable={!sending}
+                />
+
+                <Text style={[styles.label, { color: colors.textSecondary, marginTop: 16 }]}>Mesajınız</Text>
+                <TextInput
+                  style={[styles.input, styles.textArea, { backgroundColor: inputBg, borderColor, color: colors.textPrimary }]}
+                  placeholder="Sorununuzu veya talebinizi detaylı yazın..."
+                  placeholderTextColor={placeholderColor}
+                  value={message}
+                  onChangeText={setMessage}
+                  multiline
+                  numberOfLines={5}
+                  maxLength={10000}
+                  textAlignVertical="top"
+                  editable={!sending}
+                />
+
+                <TouchableOpacity
+                  style={[styles.submitBtn, { backgroundColor: colors.primary || '#06B6D4' }]}
+                  onPress={handleSubmit}
+                  disabled={sending}
+                  activeOpacity={0.8}
+                >
+                  {sending ? (
+                    <ActivityIndicator size="small" color="#fff" />
+                  ) : (
+                    <>
+                      <Ionicons name="send" size={20} color="#fff" />
+                      <Text style={styles.submitText}>Gönder</Text>
+                    </>
+                  )}
+                </TouchableOpacity>
+              </View>
+
+              {tesis?.tesisAdi && (
+                <Text style={[styles.footerHint, { color: colors.textSecondary }]}>
+                  Talep tesisiniz ({tesis.tesisAdi}) ile ilişkilendirilecektir.
+                </Text>
+              )}
+            </>
           )}
         </ScrollView>
       </KeyboardAvoidingView>
@@ -305,4 +344,12 @@ const styles = StyleSheet.create({
   ticketSubject: { fontSize: 15, fontWeight: '600' },
   ticketMeta: { fontSize: 12, marginTop: 4 },
   ticketMessage: { fontSize: 13, marginTop: 6, lineHeight: 18 },
+  adminNoteWrap: {
+    marginTop: 10,
+    padding: 12,
+    borderRadius: 8,
+    borderWidth: 1,
+  },
+  adminNoteLabel: { fontSize: 12, fontWeight: '600', marginBottom: 4 },
+  adminNoteText: { fontSize: 14, lineHeight: 20 },
 });

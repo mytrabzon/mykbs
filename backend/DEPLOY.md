@@ -5,6 +5,7 @@
 | Değişken | Zorunlu | Açıklama |
 |----------|---------|----------|
 | `PORT` | Hayır | Sunucu portu (Railway otomatik verir) |
+| `JWT_SECRET` | **Evet (production)** | JWT token imzası. Yoksa uygulama başlamaz (`[server] Production ortamında JWT_SECRET zorunludur`). En az 32 karakter; örn. `openssl rand -base64 32` ile üretin. **Railway Variables** (veya kullandığınız platformun env) içine ekleyin. |
 | `DATABASE_URL` | **Evet (Railway)** | Supabase PostgreSQL: Dashboard → **Settings → Database** → Connection string → **URI**. Örnek: `postgresql://postgres:[ŞİFRE]@db.xxxx.supabase.co:5432/postgres`. Railway Variables'a ekleyin; ilk deploy sonrası (veya deploy script'te) `npx prisma db push` çalıştırın. |
 | `SUPABASE_URL` | Evet | Supabase proje URL |
 | `SUPABASE_SERVICE_ROLE_KEY` | Evet | Supabase Settings → API → service_role key (mobilde ASLA kullanma). Adım adım: [docs/ADMIN_PANEL_SERVICE_ROLE.md](../docs/ADMIN_PANEL_SERVICE_ROLE.md) |
@@ -67,6 +68,7 @@ Bundan sonra `main`’e (veya `backend/` altında değişiklik içeren) push’l
 
 ## Sorun giderme
 
+- **"[server] Production ortamında JWT_SECRET zorunludur" / container sürekli yeniden başlıyor:** Deploy platformunda (Railway Variables, Render env, vb.) `JWT_SECRET` tanımlı değil. Değeri ekleyin (en az 32 karakter; örn. `openssl rand -base64 32` ile üretin), kaydedin ve redeploy edin.
 - **"Supabase yapılandırması eksik" (kayıt / giriş 500):** Railway Variables’da `SUPABASE_URL` ve `SUPABASE_SERVICE_ROLE_KEY` (veya en azından `SUPABASE_ANON_KEY`) tanımlı olmalı. Ekledikten sonra redeploy edin.
 
 ### "Veritabanı hatası" / "Can't reach database server" (Supabase paused)

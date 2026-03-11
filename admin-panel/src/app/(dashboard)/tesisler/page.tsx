@@ -114,8 +114,16 @@ export default function TesislerPage() {
                   className="kbs-table-row-clickable"
                   onClick={() => router.push(`/tesisler/${tesis.id}`)}
                 >
-                  <td className="kbs-table-cell-link">{tesis.tesisAdi}</td>
-                  <td className="kbs-table-cell-link">{tesis.yetkiliAdSoyad}</td>
+                  <td className="kbs-table-cell-link">
+                    <Link href={`/tesisler/${tesis.id}`} onClick={(e) => e.stopPropagation()} className="kbs-table-cell-link-inner">
+                      {tesis.tesisAdi}
+                    </Link>
+                  </td>
+                  <td className="kbs-table-cell-link">
+                    <Link href={`/tesisler/${tesis.id}`} onClick={(e) => e.stopPropagation()} className="kbs-table-cell-link-inner">
+                      {tesis.yetkiliAdSoyad}
+                    </Link>
+                  </td>
                   <td>{tesis.telefon}</td>
                   <td>{tesis.il}</td>
                   <td>{tesis.paket}</td>
