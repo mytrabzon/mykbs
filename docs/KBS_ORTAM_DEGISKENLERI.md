@@ -54,3 +54,17 @@ Polis KBS kullanıyorsanız ayrıca:
 
 - **Ad:** `POLIS_KBS_URL`  
 - **Değer:** Polis KBS sözleşmesinde verilen servis URL’si (Jandarma adresiyle aynı değildir).
+
+---
+
+## Giriş bildirimi: Sadece TC mi, tüm bilgiler mi?
+
+**Şu anki davranış (backend):** Jandarma KBS’ye **MisafirGiris** SOAP isteğiyle şu alanlar gönderiliyor: Ad, Ad2 (baba adı), Soyad, TcKimlikNo, PasaportNo, DogumTarihi, Uyruk, GirisTarihi, OdaNo. Yani **tüm bilgiler** gönderiliyor.
+
+**Çıkış bildirimi:** **MisafirCikis** ile sadece TcKimlikNo (veya PasaportNo) + CikisTarihi gönderiliyor. Çıkışta TC/pasaport yeterli.
+
+**“KBS’ye TC yazınca otomatik çıkıyor”:** Bazı sistemlerde KBS tarafında TC ile MERNIS’ten ad-soyad–doğum vb. otomatik dolduruluyor olabilir. Resmi Jandarma dokümantasyonunda “girişte sadece TC yeterli” ifadesi net değil; bazı kaynaklarda TC vatandaşları için **MusteriKimlikNoGiris** (TC odaklı) ayrı bir operasyon olarak geçiyor. Bizim kullandığımız servis (**SrvShsYtkTml** / **MisafirGiris**) ise tüm alanları içeren SOAP ile çalışıyor.
+
+**Sonuç / öneri:**
+- **Şimdilik:** Giriş bildiriminde **tüm bilgileri (ad, soyad, baba adı, ana adı, doğum, uyruk, TC, oda, giriş tarihi)** göndermeye devam ediyoruz; KBS’nin bu serviste sadece TC ile kabul edip etmediği resmi dokümana veya Jandarma’ya sorularak netleştirilebilir.
+- **Sadece TC ile denemek isterseniz:** Jandarma’dan veya entegrasyon dokümanından “MisafirGiris’te sadece TcKimlikNo + OdaNo + GirisTarihi yeterli mi?” onayı alındıktan sonra, manuel bildirim formunda diğer alanları opsiyonel yapıp boş göndermek test edilebilir. Boş alanlar servis tarafından reddedilirse yine tüm bilgiler zorunlu demektir.

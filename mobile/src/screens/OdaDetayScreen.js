@@ -57,6 +57,10 @@ export default function OdaDetayScreen() {
   const [topluKbsModal, setTopluKbsModal] = useState(false);
   const [topluKbsTipi, setTopluKbsTipi] = useState(''); // tc_vatandasi | ykn | yabanci
   const [topluKbsLoading, setTopluKbsLoading] = useState(false);
+  const [odaDegistirMisafir, setOdaDegistirMisafir] = useState(null);
+  const [bosOdalar, setBosOdalar] = useState([]);
+  const [bosOdalarLoading, setBosOdalarLoading] = useState(false);
+  const [odaDegistirLoading, setOdaDegistirLoading] = useState(null);
 
   const loadOdaDetay = useCallback(async () => {
     if (!odaId) return;
@@ -73,6 +77,39 @@ export default function OdaDetayScreen() {
   useEffect(() => {
     loadOdaDetay();
   }, [loadOdaDetay]);
+
+  useEffect(() => {
+    if (!odaDegistirMisafir || !odaId) return;
+    let cancelled = false;
+    setBosOdalarLoading(true);
+    dataService.getOdalar('bos').then((list) => {
+      if (cancelled) return;
+      setBosOdalar((list || []).filter((o) => o.id !== odaId));
+    }).catch(() => {
+      if (!cancelled) setBosOdalar([]);
+    }).finally(() => {
+      if (!cancelled) setBosOdalarLoading(false);
+    });
+    return () => { cancelled = true; };
+  }, [odaDegistirMisafir, odaId]);
+
+  const handleOdaDegistir = async (misafir, yeniOdaId) => {
+    if (odaDegistirLoading) return;
+    setOdaDegistirLoading(yeniOdaId);
+    const wasOnlyGuest = (oda?.misafirler || []).filter(m => !m.cikisTarihi).length === 1;
+    try {
+      await api.post(`/misafir/oda-degistir/${misafir.id}`, { yeniOdaId });
+      await dataService.clearCache();
+      Toast.show({ type: 'success', text1: 'Oda değiştirildi' });
+      setOdaDegistirMisafir(null);
+      loadOdaDetay();
+      if (wasOnlyGuest) navigation.goBack();
+    } catch (err) {
+      Toast.show({ type: 'error', text1: 'Hata', text2: err?.response?.data?.message || 'Oda değiştirilemedi' });
+    } finally {
+      setOdaDegistirLoading(null);
+    }
+  };
 
   const kalanMisafirler = (oda?.misafirler || []).filter(m => !m.cikisTarihi);
 
@@ -321,6 +358,13 @@ export default function OdaDetayScreen() {
 
                   <View style={styles.actionRow}>
                     <TouchableOpacity
+                      style={[styles.smallBtn, { backgroundColor: colors.primary + '20' }]}
+                      onPress={() => setOdaDegistirMisafir(m)}
+                    >
+                      <Ionicons name="swap-horizontal" size={16} color={colors.primary} />
+                      <Text style={[styles.smallBtnText, { color: colors.primary }]}>Oda değiştir</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
                       style={[styles.smallBtn, { backgroundColor: colors.error + '20' }]}
                       onPress={() => handleCheckoutOne(m)}
                     >
@@ -423,6 +467,55 @@ export default function OdaDetayScreen() {
                 )}
               </TouchableOpacity>
             </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Oda değiştir modalı — boş odalar listesi, tıklanınca otomatik değişir */}
+      <Modal visible={!!odaDegistirMisafir} transparent animationType="fade">
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalBox, { backgroundColor: colors.surface }]}>
+            <Text style={[styles.modalTitle, { color: colors.textPrimary }]}>
+              Yeni oda seç — {odaDegistirMisafir ? [odaDegistirMisafir.ad, odaDegistirMisafir.soyad].filter(Boolean).join(' ') : ''}
+            </Text>
+            <Text style={[styles.infoText, { color: colors.textSecondary, marginBottom: 12 }]}>
+              Tıkladığınız oda otomatik atanır.
+            </Text>
+            {bosOdalarLoading ? (
+              <ActivityIndicator size="small" color={colors.primary} style={{ marginVertical: 16 }} />
+            ) : bosOdalar.length === 0 ? (
+              <Text style={[styles.infoText, { color: colors.textSecondary }]}>Boş oda bulunamadı.</Text>
+            ) : (
+              <View style={styles.odaSeceneklerWrap}>
+                {bosOdalar.map((yeniOda) => {
+                  const isLoading = odaDegistirLoading === yeniOda.id;
+                  return (
+                    <TouchableOpacity
+                      key={yeniOda.id}
+                      style={[
+                        styles.odaSecenekChip,
+                        { borderColor: colors.border, backgroundColor: colors.background },
+                        isLoading && { opacity: 0.7 },
+                      ]}
+                      onPress={() => handleOdaDegistir(odaDegistirMisafir, yeniOda.id)}
+                      disabled={!!odaDegistirLoading}
+                    >
+                      {isLoading ? (
+                        <ActivityIndicator size="small" color={colors.primary} />
+                      ) : (
+                        <Text style={[styles.odaSecenekText, { color: colors.textPrimary }]}>Oda {yeniOda.odaNumarasi}</Text>
+                      )}
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            )}
+            <TouchableOpacity
+              style={[styles.modalBtn, { backgroundColor: colors.border, marginTop: 16 }]}
+              onPress={() => setOdaDegistirMisafir(null)}
+            >
+              <Text style={{ color: colors.textPrimary }}>İptal</Text>
+            </TouchableOpacity>
           </View>
         </View>
       </Modal>
@@ -562,4 +655,14 @@ const styles = StyleSheet.create({
   modalActions: { flexDirection: 'row', gap: 12, marginTop: 16 },
   modalBtn: { flex: 1, padding: 14, borderRadius: 10, alignItems: 'center' },
   modalBtnPrimaryText: { color: '#fff', fontWeight: '600' },
+  odaSeceneklerWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
+  odaSecenekChip: {
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 12,
+    borderWidth: 1,
+    minWidth: 90,
+    alignItems: 'center',
+  },
+  odaSecenekText: { fontSize: 15, fontWeight: '600' },
 });

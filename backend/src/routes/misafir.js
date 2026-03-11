@@ -232,10 +232,10 @@ router.post('/checkin', async (req, res) => {
         tesisId,
         kullaniciId: req.user.id,
         islem: 'check-in',
-        detay: {
+        detay: JSON.stringify({
           odaNumarasi: oda.odaNumarasi,
           misafirId: misafir.id
-        },
+        }),
         basarili: true
       }
     });
@@ -508,10 +508,10 @@ router.post('/checkout/:misafirId', async (req, res) => {
         tesisId: getTesisId(req),
         kullaniciId: req.user.id,
         islem: 'check-out',
-        detay: {
+        detay: JSON.stringify({
           odaNumarasi: misafir.oda.odaNumarasi,
           misafirId: misafir.id
-        },
+        }),
         basarili: true
       }
     });
@@ -614,11 +614,11 @@ router.post('/oda-degistir/:misafirId', async (req, res) => {
         tesisId: getTesisId(req),
         kullaniciId: req.user.id,
         islem: 'oda-degistir',
-        detay: {
+        detay: JSON.stringify({
           misafirId: misafir.id,
           eskiOda: misafir.oda.odaNumarasi,
           yeniOda: yeniOda.odaNumarasi
-        },
+        }),
         basarili: true
       }
     });
@@ -675,7 +675,7 @@ router.put('/:misafirId', async (req, res) => {
         tesisId: getTesisId(req),
         kullaniciId: req.user.id,
         islem: 'misafir-guncelle',
-        detay: { misafirId },
+        detay: JSON.stringify({ misafirId }),
         basarili: true
       }
     });
