@@ -26,15 +26,15 @@ export default function MrzResultScreen({ route, navigation }) {
   const [savedToOkutulan, setSavedToOkutulan] = useState(false);
 
   const validation = fromNfc
-    ? { valid: !!((payload?.givenNames || payload?.ad) && (payload?.surname || payload?.soyad)) }
+    ? { valid: !!((payload?.givenNames || payload?.ad) && (payload?.surname || payload?.soyad)), reason: null }
     : (payload ? validateMrz(payload) : { valid: false, reason: 'no_payload' });
   const minimal = payload
     ? (fromNfc
       ? {
-          passportNumber: payload.passportNumber?.trim() || '',
-          birthDate: payload.birthDate || '',
-          expiryDate: '',
-          issuingCountry: payload.issuingCountry || '',
+          passportNumber: (payload.passportNumber || payload.kimlikNo || payload.pasaportNo || '').trim() || '',
+          birthDate: payload.birthDate || (payload.dogumTarihi ? payload.dogumTarihi.split('.').reverse().join('-') : '') || '',
+          expiryDate: payload.expiryDate || (payload.sonKullanma ? payload.sonKullanma.split('.').reverse().join('-') : '') || '',
+          issuingCountry: (payload.issuingCountry || payload.nationality || '').trim().slice(0, 3) || '',
           docType: payload.docType || 'ID',
         }
       : toMinimalPayload(payload))
@@ -51,14 +51,15 @@ export default function MrzResultScreen({ route, navigation }) {
 
   const handleKaydetOkutulan = useCallback(async () => {
     if (!payload) return;
-    const num = (payload.passportNumber || '').trim();
+    const num = (payload.passportNumber || payload.kimlikNo || payload.pasaportNo || '').trim();
     const ad = (payload.givenNames || payload.ad || '').trim();
     const soyad = (payload.surname || payload.soyad || '').trim();
     if (!ad || !soyad) {
-      Toast.show({ type: 'error', text1: 'Eksik bilgi', text2: 'Ad ve soyad olmadan kaydedilemez.' });
+      Toast.show({ type: 'error', text1: 'Eksik bilgi', text2: 'Ad ve soyad olmadan kaydedilemez. MRZ ile tekrar okuyabilirsiniz.' });
       return;
     }
     const isTc = /^\d{11}$/.test(num);
+    const dogumTarihi = payload.birthDate ? isoToDDMMYYYY(payload.birthDate) : (payload.dogumTarihi || null);
     const body = {
       belgeTuru: isTc ? 'kimlik' : 'pasaport',
       ad,
@@ -66,8 +67,8 @@ export default function MrzResultScreen({ route, navigation }) {
       kimlikNo: isTc ? num : null,
       pasaportNo: !isTc ? num : null,
       belgeNo: num || null,
-      dogumTarihi: payload.birthDate ? isoToDDMMYYYY(payload.birthDate) : null,
-      uyruk: (payload.nationality || 'TÜRK').trim(),
+      dogumTarihi,
+      uyruk: (payload.nationality || payload.uyruk || 'TÜRK').trim(),
     };
     setSavingOkutulan(true);
     try {
@@ -104,21 +105,25 @@ export default function MrzResultScreen({ route, navigation }) {
             <Text style={styles.scanTimeText}>Okuma süresi: {(scanDurationMs / 1000).toFixed(2)} sn</Text>
           </View>
         )}
-        {!validation.valid && validation.reason && (
+        {!validation.valid && validation.reason && !fromNfc && (
           <Text style={styles.warningText}>{validation.reason === 'document_expired' ? 'Belge süresi dolmuş.' : 'Check digit veya tarih hatası. Tekrar tarayın veya manuel girin.'}</Text>
         )}
-        <Row label="Belge no" value={payload.passportNumber} mask />
-        <Row label="Ülke" value={payload.issuingCountry} />
-        <Row label="Doğum" value={payload.birthDate} />
-        <Row label="Son kullanma" value={payload.expiryDate} />
+        {fromNfc && !validation.valid && (
+          <Text style={styles.warningText}>Ad/soyad çipten okunamadı. Kaydetmek için MRZ ile tekrar okuyabilir veya belge no ile kaydedebilirsiniz.</Text>
+        )}
+        <Row label="Belge no" value={payload.passportNumber || payload.kimlikNo || payload.pasaportNo} mask />
+        <Row label="Ülke" value={payload.issuingCountry || payload.nationality || payload.uyruk} />
+        <Row label="Doğum" value={payload.birthDate || payload.dogumTarihi} />
+        <Row label="Son kullanma" value={payload.expiryDate || payload.sonKullanma} />
         <Row label="Soyad" value={payload.surname || payload.soyad} />
         <Row label="Ad" value={payload.givenNames || payload.ad} />
-        <Text style={styles.masked}>MRZ (maske): {maskMrz(raw)}</Text>
+        <Text style={styles.masked}>{fromNfc ? 'NFC ile okundu' : `MRZ (maske): ${maskMrz(raw)}`}</Text>
       </View>
       <TouchableOpacity
         style={[styles.buttonSecondary, styles.buttonSave]}
         onPress={handleKaydetOkutulan}
         disabled={savingOkutulan}
+        activeOpacity={0.8}
       >
         {savingOkutulan ? (
           <ActivityIndicator size="small" color={theme.colors.primary} />
@@ -129,8 +134,8 @@ export default function MrzResultScreen({ route, navigation }) {
           {savedToOkutulan ? 'Kaydedildi' : 'Kaydet (Okutulan kimlikler)'}
         </Text>
       </TouchableOpacity>
-      <TouchableOpacity style={[styles.button, styles.primary]} onPress={handleConfirm} disabled={!validation.valid}>
-        <Text style={styles.buttonText}>Onayla ve devam et</Text>
+      <TouchableOpacity style={[styles.button, styles.primary]} onPress={handleConfirm} disabled={!validation.valid} activeOpacity={0.8}>
+        <Text style={[styles.buttonText, !validation.valid && styles.buttonTextDisabled]}>Onayla ve devam et</Text>
       </TouchableOpacity>
       <TouchableOpacity style={styles.tekrarTaraButton} onPress={handleRetry} activeOpacity={0.8}>
         <Ionicons name="scan-outline" size={22} color={theme.colors.primary} />
@@ -174,6 +179,7 @@ const styles = StyleSheet.create({
   button: { ...theme.styles.button.primary, marginBottom: theme.spacing.sm },
   primary: {},
   buttonText: { color: '#fff', fontSize: theme.typography.fontSize.base, fontWeight: theme.typography.fontWeight.semibold },
+  buttonTextDisabled: { opacity: 0.7 },
   buttonSecondary: { ...theme.styles.button.outline, marginTop: theme.spacing.xs, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 },
   buttonSecondaryText: { color: theme.colors.primary, fontSize: theme.typography.fontSize.base },
   buttonSave: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 },

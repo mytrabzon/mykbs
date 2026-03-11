@@ -44,7 +44,12 @@ import ProfilIletisimScreen from './src/screens/ProfilIletisimScreen';
 import RaporlarScreen from './src/screens/RaporlarScreen';
 import DahaFazlaScreen from './src/screens/DahaFazlaScreen';
 import ReceptionistPanelScreen from './src/screens/ReceptionistPanelScreen';
-import PlaceholderScreen from './src/screens/PlaceholderScreen';
+import LiveStreamScreen from './src/screens/LiveStreamScreen';
+import MusterilerScreen from './src/screens/MusterilerScreen';
+import LisanslarScreen from './src/screens/LisanslarScreen';
+import PendingUsersScreen from './src/screens/PendingUsersScreen';
+import UsersScreen from './src/screens/UsersScreen';
+import PaymentsScreen from './src/screens/PaymentsScreen';
 import DestekScreen from './src/screens/DestekScreen';
 import AuditLogScreen from './src/screens/AuditLogScreen';
 import DrawerMenu from './src/components/DrawerMenu';
@@ -631,14 +636,14 @@ function AppNavigator() {
                   }}
                 >
                   <Drawer.Screen name="Main" component={MainStack} options={{ drawerLabel: 'Dashboard' }} />
-                  <Drawer.Screen name="LiveStream" component={PlaceholderScreen} initialParams={{ title: 'Canlı Akış', webPath: 'live' }} options={{ drawerLabel: 'Canlı Akış' }} />
-                  <Drawer.Screen name="Musteriler" component={PlaceholderScreen} initialParams={{ title: 'Müşteriler (B2B)', webPath: 'musteriler' }} options={{ drawerLabel: 'Müşteriler (B2B)' }} />
-                  <Drawer.Screen name="Lisanslar" component={PlaceholderScreen} initialParams={{ title: 'Lisanslar', webPath: 'lisanslar' }} options={{ drawerLabel: 'Lisanslar' }} />
+                  <Drawer.Screen name="LiveStream" component={LiveStreamScreen} options={{ drawerLabel: 'Canlı Akış' }} />
+                  <Drawer.Screen name="Musteriler" component={MusterilerScreen} options={{ drawerLabel: 'Müşteriler (B2B)' }} />
+                  <Drawer.Screen name="Lisanslar" component={LisanslarScreen} options={{ drawerLabel: 'Lisanslar' }} />
                   <Drawer.Screen name="Destek" component={DestekScreen} options={{ drawerLabel: 'Destek' }} />
-                  <Drawer.Screen name="PendingUsers" component={PlaceholderScreen} initialParams={{ title: 'Onay Bekleyenler', webPath: 'pending-users' }} options={{ drawerLabel: 'Onay Bekleyenler' }} />
-                  <Drawer.Screen name="Users" component={PlaceholderScreen} initialParams={{ title: 'Kullanıcılar', webPath: 'users' }} options={{ drawerLabel: 'Kullanıcılar' }} />
+                  <Drawer.Screen name="PendingUsers" component={PendingUsersScreen} options={{ drawerLabel: 'Onay Bekleyenler' }} />
+                  <Drawer.Screen name="Users" component={UsersScreen} options={{ drawerLabel: 'Kullanıcılar' }} />
                   <Drawer.Screen name="Identity" component={MrzScanScreen} options={{ drawerLabel: 'Kimlik & Pasaport' }} />
-                  <Drawer.Screen name="Payments" component={PlaceholderScreen} initialParams={{ title: 'Paketler & Ödemeler', webPath: 'payments' }} options={{ drawerLabel: 'Paketler & Ödemeler' }} />
+                  <Drawer.Screen name="Payments" component={PaymentsScreen} options={{ drawerLabel: 'Paketler & Ödemeler' }} />
                   <Drawer.Screen name="Tesisler" component={TesisListScreen} options={{ drawerLabel: 'Tesis Listesi' }} />
                   <Drawer.Screen name="Notifications" component={BildirimlerScreen} options={{ drawerLabel: 'Bildirim & Duyurular' }} />
                   <Drawer.Screen name="Reports" component={RaporlarScreen} options={{ drawerLabel: 'Raporlar' }} />
@@ -667,14 +672,14 @@ function AppNavigator() {
                   }}
                 >
                   <Drawer.Screen name="Main" component={MainStack} options={{ drawerLabel: 'Dashboard' }} />
-                  <Drawer.Screen name="LiveStream" component={PlaceholderScreen} initialParams={{ title: 'Canlı Akış', webPath: 'live' }} options={{ drawerLabel: 'Canlı Akış' }} />
-                  <Drawer.Screen name="Musteriler" component={PlaceholderScreen} initialParams={{ title: 'Müşteriler (B2B)', webPath: 'musteriler' }} options={{ drawerLabel: 'Müşteriler (B2B)' }} />
-                  <Drawer.Screen name="Lisanslar" component={PlaceholderScreen} initialParams={{ title: 'Lisanslar', webPath: 'lisanslar' }} options={{ drawerLabel: 'Lisanslar' }} />
+                  <Drawer.Screen name="LiveStream" component={LiveStreamScreen} options={{ drawerLabel: 'Canlı Akış' }} />
+                  <Drawer.Screen name="Musteriler" component={MusterilerScreen} options={{ drawerLabel: 'Müşteriler (B2B)' }} />
+                  <Drawer.Screen name="Lisanslar" component={LisanslarScreen} options={{ drawerLabel: 'Lisanslar' }} />
                   <Drawer.Screen name="Destek" component={DestekScreen} options={{ drawerLabel: 'Destek' }} />
-                  <Drawer.Screen name="PendingUsers" component={PlaceholderScreen} initialParams={{ title: 'Onay Bekleyenler', webPath: 'pending-users' }} options={{ drawerLabel: 'Onay Bekleyenler' }} />
-                  <Drawer.Screen name="Users" component={PlaceholderScreen} initialParams={{ title: 'Kullanıcılar', webPath: 'users' }} options={{ drawerLabel: 'Kullanıcılar' }} />
+                  <Drawer.Screen name="PendingUsers" component={PendingUsersScreen} options={{ drawerLabel: 'Onay Bekleyenler' }} />
+                  <Drawer.Screen name="Users" component={UsersScreen} options={{ drawerLabel: 'Kullanıcılar' }} />
                   <Drawer.Screen name="Identity" component={MrzScanScreen} options={{ drawerLabel: 'Kimlik & Pasaport' }} />
-                  <Drawer.Screen name="Payments" component={PlaceholderScreen} initialParams={{ title: 'Paketler & Ödemeler', webPath: 'payments' }} options={{ drawerLabel: 'Paketler & Ödemeler' }} />
+                  <Drawer.Screen name="Payments" component={PaymentsScreen} options={{ drawerLabel: 'Paketler & Ödemeler' }} />
                   <Drawer.Screen name="Tesisler" component={TesisListScreen} options={{ drawerLabel: 'Tesis Listesi' }} />
                   <Drawer.Screen name="Notifications" component={BildirimlerScreen} options={{ drawerLabel: 'Bildirim & Duyurular' }} />
                   <Drawer.Screen name="Reports" component={RaporlarScreen} options={{ drawerLabel: 'Raporlar' }} />

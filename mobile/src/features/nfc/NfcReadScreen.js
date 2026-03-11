@@ -10,6 +10,7 @@ import { Ionicons } from '@expo/vector-icons';
 import Toast from 'react-native-toast-message';
 import { useTheme } from '../../context/ThemeContext';
 import { useIndependentNfcReader } from './IndependentNfcReader';
+import { logger } from '../../utils/logger';
 
 export default function NfcReadScreen() {
   const navigation = useNavigation();
@@ -36,32 +37,51 @@ export default function NfcReadScreen() {
 
   const handleRead = useCallback(async () => {
     if (!isSupported) {
+      logger.info('[NFC] Okuma başlatılamadı: desteklenmiyor');
       Toast.show({ type: 'info', text1: 'NFC desteklenmiyor', text2: 'MRZ kamerayı kullanın.' });
       return;
     }
+    logger.info('[NFC] Okuma başlatıldı (NFC ile oku butonu)');
     try {
       const result = await readNfcDirect();
+      logger.info('[NFC] readNfcDirect sonucu', { success: result?.success, hasData: !!result?.data, error: result?.error });
       if (result?.success && result?.data) {
         const d = result.data;
+        logger.info('[NFC] Okuma başarılı', { ad: d.ad, soyad: d.soyad, kimlikNo: d.kimlikNo, pasaportNo: d.pasaportNo });
         Toast.show({ type: 'success', text1: 'Okundu', text2: `${d.ad || ''} ${d.soyad || ''}`.trim() || 'Kimlik bilgisi alındı.' });
         // Sonuç ekranına geç (Kaydet / Onayla) — replace ile NfcRead yerine MrzResult gösterilir
         const birthIso = d.dogumTarihi ? d.dogumTarihi.split('.').reverse().join('-') : null;
+        const sonKullanmaIso = d.sonKullanma ? d.sonKullanma.split('.').reverse().join('-') : null;
+        const docNo = (d.kimlikNo || d.pasaportNo || '').trim();
+        logger.info('[NFC] MrzResult ekranına yönlendiriliyor (fromNfc: true)');
         navigation.replace('MrzResult', {
           payload: {
+            ad: d.ad || '',
+            soyad: d.soyad || '',
             givenNames: d.ad || '',
             surname: d.soyad || '',
-            passportNumber: (d.kimlikNo || d.pasaportNo || '').trim() || '',
+            kimlikNo: d.kimlikNo || null,
+            pasaportNo: d.pasaportNo || null,
+            passportNumber: docNo || '',
+            dogumTarihi: d.dogumTarihi || null,
             birthDate: birthIso || null,
+            sonKullanma: d.sonKullanma || null,
+            expiryDate: sonKullanmaIso || null,
+            uyruk: d.uyruk || 'TÜRK',
             nationality: d.uyruk || 'TÜRK',
+            issuingCountry: (d.uyruk || 'TUR').trim().slice(0, 3),
+            chipPhotoBase64: d.chipPhotoBase64 || null,
             raw: 'NFC',
           },
           scanDurationMs: 0,
           fromNfc: true,
         });
       } else {
+        logger.warn('[NFC] Okuma başarısız', { error: result?.error, fallback: result?.fallback });
         Toast.show({ type: 'info', text1: 'NFC okunamadı', text2: result?.error || 'Belgeyi yaklaştırıp tekrar deneyin veya MRZ kullanın.' });
       }
     } catch (e) {
+      logger.error('[NFC] Okuma hatası (exception)', e?.message || e);
       Toast.show({ type: 'error', text1: 'Hata', text2: 'NFC okunamadı. MRZ kamerayı deneyin.' });
     }
   }, [isSupported, readNfcDirect, navigation]);

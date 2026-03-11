@@ -3,12 +3,20 @@
  * İsteğe bağlı web URL'ine yönlendirme.
  */
 import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Linking } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Linking, Platform } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../context/ThemeContext';
-import { ENV } from '../lib/config/env';
+
+function getAdminPanelUrl() {
+  try {
+    const { ENV } = require('../lib/config/env');
+    return (ENV.ADMIN_PANEL_WEB_URL || '').trim() || '';
+  } catch (_) {
+    return '';
+  }
+}
 
 export default function PlaceholderScreen() {
   const insets = useSafeAreaInsets();
@@ -17,8 +25,9 @@ export default function PlaceholderScreen() {
   const { colors } = useTheme();
   const title = route?.params?.title || 'Sayfa';
   const webPath = route?.params?.webPath || '';
-  const adminUrl = (ENV.ADMIN_PANEL_WEB_URL || '').trim() || 'http://localhost:3000';
+  const adminUrl = getAdminPanelUrl() || 'http://localhost:3000';
   const fullUrl = webPath ? `${adminUrl.replace(/\/$/, '')}/${webPath.replace(/^\//, '')}` : adminUrl;
+  const isLocalhost = /^https?:\/\/localhost(\b|:)/i.test(adminUrl) || /^https?:\/\/127\.0\.0\.1(\b|:)/i.test(adminUrl);
 
   const handleBack = () => {
     if (navigation.canGoBack()) {
@@ -40,15 +49,21 @@ export default function PlaceholderScreen() {
       <View style={styles.content}>
         <Ionicons name="construct-outline" size={64} color={colors.textSecondary} style={styles.icon} />
         <Text style={[styles.message, { color: colors.textPrimary }]}>Bu bölüm mobilde yakında eklenecek.</Text>
-        <Text style={[styles.sub, { color: colors.textSecondary }]}>Web panelinden erişebilirsiniz.</Text>
-        <TouchableOpacity
-          style={[styles.webBtn, { backgroundColor: colors.primary }]}
-          onPress={() => Linking.openURL(fullUrl)}
-          activeOpacity={0.8}
-        >
-          <Ionicons name="open-outline" size={20} color="#fff" />
-          <Text style={styles.webBtnText}>Web panelini aç</Text>
-        </TouchableOpacity>
+        <Text style={[styles.sub, { color: colors.textSecondary }]}>
+          {isLocalhost && Platform.OS !== 'web'
+            ? 'Web paneli adresini .env dosyasında EXPO_PUBLIC_ADMIN_PANEL_WEB_URL olarak ayarlayın.'
+            : 'Web panelinden erişebilirsiniz.'}
+        </Text>
+        {(!isLocalhost || Platform.OS === 'web') && (
+          <TouchableOpacity
+            style={[styles.webBtn, { backgroundColor: colors.primary }]}
+            onPress={() => Linking.openURL(fullUrl)}
+            activeOpacity={0.8}
+          >
+            <Ionicons name="open-outline" size={20} color="#fff" />
+            <Text style={styles.webBtnText}>Web panelini aç</Text>
+          </TouchableOpacity>
+        )}
       </View>
     </View>
   );

@@ -371,19 +371,28 @@ function parseMRZFromString(str) {
   };
 }
 
+/** TLV parse: 2-byte tag (0x5F 0x1E = ad, 0x5F 0x1F = soyad vb.). Türk eID DG1 ICAO 9303 2-byte tag kullanır. */
 function parseTLV(bytes, payload) {
   let i = 0;
   while (i + 2 <= bytes.length) {
-    const tag = bytes[i];
-    const len = bytes[i + 1];
-    i += 2;
-    if (i + len > bytes.length) break;
-    const value = bytes.slice(i, i + len);
-    i += len;
-    if (tag === 0x5f1e) payload.ad = bytesToUtf8(value).trim();
-    else if (tag === 0x5f1f) payload.soyad = bytesToUtf8(value).trim();
-    else if (tag === 0x5f20) payload.kimlikNo = bytesToUtf8(value).trim() || null;
-    else if (tag === 0x5f2b) payload.dogumTarihi = bytesToUtf8(value).trim() || null;
+    if (bytes[i] === 0x5f && i + 3 <= bytes.length) {
+      const tagByte2 = bytes[i + 1];
+      const len = bytes[i + 2];
+      const valueStart = i + 3;
+      if (valueStart + len > bytes.length) break;
+      const value = bytes.slice(valueStart, valueStart + len);
+      const str = bytesToUtf8(value).trim();
+      if (tagByte2 === 0x1e && str) payload.ad = str;
+      else if (tagByte2 === 0x1f && str) payload.soyad = str;
+      else if (tagByte2 === 0x20 && str) payload.kimlikNo = str || null;
+      else if (tagByte2 === 0x2b && str) payload.dogumTarihi = str || null;
+      i = valueStart + len;
+    } else {
+      i += 1;
+      const len = bytes[i];
+      i += 1 + (len || 0);
+      if (i > bytes.length) break;
+    }
   }
 }
 

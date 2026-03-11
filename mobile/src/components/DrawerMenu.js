@@ -62,12 +62,14 @@ export default function DrawerMenu(props) {
   );
 
   const handleItemPress = (screen) => {
-    closeDrawer();
     if (screen === 'Main') {
       nav.navigate('Main');
+      closeDrawer();
       return;
     }
+    // Önce hedef ekrana git; drawer kapanınca geçiş kaybolmasın diye önce navigate
     nav.navigate(screen);
+    setTimeout(() => closeDrawer(), 50);
   };
 
   const handleLogout = async () => {
