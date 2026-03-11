@@ -17,13 +17,21 @@ process.env.JWT_SECRET = process.env.JWT_SECRET || "mykbs-super-secret-jwt-key-2
 process.env.JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || "365d";
 process.env.DATABASE_URL = process.env.DATABASE_URL || "file:./dev.db";
 
-// Supabase pooler (PgBouncer/Supavisor) ile Prisma 08P01 hatasını önlemek için
-// Session mode: pooler.supabase.com; Transaction mode: db.xxx.supabase.co:6543
+// Supabase pooler (PgBouncer/Supavisor): 08P01 önlemek için pgbouncer=true,
+// "MaxClientsInSessionMode: max clients reached" önlemek için connection_limit=1 (tek process bağlantı).
+// Session mode: pooler.supabase.com:6543
 const dbUrl = process.env.DATABASE_URL;
-if (dbUrl && dbUrl.startsWith('postgres') && !dbUrl.includes('pgbouncer=true')) {
+if (dbUrl && dbUrl.startsWith('postgres')) {
   const isPooler = dbUrl.includes('pooler') || /:6543[/?]/.test(dbUrl);
   if (isPooler) {
-    process.env.DATABASE_URL = dbUrl.includes('?') ? dbUrl + '&pgbouncer=true' : dbUrl + '?pgbouncer=true';
+    let u = dbUrl;
+    if (!u.includes('pgbouncer=true')) {
+      u = u.includes('?') ? u + '&pgbouncer=true' : u + '?pgbouncer=true';
+    }
+    if (!/connection_limit=\d+/.test(u)) {
+      u = u.includes('?') ? u + '&connection_limit=1' : u + '?connection_limit=1';
+    }
+    process.env.DATABASE_URL = u;
   }
 }
 
