@@ -25,6 +25,7 @@ import { useAuth } from '../../context/AuthContext';
 import { useNfcAutoScanner } from '../nfc/NfcAutoScanner';
 import { useIndependentNfcReader } from '../nfc/IndependentNfcReader';
 import { getNfcEnabled } from '../../utils/nfcSetting';
+import { setLastMrzForBac } from '../../utils/lastMrzForBac';
 import { useFamilyCheckIn } from '../../context/FamilyCheckInContext';
 
 /** Okutulan belgeyi backend'e kaydet (arka planda; hata sessiz). photoUri: belge fotoğrafı, portraitBase64: belgeden kırpılan kimlik resmi. */
@@ -223,6 +224,16 @@ export default function MrzScanScreen({ navigation }) {
   /** iOS siyah ekran önlemi: kamera sadece layout ölçüldükten sonra mount edilir. Android'de Activity hazır olsun diye kısa gecikme. */
   const [unifiedCameraMountReady, setUnifiedCameraMountReady] = useState(false);
   const unifiedMountDelayRef = useRef(null);
+
+  /** Son okunan MRZ'yi BAC (NFC) için sakla — Check-in'de "NFC ile Okut" bunu kullanır */
+  useEffect(() => {
+    const p = instantPayload;
+    if (!p || !p.birthDate || !p.expiryDate) return;
+    const docNo = (p.documentNumber || p.passportNumber || '').trim();
+    if (!docNo) return;
+    setLastMrzForBac({ documentNumber: docNo, passportNumber: docNo, birthDate: p.birthDate, expiryDate: p.expiryDate });
+  }, [instantPayload]);
+
   /** Android'de onMountError sonrası yeniden denemek için key artırılır */
   const [unifiedCameraMountKey, setUnifiedCameraMountKey] = useState(0);
   /** Kamera açılamadı (onMountError veya uzun süre hazırlanıyor) — Galeriden seç göster */
@@ -688,8 +699,11 @@ export default function MrzScanScreen({ navigation }) {
         if (timeoutRef.current) clearTimeout(timeoutRef.current);
         setFrontImageUri(null);
         setMergedPayload(null);
+        if (p && (p.documentNumber || p.passportNumber) && p.birthDate && p.expiryDate) {
+          setLastMrzForBac({ documentNumber: p.documentNumber || p.passportNumber, passportNumber: p.passportNumber || p.documentNumber, birthDate: p.birthDate, expiryDate: p.expiryDate });
+        }
         if (fromCheckIn) {
-          const num = (p.passportNumber || '').trim();
+          const num = (p.passportNumber || p.documentNumber || '').trim();
           const isTc = /^\d{11}$/.test(num);
           navigation.replace('CheckIn', { mrzPayload: p, selectedOda: route.params?.selectedOda, scanDurationMs });
           saveOkutulanBelgeAsync(

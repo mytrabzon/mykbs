@@ -37,6 +37,12 @@ import {
 import { useLanguage } from '../context/LanguageContext';
 import { FREQUENT_NATIONALITIES } from '../constants/frequentNationalities';
 import { getVisaWarningFromDate } from '../utils/visaWarning';
+import { getLastMrzForBac, setLastMrzForBac } from '../utils/lastMrzForBac';
+
+let NfcPassportReader = null;
+try {
+  NfcPassportReader = require('react-native-nfc-passport-reader').default;
+} catch (_) {}
 
 const MIN_BUTTON_SIZE = 60; // Eldivenle kullanım için dev butonlar
 
@@ -78,6 +84,19 @@ export default function CheckInScreen({ navigation, route }) {
   const { readNfcDirect, isReading: nfcChipReading } = useIndependentNfcReader();
   const tcLookupTimeoutRef = useRef(null);
   const tcLookupInProgressRef = useRef(false);
+
+  // Check-in'e MRZ ile gelindiyse BAC için sakla (NFC'de kullanılır)
+  useEffect(() => {
+    const p = route.params?.mrzPayload;
+    if (p && (p.documentNumber || p.passportNumber) && p.birthDate && p.expiryDate) {
+      setLastMrzForBac({
+        documentNumber: p.documentNumber || p.passportNumber,
+        passportNumber: p.passportNumber || p.documentNumber,
+        birthDate: p.birthDate,
+        expiryDate: p.expiryDate,
+      });
+    }
+  }, [route.params?.mrzPayload]);
 
   // TC 11 hane girilince (bu tesiste daha önce check-in yapılmışsa) ad, soyad, doğum tarihi, uyruk otomatik doldurulur
   useEffect(() => {
@@ -247,9 +266,60 @@ export default function CheckInScreen({ navigation, route }) {
     }
   };
 
-  /** Tam NFC çip okuması (DG1/DG2) — cihazda okunur, API'ye ham tag gönderilmez. */
+  /** NfcPassportReader sonucunu formata çevir (ad, soyad, kimlikNo, dogumTarihi DD.MM.YYYY, uyruk). */
+  const mapNfcResultToForm = (r) => {
+    const birth = (r.birthDate || '').trim();
+    const dogumTarihi = birth.includes('-')
+      ? birth.split('-').reverse().join('.')
+      : birth;
+    const docNo = (r.identityNo || r.documentNo || '').trim();
+    const isTc = /^\d{11}$/.test(docNo);
+    return {
+      ad: (r.firstName || '').trim(),
+      ad2: '',
+      soyad: (r.lastName || '').trim(),
+      kimlikNo: isTc ? docNo : '',
+      pasaportNo: !isTc ? docNo : '',
+      dogumTarihi,
+      uyruk: (r.nationality || 'TÜRK').trim(),
+    };
+  };
+
+  /** Tam NFC çip okuması — varsa son MRZ ile BAC (NfcPassportReader), yoksa doğrudan readNfcDirect. */
   const processNfcChipRead = async () => {
     try {
+      const bacKey = await getLastMrzForBac();
+      if (NfcPassportReader && bacKey && bacKey.documentNo && bacKey.birthDate && bacKey.expiryDate) {
+        try {
+          logger.log('NFC: BAC ile okuma deneniyor (son MRZ)', { docNoMask: (bacKey.documentNo || '').slice(0, 2) + '***' });
+          const nfcResult = await NfcPassportReader.startReading({
+            bacKey: {
+              documentNo: bacKey.documentNo,
+              birthDate: bacKey.birthDate,
+              expiryDate: bacKey.expiryDate,
+            },
+          });
+          if (nfcResult && (nfcResult.firstName || nfcResult.lastName || nfcResult.documentNo)) {
+            const d = mapNfcResultToForm(nfcResult);
+            logger.log('NFC BAC okuma başarılı', { ad: d.ad, soyad: d.soyad });
+            setFormData((prev) => ({ ...prev, ...d }));
+            setDocumentExpiryFromMrz(null);
+            setStep(3);
+            setSavedOnly(false);
+            feedbackReadSuccess(ttsLocale);
+            Toast.show({ type: 'success', text1: 'Kimlik okundu', text2: 'Bilgiler dolduruldu.' });
+            return;
+          }
+        } catch (bacErr) {
+          const msg = bacErr?.message || '';
+          if (msg.includes('cancel') || msg.includes('Cancel') || msg.includes('cancelled')) {
+            Toast.show({ type: 'info', text1: 'İptal', text2: 'Okuma iptal edildi.' });
+            return;
+          }
+          logger.warn('NFC BAC okuma başarısız, doğrudan okumaya geçiliyor', msg);
+        }
+      }
+
       const result = await readNfcDirect();
       if (result.success && result.data) {
         const d = result.data;
@@ -274,7 +344,7 @@ export default function CheckInScreen({ navigation, route }) {
         Toast.show({
           type: 'info',
           text1: 'NFC okunamadı',
-          text2: errMsg.includes('MRZ') ? errMsg : (errMsg + ' MRZ veya kamera deneyin.'),
+          text2: errMsg.includes('MRZ') ? errMsg : (errMsg + ' Önce kamerayla MRZ okutun veya manuel girin.'),
         });
       }
     } catch (error) {

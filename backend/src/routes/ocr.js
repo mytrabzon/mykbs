@@ -685,7 +685,7 @@ router.post('/document-base64', authenticateTesisOrSupabase, tenantMiddleware, e
     let mrzPayload = mrzResult.payload || null;
     if (!mrzPayload && mrzRaw) mrzPayload = parseMrzToPayload(mrzRaw);
     const mrzFailureReason = !mrzRaw ? buildMrzFailureReason(mrzResult, false) : null;
-    const lineCount = mrzRaw ? mrzRaw.trim().split(/\r?\n/).filter(Boolean).length;
+    const lineCount = mrzRaw ? mrzRaw.trim().split('\n').filter(Boolean).length : 0;
     const docTypeHint = mrzRaw ? (lineCount >= 3 ? 'TC_KIMLIK (TD1, 3 satır)' : 'PASAPORT (TD3, 2 satır)') : null;
     console.log(logPrefix, 'runMrzPipeline bitti', { ok: mrzResult.ok, hasMrzRaw: !!mrzRaw, docType: docTypeHint, score: mrzResult.score, attemptsUsed: mrzResult.attemptsUsed });
     if (!mrzRaw && mrzFailureReason) console.log(logPrefix, 'MRZ bulunamadı', { reason: mrzFailureReason.slice(0, 120) });
