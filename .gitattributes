@@ -1,0 +1,3 @@
+# Patch files must use LF so patch-package parses correctly on EAS (Linux)
+*.patch text eol=lf
+patches/* text eol=lf

@@ -13,10 +13,10 @@ index 2d44be5..398e8a3 100644
  export type { UseHandlerContext } from './useHandler';
 diff --git a/node_modules/react-native-reanimated/src/hook/useAnimatedGestureHandler.ts b/node_modules/react-native-reanimated/src/hook/useAnimatedGestureHandler.ts
 new file mode 100644
-index 0000000..4c81efa
+index 0000000..e968c03
 --- /dev/null
 +++ b/node_modules/react-native-reanimated/src/hook/useAnimatedGestureHandler.ts
-@@ -0,0 +1,87 @@
+@@ -0,0 +1,88 @@
 +'use strict';
 +/**
 + * Reanimated 4 compatibility: useAnimatedGestureHandler was removed.
