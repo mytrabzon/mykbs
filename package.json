@@ -3,7 +3,7 @@
   "private": true,
   "scripts": {
     "start": "npm start --prefix backend",
-    "postinstall": "node -e \"require('child_process').execSync('npm install --prefix backend' + (process.env.NODE_ENV === 'production' ? ' --omit=dev' : ''), { stdio: 'inherit' })\"",
+    "postinstall": "node -e \"var env = Object.assign({}, process.env); if (process.env.NODE_ENV === 'production') { delete env.NODE_ENV; require('child_process').execSync('npm install --prefix backend --omit=dev', { stdio: 'inherit', env: env }); } else { require('child_process').execSync('npm install --prefix backend', { stdio: 'inherit' }); }\"",
     "mobile": "npm run start --prefix mobile",
     "mobile:dev": "npm run start:dev --prefix mobile",
     "mobile:dev:clear": "npm run start:dev:clear --prefix mobile",

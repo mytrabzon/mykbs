@@ -1607,6 +1607,7 @@ export default function MrzScanScreen({ navigation }) {
       <View style={[styles.container, styles.unifiedCameraRoot]}>
         <View
           style={styles.unifiedCameraWrap}
+          pointerEvents="box-none"
           onLayout={(e) => {
             const { width, height } = e.nativeEvent.layout;
             const hasValidSize = width > 50 && height > 50;
@@ -1624,6 +1625,7 @@ export default function MrzScanScreen({ navigation }) {
               ref={unifiedCameraRef}
               style={[StyleSheet.absoluteFill, styles.unifiedCameraSize]}
               facing="back"
+              enableTorch={torchOn}
               onCameraReady={() => {
                 if (unifiedCameraReadyTimeoutRef.current) {
                   clearTimeout(unifiedCameraReadyTimeoutRef.current);
@@ -1657,21 +1659,18 @@ export default function MrzScanScreen({ navigation }) {
             </View>
           )}
         </View>
-        <View style={[styles.overlayTop, { paddingTop: insets.top + 6 }]} pointerEvents="box-none">
+        <View style={[styles.overlayTop, styles.overlayZIndex, { paddingTop: insets.top + 6 }]} pointerEvents="box-none">
           <TouchableOpacity onPress={goBack} style={styles.overlayBackBtn} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }} activeOpacity={0.8}>
             <Ionicons name="arrow-back" size={26} color="#fff" />
           </TouchableOpacity>
           <View style={styles.overlayBackBtn} />
         </View>
-        <View style={[styles.overlayBottom, { paddingBottom: insets.bottom + 20 }]} pointerEvents="box-none">
+        <View style={[styles.overlayBottom, styles.overlayZIndex, { paddingBottom: insets.bottom + 20 }]} pointerEvents="box-none">
           <View style={styles.overlayBottomBtn} />
-          {TorchModule ? (
-            <TouchableOpacity style={[styles.overlayBottomBtn, styles.torchBtnRound, torchOn && styles.torchBtnRoundOn]} onPress={toggleTorch} activeOpacity={0.8}>
-              <Ionicons name={torchOn ? 'flash' : 'flash-outline'} size={28} color="#fff" />
-            </TouchableOpacity>
-          ) : (
-            <View style={styles.overlayBottomBtn} />
-          )}
+          <TouchableOpacity style={[styles.overlayBottomBtn, styles.torchBtnRound, torchOn && styles.torchBtnRoundOn]} onPress={toggleTorch} activeOpacity={0.8}>
+            <Ionicons name={torchOn ? 'flash' : 'flash-outline'} size={28} color="#fff" />
+          </TouchableOpacity>
+          <View style={styles.overlayBottomBtn} />
         </View>
         {ocrLoading && (
           <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'center', alignItems: 'center' }]} pointerEvents="none">
@@ -1689,7 +1688,7 @@ export default function MrzScanScreen({ navigation }) {
             Otomatik algılama: Türkiye Cumhuriyeti kimlik kartı (arka yüz 3 satır MRZ) veya pasaport MRZ; ön yüz net görünsün
           </Text>
         </View>
-        <View style={[styles.androidFallbackBar, { bottom: insets.bottom + 72 }]} pointerEvents="box-none">
+        <View style={[styles.androidFallbackBar, styles.overlayZIndex, { bottom: insets.bottom + 72 }]} pointerEvents="box-none">
           <Text style={styles.androidFallbackLabel}>Algılanmazsa</Text>
           <View style={styles.androidFallbackRow}>
             <TouchableOpacity style={styles.androidFallbackBtn} onPress={handlePickImage} disabled={ocrLoading} activeOpacity={0.8}>
@@ -1723,7 +1722,7 @@ export default function MrzScanScreen({ navigation }) {
           <Text style={styles.mrzPickLoadingText}>Kamera hazırlanıyor…</Text>
         </View>
       )}
-      <View style={[styles.overlayTop, { paddingTop: insets.top + 6 }]} pointerEvents="box-none">
+      <View style={[styles.overlayTop, styles.overlayZIndex, { paddingTop: insets.top + 6 }]} pointerEvents="box-none">
         <TouchableOpacity onPress={goBack} style={styles.overlayBackBtn} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }} activeOpacity={0.8}>
           <Ionicons name="arrow-back" size={26} color="#fff" />
         </TouchableOpacity>
@@ -1754,7 +1753,7 @@ export default function MrzScanScreen({ navigation }) {
         </View>
         <View style={styles.overlayBackBtn} />
       </View>
-      <View style={[styles.overlayBottom, { paddingBottom: insets.bottom + 20 }]} pointerEvents="box-none">
+      <View style={[styles.overlayBottom, styles.overlayZIndex, { paddingBottom: insets.bottom + 20 }]} pointerEvents="box-none">
         <View style={styles.overlayBottomBtn} />
         {TorchModule ? (
           <TouchableOpacity style={[styles.overlayBottomBtn, styles.torchBtnRound, torchOn && styles.torchBtnRoundOn]} onPress={toggleTorch} activeOpacity={0.8}>
@@ -1886,6 +1885,7 @@ const styles = StyleSheet.create({
   cameraFullScreen: { flex: 1, width: '100%', minHeight: 300, overflow: 'hidden' },
   cameraPlaceholder: { backgroundColor: '#000' },
   cameraAreaWrap: { flex: 1, minHeight: 280 },
+  overlayZIndex: { zIndex: 20, elevation: 20 },
   overlayTop: { position: 'absolute', top: 0, left: 0, right: 0, zIndex: 10, elevation: 10, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 12 },
   overlayBackBtn: { width: 44, height: 44, borderRadius: 22, backgroundColor: 'rgba(0,0,0,0.5)', alignItems: 'center', justifyContent: 'center' },
   overlayIconBtn: { width: 44, height: 44, borderRadius: 22, backgroundColor: 'rgba(0,0,0,0.35)', alignItems: 'center', justifyContent: 'center' },
@@ -1931,7 +1931,7 @@ const styles = StyleSheet.create({
   mrzBandLabel: { color: 'rgba(255,255,255,0.9)', fontSize: 13, textAlign: 'center', paddingHorizontal: 16 },
   bannerFloating: { position: 'absolute', left: 12, right: 12, flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.75)', padding: 10, borderRadius: 8 },
   bannerText: { marginLeft: theme.spacing.sm, color: '#fff', fontSize: theme.typography.fontSize.sm, flex: 1 },
-  androidFallbackBar: { position: 'absolute', left: 12, right: 12, alignItems: 'center', zIndex: 10 },
+  androidFallbackBar: { position: 'absolute', left: 12, right: 12, alignItems: 'center', zIndex: 20, elevation: 20 },
   androidFallbackLabel: { color: 'rgba(255,255,255,0.9)', fontSize: 12, marginBottom: 6 },
   androidFallbackRow: { flexDirection: 'row', gap: 12 },
   androidFallbackBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: 'rgba(0,0,0,0.6)', paddingVertical: 10, paddingHorizontal: 16, borderRadius: 10 },
