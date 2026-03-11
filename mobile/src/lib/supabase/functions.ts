@@ -1,4 +1,4 @@
-import { supabase } from './supabase';
+import { supabase, refreshSessionWithRetry } from './supabase';
 import { logger } from '../../utils/logger';
 import { ENV } from '../config/env';
 
@@ -37,8 +37,12 @@ export async function callFn<T = unknown>(
   const baseUrl = ENV.SUPABASE_URL.replace(/\/$/, '');
   const fnUrl = `${baseUrl}/functions/v1/${name}`;
 
+  // Backend ile girişte Supabase token AsyncStorage'da olur, session boş olabilir. tokenOverride verilmişse önce onu kullan (bildirimler vb.).
   let accessToken: string | null = null;
-  if (requireAuth) {
+  const override = opts.tokenOverride && typeof opts.tokenOverride === 'string' && !opts.tokenOverride.startsWith('stub_token_') ? opts.tokenOverride : null;
+  if (override) {
+    accessToken = override;
+  } else if (requireAuth) {
     const { data: { session } } = await supabase.auth.getSession();
     accessToken = session?.access_token ?? null;
   }
@@ -87,8 +91,8 @@ export async function callFn<T = unknown>(
     data = { message: text || res.statusText };
   }
 
-  if (res.status === 401 && requireAuth && (name === 'me' || name === 'facilities_list' || name === 'rooms_list' || name === 'upload_community_image' || name === 'profile_update' || name === 'upload_avatar')) {
-    const { data: { session: refreshed } } = await supabase.auth.refreshSession();
+  if (res.status === 401 && requireAuth && (name === 'me' || name === 'facilities_list' || name === 'rooms_list' || name === 'upload_community_image' || name === 'profile_update' || name === 'upload_avatar' || name === 'in_app_notifications_list' || name === 'in_app_notifications_mark_read')) {
+    const { data: { session: refreshed } } = await refreshSessionWithRetry();
     const newToken = refreshed?.access_token;
     if (newToken) {
       logger.log('[callFn] 401 sonrası session yenilendi, tekrar deniyor', { name });

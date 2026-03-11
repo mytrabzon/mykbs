@@ -461,7 +461,7 @@ export default function OdalarScreen() {
       if ((odalar || []).length > 0) setBackendStatus((p) => ({ ...p, isOnline: true }));
       dataService.getMisafirler(false).then((list) => {
         const sorted = [...(list || [])].sort((a, b) => new Date(b.girisTarihi || 0) - new Date(a.girisTarihi || 0));
-        setSonGirenler(sorted.slice(0, 8));
+        setSonGirenler(sorted.slice(0, 10));
       }).catch(() => {});
       logger.log('[OdalarScreen] loadData tamamlandı', { step: lastLoadStep, odaCount: (odalar || []).length });
     } catch (error) {
@@ -842,6 +842,7 @@ export default function OdalarScreen() {
           navigation={navigation}
           getBackendUrl={getBackendUrl}
           backendOk={backendStatus.isOnline === true}
+          onOpenMenu={() => navigation.getParent()?.getParent()?.getParent()?.openDrawer?.()}
         />
       )}
 
@@ -882,10 +883,10 @@ export default function OdalarScreen() {
         getStatusLabel={getStatusLabel}
         getKBSDurumText={getKBSDurumText}
       />
-      {Platform.OS === 'android' && (needsPrivacyConsent || needsTermsConsent) ? (
+      {(needsPrivacyConsent || needsTermsConsent) ? (
         <TouchableOpacity
           style={[styles.consentBar, { backgroundColor: colors.primary + '20', borderColor: colors.primary }]}
-          onPress={() => navigation.navigate(needsPrivacyConsent ? 'PrivacyConsent' : 'TermsConsent')}
+          onPress={() => navigation.navigate('ConsentGate')}
           activeOpacity={0.8}
         >
           <Ionicons name="document-text-outline" size={20} color={colors.primary} />

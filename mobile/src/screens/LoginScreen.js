@@ -397,10 +397,10 @@ export default function LoginScreen({ route }) {
             </TouchableOpacity>
           </View>
 
-          {Platform.OS === 'android' && (needsPrivacyConsent || needsTermsConsent) ? (
+          {(needsPrivacyConsent || needsTermsConsent) ? (
             <TouchableOpacity
               style={[styles.consentBar, { backgroundColor: colors.primary + '20', borderColor: colors.primary }]}
-              onPress={() => navigation.navigate(needsPrivacyConsent ? 'PrivacyConsent' : 'TermsConsent')}
+              onPress={() => navigation.navigate('ConsentGate')}
               activeOpacity={0.8}
             >
               <Ionicons name="document-text-outline" size={20} color={colors.primary} />

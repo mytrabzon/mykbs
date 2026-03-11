@@ -150,6 +150,8 @@ export default function PrimeHomeView({
   getBackendUrl,
   backendOk,
   headerContent,
+  /** Hamburger menüyü açar (Drawer açıkken kullanılır) */
+  onOpenMenu,
 }) {
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
@@ -176,9 +178,21 @@ export default function PrimeHomeView({
       {headerContent}
       {/* Üst Bar */}
       <View style={[styles.header, { paddingTop: insets.top + 8, paddingBottom: 16 }]}>
-        <View>
-          <Text style={[styles.greeting, { color: colors.textSecondary }]}>Merhaba,</Text>
-          <Text style={[styles.hotelName, { color: colors.textPrimary }]}>{hotelName} 🏨</Text>
+        <View style={styles.headerLeft}>
+          {typeof onOpenMenu === 'function' && (
+            <TouchableOpacity
+              style={styles.menuButton}
+              onPress={onOpenMenu}
+              activeOpacity={0.7}
+              accessibilityLabel="Menü"
+            >
+              <Ionicons name="menu" size={28} color={colors.textPrimary} />
+            </TouchableOpacity>
+          )}
+          <View>
+            <Text style={[styles.greeting, { color: colors.textSecondary }]}>Merhaba,</Text>
+            <Text style={[styles.hotelName, { color: colors.textPrimary }]}>{hotelName} 🏨</Text>
+          </View>
         </View>
         <View style={styles.headerRight}>
           {isSuperAdmin && (
@@ -343,7 +357,7 @@ export default function PrimeHomeView({
           <View style={styles.sectionHeader}>
             <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>👥 Son giriş yapanlar</Text>
           </View>
-          {sonGirenler.slice(0, 6).map((m) => (
+          {sonGirenler.slice(0, 10).map((m) => (
             <TouchableOpacity
               key={m.id}
               style={[styles.recentItem, { borderBottomColor: colors.border }]}
@@ -397,6 +411,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 20,
   },
+  headerLeft: { flexDirection: 'row', alignItems: 'center', gap: 12, flex: 1, minWidth: 0 },
+  menuButton: { padding: 8, marginLeft: -8 },
   greeting: { fontSize: 14 },
   hotelName: { fontSize: 24, fontWeight: 'bold' },
   headerRight: { flexDirection: 'row', alignItems: 'center', gap: 15 },

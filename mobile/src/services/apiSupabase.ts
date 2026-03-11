@@ -167,7 +167,7 @@ async function wrapError(err: unknown): Promise<never> {
 export const api = {
   defaults: { headers: { common: {} as Record<string, string> } },
 
-  async get(path: string, _config?: { timeout?: number }) {
+  async get(path: string, _config?: { timeout?: number; responseType?: 'json' | 'text' | 'arraybuffer' }) {
     const { pathname, query } = parsePath(path);
     const token = await getToken();
     try {
@@ -351,7 +351,7 @@ export const api = {
         const res = await callFn('room_get', { id: odaMatch[1] }, token);
         return toResponse(res);
       }
-      if (pathname === '/rapor' || pathname === 'rapor') {
+      if (pathname === '/rapor' || pathname === 'rapor' || pathname.startsWith('/rapor/') || pathname.startsWith('rapor/')) {
         const backendUrl = getBackendUrl();
         if (!backendUrl) {
           const err = new Error('Sunucu adresi tanımlı değil') as Error & { response?: { status: number; data: unknown } };
@@ -363,12 +363,27 @@ export const api = {
           err.response = { status: 401, data: { message: 'Token bulunamadı' } };
           throw err;
         }
-        const r = await fetchWithLog(`${backendUrl}/api/rapor`, {
+        const qs = path.includes('?') ? path.slice(path.indexOf('?')) : '';
+        const apiPath = pathname.startsWith('/') ? pathname : `/${pathname}`;
+        const url = `${backendUrl}/api${apiPath}${qs}`;
+        const r = await fetchWithLog(url, {
           method: 'GET',
           headers: { Authorization: `Bearer ${token}` },
         });
+        if (!r.ok) {
+          const data = await r.json().catch(() => ({}));
+          throw Object.assign(new Error((data as { message?: string })?.message || 'Rapor alınamadı'), { response: { status: r.status, data } });
+        }
+        const responseType = _config?.responseType ?? 'json';
+        if (responseType === 'text') {
+          const text = await r.text();
+          return toResponse(text);
+        }
+        if (responseType === 'arraybuffer') {
+          const buf = await r.arrayBuffer();
+          return toResponse(buf);
+        }
         const data = await r.json().catch(() => ({}));
-        if (!r.ok) throw Object.assign(new Error((data as { message?: string }).message || 'Rapor alınamadı'), { response: { status: r.status, data } });
         return toResponse(data);
       }
       logger.warn('[apiSupabase] Unmapped GET', path);
@@ -780,6 +795,33 @@ export const api = {
         }
         const res = await callFn('document_scan', payload, token);
         return toResponse(res);
+      }
+      if (pathname === '/checkin' || pathname === 'checkin') {
+        const backendUrl = getBackendUrl();
+        if (backendUrl && token) {
+          const body = payload && typeof payload === 'object' ? {
+            ad: (payload as { ad?: string }).ad,
+            soyad: (payload as { soyad?: string }).soyad,
+            kimlikNo: (payload as { kimlikNo?: string }).kimlikNo,
+            pasaportNo: (payload as { pasaportNo?: string }).pasaportNo,
+            dogumTarihi: (payload as { dogumTarihi?: string }).dogumTarihi,
+            uyruk: (payload as { uyruk?: string }).uyruk || 'TÜRK',
+            room_number: (payload as { room_number?: string }).room_number
+          } : {};
+          const r = await fetchWithLog(`${backendUrl}/api/checkin`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+            body: JSON.stringify(body),
+          });
+          const data = await r.json().catch(() => ({}));
+          if (!r.ok) {
+            const e = new EdgeFunctionError((data as { message?: string })?.message || 'Check-in başarısız', r.status, undefined, data);
+            (e as EdgeFunctionError & { skipAuthRedirect?: boolean }).skipAuthRedirect = true;
+            throw e;
+          }
+          return toResponse({ ok: true, message: (data as { message?: string })?.message || 'Check-in kaydedildi', guestId: (data as { guestId?: string })?.guestId });
+        }
+        throw Object.assign(new Error('Backend adresi tanımlı değil'), { response: { status: 503, data: {} } });
       }
       if (pathname === '/misafir/checkin' || pathname === 'misafir/checkin') {
         const backendUrl = getBackendUrl();

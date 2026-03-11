@@ -1,0 +1,26 @@
+diff --git a/node_modules/@react-navigation/drawer/src/views/DrawerView.tsx b/node_modules/@react-navigation/drawer/src/views/DrawerView.tsx
+index 94770c4..360857b 100644
+--- a/node_modules/@react-navigation/drawer/src/views/DrawerView.tsx
++++ b/node_modules/@react-navigation/drawer/src/views/DrawerView.tsx
+@@ -79,17 +79,16 @@ function DrawerViewBase({
+   // @ts-expect-error: the type definitions are incomplete
+   useLegacyImplementation = !Reanimated.isConfigured?.(),
+ }: Props) {
+-  // Reanimated v3 dropped legacy v1 syntax
++  // Reanimated v3/v4: legacy implementation not available; use modern drawer instead of throwing
+   const legacyImplemenationNotAvailable =
+     require('react-native-reanimated').abs === undefined;
+ 
++  let effectiveUseLegacy = useLegacyImplementation;
+   if (useLegacyImplementation && legacyImplemenationNotAvailable) {
+-    throw new Error(
+-      'The `useLegacyImplementation` prop is not available with Reanimated 3 as it no longer includes support for Reanimated 1 legacy API. Remove the `useLegacyImplementation` prop from `Drawer.Navigator` to be able to use it.'
+-    );
++    effectiveUseLegacy = false;
+   }
+ 
+-  const Drawer: React.ComponentType<DrawerProps> = useLegacyImplementation
++  const Drawer: React.ComponentType<DrawerProps> = effectiveUseLegacy
+     ? require('./legacy/Drawer').default
+     : require('./modern/Drawer').default;
+ 

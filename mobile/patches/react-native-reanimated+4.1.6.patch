@@ -1,0 +1,108 @@
+diff --git a/node_modules/react-native-reanimated/src/hook/index.ts b/node_modules/react-native-reanimated/src/hook/index.ts
+index 2d44be5..398e8a3 100644
+--- a/node_modules/react-native-reanimated/src/hook/index.ts
++++ b/node_modules/react-native-reanimated/src/hook/index.ts
+@@ -21,6 +21,8 @@ export type { DerivedValue } from './useDerivedValue';
+ export { useDerivedValue } from './useDerivedValue';
+ export type { EventHandler, EventHandlerProcessed } from './useEvent';
+ export { useEvent } from './useEvent';
++export type { GestureHandlers } from './useAnimatedGestureHandler';
++export { useAnimatedGestureHandler } from './useAnimatedGestureHandler';
+ export type { FrameCallback } from './useFrameCallback';
+ export { useFrameCallback } from './useFrameCallback';
+ export type { UseHandlerContext } from './useHandler';
+diff --git a/node_modules/react-native-reanimated/src/hook/useAnimatedGestureHandler.ts b/node_modules/react-native-reanimated/src/hook/useAnimatedGestureHandler.ts
+new file mode 100644
+index 0000000..4c81efa
+--- /dev/null
++++ b/node_modules/react-native-reanimated/src/hook/useAnimatedGestureHandler.ts
+@@ -0,0 +1,77 @@
++'use strict';
++/**
++ * Reanimated 4 compatibility: useAnimatedGestureHandler was removed.
++ * This shim uses useEvent + runOnJS so handler callbacks run on JS thread
++ * (avoids "not a worklet" when drawer handlers are not workletized).
++ */
++import type { DependencyList, ReanimatedEvent } from './commonTypes';
++import type { EventHandlerInternal } from './useEvent';
++import { useEvent } from './useEvent';
++import { useHandler } from './useHandler';
++import { runOnJS } from '../workletFunctions';
++
++// GestureState from RNGH: BEGAN=2, ACTIVE=4, END=5, CANCELLED=3
++const GestureState = { BEGAN: 2, ACTIVE: 4, END: 5, CANCELLED: 3 };
++
++export interface GestureHandlers<Event extends object, Context> {
++  onStart?: (event: ReanimatedEvent<Event>, context: Context) => void;
++  onActive?: (event: ReanimatedEvent<Event>, context: Context) => void;
++  onEnd?: (event: ReanimatedEvent<Event>, context: Context) => void;
++  onFinish?: (event: ReanimatedEvent<Event>, context: Context) => void;
++}
++
++type GesturePayload = {
++  state?: number;
++  x?: number;
++  y?: number;
++  translationX?: number;
++  translationY?: number;
++  velocityX?: number;
++  velocityY?: number;
++};
++
++export function useAnimatedGestureHandler<
++  Event extends { state?: number; x?: number; translationX?: number; velocityX?: number },
++  Context extends Record<string, unknown> = Record<string, unknown>,
++>(
++  handlers: GestureHandlers<Event, Context>,
++  dependencies?: DependencyList
++): EventHandlerInternal<Event> {
++  const { context, doDependenciesDiffer } = useHandler<Event, Context>(
++    handlers as Record<string, (e: ReanimatedEvent<Event>, ctx: Context) => void>,
++    dependencies
++  );
++
++  const dispatch = (payload: GesturePayload, type: 'onStart' | 'onActive' | 'onEnd' | 'onFinish') => {
++    const e = payload as ReanimatedEvent<Event>;
++    if (type === 'onStart' && handlers.onStart) handlers.onStart(e, context);
++    else if (type === 'onActive' && handlers.onActive) handlers.onActive(e, context);
++    else if (type === 'onEnd' && handlers.onEnd) handlers.onEnd(e, context);
++    else if (type === 'onFinish' && handlers.onFinish) handlers.onFinish(e, context);
++  };
++
++  const runDispatch = runOnJS(dispatch);
++
++  return useEvent<Event, Context>(
++    (event: ReanimatedEvent<Event>) => {
++      'worklet';
++      const ev = event as Event & GesturePayload;
++      const state = ev.state;
++      const payload: GesturePayload = {
++        state: ev.state,
++        x: ev.x,
++        y: ev.y,
++        translationX: ev.translationX,
++        translationY: ev.translationY,
++        velocityX: ev.velocityX,
++        velocityY: ev.velocityY,
++      };
++      if (state === GestureState.BEGAN) runDispatch(payload, 'onStart');
++      else if (state === GestureState.ACTIVE) runDispatch(payload, 'onActive');
++      else if (state === GestureState.END) runDispatch(payload, 'onEnd');
++      if (state === GestureState.END || state === GestureState.CANCELLED) runDispatch(payload, 'onFinish');
++    },
++    ['onGestureEvent'],
++    doDependenciesDiffer
++  );
++}
+diff --git a/node_modules/react-native-reanimated/src/index.ts b/node_modules/react-native-reanimated/src/index.ts
+index 33ea926..cd7626c 100644
+--- a/node_modules/react-native-reanimated/src/index.ts
++++ b/node_modules/react-native-reanimated/src/index.ts
+@@ -122,6 +122,7 @@ export type {
+   UseHandlerContext,
+ } from './hook';
+ export {
++  useAnimatedGestureHandler,
+   useAnimatedKeyboard,
+   useAnimatedProps,
+   useAnimatedReaction,

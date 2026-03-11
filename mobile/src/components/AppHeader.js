@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Modal, Pressable } from 'react-native';
+import React from 'react';
+import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
@@ -9,40 +9,15 @@ import { getIsAdminPanelUser } from '../utils/adminAuth';
 import { typography, spacing } from '../theme';
 
 /**
- * Bağlantı noktası: yeşil = bağlı, kırmızı = bağlı değil, gri = yapılandırılmadı.
- * Tıklanınca modal ile kullanıcıya not gösterilir.
- */
-function StatusDot({ configured, isOnline, error, label, onPress }) {
-  const { colors } = useTheme();
-  const dotColor = !configured ? colors.textSecondary : isOnline ? colors.success : colors.error;
-  return (
-    <TouchableOpacity
-      onPress={onPress}
-      style={[styles.dotWrap, { backgroundColor: dotColor }]}
-      hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-      accessibilityLabel={`${label}: ${!configured ? 'yapılandırılmadı' : isOnline ? 'bağlı' : 'bağlı değil'}`}
-    />
-  );
-}
-
-/**
- * Standart header: sol tesis + paket, orta başlık, sağda bağlantı noktaları (Backend · Supabase) + bildirim + profil.
- * Noktalar: yeşil = bağlı, kırmızı = bağlı değil, gri = yapılandırılmadı. Tıklanınca durum notu modalı açılır.
+ * Standart header: sol tesis + paket, orta başlık, sağda bildirim + profil.
  */
 export default function AppHeader({
   title,
   tesis,
   variant = 'default',
   hideTesisAndTitle = false,
-  /** Sadece başlık + bildirim + profil (tesis/paket ve durum noktaları gizlenir) */
+  /** Sadece başlık + bildirim + profil (tesis/paket gizlenir) */
   minimal = false,
-  backendConfigured = false,
-  backendOnline = null,
-  backendError = null,
-  supabaseConfigured = false,
-  supabaseOnline = null,
-  supabaseError = null,
-  kbsConfigured = null,
   onNotification,
   onProfile,
   onBack,
@@ -53,29 +28,6 @@ export default function AppHeader({
   const navigation = useNavigation();
   const { user } = useAuth();
   const isSuperAdmin = getIsAdminPanelUser(user);
-  const [modalVisible, setModalVisible] = useState(false);
-  const [modalContent, setModalContent] = useState({ title: '', body: '' });
-
-  const showNote = (source) => {
-    if (source === 'backend') {
-      if (!backendConfigured) {
-        setModalContent({ title: 'Backend', body: 'Backend adresi yapılandırılmadı. EXPO_PUBLIC_BACKEND_URL tanımlanmamış.' });
-      } else if (backendOnline === true) {
-        setModalContent({ title: 'Backend', body: 'Bağlantı var.' });
-      } else {
-        setModalContent({ title: 'Backend', body: 'Bağlantı yok. Sorun yok, sistem geliştiriliyor.' });
-      }
-    } else {
-      if (!supabaseConfigured) {
-        setModalContent({ title: 'Supabase', body: 'Supabase yapılandırılmadı. EXPO_PUBLIC_SUPABASE_URL tanımlanmamış.' });
-      } else if (supabaseOnline === true) {
-        setModalContent({ title: 'Supabase', body: 'Bağlantı var.' });
-      } else {
-        setModalContent({ title: 'Supabase', body: 'Bağlantı yok. Sorun yok, sistem geliştiriliyor.' });
-      }
-    }
-    setModalVisible(true);
-  };
 
   const isPrimary = variant === 'primary';
   return (
@@ -112,24 +64,6 @@ export default function AppHeader({
           </Text>
         ) : null}
         <View style={styles.right} pointerEvents="box-none">
-          {/* Bağlantı göstergesi: minimal modda da göster */}
-          <View style={styles.dotsRow} pointerEvents="box-none">
-            <StatusDot
-              configured={backendConfigured}
-              isOnline={backendOnline}
-              error={backendError}
-              label="Backend"
-              onPress={() => showNote('backend')}
-            />
-            <View style={[styles.dotDivider, { backgroundColor: colors.border }]} />
-            <StatusDot
-              configured={supabaseConfigured}
-              isOnline={supabaseOnline}
-              error={supabaseError}
-              label="Supabase"
-              onPress={() => showNote('supabase')}
-            />
-          </View>
           {rightComponent ?? (
             <>
               {isSuperAdmin && (
@@ -263,54 +197,5 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 9,
     fontWeight: 'bold',
-  },
-  dotsRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginRight: spacing.xs,
-  },
-  dotWrap: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
-  },
-  dotDivider: {
-    width: 1,
-    height: 10,
-    marginHorizontal: 4,
-  },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.5)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: spacing.lg,
-  },
-  modalCard: {
-    width: '100%',
-    maxWidth: 320,
-    borderRadius: 12,
-    borderWidth: 1,
-    padding: spacing.lg,
-  },
-  modalTitle: {
-    ...typography.text.h2,
-    marginBottom: spacing.sm,
-  },
-  modalBody: {
-    fontSize: typography.text.body.fontSize,
-    lineHeight: 22,
-    marginBottom: spacing.lg,
-  },
-  modalButton: {
-    paddingVertical: spacing.sm,
-    paddingHorizontal: spacing.lg,
-    borderRadius: 8,
-    alignSelf: 'flex-end',
-  },
-  modalButtonText: {
-    color: '#fff',
-    fontSize: typography.text.body.fontSize,
-    fontWeight: typography.fontWeight.medium,
   },
 });

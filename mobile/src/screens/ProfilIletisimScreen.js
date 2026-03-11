@@ -250,12 +250,6 @@ export default function ProfilIletisimScreen() {
         onBack={() => (step !== 'list' ? cancelFlow() : navigation.goBack())}
         onNotification={() => navigation.navigate('Bildirimler')}
         onProfile={() => navigation.navigate('Main', { screen: 'DahaFazla', params: { screen: 'Ayarlar' } })}
-        backendConfigured={backendStatus.configured}
-        backendOnline={backendStatus.isOnline}
-        backendError={backendStatus.error}
-        supabaseConfigured={supabaseStatus.configured}
-        supabaseOnline={supabaseStatus.isOnline}
-        supabaseError={supabaseStatus.error}
       />
       <KeyboardAvoidingView
         style={styles.flex}

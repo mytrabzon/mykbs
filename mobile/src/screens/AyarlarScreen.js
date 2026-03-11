@@ -25,6 +25,10 @@ import { dataService } from '../services/dataService';
 import { backendHealth } from '../services/backendHealth';
 import { getApiBaseUrl, isSupabaseConfigured } from '../config/api';
 import { getNfcEnabled, setNfcEnabled } from '../utils/nfcSetting';
+import { getTtsEnabled, setTtsEnabled, getHapticEnabled, setHapticEnabled, loadFeedbackSettings } from '../utils/feedback';
+import { useLanguage } from '../context/LanguageContext';
+import { exportGuestsToExcel } from '../utils/exportExcel';
+import { createBackup } from '../utils/backup';
 import * as communityApi from '../services/communityApi';
 import Toast from 'react-native-toast-message';
 import { Ionicons } from '@expo/vector-icons';
@@ -75,6 +79,11 @@ export default function AyarlarScreen() {
   const [okutulanBelgelerLoading, setOkutulanBelgelerLoading] = useState(false);
   const [okutulanBelgeDetail, setOkutulanBelgeDetail] = useState(null);
   const [nfcEnabled, setNfcEnabledState] = useState(false);
+  const [ttsEnabled, setTtsEnabledState] = useState(true);
+  const [hapticEnabled, setHapticEnabledState] = useState(true);
+  const [exportLoading, setExportLoading] = useState(false);
+  const [backupLoading, setBackupLoading] = useState(false);
+  const { language, setLanguage, t, languageLabels } = useLanguage();
   const settingsLoadedRef = useRef(false);
   // Profil (birleştirilmiş profil düzenleme)
   const [displayName, setDisplayName] = useState(() => (user?.adSoyad || '').trim());
@@ -118,6 +127,10 @@ export default function AyarlarScreen() {
 
   useEffect(() => {
     getNfcEnabled().then(setNfcEnabledState);
+    loadFeedbackSettings().then(() => {
+      setTtsEnabledState(getTtsEnabled());
+      setHapticEnabledState(getHapticEnabled());
+    });
   }, []);
 
   // Tek seferde tüm ayar verilerini yükle (429 rate limit önlemi: aynı anda 4+ istek yerine tek batch)
@@ -580,12 +593,6 @@ export default function AyarlarScreen() {
       <AppHeader
         title="Profil ve Ayarlar"
         tesis={tesis}
-        backendConfigured={backendStatus.configured}
-        backendOnline={backendStatus.isOnline}
-        backendError={backendStatus.error}
-        supabaseConfigured={supabaseStatus.configured}
-        supabaseOnline={supabaseStatus.isOnline}
-        supabaseError={supabaseStatus.error}
         onNotification={() => navigation.navigate('Bildirimler')}
       />
       <ScrollView style={styles.scroll} contentContainerStyle={styles.content}>
@@ -669,6 +676,84 @@ export default function AyarlarScreen() {
               thumbColor={nfcEnabled ? colors.primary : colors.textSecondary}
             />
           </View>
+        </View>
+
+        <View style={[styles.section, { backgroundColor: colors.surface }]}>
+          <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>Kullanım kolaylığı</Text>
+          <View style={[styles.switchRow, { borderColor: colors.border }]}>
+            <Text style={[styles.label, { color: colors.textPrimary }]}>Titreşimli geri bildirim</Text>
+            <Switch
+              value={hapticEnabled}
+              onValueChange={(v) => { setHapticEnabled(v); setHapticEnabledState(v); }}
+              trackColor={{ false: colors.border, true: colors.primarySoft }}
+              thumbColor={hapticEnabled ? colors.primary : colors.textSecondary}
+            />
+          </View>
+          <View style={[styles.switchRow, { borderColor: colors.border }]}>
+            <Text style={[styles.label, { color: colors.textPrimary }]}>Sesli yönlendirme (TTS)</Text>
+            <Switch
+              value={ttsEnabled}
+              onValueChange={(v) => { setTtsEnabled(v); setTtsEnabledState(v); }}
+              trackColor={{ false: colors.border, true: colors.primarySoft }}
+              thumbColor={ttsEnabled ? colors.primary : colors.textSecondary}
+            />
+          </View>
+          <View style={[styles.menuRow, { borderBottomWidth: 0 }]}>
+            <Text style={[styles.label, { color: colors.textPrimary }]}>Dil</Text>
+            <View style={{ flexDirection: 'row', gap: 8, flexWrap: 'wrap' }}>
+              {Object.entries(languageLabels || {}).map(([code, label]) => (
+                <TouchableOpacity
+                  key={code}
+                  onPress={() => setLanguage(code)}
+                  style={[styles.langChip, { backgroundColor: language === code ? colors.primary + '25' : colors.background, borderColor: colors.border }]}
+                >
+                  <Text style={[styles.langChipText, { color: language === code ? colors.primary : colors.textPrimary }]}>{label}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </View>
+        </View>
+
+        <View style={[styles.section, { backgroundColor: colors.surface }]}>
+          <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>Raporlar ve yedek</Text>
+          <TouchableOpacity
+            style={[styles.menuRow, { borderColor: colors.border }]}
+            onPress={async () => {
+              if (exportLoading) return;
+              setExportLoading(true);
+              try {
+                await exportGuestsToExcel();
+                Toast.show({ type: 'success', text1: 'Excel aktarıldı', text2: 'Dosyayı paylaşabilirsiniz.' });
+              } catch (e) {
+                Toast.show({ type: 'error', text1: 'Hata', text2: e?.message || 'Aktarılamadı.' });
+              } finally {
+                setExportLoading(false);
+              }
+            }}
+            disabled={exportLoading}
+          >
+            <Text style={[styles.menuRowText, { color: colors.textPrimary }]}>{exportLoading ? 'Hazırlanıyor...' : "Excel'e aktar"}</Text>
+            {exportLoading ? <ActivityIndicator size="small" color={colors.primary} /> : <Ionicons name="download-outline" size={20} color={colors.textSecondary} />}
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.menuRow, { borderColor: colors.border }]}
+            onPress={async () => {
+              if (backupLoading) return;
+              setBackupLoading(true);
+              try {
+                await createBackup();
+                Toast.show({ type: 'success', text1: 'Yedek oluşturuldu', text2: 'Dosyayı paylaşabilirsiniz.' });
+              } catch (e) {
+                Toast.show({ type: 'error', text1: 'Hata', text2: e?.message || 'Yedek alınamadı.' });
+              } finally {
+                setBackupLoading(false);
+              }
+            }}
+            disabled={backupLoading}
+          >
+            <Text style={[styles.menuRowText, { color: colors.textPrimary }]}>{backupLoading ? 'Hazırlanıyor...' : 'Yedekle'}</Text>
+            {backupLoading ? <ActivityIndicator size="small" color={colors.primary} /> : <Ionicons name="cloud-upload-outline" size={20} color={colors.textSecondary} />}
+          </TouchableOpacity>
         </View>
 
         <View style={[styles.section, { backgroundColor: colors.surface }]}>
@@ -1029,6 +1114,13 @@ const styles = StyleSheet.create({
     marginBottom: spacing.xs,
   },
   segmented: { marginBottom: spacing.md },
+  langChip: {
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    borderRadius: 8,
+    borderWidth: 1,
+  },
+  langChipText: { fontSize: 14, fontWeight: '500' },
   switchRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',

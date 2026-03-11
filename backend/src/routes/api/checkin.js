@@ -111,6 +111,124 @@ router.get('/aktif-misafirler', async (req, res) => {
 });
 
 /**
+ * POST /api/checkin/batch
+ * Offline-first sync: toplu check-in. Body: { notifications: [ { local_id, ad, soyad, kimlikNo?, pasaportNo?, dogumTarihi, uyruk, room_number } ] }
+ * Her biri için: guests insert + kbs_outbox. KBS worker arka planda gönderir.
+ */
+router.post('/checkin/batch', async (req, res) => {
+  try {
+    const branchId = req.branchId;
+    const branch = req.branch || {};
+    const userId = req.user?.id;
+    if (!branchId) {
+      return res.status(409).json({ message: 'Tesis/şube bilgisi yüklenemedi.' });
+    }
+    if (!supabaseAdmin) {
+      return res.status(503).json({ message: 'Supabase yapılandırılmamış' });
+    }
+
+    const notifications = req.body?.notifications || [];
+    if (!Array.isArray(notifications) || notifications.length === 0) {
+      return res.status(400).json({ message: 'notifications dizisi gerekli' });
+    }
+    if (notifications.length > 100) {
+      return res.status(400).json({ message: 'En fazla 100 kayıt gönderilebilir' });
+    }
+
+    const kbsEnabled = branch.kbs_configured && branch.kbs_approved && branch.kbs_turu && branch.kbs_tesis_kodu && branch.kbs_web_servis_sifre;
+    const success = [];
+    const failed = [];
+
+    for (const n of notifications) {
+      const localId = n.local_id || n.id;
+      const ad = (n.ad || '').trim();
+      const soyad = (n.soyad || '').trim();
+      const fullName = [ad, soyad].filter(Boolean).join(' ') || 'Misafir';
+      const kimlikNo = n.kimlikNo || null;
+      const pasaportNo = n.pasaportNo || null;
+      const dogumTarihi = n.dogumTarihi || null;
+      const uyruk = n.uyruk || 'TÜRK';
+      const roomNumber = (n.room_number || n.odaNumarasi || '').toString().trim() || null;
+      const checkinAt = n.checkin_at ? new Date(n.checkin_at) : new Date();
+
+      if (!ad || !soyad) {
+        failed.push({ local_id: localId, error: 'Ad ve soyad gerekli' });
+        continue;
+      }
+      if (!kimlikNo && !pasaportNo) {
+        failed.push({ local_id: localId, error: 'Kimlik veya pasaport numarası gerekli' });
+        continue;
+      }
+
+      try {
+        const { data: guest, error: guestErr } = await supabaseAdmin
+          .from('guests')
+          .insert({
+            branch_id: branchId,
+            full_name: fullName,
+            nationality: uyruk,
+            document_type: kimlikNo ? 'tc' : 'pasaport',
+            document_no: kimlikNo || pasaportNo,
+            birth_date: dogumTarihi || null,
+            room_number: roomNumber,
+            checkin_at: checkinAt.toISOString()
+          })
+          .select('id')
+          .single();
+
+        if (guestErr) {
+          failed.push({ local_id: localId, error: guestErr.message || 'Misafir kaydı oluşturulamadı' });
+          continue;
+        }
+
+        if (kbsEnabled) {
+          try {
+            const outboxId = await createOutbox(branchId, 'checkin', {
+              type: 'checkin',
+              guest_id: guest.id,
+              ad,
+              soyad,
+              kimlikNo,
+              pasaportNo,
+              dogumTarihi,
+              uyruk,
+              girisTarihi: checkinAt.toISOString(),
+              odaNumarasi: roomNumber || '0'
+            });
+            setImmediate(() => attemptSendOutbox(outboxId).catch((e) => console.error('[checkin/batch] attemptSendOutbox', e)));
+          } catch (outboxErr) {
+            console.error('[checkin/batch] outbox', outboxErr);
+          }
+        }
+
+        await supabaseAdmin.from('audit_logs').insert({
+          branch_id: branchId,
+          user_id: userId,
+          action: 'checkin_create',
+          entity: 'guests',
+          entity_id: guest.id,
+          meta_json: { room_number: roomNumber, batch: true }
+        }).then(() => {});
+
+        success.push({ local_id: localId, guest_id: guest.id });
+      } catch (err) {
+        failed.push({ local_id: localId, error: err?.message || 'Sunucu hatası' });
+      }
+    }
+
+    res.json({
+      processed: notifications.length,
+      success: success.length,
+      failed: failed.length,
+      details: { success, failed }
+    });
+  } catch (err) {
+    console.error('[checkin/batch]', err);
+    return res.status(500).json({ message: err?.message || 'Toplu işlem başarısız' });
+  }
+});
+
+/**
  * POST /api/checkin
  * Body: { branch_id, guest: { ad, soyad, kimlikNo?, pasaportNo?, dogumTarihi, uyruk }, room_id?, room_number?, checkin_at? }
  * Mobil uyumluluk: odaId, ad, soyad, kimlikNo, pasaportNo, dogumTarihi, uyruk

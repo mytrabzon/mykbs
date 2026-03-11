@@ -9,4 +9,29 @@ export function getIsAdminPanelUser(user) {
   return user.id === SUPER_ADMIN_UID;
 }
 
+/**
+ * Web ile aynı yetki: super_admin | admin | user | staff.
+ * Backend /auth/me role döndürüyor; super_admin UID ile de eşleşirse super_admin sayılır.
+ */
+export function getEffectiveRole(user) {
+  if (!user) return 'user';
+  if (user.id === SUPER_ADMIN_UID || user.role === 'super_admin') return 'super_admin';
+  return user.role || 'user';
+}
+
+/** Yetki seviyesi etiketi: receptionist = sadece bildirim, manager/admin = her şeyi görebilir */
+export const ROLE_LABELS = {
+  staff: 'Resepsiyonist',
+  receptionist: 'Resepsiyonist',
+  user: 'Kullanıcı',
+  admin: 'Müdür',
+  manager: 'Müdür',
+  super_admin: 'Süper Admin',
+};
+export function getRoleLabel(user) {
+  if (!user) return ROLE_LABELS.user;
+  const role = getEffectiveRole(user);
+  return ROLE_LABELS[role] || ROLE_LABELS.user;
+}
+
 export { SUPER_ADMIN_UID };

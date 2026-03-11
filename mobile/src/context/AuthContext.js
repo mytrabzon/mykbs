@@ -3,7 +3,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { api, setApiTokenProvider, setOnUnauthorized } from '../services/api';
 import { dataService, setDataServiceTokenProvider } from '../services/dataService';
 import { logger } from '../utils/logger';
-import { supabase } from '../lib/supabase/supabase';
+import { supabase, refreshSessionWithRetry } from '../lib/supabase/supabase';
 
 const APP_PREFIX = 'mykbs';
 
@@ -196,7 +196,7 @@ export const AuthProvider = ({ children }) => {
             if (!expiresAt || expiresAt > nowSec + bufferSec) {
               return session.access_token;
             }
-            const { data: { session: refreshed }, error } = await supabase.auth.refreshSession();
+            const { data: { session: refreshed }, error } = await refreshSessionWithRetry();
             if (!error && refreshed?.access_token) {
               await AsyncStorage.setItem(AUTH_STORAGE_KEYS.SUPABASE_TOKEN, refreshed.access_token);
               await AsyncStorage.setItem(AUTH_STORAGE_KEYS.TOKEN, refreshed.access_token);
@@ -270,7 +270,7 @@ export const AuthProvider = ({ children }) => {
         if (localTerms && mounted.current) setLocalTermsAcceptedAt(localTerms);
 
         if (supabase) {
-          const { data: { session: refreshedSession }, error: refreshError } = await supabase.auth.refreshSession();
+          const { data: { session: refreshedSession }, error: refreshError } = await refreshSessionWithRetry();
           const session = !refreshError && refreshedSession?.access_token
             ? refreshedSession
             : (await supabase.auth.getSession()).data?.session;
@@ -712,12 +712,20 @@ export const AuthProvider = ({ children }) => {
         needsTermsConsent,
         acceptPrivacyLocally: async () => {
           const now = new Date().toISOString();
-          await AsyncStorage.setItem(AUTH_STORAGE_KEYS.LOCAL_PRIVACY_ACCEPTED_AT, now);
+          try {
+            await AsyncStorage.setItem(AUTH_STORAGE_KEYS.LOCAL_PRIVACY_ACCEPTED_AT, now);
+          } catch (e) {
+            logger.warn('acceptPrivacyLocally storage failed', e?.message);
+          }
           setLocalPrivacyAcceptedAt(now);
         },
         acceptTermsLocally: async () => {
           const now = new Date().toISOString();
-          await AsyncStorage.setItem(AUTH_STORAGE_KEYS.LOCAL_TERMS_ACCEPTED_AT, now);
+          try {
+            await AsyncStorage.setItem(AUTH_STORAGE_KEYS.LOCAL_TERMS_ACCEPTED_AT, now);
+          } catch (e) {
+            logger.warn('acceptTermsLocally storage failed', e?.message);
+          }
           setLocalTermsAcceptedAt(now);
         },
         acceptPrivacy: async () => {
@@ -728,7 +736,7 @@ export const AuthProvider = ({ children }) => {
               const { data: { session } } = await supabase.auth.getSession();
               if (session?.access_token) {
                 if (session?.expires_at && session.expires_at <= Math.floor(Date.now() / 1000) + 300) {
-                  const { data: { session: refreshed } } = await supabase.auth.refreshSession();
+                  const { data: { session: refreshed } } = await refreshSessionWithRetry();
                   tokenToUse = refreshed?.access_token ?? session?.access_token;
                 } else {
                   tokenToUse = session?.access_token;
@@ -741,17 +749,12 @@ export const AuthProvider = ({ children }) => {
             }
           } catch (e) {
             const status = e?.response?.status;
-            const isRateLimit = status === 429;
-            const isNetwork = !e?.response && (e?.message?.includes('Network') || e?.code === 'ECONNABORTED');
-            if (isRateLimit || isNetwork) {
+            logger.warn('acceptPrivacy API failed, saving locally', status || e?.message);
+            try {
               await AsyncStorage.setItem(AUTH_STORAGE_KEYS.LOCAL_PRIVACY_ACCEPTED_AT, now);
-              setLocalPrivacyAcceptedAt(now);
-              setPrivacyPolicyAcceptedAt(now);
-              logger.warn('acceptPrivacy: rate limit/network, local consent saved', status || e?.message);
-              return;
-            }
-            logger.error('acceptPrivacy error', e);
-            throw e;
+            } catch (_) {}
+            setLocalPrivacyAcceptedAt(now);
+            setPrivacyPolicyAcceptedAt(now);
           }
         },
         /** Kullanım şartları onayı (ISO tarih string veya true). Yoksa lobide onay ekranı gösterilir. */
@@ -764,7 +767,7 @@ export const AuthProvider = ({ children }) => {
               const { data: { session } } = await supabase.auth.getSession();
               if (session?.access_token) {
                 if (session?.expires_at && session.expires_at <= Math.floor(Date.now() / 1000) + 300) {
-                  const { data: { session: refreshed } } = await supabase.auth.refreshSession();
+                  const { data: { session: refreshed } } = await refreshSessionWithRetry();
                   tokenToUse = refreshed?.access_token ?? session?.access_token;
                 } else {
                   tokenToUse = session?.access_token;
@@ -777,17 +780,12 @@ export const AuthProvider = ({ children }) => {
             }
           } catch (e) {
             const status = e?.response?.status;
-            const isRateLimit = status === 429;
-            const isNetwork = !e?.response && (e?.message?.includes('Network') || e?.code === 'ECONNABORTED');
-            if (isRateLimit || isNetwork) {
+            logger.warn('acceptTerms API failed, saving locally', status || e?.message);
+            try {
               await AsyncStorage.setItem(AUTH_STORAGE_KEYS.LOCAL_TERMS_ACCEPTED_AT, now);
-              setLocalTermsAcceptedAt(now);
-              setTermsOfServiceAcceptedAt(now);
-              logger.warn('acceptTerms: rate limit/network, local consent saved', status || e?.message);
-              return;
-            }
-            logger.error('acceptTerms error', e);
-            throw e;
+            } catch (_) {}
+            setLocalTermsAcceptedAt(now);
+            setTermsOfServiceAcceptedAt(now);
           }
         },
         accountPendingDeletion,

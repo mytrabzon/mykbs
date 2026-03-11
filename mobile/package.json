@@ -1,6 +1,6 @@
 {
   "name": "mykbs-mobile",
-  "version": "1.0.3",
+  "version": "1.0.0",
   "main": "index.js",
   "scripts": {
     "postinstall": "node scripts/ensure-patch-package-state.js && npx patch-package",
@@ -23,6 +23,7 @@
     "@react-native-community/datetimepicker": "8.4.4",
     "@react-native-picker/picker": "2.11.1",
     "@react-navigation/bottom-tabs": "6.6.1",
+    "@react-navigation/drawer": "^6.7.2",
     "@react-navigation/native": "6.1.18",
     "@react-navigation/native-stack": "^6.4.1",
     "@react-navigation/stack": "6.4.1",
@@ -35,11 +36,16 @@
     "expo-dev-client": "~6.0.20",
     "expo-document-picker": "~14.0.0",
     "expo-file-system": "~19.0.0",
+    "expo-haptics": "~15.0.8",
     "expo-image-picker": "~17.0.0",
     "expo-linear-gradient": "~15.0.8",
     "expo-local-authentication": "~17.0.0",
     "expo-notifications": "~0.32.16",
+    "expo-print": "~15.0.8",
     "expo-screen-orientation": "~9.0.8",
+    "expo-sharing": "~14.0.8",
+    "expo-speech": "~14.0.8",
+    "expo-sqlite": "~16.0.10",
     "expo-updates": "~29.0.16",
     "react": "19.1.0",
     "react-native": "0.81.5",
@@ -47,11 +53,14 @@
     "react-native-iap": "^12.15.0",
     "react-native-masked-text": "^1.13.0",
     "react-native-nfc-manager": "^3.14.3",
+    "react-native-reanimated": "~4.1.1",
     "react-native-safe-area-context": "~5.6.0",
     "react-native-screens": "~4.16.0",
     "react-native-toast-message": "^2.1.6",
     "react-native-torch": "^1.0.5",
-    "react-native-webview": "13.15.0"
+    "react-native-webview": "13.15.0",
+    "react-native-worklets": "0.5.1",
+    "xlsx": "^0.18.5"
   },
   "expo": {
     "doctor": {

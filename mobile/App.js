@@ -4,6 +4,7 @@ import { getApiBaseUrl } from './src/config/api';
 import { dataService } from './src/services/dataService';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
+import { createDrawerNavigator } from '@react-navigation/drawer';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
 import Toast from 'react-native-toast-message';
@@ -25,6 +26,7 @@ import KayitScreen from './src/screens/KayitScreen';
 import BasvuruScreen from './src/screens/BasvuruScreen';
 import OdalarScreen from './src/screens/OdalarScreen';
 import CheckInScreen from './src/screens/CheckInScreen';
+import QRRoomScanScreen from './src/screens/QRRoomScanScreen';
 import KaydedilenlerScreen from './src/screens/KaydedilenlerScreen';
 import AyarlarScreen from './src/screens/AyarlarScreen';
 import OdaDetayScreen from './src/screens/OdaDetayScreen';
@@ -39,8 +41,12 @@ import PaylasimEkleScreen from './src/screens/PaylasimEkleScreen';
 import ProfilIletisimScreen from './src/screens/ProfilIletisimScreen';
 import RaporlarScreen from './src/screens/RaporlarScreen';
 import DahaFazlaScreen from './src/screens/DahaFazlaScreen';
+import ReceptionistPanelScreen from './src/screens/ReceptionistPanelScreen';
+import PlaceholderScreen from './src/screens/PlaceholderScreen';
+import DrawerMenu from './src/components/DrawerMenu';
 import PrivacyConsentScreen from './src/screens/PrivacyConsentScreen';
 import TermsConsentScreen from './src/screens/TermsConsentScreen';
+import ConsentGateScreen from './src/screens/ConsentGateScreen';
 import AccountDeletionPendingScreen from './src/screens/AccountDeletionPendingScreen';
 import MrzScanScreen from './src/features/kyc/MrzScanScreen';
 import MrzResultScreen from './src/features/kyc/MrzResultScreen';
@@ -61,6 +67,8 @@ import ScanHome from './src/features/scan/ScanHome';
 import ScanCameraScreen from './src/features/scan/ScanCameraScreen';
 import ScanReviewScreen from './src/features/scan/ScanReviewScreen';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
+import { LanguageProvider } from './src/context/LanguageContext';
+import { loadFeedbackSettings } from './src/utils/feedback';
 
 // Misafirler sekmesi: Oteldeki mevcut kişiler (check-in yapılan misafirler) listelenir.
 function MisafirlerScreen({ navigation }) {
@@ -291,6 +299,7 @@ import CreditsBanner from './src/components/CreditsBanner';
 import PaywallModal from './src/components/PaywallModal';
 const Tab = createBottomTabNavigator();
 const Stack = createNativeStackNavigator();
+const Drawer = createDrawerNavigator();
 
 const MAIN_TAB_NAMES = ['Odalar', 'Misafirler', 'MRZ', 'Raporlar', 'DahaFazla'];
 
@@ -299,8 +308,51 @@ function DahaFazlaStack() {
     <Stack.Navigator screenOptions={{ headerShown: false }}>
       <Stack.Screen name="DahaFazlaMenu" component={DahaFazlaScreen} />
       <Stack.Screen name="Ayarlar" component={AyarlarScreen} />
+      <Stack.Screen name="ReceptionistPanel" component={ReceptionistPanelScreen} />
       <Stack.Screen name="Topluluk" component={ToplulukScreen} />
       <Stack.Screen name="AdminPanel" component={AdminPanelScreen} />
+    </Stack.Navigator>
+  );
+}
+
+/** Ana stack: tab'lar + check-in, oda detay, admin vb. (Drawer'ın "Main" ekranı) */
+function MainStack() {
+  return (
+    <Stack.Navigator screenOptions={{ headerShown: false }} initialRouteName="MainTabs">
+      <Stack.Screen name="MainTabs" component={MainTabs} />
+      <Stack.Screen name="CheckIn" component={CheckInScreen} />
+      <Stack.Screen name="QRRoomScan" component={QRRoomScanScreen} />
+      <Stack.Screen name="FamilyCheckIn" component={FamilyCheckInScreen} />
+      <Stack.Screen name="Kaydedilenler" component={KaydedilenlerScreen} />
+      <Stack.Screen name="OdaDetay" component={OdaDetayScreen} />
+      <Stack.Screen name="AddRoom" component={AddRoomScreen} />
+      <Stack.Screen name="PostDetay" component={PostDetayScreen} />
+      <Stack.Screen name="PaylasimEkle" component={PaylasimEkleScreen} />
+      <Stack.Screen name="ProfilIletisim" component={ProfilIletisimScreen} />
+      <Stack.Screen name="ToplulukProfil" component={ToplulukProfilScreen} />
+      <Stack.Screen name="AdminPanel" component={AdminPanelScreen} />
+      <Stack.Screen name="TesisList" component={TesisListScreen} />
+      <Stack.Screen name="Bildirimler" component={BildirimlerScreen} />
+      <Stack.Screen name="ReceptionistPanel" component={ReceptionistPanelScreen} options={{ title: 'KBS Senkronizasyon' }} />
+      <Stack.Screen name="MrzScan" component={MrzScanScreen} />
+      <Stack.Screen name="NfcRead" component={NfcReadScreen} />
+      <Stack.Screen name="MrzResult" component={MrzResultScreen} />
+      <Stack.Screen name="KycSubmit" component={KycSubmitScreen} />
+      <Stack.Screen name="KycManualEntry" component={KycManualEntryScreen} />
+      <Stack.Screen name="NfcIntro" component={NfcIntroScreen} />
+      <Stack.Screen name="DocumentHub" component={DocumentHubScreen} />
+      <Stack.Screen name="FrontDocumentScan" component={FrontDocumentScanScreen} />
+      <Stack.Screen name="GallerySingleDocument" component={GallerySingleDocumentScreen} />
+      <Stack.Screen name="GalleryFrontBackDocument" component={GalleryFrontBackDocumentScreen} />
+      <Stack.Screen name="GalleryBatchDocument" component={GalleryBatchDocumentScreen} />
+      <Stack.Screen name="DocumentResult" component={DocumentResultScreen} />
+      <Stack.Screen name="DocumentBatchResult" component={DocumentBatchResultScreen} />
+      <Stack.Screen name="CameraTest" component={CameraTestScreen} />
+      <Stack.Screen name="ScanHome" component={ScanHome} />
+      <Stack.Screen name="ScanCamera" component={ScanCameraScreen} />
+      <Stack.Screen name="ScanReview" component={ScanReviewScreen} />
+      <Stack.Screen name="PrivacyConsent" component={PrivacyConsentScreen} />
+      <Stack.Screen name="TermsConsent" component={TermsConsentScreen} />
     </Stack.Navigator>
   );
 }
@@ -462,12 +514,10 @@ function AppNavigator() {
   const { isAuthenticated, isLoading, authError, clearAuthError, refreshMe, recoverySessionPending, clearRecoveryPending, needsPrivacyConsent, needsTermsConsent, accountPendingDeletion } = useAuth();
   const hasPrivacyAccepted = !needsPrivacyConsent;
   const hasTermsAccepted = !needsTermsConsent;
-  const showPrivacyConsent = isAuthenticated && needsPrivacyConsent;
-  const showTermsConsent = isAuthenticated && needsTermsConsent;
   const showAccountDeletionPending = isAuthenticated && hasPrivacyAccepted && hasTermsAccepted && !!accountPendingDeletion;
-  const showConsentBeforeLoginIos = !isAuthenticated && Platform.OS === 'ios' && (needsPrivacyConsent || needsTermsConsent);
-  const blockMainWithConsentIos = isAuthenticated && Platform.OS === 'ios' && (needsPrivacyConsent || needsTermsConsent);
-  const showConsentAsButtonAndroid = Platform.OS === 'android' && (needsPrivacyConsent || needsTermsConsent);
+  /** iOS ve Android: Onay gerekiyorsa uygulama açıldığında ConsentGate gösterilir; Onayla sonrası bir daha gösterilmez. */
+  const needsConsent = needsPrivacyConsent || needsTermsConsent;
+  const showConsentGate = needsConsent;
 
   const handleRetryConnection = useCallback(() => {
     clearAuthError();
@@ -520,7 +570,7 @@ function AppNavigator() {
       <Stack.Navigator
         screenOptions={{ headerShown: false }}
         initialRouteName={
-          showRecovery ? 'ForgotPassword' : showConsentBeforeLoginIos ? (needsPrivacyConsent ? 'PrivacyConsent' : 'TermsConsent') : undefined
+          showRecovery ? 'ForgotPassword' : showConsentGate ? 'ConsentGate' : undefined
         }
       >
         {showRecovery ? (
@@ -532,15 +582,16 @@ function AppNavigator() {
             <Stack.Screen name="Basvuru" component={BasvuruScreen} />
           </>
         ) : !isAuthenticated ? (
-          showConsentBeforeLoginIos ? (
+          showConsentGate ? (
             <>
-              <Stack.Screen name="PrivacyConsent" component={PrivacyConsentScreen} options={{ headerShown: false }} />
-              <Stack.Screen name="TermsConsent" component={TermsConsentScreen} options={{ headerShown: false }} />
+              <Stack.Screen name="ConsentGate" component={ConsentGateScreen} options={{ headerShown: false }} />
               <Stack.Screen name="Login" component={LoginScreen} />
               <Stack.Screen name="ForgotPassword" component={ForgotPasswordScreen} />
               <Stack.Screen name="Kayit" component={KayitScreen} />
               <Stack.Screen name="OTPVerify" component={OTPVerifyScreen} />
               <Stack.Screen name="Basvuru" component={BasvuruScreen} />
+              <Stack.Screen name="PrivacyConsent" component={PrivacyConsentScreen} options={{ headerShown: false }} />
+              <Stack.Screen name="TermsConsent" component={TermsConsentScreen} options={{ headerShown: false }} />
             </>
           ) : (
             <>
@@ -549,62 +600,80 @@ function AppNavigator() {
               <Stack.Screen name="Kayit" component={KayitScreen} />
               <Stack.Screen name="OTPVerify" component={OTPVerifyScreen} />
               <Stack.Screen name="Basvuru" component={BasvuruScreen} />
-              {showConsentAsButtonAndroid ? (
-                <>
-                  <Stack.Screen name="PrivacyConsent" component={PrivacyConsentScreen} options={{ headerShown: false }} />
-                  <Stack.Screen name="TermsConsent" component={TermsConsentScreen} options={{ headerShown: false }} />
-                </>
-              ) : null}
-            </>
-          )
-        ) : blockMainWithConsentIos ? (
-          needsPrivacyConsent ? (
-            <>
               <Stack.Screen name="PrivacyConsent" component={PrivacyConsentScreen} options={{ headerShown: false }} />
-            </>
-          ) : (
-            <>
               <Stack.Screen name="TermsConsent" component={TermsConsentScreen} options={{ headerShown: false }} />
             </>
           )
+        ) : showConsentGate ? (
+          <>
+            <Stack.Screen name="ConsentGate" component={ConsentGateScreen} options={{ headerShown: false }} />
+            <Stack.Screen name="Main" options={{ headerShown: false }}>
+              {() => (
+                <Drawer.Navigator
+                  drawerContent={(p) => <DrawerMenu {...p} />}
+                  screenOptions={{
+                    headerShown: false,
+                    drawerType: 'front',
+                    drawerStyle: { width: 300 },
+                    swipeEdgeWidth: 60,
+                  }}
+                >
+                  <Drawer.Screen name="Main" component={MainStack} options={{ drawerLabel: 'Dashboard' }} />
+                  <Drawer.Screen name="LiveStream" component={PlaceholderScreen} initialParams={{ title: 'Canlı Akış', webPath: 'live' }} options={{ drawerLabel: 'Canlı Akış' }} />
+                  <Drawer.Screen name="Musteriler" component={PlaceholderScreen} initialParams={{ title: 'Müşteriler (B2B)', webPath: 'musteriler' }} options={{ drawerLabel: 'Müşteriler (B2B)' }} />
+                  <Drawer.Screen name="Lisanslar" component={PlaceholderScreen} initialParams={{ title: 'Lisanslar', webPath: 'lisanslar' }} options={{ drawerLabel: 'Lisanslar' }} />
+                  <Drawer.Screen name="Destek" component={PlaceholderScreen} initialParams={{ title: 'Destek', webPath: 'destek' }} options={{ drawerLabel: 'Destek' }} />
+                  <Drawer.Screen name="PendingUsers" component={PlaceholderScreen} initialParams={{ title: 'Onay Bekleyenler', webPath: 'pending-users' }} options={{ drawerLabel: 'Onay Bekleyenler' }} />
+                  <Drawer.Screen name="Users" component={PlaceholderScreen} initialParams={{ title: 'Kullanıcılar', webPath: 'users' }} options={{ drawerLabel: 'Kullanıcılar' }} />
+                  <Drawer.Screen name="Identity" component={MrzScanScreen} options={{ drawerLabel: 'Kimlik & Pasaport' }} />
+                  <Drawer.Screen name="Payments" component={PlaceholderScreen} initialParams={{ title: 'Paketler & Ödemeler', webPath: 'payments' }} options={{ drawerLabel: 'Paketler & Ödemeler' }} />
+                  <Drawer.Screen name="Tesisler" component={TesisListScreen} options={{ drawerLabel: 'Tesis Listesi' }} />
+                  <Drawer.Screen name="Notifications" component={BildirimlerScreen} options={{ drawerLabel: 'Bildirim & Duyurular' }} />
+                  <Drawer.Screen name="Reports" component={RaporlarScreen} options={{ drawerLabel: 'Raporlar' }} />
+                  <Drawer.Screen name="Ayarlar" component={AyarlarScreen} options={{ drawerLabel: 'Ayarlar' }} />
+                  <Drawer.Screen name="AdminPanel" component={AdminPanelScreen} options={{ drawerLabel: 'Admin Paneli' }} />
+                  <Drawer.Screen name="AuditLog" component={PlaceholderScreen} initialParams={{ title: 'Audit Log', webPath: 'audit' }} options={{ drawerLabel: 'Audit Log' }} />
+                </Drawer.Navigator>
+              )}
+            </Stack.Screen>
+          </>
         ) : showAccountDeletionPending ? (
           <>
             <Stack.Screen name="AccountDeletionPending" component={AccountDeletionPendingScreen} options={{ headerShown: false }} />
           </>
         ) : (
           <>
-            <Stack.Screen name="Main" component={MainTabs} />
+            <Stack.Screen name="Main" options={{ headerShown: false }}>
+              {() => (
+                <Drawer.Navigator
+                  drawerContent={(p) => <DrawerMenu {...p} />}
+                  screenOptions={{
+                    headerShown: false,
+                    drawerType: 'front',
+                    drawerStyle: { width: 300 },
+                    swipeEdgeWidth: 60,
+                  }}
+                >
+                  <Drawer.Screen name="Main" component={MainStack} options={{ drawerLabel: 'Dashboard' }} />
+                  <Drawer.Screen name="LiveStream" component={PlaceholderScreen} initialParams={{ title: 'Canlı Akış', webPath: 'live' }} options={{ drawerLabel: 'Canlı Akış' }} />
+                  <Drawer.Screen name="Musteriler" component={PlaceholderScreen} initialParams={{ title: 'Müşteriler (B2B)', webPath: 'musteriler' }} options={{ drawerLabel: 'Müşteriler (B2B)' }} />
+                  <Drawer.Screen name="Lisanslar" component={PlaceholderScreen} initialParams={{ title: 'Lisanslar', webPath: 'lisanslar' }} options={{ drawerLabel: 'Lisanslar' }} />
+                  <Drawer.Screen name="Destek" component={PlaceholderScreen} initialParams={{ title: 'Destek', webPath: 'destek' }} options={{ drawerLabel: 'Destek' }} />
+                  <Drawer.Screen name="PendingUsers" component={PlaceholderScreen} initialParams={{ title: 'Onay Bekleyenler', webPath: 'pending-users' }} options={{ drawerLabel: 'Onay Bekleyenler' }} />
+                  <Drawer.Screen name="Users" component={PlaceholderScreen} initialParams={{ title: 'Kullanıcılar', webPath: 'users' }} options={{ drawerLabel: 'Kullanıcılar' }} />
+                  <Drawer.Screen name="Identity" component={MrzScanScreen} options={{ drawerLabel: 'Kimlik & Pasaport' }} />
+                  <Drawer.Screen name="Payments" component={PlaceholderScreen} initialParams={{ title: 'Paketler & Ödemeler', webPath: 'payments' }} options={{ drawerLabel: 'Paketler & Ödemeler' }} />
+                  <Drawer.Screen name="Tesisler" component={TesisListScreen} options={{ drawerLabel: 'Tesis Listesi' }} />
+                  <Drawer.Screen name="Notifications" component={BildirimlerScreen} options={{ drawerLabel: 'Bildirim & Duyurular' }} />
+                  <Drawer.Screen name="Reports" component={RaporlarScreen} options={{ drawerLabel: 'Raporlar' }} />
+                  <Drawer.Screen name="Ayarlar" component={AyarlarScreen} options={{ drawerLabel: 'Ayarlar' }} />
+                  <Drawer.Screen name="AdminPanel" component={AdminPanelScreen} options={{ drawerLabel: 'Admin Paneli' }} />
+                  <Drawer.Screen name="AuditLog" component={PlaceholderScreen} initialParams={{ title: 'Audit Log', webPath: 'audit' }} options={{ drawerLabel: 'Audit Log' }} />
+                </Drawer.Navigator>
+              )}
+            </Stack.Screen>
             <Stack.Screen name="PrivacyConsent" component={PrivacyConsentScreen} options={{ headerShown: false }} />
             <Stack.Screen name="TermsConsent" component={TermsConsentScreen} options={{ headerShown: false }} />
-            <Stack.Screen name="CheckIn" component={CheckInScreen} />
-            <Stack.Screen name="FamilyCheckIn" component={FamilyCheckInScreen} />
-            <Stack.Screen name="Kaydedilenler" component={KaydedilenlerScreen} />
-            <Stack.Screen name="OdaDetay" component={OdaDetayScreen} />
-            <Stack.Screen name="AddRoom" component={AddRoomScreen} />
-            <Stack.Screen name="PostDetay" component={PostDetayScreen} />
-            <Stack.Screen name="PaylasimEkle" component={PaylasimEkleScreen} />
-            <Stack.Screen name="ProfilIletisim" component={ProfilIletisimScreen} />
-            <Stack.Screen name="ToplulukProfil" component={ToplulukProfilScreen} />
-            <Stack.Screen name="AdminPanel" component={AdminPanelScreen} />
-            <Stack.Screen name="TesisList" component={TesisListScreen} />
-            <Stack.Screen name="Bildirimler" component={BildirimlerScreen} />
-            <Stack.Screen name="MrzScan" component={MrzScanScreen} />
-            <Stack.Screen name="NfcRead" component={NfcReadScreen} />
-            <Stack.Screen name="MrzResult" component={MrzResultScreen} />
-            <Stack.Screen name="KycSubmit" component={KycSubmitScreen} />
-            <Stack.Screen name="KycManualEntry" component={KycManualEntryScreen} />
-            <Stack.Screen name="NfcIntro" component={NfcIntroScreen} />
-            <Stack.Screen name="DocumentHub" component={DocumentHubScreen} />
-            <Stack.Screen name="FrontDocumentScan" component={FrontDocumentScanScreen} />
-            <Stack.Screen name="GallerySingleDocument" component={GallerySingleDocumentScreen} />
-            <Stack.Screen name="GalleryFrontBackDocument" component={GalleryFrontBackDocumentScreen} />
-            <Stack.Screen name="GalleryBatchDocument" component={GalleryBatchDocumentScreen} />
-            <Stack.Screen name="DocumentResult" component={DocumentResultScreen} />
-            <Stack.Screen name="DocumentBatchResult" component={DocumentBatchResultScreen} />
-            <Stack.Screen name="CameraTest" component={CameraTestScreen} />
-            <Stack.Screen name="ScanHome" component={ScanHome} />
-            <Stack.Screen name="ScanCamera" component={ScanCameraScreen} />
-            <Stack.Screen name="ScanReview" component={ScanReviewScreen} />
           </>
         )}
       </Stack.Navigator>
@@ -634,6 +703,8 @@ export default function App() {
     console.log('[BOOT] dataService mode=', dataService.getMode?.() ?? 'unknown');
 
     logger.log('App started', { timestamp: new Date().toISOString() });
+
+    loadFeedbackSettings();
 
     // Backend health check başlat
     backendHealth.startPeriodicCheck(30000); // Her 30 saniyede bir kontrol et
@@ -693,19 +764,27 @@ export default function App() {
     return <IpadBlockScreen />;
   }
 
+  React.useEffect(() => {
+    const { start, stop } = require('./src/services/kbsSyncWorker');
+    start();
+    return () => { stop(); };
+  }, []);
+
   return (
     <ErrorBoundary>
       <ThemeProvider>
-        <CameraProvider>
-          <AuthProvider>
-            <FamilyCheckInProvider>
+        <LanguageProvider>
+          <CameraProvider>
+            <AuthProvider>
+              <FamilyCheckInProvider>
               <CreditsProvider>
                 <AppNavigator />
                 <Toast />
               </CreditsProvider>
-            </FamilyCheckInProvider>
-          </AuthProvider>
-        </CameraProvider>
+              </FamilyCheckInProvider>
+            </AuthProvider>
+          </CameraProvider>
+        </LanguageProvider>
       </ThemeProvider>
     </ErrorBoundary>
   );

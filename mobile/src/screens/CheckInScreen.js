@@ -14,6 +14,8 @@ import {
 import * as ImagePicker from 'expo-image-picker';
 import NfcManager, { NfcEvents } from 'react-native-nfc-manager';
 import { api } from '../services/api';
+import { getBackendUrl } from '../services/apiSupabase';
+import * as offlineKbs from '../services/offlineKbsDB';
 import { showKimlikBildirimInProgress, dismissKimlikBildirimNotification } from '../services/pushNotifications';
 import Toast from 'react-native-toast-message';
 import { logger } from '../utils/logger';
@@ -21,11 +23,23 @@ import { getNfcEnabled } from '../utils/nfcSetting';
 import { Ionicons, MaterialIcons } from '@expo/vector-icons';
 import { theme } from '../theme';
 import { useCredits } from '../context/CreditsContext';
+import { useAuth } from '../context/AuthContext';
 import PermissionCard from '../components/PermissionCard';
 import { useFocusEffect } from '@react-navigation/native';
+import {
+  feedbackCheckInSuccess,
+  feedbackReadSuccess,
+  speakApproachPassport,
+  speakApproachId,
+} from '../utils/feedback';
+import { FREQUENT_NATIONALITIES } from '../constants/frequentNationalities';
+import { getVisaWarningFromDate } from '../utils/visaWarning';
+
+const MIN_BUTTON_SIZE = 60; // Eldivenle kullanım için dev butonlar
 
 export default function CheckInScreen({ navigation, route }) {
   const { triggerPaywall } = useCredits();
+  const { tesis } = useAuth();
   const [step, setStep] = useState(1);
   const [odalar, setOdalar] = useState([]);
   const [selectedOda, setSelectedOda] = useState(null);
@@ -50,6 +64,8 @@ export default function CheckInScreen({ navigation, route }) {
   /** Step 3'te "Sadece kaydet" yapıldıktan sonra gösterilen başarı alanı */
   const [savedOnly, setSavedOnly] = useState(false);
   const [savingOkutulan, setSavingOkutulan] = useState(false);
+  /** MRZ/belge bitiş tarihi — vize uyarısı göstermek için */
+  const [documentExpiryFromMrz, setDocumentExpiryFromMrz] = useState(null);
   const nfcSessionCancelledRef = useRef(false);
   const nfcTechRequestedRef = useRef(false);
   const nfcProcessingRef = useRef(false);
@@ -74,7 +90,10 @@ export default function CheckInScreen({ navigation, route }) {
   useFocusEffect(
     React.useCallback(() => {
       const odaFromParams = route.params?.selectedOda;
-      if (odaFromParams) setSelectedOda(odaFromParams);
+      if (odaFromParams) {
+        setSelectedOda(odaFromParams);
+        setStep(2); // QR ile oda seçildiyse doğrudan kimlik okumaya geç
+      }
       const doc = route.params?.documentPayload;
       if (doc) {
         setFormData(prev => ({
@@ -88,8 +107,10 @@ export default function CheckInScreen({ navigation, route }) {
           uyruk: (doc.uyruk || 'TÜRK').trim() || prev.uyruk,
           misafirTipi: (doc.misafirTipi || '').trim() || prev.misafirTipi,
         }));
+        setDocumentExpiryFromMrz(doc.expiryDate ? new Date(doc.expiryDate) : null);
         setDocumentPhotoUri(route.params?.photoUri || null);
-        setStep(3); // 3 = Ne yapmak istiyorsunuz? (Gönder / Sadece kaydet)
+        setStep(3);
+        feedbackReadSuccess();
         navigation.setParams({ documentPayload: undefined, photoUri: undefined, selectedOda: undefined });
         return;
       }
@@ -112,8 +133,10 @@ export default function CheckInScreen({ navigation, route }) {
         dogumTarihi: isoToDDMMYYYY(p.birthDate) || prev.dogumTarihi,
         uyruk: (p.nationality || 'TÜRK').trim(),
       }));
+      setDocumentExpiryFromMrz(p.expiryDate ? new Date(p.expiryDate) : null);
       setDocumentPhotoUri(route.params?.photoUri || null);
-      setStep(3); // 3 = seçim ekranı (Gönder / Sadece kaydet)
+      setStep(3);
+      feedbackReadSuccess();
       navigation.setParams({ mrzPayload: undefined, selectedOda: undefined, photoUri: undefined });
     }, [route.params?.mrzPayload, route.params?.documentPayload, route.params?.photoUri, route.params?.selectedOda, navigation])
   );
@@ -185,9 +208,12 @@ export default function CheckInScreen({ navigation, route }) {
 
       if (response?.data?.success && response?.data?.parsed) {
         logger.log('NFC read successful, updating form data');
-        setFormData((prev) => ({ ...prev, ...response.data.parsed }));
-        setStep(3); // Seçim: Gönder veya Sadece kaydet
+        const parsed = response.data.parsed;
+        setFormData((prev) => ({ ...prev, ...parsed }));
+        setDocumentExpiryFromMrz(parsed.expiryDate ? new Date(parsed.expiryDate) : null);
+        setStep(3);
         setSavedOnly(false);
+        feedbackReadSuccess();
         Toast.show({ type: 'success', text1: 'Kimlik okundu', text2: 'Bilgiler dolduruldu.' });
       } else {
         logger.warn('NFC read failed or no parsed data', response?.data);
@@ -264,6 +290,16 @@ export default function CheckInScreen({ navigation, route }) {
       NfcManager.setEventListener(NfcEvents.DiscoverTag, null);
       NfcManager.unregisterTagEvent().catch(() => {});
     };
+  }, [step, nfcSupported, nfcEnabledInSettings]);
+
+  // Step 2: Sesli yönlendirme — "Lütfen pasaportu yaklaştırın" / "Kimliği yaklaştırın"
+  useEffect(() => {
+    if (step !== 2) return;
+    if (nfcSupported && nfcEnabledInSettings) {
+      speakApproachId();
+    } else {
+      speakApproachPassport();
+    }
   }, [step, nfcSupported, nfcEnabledInSettings]);
 
   const handleNFCRead = async () => {
@@ -354,8 +390,9 @@ export default function CheckInScreen({ navigation, route }) {
             ...prev,
             ...response.data.parsed
           }));
-          setStep(3); // Seçim: Gönder veya Sadece kaydet
+          setStep(3);
           setSavedOnly(false);
+          feedbackReadSuccess();
         } else {
           logger.warn('OCR failed', response.data);
         }
@@ -427,12 +464,31 @@ export default function CheckInScreen({ navigation, route }) {
       }
 
       setLoading(true);
+      const misafirData = {
+        ad: formData.ad,
+        soyad: formData.soyad,
+        kimlikNo: formData.kimlikNo || undefined,
+        pasaportNo: formData.pasaportNo || undefined,
+        dogumTarihi: formData.dogumTarihi,
+        uyruk: formData.uyruk || 'TÜRK',
+        room_number: selectedOda.odaNumarasi
+      };
+      const odaNo = selectedOda.odaNumarasi;
+      const branchId = tesis?.id || 'local';
+
+      let localId = null;
+      try {
+        localId = await offlineKbs.saveToQueue(misafirData, odaNo, branchId);
+      } catch (queueErr) {
+        logger.warn('Offline queue save failed', queueErr);
+      }
+
       try {
         kimlikNotifId = await showKimlikBildirimInProgress();
       } catch (_) {}
       const payload = {
         odaId: selectedOda.id,
-        room_number: selectedOda.odaNumarasi,
+        room_number: odaNo,
         ad: formData.ad,
         ad2: formData.ad2 || undefined,
         soyad: formData.soyad,
@@ -442,22 +498,28 @@ export default function CheckInScreen({ navigation, route }) {
         uyruk: formData.uyruk,
         misafirTipi: formData.misafirTipi || undefined
       };
-      logger.api('POST', '/misafir/checkin', payload);
-      const response = await api.post('/misafir/checkin', payload);
 
-      logger.api('POST', '/misafir/checkin', null, { 
-        status: response.status,
-        message: response.data.message 
-      });
+      const useBackendCheckin = !!getBackendUrl();
+      const apiPath = useBackendCheckin ? '/checkin' : '/misafir/checkin';
+      const checkinPayload = useBackendCheckin
+        ? { ad: formData.ad, soyad: formData.soyad, kimlikNo: formData.kimlikNo, pasaportNo: formData.pasaportNo, dogumTarihi: formData.dogumTarihi, uyruk: formData.uyruk || 'TÜRK', room_number: odaNo }
+        : payload;
+
+      logger.api('POST', apiPath, checkinPayload);
+      const response = await api.post(apiPath, checkinPayload);
+
+      if (localId) await offlineKbs.deleteFromQueue(localId).catch(() => {});
+
+      logger.api('POST', apiPath, null, { status: response.status, message: response.data?.message });
       logger.log('CheckIn successful');
+      feedbackCheckInSuccess();
 
       Toast.show({
         type: 'success',
         text1: 'Başarılı',
-        text2: response.data.message || 'Check-in kaydedildi'
+        text2: response.data?.message || 'Check-in kaydedildi'
       });
 
-      // Sayfa ilerlesin: ana ekrana dön ve Misafirler sekmesini aç (yeni kayıt orada görünsün)
       navigation.navigate('Main', { screen: 'Misafirler' });
     } catch (error) {
       logger.error('CheckIn error', {
@@ -474,7 +536,7 @@ export default function CheckInScreen({ navigation, route }) {
         Toast.show({
           type: 'error',
           text1: status === 401 ? 'Oturum süresi dolmuş olabilir' : 'Hata',
-          text2: status === 401 ? 'Tekrar giriş yapın.' : msg
+          text2: status === 401 ? 'Tekrar giriş yapın.' : (msg + (localId ? ' Kayıt bekleyecek, internet gelince gönderilecek.' : ''))
         });
       }
     } finally {
@@ -493,7 +555,7 @@ export default function CheckInScreen({ navigation, route }) {
         {/* Header */}
         <View style={styles.header}>
           <TouchableOpacity
-            style={styles.backButton}
+            style={[styles.backButton, { minWidth: MIN_BUTTON_SIZE, minHeight: MIN_BUTTON_SIZE }]}
             onPress={() => navigation.goBack()}
           >
             <Ionicons name="arrow-back" size={24} color={theme.colors.textPrimary} />
@@ -508,9 +570,18 @@ export default function CheckInScreen({ navigation, route }) {
               <Ionicons name="bed-outline" size={20} color={theme.colors.primary} /> Boş Odalar
             </Text>
             <Text style={styles.sectionSubtitle}>
-              Check-in yapmak için bir oda seçin
+              Check-in yapmak için bir oda seçin veya QR ile okuyun
             </Text>
           </View>
+
+          <TouchableOpacity
+            style={[styles.qrRoomButton, { backgroundColor: theme.colors.primary, minHeight: MIN_BUTTON_SIZE }]}
+            onPress={() => navigation.navigate('QRRoomScan', { fromCheckIn: true })}
+            activeOpacity={0.8}
+          >
+            <Ionicons name="qr-code" size={24} color="#fff" />
+            <Text style={styles.qrRoomButtonText}>QR ile oda seç</Text>
+          </TouchableOpacity>
 
           {odalar.length === 0 ? (
             <View style={styles.emptyContainer}>
@@ -655,7 +726,7 @@ export default function CheckInScreen({ navigation, route }) {
             )}
 
             <TouchableOpacity 
-              style={[styles.okutButton, (nfcSupported && nfcEnabledInSettings) ? styles.okutButtonNFC : styles.okutButtonCamera]}
+              style={[styles.okutButton, (nfcSupported && nfcEnabledInSettings) ? styles.okutButtonNFC : styles.okutButtonCamera, { minHeight: MIN_BUTTON_SIZE }]}
               onPress={handleOkut}
             >
               <Ionicons 
@@ -670,7 +741,7 @@ export default function CheckInScreen({ navigation, route }) {
             </TouchableOpacity>
 
             <TouchableOpacity
-              style={styles.manualButton}
+              style={[styles.manualButton, { minHeight: MIN_BUTTON_SIZE }]}
               onPress={() => {
                 try {
                   logger.button('Manuel Giriş Button', 'clicked');
@@ -786,7 +857,7 @@ export default function CheckInScreen({ navigation, route }) {
           ) : (
             <>
               <TouchableOpacity
-                style={[styles.primaryActionButton, styles.sendActionButton]}
+                style={[styles.primaryActionButton, styles.sendActionButton, { minHeight: MIN_BUTTON_SIZE }]}
                 onPress={() => setStep(4)}
                 activeOpacity={0.8}
               >
@@ -1010,6 +1081,23 @@ export default function CheckInScreen({ navigation, route }) {
               <Text style={styles.inputLabel}>
                 <Ionicons name="flag-outline" size={16} color={theme.colors.textSecondary} /> Uyruk
               </Text>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.frequentNationalityScroll} contentContainerStyle={styles.frequentNationalityChips}>
+                {FREQUENT_NATIONALITIES.map((n) => {
+                  const selected = formData.uyruk === n.label || formData.uyruk === n.code;
+                  return (
+                    <TouchableOpacity
+                      key={n.code}
+                      style={[
+                        styles.frequentNationalityChip,
+                        { backgroundColor: selected ? theme.colors.primary + '25' : theme.colors.surface, borderColor: theme.colors.border },
+                      ]}
+                      onPress={() => setFormData({ ...formData, uyruk: n.label })}
+                    >
+                      <Text style={[styles.frequentNationalityChipText, { color: selected ? theme.colors.primary : theme.colors.textPrimary }]}>{n.label}</Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </ScrollView>
               <TextInput
                 style={styles.input}
                 placeholder="TÜRK"
@@ -1028,7 +1116,7 @@ export default function CheckInScreen({ navigation, route }) {
           </View>
 
           <TouchableOpacity
-            style={[styles.submitButton, loading && styles.submitButtonDisabled]}
+            style={[styles.submitButton, loading && styles.submitButtonDisabled, { minHeight: MIN_BUTTON_SIZE }]}
             onPress={handleCheckIn}
             disabled={loading || !formData.ad || !formData.soyad || (!formData.kimlikNo && !formData.pasaportNo)}
           >
@@ -1062,6 +1150,36 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: theme.colors.border,
   },
+  qrRoomButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: theme.spacing.base,
+    paddingHorizontal: theme.spacing.xl,
+    borderRadius: theme.spacing.borderRadius.base,
+    marginBottom: theme.spacing.lg,
+    gap: theme.spacing.sm,
+  },
+  qrRoomButtonText: { color: '#fff', fontSize: theme.typography.fontSize.base, fontWeight: '600' },
+  visaWarningCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: theme.spacing.base,
+    borderRadius: theme.spacing.borderRadius.base,
+    borderWidth: 1,
+    marginBottom: theme.spacing.lg,
+    gap: theme.spacing.sm,
+  },
+  visaWarningText: { fontSize: theme.typography.fontSize.sm, fontWeight: '500', flex: 1 },
+  frequentNationalityScroll: { marginBottom: theme.spacing.sm, maxHeight: 44 },
+  frequentNationalityChips: { flexDirection: 'row', gap: theme.spacing.sm, paddingVertical: 4 },
+  frequentNationalityChip: {
+    paddingHorizontal: theme.spacing.base,
+    paddingVertical: theme.spacing.sm,
+    borderRadius: theme.spacing.borderRadius.full,
+    borderWidth: 1,
+  },
+  frequentNationalityChipText: { fontSize: theme.typography.fontSize.sm, fontWeight: '500' },
   backButton: {
     width: 40,
     height: 40,

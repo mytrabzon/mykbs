@@ -21,14 +21,13 @@ try {
 
 export default {
   expo: {
-    // iOS crash (RCTThirdPartyComponentsProvider nil) önlemi: New Architecture kapalı.
-    // SDK 54'te varsayılan true; false yapmazsan Fabric kayıt crash'i olur.
-    newArchEnabled: false,
+    // Reanimated 4.x yalnızca New Architecture ile çalışıyor; açık tutuluyor.
+    newArchEnabled: true,
     name: "KBS Prime",
     slug: "mykbs",
     owner: "luvolive",
     scheme: "kbsprime",
-    version: "1.0.3",
+    version: "1.0.0",
     orientation: "default",
     icon: "./assets/icon.png",
     userInterfaceStyle: "light",
@@ -87,12 +86,14 @@ export default {
       // favicon: "./assets/favicon.png" // Asset dosyası oluşturulana kadar yorum satırı
     },
     plugins: [
+      "expo-sqlite",
       ["expo-screen-orientation", { "initialOrientation": "PORTRAIT_UP" }],
       "expo-camera",
       [
         "react-native-iap",
         { "paymentProvider": "both" }
       ],
+      "./plugins/withIosRctFollyPod.js",
       [
         "react-native-nfc-manager",
         {
@@ -115,14 +116,13 @@ export default {
             buildToolsVersion: "35.0.0",
             minSdkVersion: 24
           },
-          // iOS: New Arch kapalı — react-native-iap RCT-Folly bulunamıyor hatasını önler (EAS prebuild)
+          // iOS: Reanimated 4.x için New Arch gerekli
           ios: {
-            newArchEnabled: false
+            newArchEnabled: true
           }
         }
       ],
-      // EAS iOS: RNIap "Unable to find specification for RCT-Folly" — Podfile'a RCT-Folly podspec yolu ekler
-      "./plugins/withIosRctFollyPod.js"
+      // RCT-Folly eklentisi kaldırıldı: prebuild zaten RCT-Folly ekliyordu, ikinci kaynak "multiple dependencies" hatasına yol açıyordu.
     ],
     extra: {
       // EAS Build proje ID (eas init ile oluşturuldu)

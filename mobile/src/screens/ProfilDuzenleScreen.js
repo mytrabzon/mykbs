@@ -299,12 +299,6 @@ export default function ProfilDuzenleScreen() {
         onBack={() => navigation.goBack()}
         onNotification={() => navigation.navigate('Bildirimler')}
         onProfile={() => navigation.navigate('Ayarlar')}
-        backendConfigured={backendStatus.configured}
-        backendOnline={backendStatus.isOnline}
-        backendError={backendStatus.error}
-        supabaseConfigured={supabaseStatus.configured}
-        supabaseOnline={supabaseStatus.isOnline}
-        supabaseError={supabaseStatus.error}
       />
       <ScrollView style={styles.scroll} contentContainerStyle={styles.scrollContent}>
         <View style={[styles.card, { backgroundColor: colors.surface }]}>

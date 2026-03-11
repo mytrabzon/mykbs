@@ -40,8 +40,13 @@ export default function FamilyCheckInScreen({ route }) {
     const soyad = (p?.surname || p?.soyad || '').trim();
     const num = (p?.passportNumber || p?.kimlikNo || p?.pasaportNo || '').trim();
     const isTc = /^\d{11}$/.test(num);
+    let uyruk = (p?.nationality || p?.uyruk || 'TÜRK').trim();
     setFamily((prev) => {
       if (prev.length >= MAX_FAMILY) return prev;
+      // Aynı aileden ikinci kişide uyruk otomatik dolsun (otomatik tamamlama)
+      if (prev.length >= 1 && (!uyruk || uyruk === 'TÜRK')) {
+        uyruk = prev[0].uyruk || 'TÜRK';
+      }
       const next = [
         ...prev,
         {
@@ -51,7 +56,7 @@ export default function FamilyCheckInScreen({ route }) {
           kimlikNo: isTc ? num : null,
           pasaportNo: !isTc ? num : null,
           dogumTarihi: p?.birthDate || p?.dogumTarihi || '',
-          uyruk: (p?.nationality || p?.uyruk || 'TÜRK').trim(),
+          uyruk,
           scannedAt: new Date().toISOString(),
         },
       ];
