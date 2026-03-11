@@ -81,7 +81,7 @@ export default function NfcReadScreen() {
           <Ionicons name="hardware-chip-outline" size={64} color={colors.primary} />
         </View>
         <Text style={[styles.instruction, { color: colors.textSecondary }]}>
-          Türk kimlik kartını telefonun arkasına yaklaştırın, sabit tutun ve butona basın. NFC açık olmalı. Pasaport için MRZ kullanın.
+          Kimlik veya pasaport kartını telefonun arkasına yaklaştırın, sabit tutun ve butona basın. NFC açık olmalı. Çip için önce MRZ sekmesinden belgeyi okutup sonra NFC ile okuyabilirsiniz.
         </Text>
         {progress ? (
           <View style={styles.progressWrap}>

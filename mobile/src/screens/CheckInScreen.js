@@ -769,7 +769,7 @@ export default function CheckInScreen({ navigation, route }) {
               <Ionicons name="id-card-outline" size={20} color={theme.colors.primary} /> Kimlik Bilgileri
             </Text>
             <Text style={styles.sectionSubtitle}>
-              {selectedOda && `Oda ${selectedOda.odaNumarasi} için kimlik okutun`}
+              {selectedOda && `Oda ${selectedOda.odaNumarasi} için kimlik veya pasaport okutun`}
             </Text>
           </View>
 
@@ -810,7 +810,7 @@ export default function CheckInScreen({ navigation, route }) {
               {nfcSupported && nfcEnabledInSettings
                 ? (nfcListening
                     ? 'Kimliği telefonun arka kısmına yaklaştırın — otomatik okunacak'
-                    : 'Kimliği yaklaştırın veya aşağıdaki düğmeyle okuyun. İlk kullanımda NFC izni istenebilir.')
+                    : 'Kimlik veya pasaportu yaklaştırın veya aşağıdaki düğmeyle okuyun. İlk kullanımda NFC izni istenebilir.')
                 : 'Kimliğinizin ön yüzünün fotoğrafını çekin veya MRZ için "MRZ Tara" sekmesine gidin'}
             </Text>
 

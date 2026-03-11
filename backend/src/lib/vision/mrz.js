@@ -254,16 +254,23 @@ function parseMrzRawAmbiguous(one, opts = {}) {
  * @param {{ docTypeHint?: string }} [opts] - docTypeHint 'id' → Türk kimlik (TD1) öncelikli
  * @returns {{ fields: object, checks: { passportNoCheck, birthCheck, expiryCheck, compositeCheck } } | null}
  */
+/** DEBUG_MRZ: Railway/ortamda DEBUG_MRZ=true veya 1 ise OCR/metin ve parse adımları loglanır. */
+const DEBUG_MRZ = process.env.DEBUG_MRZ === 'true' || process.env.DEBUG_MRZ === '1';
+
 function parseMrzRaw(mrzRaw, opts = {}) {
   if (!mrzRaw || typeof mrzRaw !== 'string') return null;
-  const one = mrzRaw.trim().toUpperCase().replace(/\s/g, '');
+  const cleaned = (mrzRaw || '').replace(/[^A-Z0-9<\r\n]/gi, '').trim().toUpperCase();
+  const one = cleaned.replace(/\s/g, '');
+  if (DEBUG_MRZ) {
+    console.log('[MRZ] parseMrzRaw giriş uzunluk:', mrzRaw.length, 'temizlenmiş:', one.length, 'ilk 60:', one.slice(0, 60));
+  }
   if (one.length >= 86 && one.length <= 94 && one.length !== 88 && /^[A-Z0-9<]+$/.test(one)) {
     const ambiguous = parseMrzRawAmbiguous(one, opts);
     if (ambiguous) return ambiguous;
   }
-  const lines = normalizeMrzLines(mrzRaw);
-  if (process.env.DEBUG_MRZ !== '0' && lines.length >= 1) {
-    console.log('[MRZ] Gelen ham satır sayısı:', lines.length, '1. satır uzunluk:', lines[0]?.length, '2.:', lines[1]?.length, '3.:', lines[2]?.length);
+  const lines = normalizeMrzLines(cleaned);
+  if (DEBUG_MRZ || (process.env.DEBUG_MRZ !== '0' && lines.length >= 1)) {
+    console.log('[MRZ] Satır sayısı:', lines.length, '1. satır uzunluk:', lines[0]?.length, '2.:', lines[1]?.length, '3.:', lines[2]?.length);
   }
   // TD1 (Türk kimlik) önce — 3 satır
   if (lines.length >= 3 && (lines[0][0] === 'I' || lines[0][0] === 'A') && lines[0].length >= 28) {
@@ -318,7 +325,7 @@ function runOcr(imagePath) {
 async function runMrzPipeline(imagePath, correlationId, opts = {}) {
   const { logScanEvent } = require('../log/scanLog');
   const { maskMrz } = require('../security/redact');
-  const { preprocessForPaperMrz, preprocessMrzImage } = require('./preprocess');
+  const { preprocessForPaperMrz, preprocessMrzImage, preprocessForTurkishIdMrz } = require('./preprocess');
 
   logScanEvent(correlationId, 'preprocess_done', {});
   let text;
@@ -329,19 +336,39 @@ async function runMrzPipeline(imagePath, correlationId, opts = {}) {
     return { ok: false, confidence: 0, mrzRaw: '', mrzRawMasked: maskMrz(''), fields: {}, checks: {}, errorCode: 'ocr_failed' };
   }
   logScanEvent(correlationId, 'ocr_done', {});
-
+  if (DEBUG_MRZ) {
+    console.log('[MRZ] OCR metin uzunluk:', (text || '').length, 'ilk 200:', (text || '').trim().slice(0, 200));
+  }
   let mrzRaw = extractMrzFromOcr(text);
+  if (DEBUG_MRZ) {
+    console.log('[MRZ] extractMrzFromOcr sonucu:', mrzRaw ? `${mrzRaw.length} karakter` : 'boş', mrzRaw ? 'ilk satır: ' + mrzRaw.split('\n')[0]?.slice(0, 44) : '');
+  }
   if (!mrzRaw && opts.paperMode && fs.existsSync(imagePath)) {
     const dir = path.dirname(imagePath);
-    const paperPath = path.join(dir, `scan_paper_${Date.now()}.jpg`);
-    try {
-      fs.copyFileSync(imagePath, paperPath);
-      await preprocessForPaperMrz(paperPath);
-      const text2 = await runOcr(paperPath);
-      mrzRaw = extractMrzFromOcr(text2);
-      try { fs.unlinkSync(paperPath); } catch (_) {}
-    } catch (_) {
-      try { fs.unlinkSync(paperPath); } catch (__) {}
+    if (opts.docTypeHint === 'id') {
+      const turkishPath = path.join(dir, `scan_turkish_id_${Date.now()}.jpg`);
+      try {
+        fs.copyFileSync(imagePath, turkishPath);
+        await preprocessForTurkishIdMrz(turkishPath);
+        const textId = await runOcr(turkishPath);
+        mrzRaw = extractMrzFromOcr(textId);
+        if (DEBUG_MRZ && textId) console.log('[MRZ] Türk kimlik ön işleme OCR uzunluk:', textId.length);
+        try { fs.unlinkSync(turkishPath); } catch (_) {}
+      } catch (_) {
+        try { fs.unlinkSync(turkishPath); } catch (__) {}
+      }
+    }
+    if (!mrzRaw) {
+      const paperPath = path.join(dir, `scan_paper_${Date.now()}.jpg`);
+      try {
+        fs.copyFileSync(imagePath, paperPath);
+        await preprocessForPaperMrz(paperPath);
+        const text2 = await runOcr(paperPath);
+        mrzRaw = extractMrzFromOcr(text2);
+        try { fs.unlinkSync(paperPath); } catch (_) {}
+      } catch (_) {
+        try { fs.unlinkSync(paperPath); } catch (__) {}
+      }
     }
     if (!mrzRaw) {
       const cropPath = path.join(dir, `scan_crop_${Date.now()}.jpg`);
@@ -358,6 +385,7 @@ async function runMrzPipeline(imagePath, correlationId, opts = {}) {
   }
 
   if (!mrzRaw) {
+    if (DEBUG_MRZ) console.log('[MRZ] mrz_not_found – OCR çıktısından MRZ çıkarılamadı');
     logScanEvent(correlationId, 'parse_done', { found: false });
     return { ok: false, confidence: 0, mrzRaw: '', mrzRawMasked: '', fields: {}, checks: {}, errorCode: 'mrz_not_found' };
   }
@@ -365,6 +393,7 @@ async function runMrzPipeline(imagePath, correlationId, opts = {}) {
   const parseOpts = opts.docTypeHint ? { docTypeHint: opts.docTypeHint } : {};
   const parsed = parseMrzRaw(mrzRaw, parseOpts);
   if (!parsed) {
+    if (DEBUG_MRZ) console.log('[MRZ] invalid_format – mrzRaw:', mrzRaw.slice(0, 120));
     logScanEvent(correlationId, 'parse_done', { found: true, validFormat: false });
     return { ok: false, confidence: 0, mrzRaw, mrzRawMasked: maskMrz(mrzRaw), fields: {}, checks: {}, errorCode: 'invalid_format' };
   }

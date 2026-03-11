@@ -11,6 +11,7 @@ const {
   cropTopFraction,
   cropCenterFraction,
   preprocessForKimlikMrz,
+  preprocessForTurkishIdMrz,
   preprocessForPaperMrz,
   preprocessForPhotocopyMrz,
   preprocessForPhotocopyMrzStrong,
@@ -379,8 +380,10 @@ async function runMrzPipeline(filePath, opts = {}) {
     { fn: (p) => preprocessForKimlikMrz(p, { sharpen: true }), name: 'kimlikSharp' },
     { fn: preprocessForInvertedMrz, name: 'inverted' },
   ];
+  const docTypeHint = opts.docTypeHint === 'id' ? 'id' : undefined;
   const preprocessVariants = paperMode
     ? [
+        ...(docTypeHint === 'id' ? [{ fn: preprocessForTurkishIdMrz, name: 'turkishId' }] : []),
         { fn: preprocessForPaperMrz, name: 'paper' },
         { fn: preprocessForPhotocopyMrzStrong, name: 'photocopyStrong' },
         { fn: preprocessForFadedMrz, name: 'faded' },
@@ -414,16 +417,17 @@ async function runMrzPipeline(filePath, opts = {}) {
           let raw = extractMrzFromOcr(text);
           if (!raw) continue;
           let fixed = raw;
-          let parsed = parseMrzRaw(raw);
+          const parseOpts = docTypeHint ? { docTypeHint } : {};
+          let parsed = parseMrzRaw(raw, parseOpts);
           if (!parsed) {
             for (let pass = 0; pass < 3; pass++) {
               fixed = fixMrzOcrErrorsBackend(fixed || raw);
-              parsed = parseMrzRaw(fixed);
+              parsed = parseMrzRaw(fixed, parseOpts);
               if (parsed) break;
             }
           } else if (parsed.checks && !parsed.checks.compositeCheck) {
             fixed = fixMrzOcrErrorsBackend(raw);
-            const reparsed = parseMrzRaw(fixed);
+            const reparsed = parseMrzRaw(fixed, parseOpts);
             if (reparsed) parsed = reparsed;
           }
           if (!parsed) continue;
@@ -704,8 +708,9 @@ router.post('/document-base64', authenticateTesisOrSupabase, tenantMiddleware, e
         return res.status(400).json({ message: 'Görsel formatı desteklenmiyor veya bozuk. JPEG/PNG deneyin.' });
       }
     }
-    console.log(logPrefix, 'runMrzPipeline başlıyor', { paperMode });
-    const mrzResult = await runMrzPipeline(filePath, { paperMode });
+    const docTypeHint = req.body?.docTypeHint === 'id' ? 'id' : undefined;
+    console.log(logPrefix, 'runMrzPipeline başlıyor', { paperMode, docTypeHint });
+    const mrzResult = await runMrzPipeline(filePath, { paperMode, docTypeHint });
     let mrzRaw = mrzResult.mrzRaw || null;
     let mrzPayload = mrzResult.payload || null;
     if (!mrzPayload && mrzRaw) mrzPayload = parseMrzToPayload(mrzRaw);

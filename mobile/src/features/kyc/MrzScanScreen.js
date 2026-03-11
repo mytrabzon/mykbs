@@ -256,7 +256,7 @@ export default function MrzScanScreen({ navigation }) {
   /** MRZ ekranında NFC dinlemesi kapalı — NFC artık sadece Hızlı NFC Okuma / Check-in ekranında kullanılıyor */
   const { isScanning: nfcScanning, lastError: nfcError, isSupported: nfcSupported } = useNfcAutoScanner({
     enabled: false,
-    alertMessage: 'Pasaport veya kimlik kartını telefonun arkasına yaklaştırın…',
+    alertMessage: 'Kimlik veya pasaport kartını telefonun arkasına yaklaştırın…',
     onTagDetected: (tag) => nfcHandlerRef.current?.(tag),
   });
 
@@ -444,15 +444,30 @@ export default function MrzScanScreen({ navigation }) {
         if (!photo?.base64 || !mounted.current) return;
         if (hasAcceptedForUnifiedRef.current) return;
         const docTypeLabel = selectedDocTypeRef.current === DocType.ID ? 'TC_KIMLIK' : 'PASAPORT';
-        logger.info('[MRZ okuma] unified capture → document-base64', { docType: docTypeLabel, base64Len: photo.base64?.length });
-        const res = await api.post('/ocr/document-base64', { imageBase64: photo.base64, paperMode: true });
+        const docTypeHint = selectedDocTypeRef.current === DocType.ID ? 'id' : undefined;
+        logger.info('[MRZ okuma] unified capture → document-base64', { docType: docTypeLabel, base64Len: photo.base64?.length, docTypeHint });
+        let res;
+        try {
+          res = await api.post('/ocr/document-base64', { imageBase64: photo.base64, paperMode: true, docTypeHint });
+        } catch (err) {
+          logger.warn('[MRZ okuma] document-base64 istek hatası', { status: err?.response?.status, data: err?.response?.data, message: err?.message });
+          throw err;
+        }
         const data = res?.data;
         if (!mounted.current || hasAcceptedForUnifiedRef.current) return;
         const mrzRaw = data?.mrz;
         const mrzPayload = data?.mrzPayload;
         const front = data?.front;
         const merged = data?.merged;
-        logger.info('[MRZ okuma] document-base64 cevabı', { hasMrz: !!mrzRaw, hasMerged: !!(merged?.ad || merged?.soyad), hasFront: !!(front?.ad || front?.soyad), failureReason: data?.mrzFailureReason ? data.mrzFailureReason.slice(0, 80) : null });
+        logger.info('[MRZ okuma] document-base64 cevabı', {
+          hasMrz: !!mrzRaw,
+          mrzLen: mrzRaw?.length,
+          hasMerged: !!(merged?.ad || merged?.soyad),
+          hasFront: !!(front?.ad || front?.soyad),
+          failureReason: data?.mrzFailureReason ? data.mrzFailureReason.slice(0, 120) : null,
+          success: data?.success,
+          error: data?.error || data?.message,
+        });
         if (mrzRaw) {
           const minimalPayload = {
             passportNumber: (mrzPayload?.documentNumber || merged?.pasaportNo || merged?.kimlikNo || '').trim(),
@@ -553,14 +568,19 @@ export default function MrzScanScreen({ navigation }) {
           setScanDurationMs(scanStartTimeRef.current ? Date.now() - scanStartTimeRef.current : 0);
           return;
         }
-        if (data?.mrzFailureReason) logger.info('[MRZ okuma] unified – MRZ tespit edilemedi', { reason: data.mrzFailureReason.slice(0, 100) });
+        if (data?.mrzFailureReason) logger.info('[MRZ okuma] unified – MRZ tespit edilemedi', { reason: data.mrzFailureReason.slice(0, 150) });
         const failureReason = data?.mrzFailureReason;
         if (failureReason && mounted.current && !hasAcceptedForUnifiedRef.current) {
           Toast.show({ type: 'info', text1: 'MRZ tespit edilemedi', text2: failureReason.length > 70 ? failureReason.slice(0, 67) + '…' : failureReason });
         }
       } catch (e) {
         if (mounted.current && !hasAcceptedForUnifiedRef.current) {
-          logger.warn('[Unified scan] document-base64 hatası', e?.message);
+          logger.warn('[Unified scan] document-base64 hatası', {
+            message: e?.message,
+            status: e?.response?.status,
+            dataKeys: e?.response?.data ? Object.keys(e.response.data) : [],
+            mrzFailureReason: e?.response?.data?.mrzFailureReason?.slice(0, 100),
+          });
           const status = e?.response?.status;
           const msg = e?.response?.data?.message || e?.response?.data?.error || e?.message;
           const text2 = status === 429

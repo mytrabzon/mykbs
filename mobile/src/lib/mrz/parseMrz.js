@@ -265,10 +265,11 @@ export function parseMrz(raw) {
   if (!raw || typeof raw !== 'string') {
     return { docType: 'OTHER', issuingCountry: '', surname: '', givenNames: '', passportNumber: '', nationality: '', birthDate: '', sex: 'U', expiryDate: '', raw: '', checks: { ok: false, reason: 'empty_input' } };
   }
-  const lines = normalizeMrzLines(raw);
+  const cleaned = raw.replace(/[^A-Z0-9<\r\n]/gi, '').trim().toUpperCase();
+  const lines = normalizeMrzLines(cleaned);
   let result = parseMrzWithLines(lines);
   if (result) return result;
-  const one = raw.trim().toUpperCase().replace(/\s/g, '').replace(/[^A-Z0-9<]/g, '');
+  const one = cleaned.replace(/\s/g, '');
   // İran vb. pasaportlar: farklı bölme noktaları dene (tek satır 66–100 karakter)
   if (one.length >= 66 && one.length <= 100) {
     for (const splitAt of [44, 43, 45, 42, 46, 41, 40]) {
@@ -279,7 +280,7 @@ export function parseMrz(raw) {
       if (result && result.passportNumber) return result;
     }
   }
-  return { docType: 'OTHER', issuingCountry: '', surname: '', givenNames: '', passportNumber: '', nationality: '', birthDate: '', sex: 'U', expiryDate: '', raw, checks: { ok: false, reason: 'invalid_format' } };
+  return { docType: 'OTHER', issuingCountry: '', surname: '', givenNames: '', passportNumber: '', nationality: '', birthDate: '', sex: 'U', expiryDate: '', raw: cleaned || raw, checks: { ok: false, reason: 'invalid_format' } };
 }
 
 // fixMrzOcrErrors yalnızca "export function" ile dışa aktarılır; burada tekrarlanmamalı (duplicate export hatası).

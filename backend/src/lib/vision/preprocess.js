@@ -265,6 +265,38 @@ async function preprocessForPaperMrz(filePath) {
 }
 
 /**
+ * Türk kimlik kartı (TD1) MRZ için ön işleme: MRZ bölgesine kırp, kontrast artır, gürültü azalt, keskinleştir.
+ * Kimlik arka yüzünde MRZ genelde alt bantta; kırpma OCR'ı hızlandırır ve gölgeyi azaltır.
+ * @param {string} filePath - Path to image file (yazılır, aynı path döner)
+ * @returns {Promise<string>} filePath
+ */
+async function preprocessForTurkishIdMrz(filePath) {
+  if (!filePath || !fs.existsSync(filePath)) return filePath;
+  try {
+    const Jimp = (await import('jimp')).default;
+    let image = await Jimp.read(filePath);
+    const w = image.bitmap.width;
+    const h = image.bitmap.height;
+    const mrzFraction = 0.38;
+    const cropH = Math.max(120, Math.round(h * mrzFraction));
+    const y = Math.max(0, h - cropH);
+    image.crop(0, y, w, cropH);
+    image = image.greyscale().normalize().brightness(0.05).contrast(0.72);
+    if (w < 900 || cropH < 280) {
+      const scale = Math.min(2.2, 900 / Math.max(w, 1), 350 / Math.max(cropH, 1));
+      if (scale > 1.1) {
+        image = image.resize(Math.round(w * scale), Math.round(cropH * scale), Jimp.RESIZE_BICUBIC);
+      }
+    }
+    image = applySharpenKernel(image);
+    await image.write(filePath);
+    return filePath;
+  } catch (e) {
+    return filePath;
+  }
+}
+
+/**
  * Soluk / silik baskı MRZ için: çok yüksek kontrast + hafif parlaklık – fotokopi/kağıt baskıda işe yarar.
  */
 async function preprocessForFadedMrz(filePath) {
@@ -438,6 +470,7 @@ module.exports = {
   cropTopFraction,
   cropCenterFraction,
   preprocessForKimlikMrz,
+  preprocessForTurkishIdMrz,
   preprocessForPaperMrz,
   preprocessForFadedMrz,
   preprocessForInvertedMrz,

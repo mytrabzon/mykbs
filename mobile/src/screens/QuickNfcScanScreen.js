@@ -229,7 +229,7 @@ export default function QuickNfcScanScreen() {
       <View style={[styles.instruction, { backgroundColor: colors.primary + '18', borderColor: colors.primary + '40' }]}>
         <Ionicons name="hardware-chip-outline" size={24} color={colors.primary} />
         <Text style={[styles.instructionText, { color: colors.textPrimary }]}>
-          Türk kimliği: Önce MRZ sekmesinden arka yüzü (3 satır) okutun. Sonra burada kartı telefonun arkasına tam yaslayıp "Manuel oku"ya basın. Kartı sabit tutun.
+          Kimlik veya pasaport: İsterseniz önce MRZ sekmesinden belgeyi okutun (kimlik 3 satır, pasaport 2 satır). Sonra burada kartı telefonun arkasına tam yaslayıp "Manuel oku"ya basın. Kartı sabit tutun.
         </Text>
       </View>
 
@@ -255,7 +255,7 @@ export default function QuickNfcScanScreen() {
             if (mountedRef.current && listening) {
               NfcManager.registerTagEvent({
                 invalidateAfterFirstRead: false,
-                alertMessage: 'Kimlik/pasaport kartını yaklaştırın',
+                alertMessage: 'Kimlik veya pasaport kartını yaklaştırın',
               }).then(() => {}).catch(() => setListening(false));
             }
           });
