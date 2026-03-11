@@ -166,6 +166,7 @@ function extractFieldFromTLV(bytes, tagByte2) {
 /**
  * DG1 ham baytlarından ad, soyad, belge no, doğum tarihi, uyruk çıkar.
  * eMRTD: ASN.1/TLV sarmalı olabilir (0x61, 0x5F1F); içeride MRZ 44/88 char (ICAO 9303).
+ * Türk eID çipleri bazen sadece TLV (5F1E ad, 5F1F soyad, 5F20 kimlik no) döner — önce TLV dene.
  */
 function parseDG1ToPayload(dg1Bytes) {
   const payload = {
@@ -179,6 +180,26 @@ function parseDG1ToPayload(dg1Bytes) {
     sonKullanma: null,
   };
   if (!dg1Bytes || dg1Bytes.length === 0) return payload;
+
+  // TLV önce: Türk kimlik çipleri sıklıkla 0x61 / 0x5F ile sarılı TLV döner
+  const firstByte = dg1Bytes[0];
+  if (firstByte === 0x61 || firstByte === 0x5f) {
+    try {
+      parseTLV(dg1Bytes, payload);
+      // Bazen tek alanda "SOYAD<<AD" gelir; ayır
+      if (payload.soyad && !payload.ad && payload.soyad.includes('<<')) {
+        const parts = payload.soyad.split('<<').map((s) => s.trim()).filter(Boolean);
+        if (parts.length >= 2) {
+          payload.soyad = parts[0] || '';
+          payload.ad = parts.slice(1).join(' ') || '';
+        }
+        if (parts.length === 1 && parts[0]) payload.soyad = parts[0];
+      }
+      if (payload.ad || payload.soyad || payload.kimlikNo || payload.pasaportNo) {
+        return payload;
+      }
+    } catch (_) {}
+  }
 
   const rawMrz = unwrapDG1ToMRZ(dg1Bytes);
   if (rawMrz && rawMrz.length >= 44) {
@@ -303,7 +324,8 @@ function unwrapDG1ToMRZ(bytes) {
     pos = valueStart + len;
   }
   if (bytes.length >= 44 && bytes[0] !== 0x61 && bytes[0] !== 0x5f) return bytes;
-  const str = bytesToUtf8(bytes);
+  const str = bytesToUtf8(bytes).replace(/\0/g, '').trim();
+  if (str.length >= 86 && str.length <= 94 && /^[IA]/.test(str)) return bytes;
   if (/[PIA][A-Z0-9<]{43,}/.test(str)) return bytes;
   return null;
 }
