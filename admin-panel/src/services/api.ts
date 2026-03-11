@@ -1,4 +1,4 @@
-import axios from 'axios'
+import axios, { type InternalAxiosRequestConfig } from 'axios'
 
 export const api = axios.create({
   baseURL: process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080/api',
@@ -22,19 +22,34 @@ api.interceptors.request.use(
   }
 )
 
-// Response interceptor: 401'de sadece JWT token ise çıkış yap (Panel Şifresi ile girişte backend 401 dönebilir, token silinmemeli)
+// Response interceptor: 401'de Supabase token ise önce refresh dene; başarısızsa çıkış yap
 api.interceptors.response.use(
   (response) => {
     return response
   },
-  (error) => {
+  async (error) => {
     if (error.response?.status === 401) {
       const token = localStorage.getItem('admin_token')
-      // JWT genelde "xxx.yyy.zzz" formatında; panel şifresi düz metin. Sadece JWT ise çıkış yap.
       const isJwt = typeof token === 'string' && (token.match(/\./g)?.length ?? 0) >= 2
       if (isJwt) {
+        try {
+          const { getValidSupabaseToken } = await import('@/services/supabaseEdge')
+          const newToken = await getValidSupabaseToken()
+          if (newToken && newToken !== token) {
+            const config = error.config as InternalAxiosRequestConfig & { _retry?: boolean }
+            if (!config._retry) {
+              config._retry = true
+              config.headers.Authorization = `Bearer ${newToken}`
+              return api.request(config)
+            }
+          }
+        } catch (_) {
+          // refresh failed
+        }
         localStorage.removeItem('admin_token')
-        window.location.href = '/login'
+        const { setSupabaseSession } = await import('@/services/supabaseEdge')
+        setSupabaseSession(null, null)
+        window.location.href = '/login?expired=1'
       }
     }
     return Promise.reject(error)

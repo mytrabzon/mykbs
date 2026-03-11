@@ -302,7 +302,7 @@ export default function Dashboard({ embedLayout = false }: DashboardProps) {
             <Link href="/users" className="kbs-nav-link">Kullanıcılar</Link>
             <Link href="/kbs-notifications" className="kbs-nav-link">KBS Bildirimleri</Link>
             <Link href="/audit" className="kbs-nav-link">Audit</Link>
-            <button type="button" onClick={() => { localStorage.removeItem('admin_token'); router.push('/login') }} className="kbs-btn-logout">
+            <button type="button" onClick={() => { localStorage.removeItem('admin_token'); localStorage.removeItem('admin_supabase_token'); localStorage.removeItem('admin_supabase_refresh_token'); router.push('/login') }} className="kbs-btn-logout">
               Çıkış
             </button>
           </div>

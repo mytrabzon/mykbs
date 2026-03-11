@@ -1,20 +1,31 @@
 'use client'
 
-import { useState } from 'react'
-import { useRouter } from 'next/navigation'
+import { useState, useEffect } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
 import toast from 'react-hot-toast'
 import { supabase } from '@/services/supabase'
-import { setSupabaseToken } from '@/services/supabaseEdge'
+import { setSupabaseSession } from '@/services/supabaseEdge'
 import { callEdgeFunction } from '@/services/supabaseEdge'
 import { api } from '@/services/api'
 
 export default function LoginPage() {
   const router = useRouter()
+  const searchParams = useSearchParams()
   const [secret, setSecret] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
-  const [mode, setMode] = useState<'secret' | 'supabase' | 'backend'>('secret')
+  const [mode, setMode] = useState<'secret' | 'supabase' | 'backend'>('supabase')
   const [loading, setLoading] = useState(false)
+
+  useEffect(() => {
+    if (searchParams.get('expired') === '1') {
+      localStorage.removeItem('admin_token')
+      localStorage.removeItem('admin_supabase_token')
+      localStorage.removeItem('admin_supabase_refresh_token')
+      toast('Oturum süreniz doldu. Lütfen tekrar giriş yapın.', { icon: '⏱️' })
+      router.replace('/login', { scroll: false })
+    }
+  }, [searchParams, router])
 
   const handleSecretLogin = (e: React.FormEvent) => {
     e.preventDefault()
@@ -72,8 +83,9 @@ export default function LoginPage() {
       const { data, error } = await supabase.auth.signInWithPassword({ email, password })
       if (error) throw error
       const token = data.session?.access_token
+      const refreshToken = data.session?.refresh_token ?? null
       if (!token) throw new Error('Oturum alınamadı')
-      setSupabaseToken(token)
+      setSupabaseSession(token, refreshToken)
       const me = await callEdgeFunction<{ role: string }>('me', {})
       if (!['admin', 'moderator', 'super_admin'].includes(me?.role || '')) {
         supabase.auth.signOut()
@@ -81,8 +93,7 @@ export default function LoginPage() {
         setLoading(false)
         return
       }
-      setSupabaseToken(token)
-      localStorage.setItem('admin_token', token)
+      setSupabaseSession(token, refreshToken)
       toast.success('Giriş başarılı')
       router.push('/')
     } catch (err: unknown) {

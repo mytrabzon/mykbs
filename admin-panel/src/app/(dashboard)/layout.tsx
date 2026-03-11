@@ -20,6 +20,18 @@ export default function DashboardLayout({
     setMounted(true)
   }, [])
 
+  // Supabase JWT ise sayfa açılışında token'ı yenile (süresi dolmuşsa refresh_token ile)
+  useEffect(() => {
+    if (!mounted || typeof window === 'undefined') return
+    const token = localStorage.getItem('admin_token')
+    const isSupabaseJwt = typeof token === 'string' && (token.match(/\./g)?.length ?? 0) >= 2
+    if (isSupabaseJwt) {
+      import('@/services/supabaseEdge').then(({ getValidSupabaseToken }) => {
+        getValidSupabaseToken().catch(() => {})
+      })
+    }
+  }, [mounted])
+
   useEffect(() => {
     if (!mounted) return
     const token = localStorage.getItem('admin_token')

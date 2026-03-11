@@ -23,6 +23,11 @@ export default function AdminTopBar({ onOpenCommandPalette }: AdminTopBarProps) 
 
   const handleLogout = () => {
     localStorage.removeItem('admin_token')
+    localStorage.removeItem('admin_supabase_token')
+    localStorage.removeItem('admin_supabase_refresh_token')
+    import('@/services/supabase').then(({ supabase }) => {
+      supabase?.auth.signOut().catch(() => {})
+    })
     router.push('/login')
   }
 
