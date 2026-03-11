@@ -58,50 +58,49 @@ router.post('/', express.json({ limit: '6mb' }), async (req, res) => {
 
     const logPrefix = '[okutulan-belgeler]';
     let photoUrl = null;
-    if (body.photoBase64 && typeof body.photoBase64 === 'string') {
-      const base64 = body.photoBase64.replace(/^data:image\/\w+;base64,/, '');
+    let portraitPhotoUrl = null;
+
+    const saveBase64ToStorage = async (base64, prefix) => {
+      const base64Clean = base64.replace(/^data:image\/\w+;base64,/, '');
       let buf;
       try {
-        buf = Buffer.from(base64, 'base64');
+        buf = Buffer.from(base64Clean, 'base64');
       } catch (decodeErr) {
-        console.warn(logPrefix, "Storage'a yazılmadı: base64 decode hatası. Neden:", decodeErr.message, "- photoBase64 geçersiz format.");
+        console.warn(logPrefix, prefix, "decode hatası:", decodeErr?.message);
+        return null;
       }
-      if (buf && buf.length > 0 && buf.length <= 5 * 1024 * 1024) {
-        const storagePath = `okutulan-belgeler/${tesisId}/${Date.now()}_${Math.random().toString(36).slice(2, 10)}.jpg`;
-        if (supabaseAdmin) {
-          try {
-            const { error: upErr } = await supabaseAdmin.storage
-              .from(BUCKET_DOCUMENTS)
-              .upload(storagePath, buf, { contentType: 'image/jpeg', upsert: false });
-            if (!upErr) {
-              photoUrl = storagePath;
-              console.log(logPrefix, "Supabase Storage'a yazıldı:", storagePath, { bufLen: buf.length });
-            } else {
-              console.warn(logPrefix, "Supabase Storage yazılamadı, yerel diske düşüyor. Neden:", upErr?.message);
-            }
-          } catch (e) {
-            console.warn(logPrefix, "Supabase Storage hatası:", e?.message);
+      if (!buf || buf.length === 0 || buf.length > 5 * 1024 * 1024) return null;
+      const storagePath = `okutulan-belgeler/${tesisId}/${Date.now()}_${Math.random().toString(36).slice(2, 10)}_${prefix}.jpg`;
+      if (supabaseAdmin) {
+        try {
+          const { error: upErr } = await supabaseAdmin.storage
+            .from(BUCKET_DOCUMENTS)
+            .upload(storagePath, buf, { contentType: 'image/jpeg', upsert: false });
+          if (!upErr) {
+            console.log(logPrefix, "Supabase Storage'a yazıldı:", storagePath, { prefix });
+            return storagePath;
           }
-        }
-        if (!photoUrl) {
-          if (!fs.existsSync(UPLOAD_DIR)) fs.mkdirSync(UPLOAD_DIR, { recursive: true });
-          const filename = `${tesisId.slice(0, 12)}_${Date.now()}.jpg`;
-          const filePath = path.join(UPLOAD_DIR, filename);
-          try {
-            fs.writeFileSync(filePath, buf);
-            photoUrl = `/uploads/okutulan-belgeler/${filename}`;
-            console.log(logPrefix, "Yerel Storage'a yazıldı:", filePath, { bufLen: buf.length });
-          } catch (writeErr) {
-            console.error(logPrefix, "Yerel Storage yazma hatası:", writeErr.message, "- path:", filePath);
-          }
-        }
-      } else if (buf) {
-        if (buf.length === 0) {
-          console.warn(logPrefix, "Storage'a yazılmadı: base64 decode sonrası buffer boş. Neden: photoBase64 decode 0 byte.");
-        } else {
-          console.warn(logPrefix, "Storage'a yazılmadı: dosya boyutu limit aşımı. Neden: max 5MB, gelen:", Math.round(buf.length / 1024), 'KB');
+        } catch (e) {
+          console.warn(logPrefix, "Supabase Storage hatası:", e?.message);
         }
       }
+      if (!fs.existsSync(UPLOAD_DIR)) fs.mkdirSync(UPLOAD_DIR, { recursive: true });
+      const filename = `${tesisId.slice(0, 12)}_${Date.now()}_${prefix}.jpg`;
+      const filePath = path.join(UPLOAD_DIR, filename);
+      try {
+        fs.writeFileSync(filePath, buf);
+        return `/uploads/okutulan-belgeler/${filename}`;
+      } catch (writeErr) {
+        console.error(logPrefix, "Yerel Storage yazma hatası:", writeErr.message);
+        return null;
+      }
+    };
+
+    if (body.photoBase64 && typeof body.photoBase64 === 'string') {
+      photoUrl = await saveBase64ToStorage(body.photoBase64, 'doc');
+    }
+    if (body.portraitPhotoBase64 && typeof body.portraitPhotoBase64 === 'string') {
+      portraitPhotoUrl = await saveBase64ToStorage(body.portraitPhotoBase64, 'portrait');
     }
 
     const rawTenantId = getTenantIdForRecord(req);
@@ -122,6 +121,7 @@ router.post('/', express.json({ limit: '6mb' }), async (req, res) => {
         dogumTarihi: body.dogumTarihi ? String(body.dogumTarihi).trim() : null,
         uyruk: body.uyruk ? String(body.uyruk).trim() : null,
         photoUrl,
+        portraitPhotoUrl: portraitPhotoUrl || undefined,
       },
     });
 
@@ -155,14 +155,20 @@ router.get('/', async (req, res) => {
     const itemsWithPhotoUrl = await Promise.all(
       items.map(async (r) => {
         let photoUrl = r.photoUrl;
-        if (photoUrl && isStoragePath(photoUrl) && supabaseAdmin) {
+        let portraitPhotoUrl = r.portraitPhotoUrl;
+        const signUrl = async (p) => {
+          if (!p || !isStoragePath(p) || !supabaseAdmin) return p;
           try {
             const { data } = await supabaseAdmin.storage
               .from(BUCKET_DOCUMENTS)
-              .createSignedUrl(photoUrl, SIGNED_URL_EXPIRY);
-            if (data?.signedUrl) photoUrl = data.signedUrl;
-          } catch (_) {}
-        }
+              .createSignedUrl(p, SIGNED_URL_EXPIRY);
+            return data?.signedUrl || p;
+          } catch (_) {
+            return p;
+          }
+        };
+        photoUrl = await signUrl(photoUrl);
+        portraitPhotoUrl = await signUrl(portraitPhotoUrl);
         return {
           id: r.id,
           belgeTuru: r.belgeTuru,
@@ -174,6 +180,7 @@ router.get('/', async (req, res) => {
           dogumTarihi: r.dogumTarihi,
           uyruk: r.uyruk,
           photoUrl,
+          portraitPhotoUrl: portraitPhotoUrl || undefined,
           createdAt: r.createdAt,
         };
       })

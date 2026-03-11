@@ -9,10 +9,9 @@ import {
   StyleSheet,
   TouchableOpacity,
   ScrollView,
-  Platform,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, DrawerActions } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../context/ThemeContext';
 import { useAuth } from '../context/AuthContext';
@@ -38,8 +37,20 @@ const MENU_ITEMS = [
 ];
 
 export default function DrawerMenu(props) {
-  const { state } = props;
-  const navigation = useNavigation();
+  const { state, navigation: drawerNav } = props;
+  const fallbackNav = useNavigation();
+  const nav = drawerNav || fallbackNav;
+  const closeDrawer = () => {
+    try {
+      if (typeof nav.closeDrawer === 'function') {
+        nav.closeDrawer();
+      } else {
+        fallbackNav.dispatch(DrawerActions.closeDrawer());
+      }
+    } catch (_) {
+      fallbackNav.dispatch(DrawerActions.closeDrawer());
+    }
+  };
   const insets = useSafeAreaInsets();
   const { colors } = useTheme();
   const { user, logout } = useAuth();
@@ -51,16 +62,16 @@ export default function DrawerMenu(props) {
   );
 
   const handleItemPress = (screen) => {
-    navigation.closeDrawer();
+    closeDrawer();
     if (screen === 'Main') {
-      navigation.navigate('Main');
+      nav.navigate('Main');
       return;
     }
-    navigation.navigate(screen);
+    nav.navigate(screen);
   };
 
   const handleLogout = async () => {
-    navigation.closeDrawer();
+    closeDrawer();
     try {
       await logout();
     } catch (e) {

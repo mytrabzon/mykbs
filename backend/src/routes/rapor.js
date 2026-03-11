@@ -200,22 +200,34 @@ router.get('/maliye/export', async (req, res) => {
   }
 });
 
+/** HTML içine yazılan tüm metinleri escape eder (XSS önlemi). Kimlik/pasaport raporlarda zaten maskelenmiş (maliyeRaporService). */
+function escapeHtml(s) {
+  if (s == null || s === '') return '';
+  const str = String(s);
+  return str
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
 function buildMaliyeHtml(data, vergi, from, to) {
   const fmt = data.formatDateTR || ((d) => (d ? new Date(d).toLocaleDateString('tr-TR') : '—'));
   const fmtTime = data.formatTimeTR || ((d) => (d ? new Date(d).toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' }) : '—'));
-  const donemFrom = from || fmt(new Date());
-  const donemTo = to || fmt(new Date());
+  const donemFrom = escapeHtml(from || fmt(new Date()));
+  const donemTo = escapeHtml(to || fmt(new Date()));
   const rows = (data.misafirler || []).slice(0, 100).map((m) => `
     <tr>
-      <td>${fmt(m.girisTarihi)}</td>
-      <td>${m.odaNo}</td>
-      <td>${m.adSoyad}</td>
-      <td>${fmtTime(m.girisTarihi)}</td>
-      <td>${m.cikisTarihi ? fmtTime(m.cikisTarihi) : '—'}</td>
+      <td>${escapeHtml(fmt(m.girisTarihi))}</td>
+      <td>${escapeHtml(m.odaNo)}</td>
+      <td>${escapeHtml(m.adSoyad)}</td>
+      <td>${escapeHtml(fmtTime(m.girisTarihi))}</td>
+      <td>${escapeHtml(m.cikisTarihi ? fmtTime(m.cikisTarihi) : '—')}</td>
       <td>—</td>
-      <td>${m.kbsNo}</td>
+      <td>${escapeHtml(m.kbsNo)}</td>
     </tr>`).join('');
-  const uyrukRows = (data.uyrukDagilimi || []).slice(0, 10).map((u) => `<tr><td>${u.uyruk}</td><td>${u.sayi} kişi</td></tr>`).join('');
+  const uyrukRows = (data.uyrukDagilimi || []).slice(0, 10).map((u) => `<tr><td>${escapeHtml(u.uyruk)}</td><td>${escapeHtml(String(u.sayi))} kişi</td></tr>`).join('');
   return `<!DOCTYPE html>
 <html lang="tr">
 <head>
@@ -242,9 +254,9 @@ function buildMaliyeHtml(data, vergi, from, to) {
   </div>
   <h2>OTEL BİLGİLERİ</h2>
   <table>
-    <tr><td><strong>Otel Adı</strong></td><td>${data.tesis?.ad || '—'}</td></tr>
-    <tr><td><strong>Vergi No</strong></td><td>${data.tesis?.vergiNo || '—'}</td></tr>
-    <tr><td><strong>Adres</strong></td><td>${data.tesis?.adres || '—'}</td></tr>
+    <tr><td><strong>Otel Adı</strong></td><td>${escapeHtml(data.tesis?.ad || '—')}</td></tr>
+    <tr><td><strong>Vergi No</strong></td><td>${escapeHtml(data.tesis?.vergiNo || '—')}</td></tr>
+    <tr><td><strong>Adres</strong></td><td>${escapeHtml(data.tesis?.adres || '—')}</td></tr>
     <tr><td><strong>Dönem</strong></td><td>${donemFrom} – ${donemTo}</td></tr>
   </table>
   <h2>DOLULUK RAPORU</h2>
@@ -274,7 +286,7 @@ function buildMaliyeHtml(data, vergi, from, to) {
     <tr><td><strong>Toplam Tahsilat</strong></td><td>${vergi.toplamTahsilat ?? 0} ₺</td></tr>
   </table>
   <div class="signature">Yetkili İmza: __________________</div>
-  <div class="meta">Rapor No: ${data.raporNo || '—'} | Düzenlenme: ${data.düzenlenmeTarihi ? fmt(new Date(data.düzenlenmeTarihi)) : '—'}</div>
+  <div class="meta">Rapor No: ${escapeHtml(data.raporNo || '—')} | Düzenlenme: ${escapeHtml(data.düzenlenmeTarihi ? fmt(new Date(data.düzenlenmeTarihi)) : '—')}</div>
 </body>
 </html>`;
 }

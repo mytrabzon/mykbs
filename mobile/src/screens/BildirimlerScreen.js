@@ -124,6 +124,7 @@ export default function BildirimlerScreen({ navigation }) {
       <AppHeader
         title="Bildirimler"
         tesis={tesis}
+        onBack={() => (navigation.canGoBack() ? navigation.goBack() : navigation.navigate('Main'))}
         onNotification={() => navigation.navigate('Bildirimler')}
         onProfile={() => navigation.navigate('DahaFazla', { screen: 'Ayarlar' })}
       />

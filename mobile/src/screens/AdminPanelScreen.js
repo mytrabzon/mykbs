@@ -202,7 +202,13 @@ export default function AdminPanelScreen() {
     Toast.show({ type: 'info', text1: 'Yenileniyor...' });
   };
 
-  const handleBack = () => navigation.goBack();
+  const handleBack = () => {
+    if (navigation.canGoBack()) {
+      navigation.goBack();
+    } else {
+      navigation.navigate('Main');
+    }
+  };
 
   if (!isAdmin) {
     return (

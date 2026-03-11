@@ -20,10 +20,18 @@ export default function PlaceholderScreen() {
   const adminUrl = (ENV.ADMIN_PANEL_WEB_URL || '').trim() || 'http://localhost:3000';
   const fullUrl = webPath ? `${adminUrl.replace(/\/$/, '')}/${webPath.replace(/^\//, '')}` : adminUrl;
 
+  const handleBack = () => {
+    if (navigation.canGoBack()) {
+      navigation.goBack();
+    } else {
+      navigation.navigate('Main');
+    }
+  };
+
   return (
     <View style={[styles.container, { backgroundColor: colors.background, paddingTop: insets.top + 16, paddingBottom: insets.bottom + 24 }]}>
       <View style={[styles.header, { borderBottomColor: colors.border }]}>
-        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
+        <TouchableOpacity onPress={handleBack} style={styles.backBtn} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
           <Ionicons name="arrow-back" size={24} color={colors.textPrimary} />
         </TouchableOpacity>
         <Text style={[styles.title, { color: colors.textPrimary }]}>{title}</Text>

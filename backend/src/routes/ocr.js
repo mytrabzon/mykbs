@@ -19,6 +19,7 @@ const {
   preprocessMrzImage,
   cropMrzCandidates,
   rotateImage,
+  cropPortraitFromDocument,
 } = require('../lib/vision/preprocess');
 const { parseMrzRaw } = require('../lib/vision/mrz');
 
@@ -604,6 +605,10 @@ router.post('/document', authenticateTesisOrSupabase, upload.single('image'), as
       return res.status(400).json({ message: 'Görüntü yüklenmedi' });
     }
     const { rawText, mrzRaw, mrzPayload, front, merged } = await runOcrOnFile(filePath);
+    let portraitBase64 = null;
+    try {
+      portraitBase64 = await cropPortraitFromDocument(filePath);
+    } catch (_) {}
     res.json({
       success: true,
       rawText: rawText,
@@ -611,6 +616,7 @@ router.post('/document', authenticateTesisOrSupabase, upload.single('image'), as
       mrzPayload: mrzPayload || null,
       front,
       merged,
+      portraitBase64: portraitBase64 || undefined,
     });
   } catch (error) {
     console.error('OCR document hatası:', error);
@@ -690,6 +696,13 @@ router.post('/document-base64', authenticateTesisOrSupabase, tenantMiddleware, e
       console.warn(logPrefix, 'Tesseract ön yüz OCR hatası (sunucu çökmemesi için yakalandı):', ocrErr.message);
     }
     const merged = mergeMrzAndFront(mrzPayload, front);
+    let portraitBase64 = null;
+    try {
+      portraitBase64 = await cropPortraitFromDocument(filePath);
+      if (portraitBase64) console.log(logPrefix, 'kimlik resmi kırpıldı', { len: portraitBase64.length });
+    } catch (portraitErr) {
+      console.warn(logPrefix, 'kimlik resmi kırpma atlandı:', portraitErr?.message);
+    }
     const scanId = Date.now();
     const timestamp = new Date().toISOString();
     console.log(logPrefix, 'tamamlandı', { mrzRawLen: mrzRaw?.length ?? 0, mergedKeys: Object.keys(merged || {}), scanId });
@@ -701,6 +714,7 @@ router.post('/document-base64', authenticateTesisOrSupabase, tenantMiddleware, e
       mrzFailureReason: mrzFailureReason || undefined,
       front,
       merged,
+      portraitBase64: portraitBase64 || undefined,
       scanId,
       timestamp,
     });
@@ -764,7 +778,11 @@ router.post('/document-front-back', authenticateTesisOrSupabase, express.json({ 
     const { data: { text: frontText } } = await Tesseract.recognize(frontPath, 'eng+ara+tur', { logger: () => {} });
     const front = parseIdentityDocument(frontText);
     const merged = mergeMrzAndFront(mrzPayload, front);
-    console.log(logPrefix, 'tamamlandı', { hasMrz: !!mrzRaw, mergedKeys: Object.keys(merged || {}) });
+    let portraitBase64 = null;
+    try {
+      portraitBase64 = await cropPortraitFromDocument(frontPath);
+    } catch (_) {}
+    console.log(logPrefix, 'tamamlandı', { hasMrz: !!mrzRaw, mergedKeys: Object.keys(merged || {}), hasPortrait: !!portraitBase64 });
     res.json({
       success: true,
       rawText: frontText,
@@ -773,6 +791,7 @@ router.post('/document-front-back', authenticateTesisOrSupabase, express.json({ 
       mrzFailureReason: mrzFailureReason || undefined,
       front,
       merged,
+      portraitBase64: portraitBase64 || undefined,
     });
   } catch (error) {
     console.error(logPrefix, 'hata:', error.message);

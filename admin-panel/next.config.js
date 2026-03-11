@@ -1,17 +1,16 @@
 /** @type {import('next').NextConfig} */
+// Gerekli env: .env.local içinde NEXT_PUBLIC_SUPABASE_URL, NEXT_PUBLIC_SUPABASE_ANON_KEY, NEXT_PUBLIC_ADMIN_SECRET (veya ADMIN_SECRET)
 const nextConfig = {
   reactStrictMode: true,
   output: 'export',
   basePath: process.env.NEXT_PUBLIC_BASE_PATH || '',
   assetPrefix: process.env.NEXT_PUBLIC_BASE_PATH ? `${process.env.NEXT_PUBLIC_BASE_PATH}/` : '',
   env: {
-    // Supabase Configuration
-    NEXT_PUBLIC_SUPABASE_URL: 'https://iuxnpxszfvyrdifchwvr.supabase.co',
-    NEXT_PUBLIC_SUPABASE_ANON_KEY: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Iml1eG5weHN6ZnZ5cmRpZmNod3ZyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njg0MTg4ODMsImV4cCI6MjA4Mzk5NDg4M30.0Ye4jGaauWA12lvUqhLcaDS7qqod9ijC9_wow8TJY7k',
-    // API Configuration
+    NEXT_PUBLIC_SUPABASE_URL: process.env.NEXT_PUBLIC_SUPABASE_URL,
+    NEXT_PUBLIC_SUPABASE_ANON_KEY: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
     API_URL: process.env.API_URL || 'http://localhost:3000/api',
-    ADMIN_SECRET: process.env.ADMIN_SECRET || 'admin-secret-key'
-  }
+    ADMIN_SECRET: process.env.ADMIN_SECRET || process.env.NEXT_PUBLIC_ADMIN_SECRET || '',
+  },
 }
 
 module.exports = nextConfig

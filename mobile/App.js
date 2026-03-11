@@ -43,6 +43,7 @@ import RaporlarScreen from './src/screens/RaporlarScreen';
 import DahaFazlaScreen from './src/screens/DahaFazlaScreen';
 import ReceptionistPanelScreen from './src/screens/ReceptionistPanelScreen';
 import PlaceholderScreen from './src/screens/PlaceholderScreen';
+import AuditLogScreen from './src/screens/AuditLogScreen';
 import DrawerMenu from './src/components/DrawerMenu';
 import PrivacyConsentScreen from './src/screens/PrivacyConsentScreen';
 import TermsConsentScreen from './src/screens/TermsConsentScreen';
@@ -632,7 +633,7 @@ function AppNavigator() {
                   <Drawer.Screen name="Reports" component={RaporlarScreen} options={{ drawerLabel: 'Raporlar' }} />
                   <Drawer.Screen name="Ayarlar" component={AyarlarScreen} options={{ drawerLabel: 'Ayarlar' }} />
                   <Drawer.Screen name="AdminPanel" component={AdminPanelScreen} options={{ drawerLabel: 'Admin Paneli' }} />
-                  <Drawer.Screen name="AuditLog" component={PlaceholderScreen} initialParams={{ title: 'Audit Log', webPath: 'audit' }} options={{ drawerLabel: 'Audit Log' }} />
+                  <Drawer.Screen name="AuditLog" component={AuditLogScreen} options={{ drawerLabel: 'Audit Log' }} />
                 </Drawer.Navigator>
               )}
             </Stack.Screen>
@@ -668,7 +669,7 @@ function AppNavigator() {
                   <Drawer.Screen name="Reports" component={RaporlarScreen} options={{ drawerLabel: 'Raporlar' }} />
                   <Drawer.Screen name="Ayarlar" component={AyarlarScreen} options={{ drawerLabel: 'Ayarlar' }} />
                   <Drawer.Screen name="AdminPanel" component={AdminPanelScreen} options={{ drawerLabel: 'Admin Paneli' }} />
-                  <Drawer.Screen name="AuditLog" component={PlaceholderScreen} initialParams={{ title: 'Audit Log', webPath: 'audit' }} options={{ drawerLabel: 'Audit Log' }} />
+                  <Drawer.Screen name="AuditLog" component={AuditLogScreen} options={{ drawerLabel: 'Audit Log' }} />
                 </Drawer.Navigator>
               )}
             </Stack.Screen>

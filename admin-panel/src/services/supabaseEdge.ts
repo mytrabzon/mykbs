@@ -38,9 +38,7 @@ export async function getValidSupabaseToken(): Promise<string | null> {
       setSupabaseSession(session.access_token, session.refresh_token ?? null)
       return session.access_token
     }
-  } catch (_) {
-    // ignore
-  }
+  } catch (_) {}
   const storedAccess = getSupabaseToken()
   const refresh = getSupabaseRefreshToken()
   if (refresh) {
@@ -54,9 +52,7 @@ export async function getValidSupabaseToken(): Promise<string | null> {
         setSupabaseSession(data.session.access_token, data.session.refresh_token ?? null)
         return data.session.access_token
       }
-    } catch (_) {
-      // refresh failed, token invalid/expired
-    }
+    } catch (_) {}
   }
   return storedAccess
 }
@@ -67,7 +63,8 @@ export async function callEdgeFunction<T = unknown>(name: string, body?: Record<
   const token = await getValidSupabaseToken()
   if (!url || !anonKey) throw new Error('Bu özellik için Supabase yapılandırması gereklidir. .env dosyasında NEXT_PUBLIC_SUPABASE_URL ve NEXT_PUBLIC_SUPABASE_ANON_KEY tanımlayın.')
   if (!token) throw new Error('Oturum gerekli')
-  const res = await fetch(`${url.replace(/\/$/, '')}/functions/v1/${name}`, {
+  const fnUrl = `${url.replace(/\/$/, '')}/functions/v1/${name}`
+  const res = await fetch(fnUrl, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}`, 'apikey': anonKey },
     body: body ? JSON.stringify(body) : undefined,
@@ -79,6 +76,9 @@ export async function callEdgeFunction<T = unknown>(name: string, body?: Record<
       return callEdgeFunction<T>(name, body)
     }
   }
-  if (!res.ok) throw new Error((data as { error?: string }).error || res.statusText)
+  if (!res.ok) {
+    const err = data as { error?: string; message?: string }
+    throw new Error(err?.message || err?.error || res.statusText)
+  }
   return data as T
 }

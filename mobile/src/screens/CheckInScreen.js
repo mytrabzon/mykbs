@@ -31,7 +31,9 @@ import {
   feedbackReadSuccess,
   speakApproachPassport,
   speakApproachId,
+  getTtsLocale,
 } from '../utils/feedback';
+import { useLanguage } from '../context/LanguageContext';
 import { FREQUENT_NATIONALITIES } from '../constants/frequentNationalities';
 import { getVisaWarningFromDate } from '../utils/visaWarning';
 
@@ -40,6 +42,8 @@ const MIN_BUTTON_SIZE = 60; // Eldivenle kullanım için dev butonlar
 export default function CheckInScreen({ navigation, route }) {
   const { triggerPaywall } = useCredits();
   const { tesis } = useAuth();
+  const { language } = useLanguage();
+  const ttsLocale = getTtsLocale(language);
   const [step, setStep] = useState(1);
   const [odalar, setOdalar] = useState([]);
   const [selectedOda, setSelectedOda] = useState(null);
@@ -110,7 +114,7 @@ export default function CheckInScreen({ navigation, route }) {
         setDocumentExpiryFromMrz(doc.expiryDate ? new Date(doc.expiryDate) : null);
         setDocumentPhotoUri(route.params?.photoUri || null);
         setStep(3);
-        feedbackReadSuccess();
+        feedbackReadSuccess(ttsLocale);
         navigation.setParams({ documentPayload: undefined, photoUri: undefined, selectedOda: undefined });
         return;
       }
@@ -136,7 +140,7 @@ export default function CheckInScreen({ navigation, route }) {
       setDocumentExpiryFromMrz(p.expiryDate ? new Date(p.expiryDate) : null);
       setDocumentPhotoUri(route.params?.photoUri || null);
       setStep(3);
-      feedbackReadSuccess();
+      feedbackReadSuccess(ttsLocale);
       navigation.setParams({ mrzPayload: undefined, selectedOda: undefined, photoUri: undefined });
     }, [route.params?.mrzPayload, route.params?.documentPayload, route.params?.photoUri, route.params?.selectedOda, navigation])
   );
@@ -213,7 +217,7 @@ export default function CheckInScreen({ navigation, route }) {
         setDocumentExpiryFromMrz(parsed.expiryDate ? new Date(parsed.expiryDate) : null);
         setStep(3);
         setSavedOnly(false);
-        feedbackReadSuccess();
+        feedbackReadSuccess(ttsLocale);
         Toast.show({ type: 'success', text1: 'Kimlik okundu', text2: 'Bilgiler dolduruldu.' });
       } else {
         logger.warn('NFC read failed or no parsed data', response?.data);
@@ -292,15 +296,15 @@ export default function CheckInScreen({ navigation, route }) {
     };
   }, [step, nfcSupported, nfcEnabledInSettings]);
 
-  // Step 2: Sesli yönlendirme — "Lütfen pasaportu yaklaştırın" / "Kimliği yaklaştırın"
+  // Step 2: Sesli yönlendirme — seçilen dile göre TTS
   useEffect(() => {
     if (step !== 2) return;
     if (nfcSupported && nfcEnabledInSettings) {
-      speakApproachId();
+      speakApproachId(ttsLocale);
     } else {
-      speakApproachPassport();
+      speakApproachPassport(ttsLocale);
     }
-  }, [step, nfcSupported, nfcEnabledInSettings]);
+  }, [step, nfcSupported, nfcEnabledInSettings, ttsLocale]);
 
   const handleNFCRead = async () => {
     let techRequested = false;
@@ -392,7 +396,7 @@ export default function CheckInScreen({ navigation, route }) {
           }));
           setStep(3);
           setSavedOnly(false);
-          feedbackReadSuccess();
+          feedbackReadSuccess(ttsLocale);
         } else {
           logger.warn('OCR failed', response.data);
         }
@@ -512,7 +516,7 @@ export default function CheckInScreen({ navigation, route }) {
 
       logger.api('POST', apiPath, null, { status: response.status, message: response.data?.message });
       logger.log('CheckIn successful');
-      feedbackCheckInSuccess();
+      feedbackCheckInSuccess(ttsLocale);
 
       Toast.show({
         type: 'success',

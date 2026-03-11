@@ -21,14 +21,14 @@ export default function ReportsPage() {
 
   const baseUrl = (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080').replace(/\/api\/?$/, '')
   const token = typeof window !== 'undefined' ? localStorage.getItem('admin_token') : null
-  const authHeaders = token ? { Authorization: `Bearer ${token}` } : {}
+  const headers: HeadersInit = token ? { Authorization: `Bearer ${token}` } : {}
 
   const handlePdf = async () => {
     setLoading('pdf')
     setError(null)
     try {
       const url = `${baseUrl}/api/rapor/maliye/html?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`
-      const res = await fetch(url, { headers: authHeaders })
+      const res = await fetch(url, { headers })
       if (!res.ok) throw new Error(res.statusText || 'Rapor alınamadı')
       const html = await res.text()
       const w = window.open('', '_blank')
@@ -50,7 +50,7 @@ export default function ReportsPage() {
     setError(null)
     try {
       const url = `${baseUrl}/api/rapor/maliye/export?format=xlsx&from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`
-      const res = await fetch(url, { headers: authHeaders })
+      const res = await fetch(url, { headers })
       if (!res.ok) throw new Error(res.statusText || 'Rapor alınamadı')
       const blob = await res.blob()
       const a = document.createElement('a')

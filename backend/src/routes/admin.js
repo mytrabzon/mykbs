@@ -9,11 +9,19 @@ const appAdminRouter = require('./appAdmin');
 const router = express.Router();
 
 const ADMIN_SECRET = (process.env.ADMIN_SECRET || 'admin-secret-key').trim();
+const DEFAULT_ADMIN_SECRET = 'admin-secret-key';
 
 const adminAuth = (req, res, next) => {
   const token = (req.headers.authorization?.replace('Bearer ', '') || '').trim();
+  // Production'da varsayılan şifre kabul edilmez
+  if (process.env.NODE_ENV === 'production' && (!ADMIN_SECRET || ADMIN_SECRET === DEFAULT_ADMIN_SECRET)) {
+    return res.status(503).json({ message: 'Admin erişimi yapılandırılmamış. ADMIN_SECRET tanımlayın.' });
+  }
   if (token && token === ADMIN_SECRET) {
     return next();
+  }
+  if (process.env.NODE_ENV === 'production' && token === DEFAULT_ADMIN_SECRET) {
+    return res.status(403).json({ message: 'Geçersiz admin anahtarı.' });
   }
   appAdminRouter.requireAdminPanelUser(req, res, next);
 };

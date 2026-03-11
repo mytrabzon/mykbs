@@ -593,6 +593,7 @@ export default function AyarlarScreen() {
       <AppHeader
         title="Profil ve Ayarlar"
         tesis={tesis}
+        onBack={() => (navigation.canGoBack() ? navigation.goBack() : navigation.navigate('Main'))}
         onNotification={() => navigation.navigate('Bildirimler')}
       />
       <ScrollView style={styles.scroll} contentContainerStyle={styles.content}>
@@ -699,7 +700,7 @@ export default function AyarlarScreen() {
             />
           </View>
           <View style={[styles.menuRow, { borderBottomWidth: 0 }]}>
-            <Text style={[styles.label, { color: colors.textPrimary }]}>Dil</Text>
+            <Text style={[styles.label, { color: colors.textPrimary }]}>{t('settings.language')}</Text>
             <View style={{ flexDirection: 'row', gap: 8, flexWrap: 'wrap' }}>
               {Object.entries(languageLabels || {}).map(([code, label]) => (
                 <TouchableOpacity

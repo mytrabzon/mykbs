@@ -22,12 +22,13 @@ Deno.serve(async (req: Request) => {
     if (!branchId) {
       return new Response(JSON.stringify({ kbsTuru: null, kbsTesisKodu: '', kbsWebServisSifre: '', ipKisitAktif: false }), { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
-    const { data: branch } = await supabase.from('branches').select('kbs_turu, kbs_tesis_kodu, kbs_web_servis_sifre').eq('id', branchId).single();
-    const b = (branch || {}) as { kbs_turu?: string; kbs_tesis_kodu?: string; kbs_web_servis_sifre?: string };
+    const { data: branch } = await supabase.from('branches').select('kbs_turu, kbs_tesis_kodu').eq('id', branchId).single();
+    const b = (branch || {}) as { kbs_turu?: string; kbs_tesis_kodu?: string };
+    // KBS şifresi istemciye gönderilmez; KBS işlemleri sadece sunucu tarafında yapılmalı
     return new Response(JSON.stringify({
       kbsTuru: b.kbs_turu ?? null,
       kbsTesisKodu: b.kbs_tesis_kodu ?? '',
-      kbsWebServisSifre: b.kbs_web_servis_sifre ?? '',
+      kbsWebServisSifre: '',
       ipKisitAktif: false,
     }), { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
   } catch (e: unknown) {

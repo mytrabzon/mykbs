@@ -842,7 +842,7 @@ export default function OdalarScreen() {
           navigation={navigation}
           getBackendUrl={getBackendUrl}
           backendOk={backendStatus.isOnline === true}
-          onOpenMenu={() => navigation.getParent()?.getParent()?.getParent()?.openDrawer?.()}
+          onOpenMenu={() => navigation.getParent()?.getParent()?.openDrawer?.()}
         />
       )}
 

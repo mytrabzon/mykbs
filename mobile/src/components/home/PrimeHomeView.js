@@ -16,6 +16,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../context/ThemeContext';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '../../context/AuthContext';
+import { useLanguage } from '../../context/LanguageContext';
 import { getIsAdminPanelUser } from '../../utils/adminAuth';
 
 let LinearGradient;
@@ -31,12 +32,12 @@ const { width } = Dimensions.get('window');
 const ROOM_CARD_WIDTH = (width - 52) / 2;
 
 const FILTER_KEYS = [
-  { key: 'tumu', label: 'Tümü' },
-  { key: 'bos', label: 'Boş' },
-  { key: 'dolu', label: 'Dolu' },
-  { key: 'temizlik', label: 'Temizlik' },
-  { key: 'bakim', label: 'Bakım' },
-  { key: 'cikisaYakin', label: 'Çıkışa Yakın' },
+  { key: 'tumu', tKey: 'home.filterTumu' },
+  { key: 'bos', tKey: 'home.filterBos' },
+  { key: 'dolu', tKey: 'home.filterDolu' },
+  { key: 'temizlik', tKey: 'home.filterTemizlik' },
+  { key: 'bakim', tKey: 'home.filterBakim' },
+  { key: 'cikisaYakin', tKey: 'home.filterCikisaYakin' },
 ];
 
 function StatCard({ title, value, icon, color, subtitle }) {
@@ -75,7 +76,7 @@ function QuickAction({ title, icon, color, onPress, badge }) {
   );
 }
 
-function RoomCard({ oda, colors, onPress }) {
+function RoomCard({ oda, colors, onPress, t }) {
   const durum = oda.durum || 'bos';
   const getRoomColor = () => {
     switch (durum) {
@@ -90,6 +91,7 @@ function RoomCard({ oda, colors, onPress }) {
   const misafirAd = oda.misafir
     ? [oda.misafir.ad, oda.misafir.soyad].filter(Boolean).join(' ')
     : null;
+  const statusLabel = durum === 'bos' ? t('home.roomBos') : durum === 'dolu' ? t('home.roomDolu') : durum === 'temizlik' ? t('home.roomTemizlik') : t('home.roomBakim');
   const cikisTarihi = oda.misafir?.cikisTarihi
     ? (() => {
         const d = new Date(oda.misafir.cikisTarihi);
@@ -98,8 +100,8 @@ function RoomCard({ oda, colors, onPress }) {
         const tomorrow = new Date(today);
         tomorrow.setDate(tomorrow.getDate() + 1);
         d.setHours(0, 0, 0, 0);
-        if (d.getTime() === today.getTime()) return 'Bugün';
-        if (d.getTime() === tomorrow.getTime()) return 'Yarın';
+        if (d.getTime() === today.getTime()) return t('home.today');
+        if (d.getTime() === tomorrow.getTime()) return t('home.tomorrow');
         return d.toLocaleDateString('tr-TR', { day: 'numeric', month: 'short' });
       })()
     : null;
@@ -113,23 +115,21 @@ function RoomCard({ oda, colors, onPress }) {
       <View style={styles.roomHeader}>
         <Text style={[styles.roomNumber, { color: colors.textPrimary }]}>{oda.odaNumarasi || oda.id}</Text>
         <View style={[styles.roomStatus, { backgroundColor: c + '22' }]}>
-          <Text style={[styles.roomStatusText, { color: c }]}>
-            {durum === 'bos' ? 'BOŞ' : durum === 'dolu' ? 'DOLU' : durum === 'temizlik' ? 'TEMİZLİK' : 'BAKIM'}
-          </Text>
+          <Text style={[styles.roomStatusText, { color: c }]}>{statusLabel}</Text>
         </View>
       </View>
       {misafirAd && (
         <View style={styles.roomGuest}>
           <Text style={[styles.guestName, { color: colors.textPrimary }]} numberOfLines={1}>{misafirAd}</Text>
           {cikisTarihi && (
-            <Text style={[styles.guestTime, { color: colors.textSecondary }]}>Çıkış: {cikisTarihi}</Text>
+            <Text style={[styles.guestTime, { color: colors.textSecondary }]}>{t('home.checkout')}: {cikisTarihi}</Text>
           )}
         </View>
       )}
       {durum === 'temizlik' && (
         <View style={styles.cleaningBadge}>
           <Ionicons name="brush" size={14} color="#F59E0B" />
-          <Text style={styles.cleaningText}>Temizlikte</Text>
+          <Text style={styles.cleaningText}>{t('home.cleaning')}</Text>
         </View>
       )}
     </TouchableOpacity>
@@ -156,13 +156,13 @@ export default function PrimeHomeView({
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
   const { user } = useAuth();
+  const { t } = useLanguage();
   const isSuperAdmin = getIsAdminPanelUser(user);
 
   const dolulukPct = ozet?.toplamOda > 0
     ? Math.round((ozet.doluOda / ozet.toplamOda) * 100)
     : 0;
   const hotelName = tesis?.tesisAdi || tesis?.adi || 'Tesis';
-  const apiUrl = getBackendUrl ? getBackendUrl() : '';
 
   return (
     <ScrollView
@@ -190,7 +190,7 @@ export default function PrimeHomeView({
             </TouchableOpacity>
           )}
           <View>
-            <Text style={[styles.greeting, { color: colors.textSecondary }]}>Merhaba,</Text>
+            <Text style={[styles.greeting, { color: colors.textSecondary }]}>{t('home.greeting')}</Text>
             <Text style={[styles.hotelName, { color: colors.textPrimary }]}>{hotelName} 🏨</Text>
           </View>
         </View>
@@ -233,57 +233,57 @@ export default function PrimeHomeView({
         contentContainerStyle={styles.statsScrollContent}
       >
         <StatCard
-          title="Doluluk"
+          title={t('home.occupancy')}
           value={`%${dolulukPct}`}
           icon="bed-outline"
           color="#06B6D4"
-          subtitle={ozet?.toplamOda != null ? `${ozet.doluOda ?? 0}/${ozet.toplamOda} oda` : ''}
+          subtitle={ozet?.toplamOda != null ? `${ozet.doluOda ?? 0}/${ozet.toplamOda} ${t('home.roomCount')}` : ''}
         />
         <StatCard
-          title="Girişler"
+          title={t('home.checkIns')}
           value={String(ozet?.bugunGiris ?? 0)}
           icon="log-in-outline"
           color="#10B981"
-          subtitle="bugün"
+          subtitle={t('home.todayLabel')}
         />
         <StatCard
-          title="Çıkışlar"
+          title={t('home.checkOuts')}
           value={String(ozet?.bugunCikis ?? 0)}
           icon="log-out-outline"
           color="#F59E0B"
-          subtitle="bugün"
+          subtitle={t('home.todayLabel')}
         />
         <StatCard
-          title="Aktif"
+          title={t('home.active')}
           value={String(ozet?.aktifMisafirSayisi ?? 0)}
           icon="people-outline"
           color="#8B5CF6"
-          subtitle="misafir"
+          subtitle={t('home.guestLabel')}
         />
       </ScrollView>
 
       {/* Hızlı İşlemler */}
       <View style={styles.quickActions}>
         <QuickAction
-          title="Aile Girişi"
+          title={t('home.quickFamily')}
           icon="people"
           color="#8B5CF6"
           onPress={() => navigation?.navigate('FamilyCheckIn')}
         />
         <QuickAction
-          title="Hızlı MRZ"
+          title={t('home.quickMrz')}
           icon="camera"
           color="#06B6D4"
           onPress={() => navigation?.navigate('MrzScan', { fromCheckIn: true })}
         />
         <QuickAction
-          title="Oda Ata"
+          title={t('home.quickAssignRoom')}
           icon="bed"
           color="#10B981"
           onPress={() => navigation?.navigate('CheckIn')}
         />
         <QuickAction
-          title="Tümü"
+          title={t('home.quickAll')}
           icon="grid"
           color="#F59E0B"
           onPress={() => onFilterChange?.('tumu')}
@@ -297,7 +297,7 @@ export default function PrimeHomeView({
         style={styles.filterScroll}
         contentContainerStyle={styles.filterScrollContent}
       >
-        {FILTER_KEYS.map(({ key, label }) => (
+        {FILTER_KEYS.map(({ key, tKey }) => (
           <TouchableOpacity
             key={key}
             style={[
@@ -315,7 +315,7 @@ export default function PrimeHomeView({
                 { color: filtre === key ? '#fff' : colors.textPrimary },
               ]}
             >
-              {label}
+              {t(tKey)}
             </Text>
           </TouchableOpacity>
         ))}
@@ -324,28 +324,28 @@ export default function PrimeHomeView({
       {/* Odalar Grid */}
       <View style={styles.roomsSection}>
         <View style={styles.sectionHeader}>
-          <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>🛏️ Odalar</Text>
-          <Text style={[styles.sectionCount, { color: colors.textSecondary }]}>{odalar.length} oda</Text>
+          <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>🛏️ {t('home.roomsTitle')}</Text>
+          <Text style={[styles.sectionCount, { color: colors.textSecondary }]}>{odalar.length} {t('home.roomCount')}</Text>
         </View>
 
         {odalar.length === 0 ? (
           <View style={[styles.emptyState, { backgroundColor: colors.surface, borderColor: colors.border }]}>
             <Ionicons name="bed-outline" size={60} color={colors.textDisabled} />
-            <Text style={[styles.emptyTitle, { color: colors.textPrimary }]}>Henüz oda yok</Text>
+            <Text style={[styles.emptyTitle, { color: colors.textPrimary }]}>{t('home.noRoomsYet')}</Text>
             <Text style={[styles.emptyText, { color: colors.textSecondary }]}>
-              Oda ekleyerek veya check-in yaparak başlayın
+              {t('home.noRoomsHint')}
             </Text>
             <TouchableOpacity
               style={[styles.emptyButton, { backgroundColor: colors.primary }]}
               onPress={() => navigation?.navigate('AddRoom')}
             >
-              <Text style={styles.emptyButtonText}>➕ Oda Ekle</Text>
+              <Text style={styles.emptyButtonText}>➕ {t('home.addRoom')}</Text>
             </TouchableOpacity>
           </View>
         ) : (
           <View style={styles.roomGrid}>
             {odalar.map((oda) => (
-              <RoomCard key={oda.id} oda={oda} colors={colors} onPress={onOdaPress} />
+              <RoomCard key={oda.id} oda={oda} colors={colors} onPress={onOdaPress} t={t} />
             ))}
           </View>
         )}
@@ -355,7 +355,7 @@ export default function PrimeHomeView({
       {sonGirenler.length > 0 && (
         <View style={styles.recentSection}>
           <View style={styles.sectionHeader}>
-            <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>👥 Son giriş yapanlar</Text>
+            <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>👥 {t('home.recentTitle')}</Text>
           </View>
           {sonGirenler.slice(0, 10).map((m) => (
             <TouchableOpacity
@@ -387,18 +387,13 @@ export default function PrimeHomeView({
         </View>
       )}
 
-      {/* Durum Bilgisi */}
-      {apiUrl && (
-        <View style={[styles.statusBar, { borderTopColor: colors.border }]}>
-          <View style={[styles.statusDot, { backgroundColor: backendOk ? '#10B981' : '#EF4444' }]} />
-          <Text style={[styles.statusText, { color: backendOk ? '#10B981' : '#EF4444' }]}>
-            {backendOk ? 'Health OK' : 'Bağlantı yok'}
-          </Text>
-          <Text style={[styles.statusUrl, { color: colors.textSecondary }]} numberOfLines={1}>
-            · {apiUrl}
-          </Text>
-        </View>
-      )}
+      {/* Durum Bilgisi — sadece Health OK / Bağlantı yok */}
+      <View style={[styles.statusBar, { borderTopColor: colors.border }]}>
+        <View style={[styles.statusDot, { backgroundColor: backendOk ? '#10B981' : '#EF4444' }]} />
+        <Text style={[styles.statusText, { color: backendOk ? '#10B981' : '#EF4444' }]}>
+          {backendOk ? 'Health OK' : 'Bağlantı yok'}
+        </Text>
+      </View>
     </ScrollView>
   );
 }
@@ -415,7 +410,7 @@ const styles = StyleSheet.create({
   menuButton: { padding: 8, marginLeft: -8 },
   greeting: { fontSize: 14 },
   hotelName: { fontSize: 24, fontWeight: 'bold' },
-  headerRight: { flexDirection: 'row', alignItems: 'center', gap: 15 },
+  headerRight: { flexDirection: 'row', alignItems: 'center', gap: 12, flexShrink: 0, marginLeft: 'auto' },
   adminButtonWrap: { position: 'relative', padding: 8 },
   adminBadge: {
     position: 'absolute',
@@ -594,5 +589,4 @@ const styles = StyleSheet.create({
   },
   statusDot: { width: 8, height: 8, borderRadius: 4, marginRight: 6 },
   statusText: { fontSize: 12, fontWeight: '500' },
-  statusUrl: { fontSize: 11, marginLeft: 4, flex: 1 },
 });

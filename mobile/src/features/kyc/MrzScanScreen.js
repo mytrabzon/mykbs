@@ -28,8 +28,8 @@ import { CameraFallback } from '../../components/CameraFallback';
 import { getNfcEnabled } from '../../utils/nfcSetting';
 import { useFamilyCheckIn } from '../../context/FamilyCheckInContext';
 
-/** Okutulan belgeyi backend'e kaydet (arka planda; hata sessiz). */
-async function saveOkutulanBelgeAsync(payload, photoUri) {
+/** Okutulan belgeyi backend'e kaydet (arka planda; hata sessiz). photoUri: belge fotoğrafı, portraitBase64: belgeden kırpılan kimlik resmi. */
+async function saveOkutulanBelgeAsync(payload, photoUri, portraitBase64) {
   try {
     const body = {
       belgeTuru: payload.belgeTuru || (payload.kimlikNo && /^\d{11}$/.test(String(payload.kimlikNo).replace(/\D/g, '')) ? 'kimlik' : 'pasaport'),
@@ -45,6 +45,8 @@ async function saveOkutulanBelgeAsync(payload, photoUri) {
       const base64 = await FileSystem.readAsStringAsync(photoUri, { encoding: FileSystem.EncodingType.Base64 });
       if (base64) body.photoBase64 = base64;
     }
+    const portrait = portraitBase64 && typeof portraitBase64 === 'string' ? portraitBase64 : (payload.chipPhotoBase64 && typeof payload.chipPhotoBase64 === 'string' ? payload.chipPhotoBase64 : null);
+    if (portrait) body.portraitPhotoBase64 = portrait;
     await api.post('/okutulan-belgeler', body);
   } catch (e) {
     logger.warn('Okutulan belge kaydı atlandı', e?.message);
@@ -181,6 +183,7 @@ export default function MrzScanScreen({ navigation }) {
   const [instantPayload, setInstantPayload] = useState(null);
   const [showFrontCamera, setShowFrontCamera] = useState(false);
   const [frontImageUri, setFrontImageUri] = useState(null);
+  const [portraitBase64, setPortraitBase64] = useState(null);
   const [mergedPayload, setMergedPayload] = useState(null);
   const [frontLoading, setFrontLoading] = useState(false);
   const [torchOn, setTorchOn] = useState(false);
@@ -314,6 +317,7 @@ export default function MrzScanScreen({ navigation }) {
       setInstantPayload(null);
       setMergedPayload(null);
       setFrontImageUri(null);
+      setPortraitBase64(null);
       setMrzCheckFailed(false);
       getNfcEnabled().then((v) => { if (mounted.current) setNfcEnabledInSettings(!!v); });
       clearMrzState();
@@ -432,8 +436,36 @@ export default function MrzScanScreen({ navigation }) {
         const front = data?.front;
         const merged = data?.merged;
         if (mrzRaw) {
+          const minimalPayload = {
+            passportNumber: (mrzPayload?.documentNumber || merged?.pasaportNo || merged?.kimlikNo || '').trim(),
+            birthDate: mrzPayload?.birthDate || (merged?.dogumTarihi || '').split('.').reverse().join('-') || '',
+            givenNames: (mrzPayload?.givenNames || merged?.ad || '').trim(),
+            surname: (mrzPayload?.surname || merged?.soyad || '').trim(),
+            nationality: (mrzPayload?.nationality || mrzPayload?.issuingCountry || merged?.uyruk || 'TÜRK').trim(),
+          };
+          const enriched = processNewMrz(minimalPayload, { source: 'unified' });
+          if (!enriched) {
+            Toast.show({ type: 'info', text1: 'Aynı belge', text2: 'Bu belge zaten okundu' });
+            return;
+          }
           hasAcceptedForUnifiedRef.current = true;
-          processMrzRaw(mrzRaw);
+          triggerReadSuccessFeedback();
+          setFrontImageUri(photo?.uri || null);
+          setPortraitBase64(data?.portraitBase64 || null);
+          setMergedPayload(merged || {
+            ad: minimalPayload.givenNames,
+            soyad: minimalPayload.surname,
+            kimlikNo: /^\d{11}$/.test(minimalPayload.passportNumber) ? minimalPayload.passportNumber : null,
+            pasaportNo: /^\d{11}$/.test(minimalPayload.passportNumber) ? null : minimalPayload.passportNumber,
+            dogumTarihi: minimalPayload.birthDate ? minimalPayload.birthDate.split('-').reverse().join('.') : null,
+            uyruk: minimalPayload.nationality,
+          });
+          setInstantPayload({
+            ...minimalPayload,
+            scanId: enriched.scanId,
+            scannedAt: enriched.scannedAt,
+          });
+          setScanDurationMs(scanStartTimeRef.current ? Date.now() - scanStartTimeRef.current : 0);
           return;
         }
         if (merged && (merged.ad || merged.soyad || merged.kimlikNo || merged.pasaportNo)) {
@@ -452,6 +484,7 @@ export default function MrzScanScreen({ navigation }) {
           hasAcceptedForUnifiedRef.current = true;
           triggerReadSuccessFeedback();
           setFrontImageUri(photo?.uri || null);
+          setPortraitBase64(data?.portraitBase64 || null);
           setMergedPayload(merged);
           setInstantPayload({
             ...minimalPayload,
@@ -478,6 +511,7 @@ export default function MrzScanScreen({ navigation }) {
           hasAcceptedForUnifiedRef.current = true;
           triggerReadSuccessFeedback();
           setFrontImageUri(photo?.uri || null);
+          setPortraitBase64(data?.portraitBase64 || null);
           setMergedPayload({
             ad: front.ad || '',
             soyad: front.soyad || '',
@@ -528,6 +562,7 @@ export default function MrzScanScreen({ navigation }) {
           hasAcceptedForUnifiedRef.current = true;
           const d = result.data;
           triggerReadSuccessFeedback();
+          setPortraitBase64(d.chipPhotoBase64 || null);
           setMergedPayload({
             ad: d.ad || '',
             soyad: d.soyad || '',
@@ -571,6 +606,7 @@ export default function MrzScanScreen({ navigation }) {
         hasAcceptedForUnifiedRef.current = true;
         const d = result.data;
         triggerReadSuccessFeedback();
+        setPortraitBase64(d.chipPhotoBase64 || null);
         setMergedPayload({
           ad: d.ad || '',
           soyad: d.soyad || '',
@@ -890,6 +926,7 @@ export default function MrzScanScreen({ navigation }) {
         if (merged && (merged.ad || merged.soyad || merged.kimlikNo || merged.pasaportNo)) {
           triggerReadSuccessFeedback();
           setMergedPayload(merged);
+          setPortraitBase64(data?.portraitBase64 || null);
           setInstantPayload({
             givenNames: merged.ad,
             surname: merged.soyad,
@@ -919,6 +956,7 @@ export default function MrzScanScreen({ navigation }) {
           });
           setInstantPayload(payload);
           setFrontImageUri(uri);
+          setPortraitBase64(data?.portraitBase64 || null);
           return;
         }
         logger.warn('[Galeri kimlik] MRZ ve merged/front yok, belge okunamadı');
@@ -1023,6 +1061,9 @@ export default function MrzScanScreen({ navigation }) {
         const base64 = await FileSystem.readAsStringAsync(frontImageUri, { encoding: FileSystem.EncodingType.Base64 });
         if (base64) body.photoBase64 = base64;
       }
+      if (portraitBase64 && typeof portraitBase64 === 'string') {
+        body.portraitPhotoBase64 = portraitBase64;
+      }
       await api.post('/okutulan-belgeler', body);
       setSavedToOkutulan(true);
       Toast.show({ type: 'success', text1: 'Kaydedildi', text2: 'Ayarlar > Okutulan kimlikler bölümünde görüntüleyebilirsiniz.' });
@@ -1031,7 +1072,7 @@ export default function MrzScanScreen({ navigation }) {
     } finally {
       setSavingOkutulan(false);
     }
-  }, [mergedPayload, instantPayload, frontImageUri, isoToDDMMYYYY]);
+  }, [mergedPayload, instantPayload, frontImageUri, portraitBase64, isoToDDMMYYYY]);
 
   const goToCheckIn = useCallback(
     (payload, photoUri) => {
@@ -1057,7 +1098,8 @@ export default function MrzScanScreen({ navigation }) {
             ...documentPayload,
             belgeNo: documentPayload.kimlikNo || documentPayload.pasaportNo || null,
           },
-          docPhotoUri
+          docPhotoUri,
+          portraitBase64 || undefined
         );
       } else {
         const num = (p.passportNumber || '').trim();
@@ -1077,11 +1119,12 @@ export default function MrzScanScreen({ navigation }) {
             dogumTarihi: isoToDDMMYYYY(p.birthDate) || null,
             uyruk: (p.nationality || 'TÜRK').trim(),
           },
-          docPhotoUri
+          docPhotoUri,
+          portraitBase64 || undefined
         );
       }
     },
-    [mergedPayload, instantPayload, frontImageUri, navigation, route.params?.selectedOda, isoToDDMMYYYY]
+    [mergedPayload, instantPayload, frontImageUri, portraitBase64, navigation, route.params?.selectedOda, isoToDDMMYYYY]
   );
 
   const captureFrontAndOcr = useCallback(async () => {
@@ -1324,7 +1367,7 @@ export default function MrzScanScreen({ navigation }) {
       <SafeAreaView style={whiteResultStyles.container} edges={['top']}>
         <ScrollView contentContainerStyle={whiteResultStyles.scroll}>
           <View style={whiteResultStyles.header}>
-            <TouchableOpacity onPress={() => { acceptedRawRef.current = ''; mrzLockedRef.current = false; setMrzLocked(false); setScanMode(DocType.ID); setInstantPayload(null); setMergedPayload(null); setFrontImageUri(null); setMrzCheckFailed(false); setSavedToOkutulan(false); setScanDurationMs(0); }} style={whiteResultStyles.backBtn}>
+            <TouchableOpacity onPress={() => { acceptedRawRef.current = ''; mrzLockedRef.current = false; setMrzLocked(false); setScanMode(DocType.ID); setInstantPayload(null); setMergedPayload(null); setFrontImageUri(null); setPortraitBase64(null); setMrzCheckFailed(false); setSavedToOkutulan(false); setScanDurationMs(0); }} style={whiteResultStyles.backBtn}>
               <Ionicons name="arrow-back" size={24} color="#111" />
             </TouchableOpacity>
             <Text style={whiteResultStyles.headerTitle}>{isKimlik ? 'Kimlik bilgileri' : 'Pasaport bilgileri'}</Text>
@@ -1335,9 +1378,20 @@ export default function MrzScanScreen({ navigation }) {
               <Text style={whiteResultStyles.scanTimeText}>Okuma süresi: {(scanDurationMs / 1000).toFixed(2)} sn</Text>
             </View>
           )}
-          {(frontImageUri || chipPhotoUri) ? (
+          {(portraitBase64 || frontImageUri || chipPhotoUri) ? (
             <View style={whiteResultStyles.photoWrap}>
-              <Image source={{ uri: frontImageUri || chipPhotoUri }} style={whiteResultStyles.photo} resizeMode="cover" />
+              <Image
+                source={{
+                  uri: portraitBase64
+                    ? `data:image/jpeg;base64,${portraitBase64}`
+                    : (frontImageUri || chipPhotoUri),
+                }}
+                style={whiteResultStyles.photo}
+                resizeMode="cover"
+              />
+              {portraitBase64 ? (
+                <Text style={whiteResultStyles.photoLabel}>Kimlik resmi</Text>
+              ) : null}
             </View>
           ) : null}
           {mrzCheckFailed && (
@@ -1988,6 +2042,7 @@ const whiteResultStyles = StyleSheet.create({
   scanTimeText: { fontSize: theme.typography.fontSize.sm, color: '#2E7D32', fontWeight: '600' },
   photoWrap: { alignSelf: 'center', width: 120, height: 150, borderRadius: 8, overflow: 'hidden', backgroundColor: '#f0f0f0', marginBottom: theme.spacing.lg },
   photo: { width: '100%', height: '100%' },
+  photoLabel: { fontSize: 11, color: '#666', textAlign: 'center', marginTop: 4 },
   card: { backgroundColor: '#F8F9FA', borderRadius: 12, padding: theme.spacing.lg, marginBottom: theme.spacing.lg },
   row: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: '#E9ECEF' },
   rowLabel: { fontSize: theme.typography.fontSize.sm, color: '#6C757D', fontWeight: '500' },

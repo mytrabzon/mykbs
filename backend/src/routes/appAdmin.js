@@ -19,7 +19,35 @@ async function requireAdminPanelUser(req, res, next) {
       return next();
     }
 
-    // 1) Önce backend JWT dene (Prisma userId = CUID string)
+    const looksLikeJwt = (token.match(/\./g)?.length ?? 0) >= 2;
+
+    // JWT ise önce Supabase dene (Supabase JWT backend JWT ile verify edilmez)
+    if (looksLikeJwt && supabaseAdmin) {
+      const { data: { user }, error } = await supabaseAdmin.auth.getUser(token);
+      if (!error && user) {
+        const { data: profilesRow } = await supabaseAdmin.from('profiles').select('is_admin', 'role').eq('id', user.id).maybeSingle();
+        if (profilesRow?.is_admin === true || (profilesRow?.role && ['admin', 'super_admin'].includes(profilesRow.role))) {
+          req.user = user;
+          req.adminSource = 'supabase';
+          return next();
+        }
+        const { data: appRole } = await supabaseAdmin.from('app_roles').select('role').eq('user_id', user.id).maybeSingle();
+        if (appRole?.role === 'admin') {
+          req.user = user;
+          req.adminSource = 'supabase';
+          return next();
+        }
+        const { data: upProfiles } = await supabaseAdmin.from('user_profiles').select('role').eq('user_id', user.id).limit(5);
+        const hasAdminProfile = Array.isArray(upProfiles) && upProfiles.some((p) => p.role === 'admin');
+        if (hasAdminProfile) {
+          req.user = user;
+          req.adminSource = 'supabase';
+          return next();
+        }
+      }
+    }
+
+    // Backend JWT (Prisma userId)
     try {
       const decoded = jwt.verify(token, process.env.JWT_SECRET);
       const userId = decoded.userId;
@@ -41,50 +69,24 @@ async function requireAdminPanelUser(req, res, next) {
         }
       }
     } catch (jwtErr) {
-      const looksLikeJwt = (token.match(/\./g)?.length ?? 0) >= 2;
-      if (looksLikeJwt) {
+      const decoded = jwt.decode(token);
+      const isBackendJwt = decoded && typeof decoded.userId !== 'undefined';
+      if (isBackendJwt) {
         return res.status(401).json({
           message: 'Token gecersiz veya suresi dolmus. Yeniden giris yapin.',
         });
       }
     }
 
-    // 2) Supabase token (backend JWT degil; Supabase Auth JWT gerekir)
-    if (!supabaseAdmin) {
-      return res.status(503).json({ message: 'Supabase yapılandırılmamış' });
-    }
-    const { data: { user }, error } = await supabaseAdmin.auth.getUser(token);
-    if (error || !user) {
-      const looksLikePanelSecret = token.length > 8 && (token.match(/\./g)?.length ?? 0) < 2;
-      return res.status(401).json({
-        message: looksLikePanelSecret
-          ? 'Yetkisiz. Panel şifresi kullandıysanız backend .env ADMIN_SECRET değeri, admin panel .env.local NEXT_PUBLIC_ADMIN_SECRET ile aynı olmalı.'
-          : 'Yetkisiz',
-      });
-    }
-    const { data: profilesRow } = await supabaseAdmin.from('profiles').select('is_admin').eq('id', user.id).maybeSingle();
-    if (profilesRow?.is_admin === true) {
-      req.user = user;
-      req.adminSource = 'supabase';
-      return next();
-    }
-    const { data: appRole } = await supabaseAdmin.from('app_roles').select('role').eq('user_id', user.id).maybeSingle();
-    if (appRole?.role === 'admin') {
-      req.user = user;
-      req.adminSource = 'supabase';
-      return next();
-    }
-    const { data: profile, error: profileError } = await supabaseAdmin
-      .from('user_profiles')
-      .select('role')
-      .eq('user_id', user.id)
-      .single();
-    if (profileError || !profile || profile.role !== 'admin') {
+    if (looksLikeJwt && supabaseAdmin) {
       return res.status(403).json({ message: 'Bu alan sadece admin yetkili hesaplar için kullanılabilir' });
     }
-    req.user = user;
-    req.adminSource = 'supabase';
-    next();
+    const looksLikePanelSecret = token.length > 8 && !looksLikeJwt;
+    return res.status(401).json({
+      message: looksLikePanelSecret
+        ? 'Yetkisiz. Panel şifresi ile giriş yaptıysanız backend .env ADMIN_SECRET ile admin panel .env.local NEXT_PUBLIC_ADMIN_SECRET aynı olmalı.'
+        : 'Yetkisiz',
+    });
   } catch (err) {
     console.error('[appAdmin]', err);
     return res.status(500).json({ message: 'Yetkilendirme hatası' });
@@ -308,14 +310,34 @@ router.post('/requests/:id/reject', async (req, res) => {
 // --- MVP: Admin API (vizyon dokümanına göre panel backend üzerinden çalışır) ---
 
 /**
- * Admin audit log listesi (MVP: boş veya ileride admin_audit_log tablosundan)
+ * Admin audit log listesi — Supabase audit_logs tablosundan (tüm şubeler, merkez admin).
  */
 router.get('/audit', async (req, res) => {
   try {
     const { action, target_user_id, limit = 100, offset = 0 } = req.query;
-    // İleride: Supabase admin_audit_log veya Prisma AdminAuditLog
-    const logs = [];
-    res.json({ logs, total: logs.length });
+    const limitNum = Math.min(Math.max(Number(limit) || 100, 1), 200);
+    const offsetNum = Math.max(Number(offset) || 0, 0);
+
+    if (!supabaseAdmin) {
+      return res.json({ logs: [], total: 0 });
+    }
+
+    let query = supabaseAdmin
+      .from('audit_logs')
+      .select('id, branch_id, user_id, action, entity, entity_id, meta_json, created_at', { count: 'exact' })
+      .order('created_at', { ascending: false })
+      .range(offsetNum, offsetNum + limitNum - 1);
+
+    if (action) query = query.eq('action', action);
+    if (target_user_id) query = query.eq('user_id', target_user_id);
+
+    const { data: logs, error, count } = await query;
+
+    if (error) {
+      console.error('[appAdmin] audit query', error.message);
+      return res.status(500).json({ message: 'Audit log alınamadı', error: error.message });
+    }
+    res.json({ logs: logs || [], total: count ?? 0 });
   } catch (err) {
     console.error('[appAdmin] audit', err);
     res.status(500).json({ message: 'Audit log alınamadı', error: err.message });

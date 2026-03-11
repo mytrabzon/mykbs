@@ -24,7 +24,7 @@ serve(async (req) => {
     .maybeSingle();
   const is_admin = profileRow?.is_admin === true;
   const is_super_admin = profileRow?.is_super_admin === true;
-  const role = is_super_admin ? "admin" : auth.profile.role;
+  const role = (is_super_admin || is_admin) ? "admin" : auth.profile.role;
 
   return jsonResponse({
     user_id: auth.userId,

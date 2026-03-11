@@ -37,7 +37,7 @@ export default function LoginPage() {
       toast.success('Giriş başarılı')
       router.push('/')
     } else {
-      toast.error('Geçersiz şifre')
+      toast.error('Geçersiz şifre. Backend .env ADMIN_SECRET ile panel .env.local NEXT_PUBLIC_ADMIN_SECRET aynı olmalı.')
       setLoading(false)
     }
   }
@@ -66,8 +66,9 @@ export default function LoginPage() {
       toast.success('Giriş başarılı')
       router.push('/')
     } catch (err: unknown) {
-      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message
-      toast.error(msg || (err as Error).message || 'Giriş başarısız')
+      const axErr = err as { response?: { status?: number; data?: { message?: string } }; message?: string }
+      const msg = axErr.response?.data?.message
+      toast.error(msg || (axErr as Error).message || 'Giriş başarısız')
       setLoading(false)
     }
   }
@@ -75,7 +76,7 @@ export default function LoginPage() {
   const handleSupabaseLogin = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!supabase) {
-      toast.error('Supabase yapılandırılmamış')
+      toast.error('Supabase yapılandırılmamış. .env.local içinde NEXT_PUBLIC_SUPABASE_URL ve NEXT_PUBLIC_SUPABASE_ANON_KEY tanımlayın.')
       return
     }
     setLoading(true)
@@ -86,10 +87,11 @@ export default function LoginPage() {
       const refreshToken = data.session?.refresh_token ?? null
       if (!token) throw new Error('Oturum alınamadı')
       setSupabaseSession(token, refreshToken)
-      const me = await callEdgeFunction<{ role: string }>('me', {})
-      if (!['admin', 'moderator', 'super_admin'].includes(me?.role || '')) {
+      const me = await callEdgeFunction<{ role?: string; is_admin?: boolean }>('me', {})
+      const allowed = ['admin', 'moderator', 'super_admin'].includes(me?.role || '') || me?.is_admin === true
+      if (!allowed) {
         supabase.auth.signOut()
-        toast.error('Bu hesap admin yetkisine sahip değil')
+        toast.error('Bu hesap admin yetkisine sahip değil. Veritabanında profiles.is_admin veya user_profiles.role=admin olmalı.')
         setLoading(false)
         return
       }
@@ -97,8 +99,14 @@ export default function LoginPage() {
       toast.success('Giriş başarılı')
       router.push('/')
     } catch (err: unknown) {
-      const msg = (err as Error).message || 'Giriş başarısız'
-      toast.error(msg === 'Invalid login credentials' ? 'E-posta veya şifre hatalı' : msg)
+      const e = err as Error & { message?: string }
+      const msg = e?.message || 'Giriş başarısız'
+      const friendly = msg === 'Invalid login credentials' ? 'E-posta veya şifre hatalı' : msg
+      if (msg.includes('Kullanici profili bulunamadi') || msg.includes('NO_PROFILE')) {
+        toast.error('Bu kullanıcı için user_profiles kaydı yok. Supabase SQL Editor\'de docs/fix_admin_user.sql çalıştırın.')
+      } else {
+        toast.error(friendly)
+      }
       setLoading(false)
     }
   }
@@ -117,9 +125,9 @@ export default function LoginPage() {
       <div className="kbs-login-card">
         <h1 className="kbs-login-title">KBS Prime Admin</h1>
         <div className="kbs-login-tabs">
+          <button type="button" onClick={() => setMode('supabase')} className={`kbs-login-tab ${mode === 'supabase' ? 'active' : ''}`}>E-posta + Şifre</button>
+          <button type="button" onClick={() => setMode('backend')} className={`kbs-login-tab ${mode === 'backend' ? 'active' : ''}`}>Backend JWT</button>
           <button type="button" onClick={() => setMode('secret')} className={`kbs-login-tab ${mode === 'secret' ? 'active' : ''}`}>Özel Giriş</button>
-          <button type="button" onClick={() => setMode('backend')} className={`kbs-login-tab ${mode === 'backend' ? 'active' : ''}`}>E-posta + Şifre</button>
-          <button type="button" onClick={() => setMode('supabase')} className={`kbs-login-tab ${mode === 'supabase' ? 'active' : ''}`}>Supabase</button>
         </div>
         {mode === 'secret' ? (
           <form onSubmit={handleSecretLogin}>

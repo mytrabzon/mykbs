@@ -35,9 +35,8 @@ export default function DashboardLayout({
   useEffect(() => {
     if (!mounted) return
     const token = localStorage.getItem('admin_token')
-    if (!token || String(token).trim().length === 0) {
-      router.replace('/login')
-    }
+    const hasToken = token != null && String(token).trim().length > 0
+    if (!hasToken) router.replace('/login')
   }, [mounted, router])
 
   useEffect(() => {

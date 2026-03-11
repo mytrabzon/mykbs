@@ -6,7 +6,12 @@ const rateLimit = require('express-rate-limit');
 const path = require('path');
 const crypto = require('crypto');
 
-// Environment variables (fallbacks for development)
+// Environment variables (fallbacks only in development; production requires .env)
+const isProduction = process.env.NODE_ENV === 'production';
+if (isProduction && !process.env.JWT_SECRET) {
+  console.error('[server] Production ortamında JWT_SECRET zorunludur. .env dosyasında tanımlayın.');
+  process.exit(1);
+}
 process.env.JWT_SECRET = process.env.JWT_SECRET || "mykbs-super-secret-jwt-key-2024-change-this";
 process.env.JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || "365d";
 process.env.DATABASE_URL = process.env.DATABASE_URL || "file:./dev.db";
@@ -35,7 +40,12 @@ app.use((req, res, next) => {
 
 // Middleware
 app.use(helmet());
-app.use(cors({ origin: '*', allowedHeaders: ['Content-Type', 'Authorization', 'X-Request-Id', 'X-Correlation-Id'] }));
+const corsOrigin = process.env.CORS_ORIGIN;
+const corsOptions = {
+  origin: corsOrigin ? corsOrigin.split(',').map((o) => o.trim()).filter(Boolean) : '*',
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Request-Id', 'X-Correlation-Id'],
+};
+app.use(cors(corsOptions));
 // Body parser: OCR base64 için 20mb, diğer API için 2mb (tek parser çalışsın diye path'e göre)
 app.use((req, res, next) => {
   const limit = req.path.startsWith('/api/ocr') ? '20mb' : '2mb';

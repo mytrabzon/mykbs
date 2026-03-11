@@ -8,7 +8,7 @@ const LanguageContext = createContext({
   language: 'tr',
   setLanguage: () => {},
   t: (key) => key,
-  languageLabels: { tr: 'Türkçe', en: 'English', de: 'Deutsch', ru: 'Русский' },
+  languageLabels: { tr: 'Türkçe', en: 'English', de: 'Deutsch', ru: 'Русский', ar: 'العربية (سوريا)' },
 });
 
 export function LanguageProvider({ children }) {

@@ -113,7 +113,7 @@ export default function TesisListScreen() {
           hitSlop={HIT_SLOP}
           activeOpacity={0.7}
           style={[styles.headerBtn, { backgroundColor: colors.background }]}
-          onPress={() => navigation.goBack()}
+          onPress={() => (navigation.canGoBack() ? navigation.goBack() : navigation.navigate('Main'))}
         >
           <Ionicons name="arrow-back" size={24} color={colors.textPrimary} />
         </TouchableOpacity>

@@ -393,6 +393,42 @@ async function applyOrientationRotation(filePath, degrees, outPath) {
   return rotateImage(filePath, degrees, outPath);
 }
 
+/**
+ * Belge görüntüsünden kimlik resmini (yüz fotoğrafı bölgesi) kırp.
+ * Türkiye kimlik: fotoğraf sağ tarafta. Pasaport: genelde sol tarafta.
+ * @param {string} filePath - Ön yüz belge görüntüsü
+ * @returns {Promise<string|null>} Base64 JPEG veya hata durumunda null
+ */
+async function cropPortraitFromDocument(filePath) {
+  if (!filePath || !fs.existsSync(filePath)) return null;
+  try {
+    const Jimp = (await import('jimp')).default;
+    const image = await Jimp.read(filePath);
+    const w = image.bitmap.width;
+    const h = image.bitmap.height;
+    if (w < 50 || h < 50) return null;
+    let x, cropW, cropH, y;
+    if (h >= w) {
+      // Dikey / kart (kimlik): fotoğraf sağda — sağ %32, dikey ortada %72
+      cropW = Math.max(40, Math.round(w * 0.32));
+      cropH = Math.max(50, Math.round(h * 0.72));
+      x = Math.max(0, w - cropW);
+      y = Math.max(0, Math.round((h - cropH) / 2));
+    } else {
+      // Yatay (pasaport sayfası): fotoğraf solda — sol %30, dikey %76
+      cropW = Math.max(40, Math.round(w * 0.30));
+      cropH = Math.max(50, Math.round(h * 0.76));
+      x = 0;
+      y = Math.max(0, Math.round((h - cropH) / 2));
+    }
+    const portrait = image.clone().crop(x, y, cropW, cropH);
+    const buf = await portrait.quality(88).getBufferAsync(Jimp.MIME_JPEG);
+    return buf && buf.length > 0 ? buf.toString('base64') : null;
+  } catch (e) {
+    return null;
+  }
+}
+
 module.exports = {
   preprocessForOcr,
   preprocessFromBase64,
@@ -409,4 +445,5 @@ module.exports = {
   cropMrzCandidates,
   rotateImage,
   applyOrientationRotation,
+  cropPortraitFromDocument,
 };

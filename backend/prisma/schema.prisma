@@ -110,10 +110,11 @@ model OkutulanBelge {
   belgeNo        String?  // MRZ documentNumber (tek alan: kimlik veya pasaport no)
   dogumTarihi    String?  // YYYY-MM-DD veya DD.MM.YYYY
   uyruk          String?
-  photoUrl       String?  // Yüklenen belge/ön yüz foto path
-  createdAt      DateTime @default(now())
+  photoUrl         String?  // Yüklenen belge/ön yüz foto path
+  portraitPhotoUrl String?  // Belgeden kırpılan kimlik resmi (yüz fotoğrafı)
+  createdAt        DateTime @default(now())
 
-  tesis          Tesis    @relation(fields: [tesisId], references: [id], onDelete: Cascade)
+  tesis            Tesis    @relation(fields: [tesisId], references: [id], onDelete: Cascade)
 
   @@index([tesisId])
   @@index([tenantId])

@@ -148,14 +148,20 @@ Deno.serve(async (req: Request) => {
       );
     }
 
-    // 4) Eski stub (geriye uyumluluk)
-    const token = "stub_token_" + Date.now();
-    const kullanici = { id: "stub-user", adSoyad: "Test", email: null, telefon: body.telefon || "", rol: "sahip" };
-    const tesis = { id: "stub-tesis", tesisAdi: "Test Tesis", tesisKodu: "STUB", paket: "deneme", kota: 500, kullanilanKota: 0 };
-    return new Response(JSON.stringify({ token, kullanici, tesis }), {
-      status: 200,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
+    // 4) Stub sadece test için; production'da kapalı
+    if (Deno.env.get("ALLOW_STUB_OTP") === "true") {
+      const token = "stub_token_" + Date.now();
+      const kullanici = { id: "stub-user", adSoyad: "Test", email: null, telefon: body.telefon || "", rol: "sahip" };
+      const tesis = { id: "stub-tesis", tesisAdi: "Test Tesis", tesisKodu: "STUB", paket: "deneme", kota: 500, kullanilanKota: 0 };
+      return new Response(JSON.stringify({ token, kullanici, tesis }), {
+        status: 200,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+    return new Response(
+      JSON.stringify({ message: "Geçerli giriş yöntemi gerekli: OTP kodu veya backend adresi (BACKEND_URL) tanımlayın.", code: "AUTH_REQUIRED" }),
+      { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+    );
   } catch (e: unknown) {
     const message = e instanceof Error ? e.message : "Beklenmeyen hata";
     return new Response(JSON.stringify({ message }), {

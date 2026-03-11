@@ -43,9 +43,7 @@ api.interceptors.response.use(
               return api.request(config)
             }
           }
-        } catch (_) {
-          // refresh failed
-        }
+        } catch (_) {}
         localStorage.removeItem('admin_token')
         const { setSupabaseSession } = await import('@/services/supabaseEdge')
         setSupabaseSession(null, null)

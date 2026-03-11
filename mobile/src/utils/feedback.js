@@ -84,6 +84,12 @@ export function stopSpeaking() {
   } catch (_) {}
 }
 
+/** Uygulama dil kodu (tr, en, ar ...) → TTS locale (tr-TR, en-US, ar-SY ...) */
+export function getTtsLocale(appLanguageCode) {
+  const map = { tr: 'tr-TR', en: 'en-US', de: 'de-DE', ru: 'ru-RU', ar: 'ar-SY' };
+  return map[appLanguageCode] || 'tr-TR';
+}
+
 /** "Lütfen pasaportu yaklaştırın" */
 export function speakApproachPassport(language = 'tr-TR') {
   const phrases = {
@@ -91,6 +97,7 @@ export function speakApproachPassport(language = 'tr-TR') {
     'en-US': 'Please bring the passport closer.',
     'de-DE': 'Bitte führen Sie den Pass näher.',
     'ru-RU': 'Пожалуйста, поднесите паспорт ближе.',
+    'ar-SY': 'يرجى تقريب جواز السفر.',
   };
   speak(phrases[language] || phrases['tr-TR'], { language });
 }
@@ -102,6 +109,7 @@ export function speakReadSuccess(language = 'tr-TR') {
     'en-US': 'Read successful.',
     'de-DE': 'Lesen erfolgreich.',
     'ru-RU': 'Чтение успешно.',
+    'ar-SY': 'تمت القراءة بنجاح.',
   };
   speak(phrases[language] || phrases['tr-TR'], { language });
 }
@@ -113,6 +121,7 @@ export function speakApproachId(language = 'tr-TR') {
     'en-US': 'Bring the ID close to the back of the phone.',
     'de-DE': 'Führen Sie den Ausweis an die Rückseite des Telefons.',
     'ru-RU': 'Поднесите документ к задней части телефона.',
+    'ar-SY': 'قرّب الهوية من ظهر الهاتف.',
   };
   speak(phrases[language] || phrases['tr-TR'], { language });
 }
