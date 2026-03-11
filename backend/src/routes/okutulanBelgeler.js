@@ -13,6 +13,8 @@ const { tenantMiddleware, getTenantIdForRecord } = require('../middleware/tenant
 const { errorResponse } = require('../lib/errorResponse');
 const { supabaseAdmin } = require('../lib/supabaseAdmin');
 const { BUCKET_DOCUMENTS } = require('../config/storage');
+const { createKBSService } = require('../services/kbs');
+const { canSendBildirim } = require('../config/packages');
 
 const router = express.Router();
 const UPLOAD_DIR = path.join(__dirname, '../../uploads/okutulan-belgeler');
@@ -33,6 +35,23 @@ function getTesisId(req) {
 
 function getKullaniciId(req) {
   return req.user?.id ?? req.user?.sub ?? null;
+}
+
+/** KBS / paket kontrolleri için tesis veya branch. */
+function getTesisOrBranch(req) {
+  if (req.authSource === 'supabase' && req.branch) {
+    return {
+      id: req.branch.id,
+      kbsTuru: req.branch.kbs_turu || null,
+      kbsTesisKodu: req.branch.kbs_tesis_kodu || null,
+      kbsWebServisSifre: req.branch.kbs_web_servis_sifre || null,
+      paket: 'deneme',
+      kota: 1000,
+      kullanilanKota: 0,
+      trialEndsAt: null
+    };
+  }
+  return req.tesis;
 }
 
 const GUEST_PASSPORT_LIMIT = 5;
@@ -193,6 +212,159 @@ router.get('/', async (req, res) => {
   } catch (e) {
     console.error('[okutulan-belgeler] GET error:', e);
     return errorResponse(req, res, 500, 'LIST_FAILED', e.message || 'Liste alınamadı.');
+  }
+});
+
+/**
+ * POST /api/okutulan-belgeler/:id/bildir
+ * Body: { odaId: string, misafirTipi?: 'tc_vatandasi'|'ykn'|'yabanci' }
+ * Okutulan belgeyi seçilen odaya check-in edip KBS'ye bildirir.
+ */
+router.post('/:id/bildir', express.json(), async (req, res) => {
+  try {
+    if (req.authSource !== 'supabase' && req.user && !req.user.checkInYetki) {
+      return errorResponse(req, res, 403, 'FORBIDDEN', 'Bildirim için check-in yetkiniz yok.');
+    }
+
+    const tesisId = getTesisId(req);
+    if (!tesisId) return errorResponse(req, res, 401, 'UNAUTHORIZED', 'Tesis bilgisi bulunamadı.');
+
+    const { id } = req.params;
+    const { odaId, misafirTipi } = req.body || {};
+    if (!odaId) return errorResponse(req, res, 400, 'MISSING_ODA', 'Oda seçimi gerekli.');
+
+    const belge = await prisma.okutulanBelge.findFirst({
+      where: { id, tesisId }
+    });
+    if (!belge) return errorResponse(req, res, 404, 'NOT_FOUND', 'Kayıt bulunamadı.');
+
+    if (!belge.kimlikNo && !belge.pasaportNo && !belge.belgeNo) {
+      return errorResponse(req, res, 400, 'MISSING_DOC', 'Belge veya kimlik numarası eksik.');
+    }
+
+    const kimlikNo = belge.kimlikNo ? String(belge.kimlikNo).trim() : null;
+    const pasaportNo = belge.pasaportNo ? String(belge.pasaportNo).trim() : null;
+    const belgeNo = belge.belgeNo ? String(belge.belgeNo).trim() : null;
+    const docNo = kimlikNo || pasaportNo || belgeNo;
+    if (!docNo) return errorResponse(req, res, 400, 'MISSING_DOC', 'Kimlik veya pasaport numarası gerekli.');
+
+    const oda = await prisma.oda.findFirst({
+      where: { id: odaId, tesisId }
+    });
+    if (!oda) return errorResponse(req, res, 404, 'ODA_NOT_FOUND', 'Oda bulunamadı.');
+    if (oda.durum === 'dolu') return errorResponse(req, res, 400, 'ODA_DOLU', 'Bu oda dolu.');
+
+    const sendCheck = canSendBildirim(getTesisOrBranch(req));
+    if (!sendCheck.allowed) {
+      const message = sendCheck.reason === 'trial_ended'
+        ? 'Deneme süren tamamlandı. Bildirimlerine kesintisiz devam etmek için paket seç.'
+        : 'Bildirim hakkın doldu. Devam etmek için paket seç.';
+      return errorResponse(req, res, 402, sendCheck.reason, message);
+    }
+
+    let dogumTarihi = new Date('1900-01-01');
+    if (belge.dogumTarihi) {
+      const s = String(belge.dogumTarihi).trim();
+      if (s.includes('.')) {
+        const [d, m, y] = s.split('.');
+        if (y && m && d) dogumTarihi = new Date(`${y}-${m.padStart(2, '0')}-${d.padStart(2, '0')}`);
+        else dogumTarihi = new Date(s);
+      } else {
+        dogumTarihi = new Date(s);
+      }
+      if (isNaN(dogumTarihi.getTime())) dogumTarihi = new Date('1900-01-01');
+    }
+    const misafir = await prisma.misafir.create({
+      data: {
+        tesisId,
+        odaId: oda.id,
+        ad: belge.ad,
+        ad2: null,
+        soyad: belge.soyad,
+        kimlikNo: /^\d{11}$/.test(String(docNo).replace(/\D/g, '')) ? docNo.replace(/\D/g, '') : (belge.belgeTuru === 'kimlik' ? docNo : null),
+        pasaportNo: belge.belgeTuru === 'pasaport' || !/^\d{11}$/.test(String(docNo).replace(/\D/g, '')) ? docNo : null,
+        dogumTarihi,
+        uyruk: belge.uyruk || 'TÜRK',
+        misafirTipi: misafirTipi || null,
+        girisTarihi: new Date()
+      }
+    });
+
+    await prisma.oda.update({
+      where: { id: oda.id },
+      data: { durum: 'dolu' }
+    });
+
+    const bildirim = await prisma.bildirim.create({
+      data: {
+        tesisId,
+        misafirId: misafir.id,
+        durum: 'beklemede',
+        hataMesaji: null,
+        kbsTuru: getTesisOrBranch(req).kbsTuru || null,
+        kbsYanit: null
+      }
+    });
+
+    const tesisSnapshot = getTesisOrBranch(req);
+    if (tesisSnapshot.kbsTuru && tesisSnapshot.kbsTesisKodu && tesisSnapshot.kbsWebServisSifre) {
+      setImmediate(async () => {
+        try {
+          const kbsService = createKBSService(tesisSnapshot);
+          const kbsResult = await kbsService.bildirimGonder({
+            ad: misafir.ad,
+            ad2: misafir.ad2 || null,
+            soyad: misafir.soyad,
+            kimlikNo: misafir.kimlikNo,
+            pasaportNo: misafir.pasaportNo,
+            dogumTarihi: misafir.dogumTarihi,
+            uyruk: misafir.uyruk,
+            misafirTipi: misafir.misafirTipi || null,
+            girisTarihi: misafir.girisTarihi,
+            odaNumarasi: oda.odaNumarasi
+          });
+          await prisma.bildirim.update({
+            where: { id: bildirim.id },
+            data: {
+              durum: kbsResult.durum,
+              hataMesaji: kbsResult.hataMesaji || null,
+              denemeSayisi: { increment: 1 },
+              sonDenemeTarihi: new Date(),
+              kbsYanit: kbsResult.yanit ? JSON.stringify(kbsResult.yanit) : null
+            }
+          });
+          if (kbsResult.success && tesisSnapshot.kullanilanKota < tesisSnapshot.kota) {
+            await prisma.tesis.update({
+              where: { id: tesisSnapshot.id },
+              data: { kullanilanKota: { increment: 1 } }
+            });
+          }
+        } catch (err) {
+          await prisma.bildirim.update({
+            where: { id: bildirim.id },
+            data: {
+              durum: 'hatali',
+              hataMesaji: err.message,
+              denemeSayisi: { increment: 1 },
+              sonDenemeTarihi: new Date(),
+              kbsYanit: JSON.stringify({ error: err.message })
+            }
+          });
+        }
+      });
+    }
+
+    return res.status(201).json({
+      ok: true,
+      message: 'KBS\'ye bildirim gönderildi',
+      misafirId: misafir.id,
+      bildirimId: bildirim.id,
+      odaNumarasi: oda.odaNumarasi,
+      kbsBildirimi: tesisSnapshot.kbsTuru ? 'Bildirim arka planda gönderiliyor' : 'KBS yapılandırılmamış'
+    });
+  } catch (e) {
+    console.error('[okutulan-belgeler] bildir error:', e);
+    return errorResponse(req, res, 500, 'BILDIR_FAILED', e.message || 'Bildirim gönderilemedi.');
   }
 });
 

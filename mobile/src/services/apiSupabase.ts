@@ -774,6 +774,18 @@ export const api = {
         if (!r.ok) throw Object.assign(new Error((data as { message?: string })?.message || 'Kayıt başarısız'), { response: { status: r.status, data } });
         return toResponse(data);
       }
+      if (pathname.startsWith('/okutulan-belgeler/') && pathname.endsWith('/bildir')) {
+        const backendUrl = getBackendUrl();
+        if (!backendUrl || !token) throw Object.assign(new Error('Giriş gerekli'), { response: { status: 401, data: {} } });
+        const r = await fetchWithLog(`${backendUrl}/api${pathname.startsWith('/') ? pathname : `/${pathname}`}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+          body: JSON.stringify(body || {}),
+        });
+        const data = await r.json().catch(() => ({}));
+        if (!r.ok) throw Object.assign(new Error((data as { message?: string })?.message || 'Bildirim gönderilemedi'), { response: { status: r.status, data } });
+        return toResponse(data);
+      }
       if (pathname === '/ocr/documents-batch' || pathname === 'ocr/documents-batch') {
         const backendUrl = getBackendUrl();
         if (backendUrl && token && body instanceof FormData) {
@@ -1004,6 +1016,19 @@ export const api = {
         });
         const data = await r.json().catch(() => ({}));
         if (!r.ok) throw Object.assign(new Error((data as { message?: string })?.message || 'Sipariş oluşturulamadı'), { response: { status: r.status, data } });
+        return toResponse(data);
+      }
+      // Destek talebi — backend POST /api/support (authenticateTesisOrSupabase)
+      if (pathname === '/support' || pathname === 'support') {
+        const backendUrl = getBackendUrl();
+        if (!backendUrl || !token) throw Object.assign(new Error('Giriş gerekli'), { response: { status: 401, data: {} } });
+        const r = await fetchWithLog(`${backendUrl}/api/support`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+          body: JSON.stringify(payload || {}),
+        });
+        const data = await r.json().catch(() => ({}));
+        if (!r.ok) throw Object.assign(new Error((data as { message?: string })?.message || 'Talep gönderilemedi'), { response: { status: r.status, data } });
         return toResponse(data);
       }
       logger.warn('[apiSupabase] Unmapped POST', path);

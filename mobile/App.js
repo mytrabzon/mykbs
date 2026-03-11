@@ -294,6 +294,7 @@ const styles = StyleSheet.create({
 // Context (useAuth used in MisafirlerScreen, RaporlarScreen)
 import { AuthProvider, useAuth } from './src/context/AuthContext';
 import { ThemeProvider, useTheme } from './src/context/ThemeContext';
+import { useLanguage } from './src/context/LanguageContext';
 import { CreditsProvider, useCredits } from './src/context/CreditsContext';
 import { CameraProvider } from './src/context/CameraContext';
 import { FamilyCheckInProvider } from './src/context/FamilyCheckInContext';
@@ -363,6 +364,7 @@ function MainTabs() {
   const insets = useSafeAreaInsets();
   const { user, lastTab, setLastTab } = useAuth();
   const { colors } = useTheme();
+  const { t } = useLanguage();
   const initialTab = lastTab && MAIN_TAB_NAMES.includes(lastTab) ? lastTab : 'Odalar';
   const tabBarBottom = Math.max(insets.bottom, 16);
 
@@ -430,30 +432,30 @@ function MainTabs() {
       <Tab.Screen 
         name="Odalar" 
         component={OdalarScreen}
-        options={{ tabBarLabel: 'Odalar' }}
+        options={{ tabBarLabel: t('tabs.rooms') }}
       />
       <Tab.Screen 
         name="Misafirler" 
         component={MisafirlerScreen}
-        options={{ tabBarLabel: 'Misafirler' }}
+        options={{ tabBarLabel: t('tabs.guests') }}
       />
       <Tab.Screen
         name="MRZ"
         component={MrzScanScreen}
         options={{
-          tabBarLabel: 'Kimlik / Pasaport',
+          tabBarLabel: t('tabs.idPassport'),
           tabBarActiveTintColor: colors.primary,
         }}
       />
       <Tab.Screen 
         name="Raporlar" 
         component={RaporlarScreen}
-        options={{ tabBarLabel: 'Raporlar' }}
+        options={{ tabBarLabel: t('tabs.reports') }}
       />
       <Tab.Screen
         name="DahaFazla"
         component={DahaFazlaStack}
-        options={{ tabBarLabel: 'Daha Fazla' }}
+        options={{ tabBarLabel: t('tabs.more') }}
       />
     </Tab.Navigator>
     </View>

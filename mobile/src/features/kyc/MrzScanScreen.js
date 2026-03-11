@@ -235,6 +235,10 @@ export default function MrzScanScreen({ navigation }) {
   const nfcHandlerRef = useRef(null);
   const familyCheckIn = useFamilyCheckIn();
 
+  const selectedDocType = mrzLockedRef.current ? lockedDocTypeRef.current : scanMode;
+  selectedDocTypeRef.current = selectedDocType;
+  const useUnifiedMrzFlow = USE_UNIFIED_AUTO_SCAN || (Platform.OS === 'ios' && selectedDocType === DocType.ID);
+
   const { processNewMrz, isProcessing: mrzStateProcessing, clearCurrent: clearMrzState } = useMrzState();
 
   const { readNfcDirect, isReading: nfcIndependentReading, progress: nfcIndependentProgress, closeNfc: closeIndependentNfc, isSupported: nfcReaderSupported } = useIndependentNfcReader();
@@ -418,7 +422,7 @@ export default function MrzScanScreen({ navigation }) {
 
   /** Tek kamera otomatik tarama: belge MRZ veya ön yüz göründüğünde backend hem MRZ hem OCR yapar. Ref kontrolü + hata toast. */
   useEffect(() => {
-    if (!USE_UNIFIED_AUTO_SCAN || !permission?.granted || !unifiedCameraReady) return;
+    if (!useUnifiedMrzFlow || !permission?.granted || !unifiedCameraReady) return;
     const runCapture = async () => {
       if (hasAcceptedForUnifiedRef.current || ocrLoading) return;
       const cam = unifiedCameraRef.current;
@@ -549,7 +553,7 @@ export default function MrzScanScreen({ navigation }) {
     const id = setInterval(runCapture, UNIFIED_CAPTURE_INTERVAL_MS);
     runCapture();
     return () => clearInterval(id);
-  }, [permission?.granted, unifiedCameraReady, ocrLoading, processMrzRaw, processNewMrz]);
+  }, [useUnifiedMrzFlow, permission?.granted, unifiedCameraReady, ocrLoading, processMrzRaw, processNewMrz]);
 
   /** NFC tag algılandığında tam çip okuma (readNfcDirect); tüm alanlar + fotoğraf çekilir, "yakında" kaldırıldı */
   useEffect(() => {
@@ -1246,7 +1250,7 @@ export default function MrzScanScreen({ navigation }) {
 
   // Unified kamera: izin + MRZ modunda KISA gecikmeyle her zaman mount et (onLayout'a güvenmeden – siyah ekran kalıcı çözüm).
   useEffect(() => {
-    if (!USE_UNIFIED_AUTO_SCAN || !(permission?.granted || permissionGrantedLocal)) return;
+    if (!useUnifiedMrzFlow || !(permission?.granted || permissionGrantedLocal)) return;
     if (unifiedFallbackTimerRef.current) clearTimeout(unifiedFallbackTimerRef.current);
     const mountMs = UNIFIED_CAMERA_MOUNT_AFTER_MS;
     unifiedFallbackTimerRef.current = setTimeout(() => {
@@ -1264,11 +1268,11 @@ export default function MrzScanScreen({ navigation }) {
         unifiedFallbackTimerRef.current = null;
       }
     };
-  }, [USE_UNIFIED_AUTO_SCAN, permission?.granted, permissionGrantedLocal]);
+  }, [useUnifiedMrzFlow, permission?.granted, permissionGrantedLocal]);
 
   // Siyah ekran önlemi: CameraView mount edildi ama onCameraReady gelmezse belirli süre sonra fallback göster.
   useEffect(() => {
-    if (!USE_UNIFIED_AUTO_SCAN || !unifiedCameraMountReady || unifiedCameraReady || unifiedCameraError) return;
+    if (!useUnifiedMrzFlow || !unifiedCameraMountReady || unifiedCameraReady || unifiedCameraError) return;
     if (unifiedCameraReadyTimeoutRef.current) clearTimeout(unifiedCameraReadyTimeoutRef.current);
     unifiedCameraReadyTimeoutRef.current = setTimeout(() => {
       unifiedCameraReadyTimeoutRef.current = null;
@@ -1284,11 +1288,11 @@ export default function MrzScanScreen({ navigation }) {
         unifiedCameraReadyTimeoutRef.current = null;
       }
     };
-  }, [USE_UNIFIED_AUTO_SCAN, unifiedCameraMountReady, unifiedCameraReady, unifiedCameraError]);
+  }, [useUnifiedMrzFlow, unifiedCameraMountReady, unifiedCameraReady, unifiedCameraError]);
 
   // Kamera önizlemesi hazır olmazsa (onCameraReady gelmezse) timeout sonunda fallback. Android'de native MrzReaderView kamera hazır sinyali göndermediği için timeout çalıştırma (siyah ekran yanlış tetiklemesin).
   useEffect(() => {
-    if (USE_UNIFIED_AUTO_SCAN || Platform.OS === 'ios' || (Platform.OS === 'android' && !USE_UNIFIED_AUTO_SCAN) || !mrzCameraMountReady || !permission?.granted || cameraPreviewReady) return;
+    if (useUnifiedMrzFlow || (Platform.OS === 'android' && !USE_UNIFIED_AUTO_SCAN) || !mrzCameraMountReady || !permission?.granted || cameraPreviewReady) return;
     logger.info('[MRZ] Kamera timeout başlatıldı (onCameraReady bekleniyor)', { ms: CAMERA_READY_TIMEOUT_MS, platform: Platform.OS });
     cameraReadyTimeoutRef.current = setTimeout(() => {
       cameraReadyTimeoutRef.current = null;
@@ -1303,9 +1307,6 @@ export default function MrzScanScreen({ navigation }) {
     };
   }, [mrzCameraMountReady, permission?.granted, cameraPreviewReady]);
 
-  const selectedDocType = mrzLockedRef.current ? lockedDocTypeRef.current : scanMode;
-  selectedDocTypeRef.current = selectedDocType;
-  // iOS: @corupta/react-native-mrz-reader sadece PASSPORT destekliyor; ID_CARD verince hata atıyor.
   const docTypeForReader = Platform.OS === 'ios' ? DocType.Passport : selectedDocType;
 
   const toggleTorch = useCallback(() => {
@@ -1572,7 +1573,7 @@ export default function MrzScanScreen({ navigation }) {
     );
   }
 
-  if (USE_UNIFIED_AUTO_SCAN) {
+  if (useUnifiedMrzFlow) {
     // Kamera açılamadı: CameraFallback (Galeriden seç / Tekrar dene)
     if (unifiedCameraError) {
       return (

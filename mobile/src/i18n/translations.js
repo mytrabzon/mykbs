@@ -41,6 +41,7 @@ export const translations = {
     },
     checkIn: { roomSelection: 'Oda Seçimi', selectRoom: 'Check-in yapmak için bir oda seçin', qrSelectRoom: 'QR ile oda seç', approachPassport: 'Lütfen pasaportu yaklaştırın.', readSuccess: 'Okuma başarılı.' },
     settings: { title: 'Ayarlar', language: 'Dil', hapticFeedback: 'Titreşimli geri bildirim', voiceGuidance: 'Sesli yönlendirme', exportExcel: "Excel'e aktar", backup: 'Yedekle' },
+    tabs: { rooms: 'Odalar', guests: 'Misafirler', idPassport: 'Kimlik / Pasaport', reports: 'Raporlar', more: 'Daha Fazla' },
   },
   en: {
     common: { ok: 'OK', cancel: 'Cancel', save: 'Save', back: 'Back', next: 'Next', loading: 'Loading...' },
@@ -81,6 +82,7 @@ export const translations = {
     },
     checkIn: { roomSelection: 'Room selection', selectRoom: 'Select a room for check-in', qrSelectRoom: 'Select room by QR', approachPassport: 'Please bring the passport closer.', readSuccess: 'Read successful.' },
     settings: { title: 'Settings', language: 'Language', hapticFeedback: 'Haptic feedback', voiceGuidance: 'Voice guidance', exportExcel: 'Export to Excel', backup: 'Backup' },
+    tabs: { rooms: 'Rooms', guests: 'Guests', idPassport: 'ID / Passport', reports: 'Reports', more: 'More' },
   },
   de: {
     common: { ok: 'OK', cancel: 'Abbrechen', save: 'Speichern', back: 'Zurück', next: 'Weiter', loading: 'Laden...' },
@@ -121,6 +123,7 @@ export const translations = {
     },
     checkIn: { roomSelection: 'Zimmerauswahl', selectRoom: 'Wählen Sie ein Zimmer für den Check-in', qrSelectRoom: 'Zimmer per QR wählen', approachPassport: 'Bitte führen Sie den Pass näher.', readSuccess: 'Lesen erfolgreich.' },
     settings: { title: 'Einstellungen', language: 'Sprache', hapticFeedback: 'Vibrationsrückmeldung', voiceGuidance: 'Sprachführung', exportExcel: 'Nach Excel exportieren', backup: 'Sicherung' },
+    tabs: { rooms: 'Zimmer', guests: 'Gäste', idPassport: 'Ausweis / Reisepass', reports: 'Berichte', more: 'Mehr' },
   },
   ru: {
     common: { ok: 'ОК', cancel: 'Отмена', save: 'Сохранить', back: 'Назад', next: 'Далее', loading: 'Загрузка...' },
@@ -161,6 +164,7 @@ export const translations = {
     },
     checkIn: { roomSelection: 'Выбор номера', selectRoom: 'Выберите номер для заезда', qrSelectRoom: 'Выбрать номер по QR', approachPassport: 'Пожалуйста, поднесите паспорт ближе.', readSuccess: 'Чтение успешно.' },
     settings: { title: 'Настройки', language: 'Язык', hapticFeedback: 'Вибрация', voiceGuidance: 'Голосовые подсказки', exportExcel: 'Экспорт в Excel', backup: 'Резервная копия' },
+    tabs: { rooms: 'Номера', guests: 'Гости', idPassport: 'Удостоверение / Паспорт', reports: 'Отчёты', more: 'Ещё' },
   },
   ar: {
     common: { ok: 'موافق', cancel: 'إلغاء', save: 'حفظ', back: 'رجوع', next: 'التالي', loading: 'جاري التحميل...' },
@@ -201,6 +205,7 @@ export const translations = {
     },
     checkIn: { roomSelection: 'اختيار الغرفة', selectRoom: 'اختر غرفة للتسجيل', qrSelectRoom: 'اختيار الغرفة بالـ QR', approachPassport: 'يرجى تقريب جواز السفر.', readSuccess: 'تمت القراءة بنجاح.' },
     settings: { title: 'الإعدادات', language: 'اللغة', hapticFeedback: 'الاهتزاز', voiceGuidance: 'التوجيه الصوتي', exportExcel: 'تصدير إلى Excel', backup: 'نسخ احتياطي' },
+    tabs: { rooms: 'الغرف', guests: 'الضيوف', idPassport: 'الهوية / جواز السفر', reports: 'التقارير', more: 'المزيد' },
   },
 };
 

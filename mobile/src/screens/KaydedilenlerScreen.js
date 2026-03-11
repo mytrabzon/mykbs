@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import {
   View,
   Text,
@@ -13,6 +13,7 @@ import {
 } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
+import Toast from 'react-native-toast-message';
 import { theme } from '../theme';
 import { api } from '../services/api';
 import { getApiBaseUrl } from '../config/api';
@@ -22,6 +23,12 @@ export default function KaydedilenlerScreen({ navigation }) {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [detail, setDetail] = useState(null);
+  const [bildirItem, setBildirItem] = useState(null);
+  const [odalar, setOdalar] = useState([]);
+  const [odalarLoading, setOdalarLoading] = useState(false);
+  const [bildirLoading, setBildirLoading] = useState(false);
+  const [selectedOda, setSelectedOda] = useState(null);
+  const [misafirTipi, setMisafirTipi] = useState('tc_vatandasi');
 
   const load = useCallback(async (isRefresh = false) => {
     if (isRefresh) setRefreshing(true);
@@ -48,6 +55,38 @@ export default function KaydedilenlerScreen({ navigation }) {
     ? `${baseUrl.replace(/\/$/, '')}${detail.photoUrl}`
     : null;
 
+  useEffect(() => {
+    if (!bildirItem) return;
+    setOdalarLoading(true);
+    setSelectedOda(null);
+    api.get('/oda?filtre=bos')
+      .then((res) => setOdalar(res.data?.odalar ?? []))
+      .catch(() => setOdalar([]))
+      .finally(() => setOdalarLoading(false));
+  }, [bildirItem]);
+
+  const handleBildir = useCallback(async () => {
+    if (!bildirItem || !selectedOda) {
+      Toast.show({ type: 'info', text1: 'Oda seçin', text2: 'KBS\'ye göndermek için bir oda seçin.' });
+      return;
+    }
+    setBildirLoading(true);
+    try {
+      await api.post(`/okutulan-belgeler/${bildirItem.id}/bildir`, {
+        odaId: selectedOda.id,
+        misafirTipi,
+      });
+      Toast.show({ type: 'success', text1: 'KBS\'ye gönderildi', text2: `${bildirItem.ad} ${bildirItem.soyad} · Oda ${selectedOda.odaNumarasi}` });
+      setBildirItem(null);
+      load(true);
+    } catch (err) {
+      const msg = err.response?.data?.message || err.message || 'Bildirim gönderilemedi';
+      Toast.show({ type: 'error', text1: 'Gönderilemedi', text2: msg });
+    } finally {
+      setBildirLoading(false);
+    }
+  }, [bildirItem, selectedOda, misafirTipi, load]);
+
   const renderItem = ({ item }) => (
     <TouchableOpacity
       style={styles.row}
@@ -65,6 +104,14 @@ export default function KaydedilenlerScreen({ navigation }) {
           {item.createdAt ? new Date(item.createdAt).toLocaleDateString('tr-TR') : ''}
         </Text>
       </View>
+      <TouchableOpacity
+        style={styles.bildirBtn}
+        onPress={(e) => { e.stopPropagation(); setBildirItem(item); }}
+        hitSlop={8}
+      >
+        <Ionicons name="send" size={18} color={theme.colors.primary} />
+        <Text style={styles.bildirBtnText}>Bildir</Text>
+      </TouchableOpacity>
       <Ionicons name="chevron-forward" size={20} color={theme.colors.textSecondary} />
     </TouchableOpacity>
   );
@@ -146,10 +193,97 @@ export default function KaydedilenlerScreen({ navigation }) {
                   label="Kayıt tarihi"
                   value={detail.createdAt ? new Date(detail.createdAt).toLocaleString('tr-TR') : null}
                 />
+                <TouchableOpacity style={styles.bildirBtnDetail} onPress={() => { setDetail(null); setBildirItem(detail); }}>
+                  <Ionicons name="send" size={20} color={theme.colors.primary} />
+                  <Text style={styles.bildirBtnDetailText}>KBS'ye bildir</Text>
+                </TouchableOpacity>
                 <TouchableOpacity style={styles.closeBtn} onPress={() => setDetail(null)}>
                   <Text style={styles.closeBtnText}>Kapat</Text>
                 </TouchableOpacity>
               </ScrollView>
+            )}
+          </TouchableOpacity>
+        </TouchableOpacity>
+      </Modal>
+
+      <Modal visible={!!bildirItem} transparent animationType="slide">
+        <TouchableOpacity
+          style={styles.modalOverlay}
+          activeOpacity={1}
+          onPress={() => setBildirItem(null)}
+        >
+          <TouchableOpacity
+            style={[styles.modalContent, styles.bildirModal, { backgroundColor: theme.colors.surface }]}
+            activeOpacity={1}
+            onPress={(e) => e.stopPropagation()}
+          >
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>KBS'ye bildir</Text>
+              <TouchableOpacity onPress={() => setBildirItem(null)} hitSlop={16}>
+                <Ionicons name="close" size={28} color={theme.colors.textSecondary} />
+              </TouchableOpacity>
+            </View>
+            {bildirItem && (
+              <>
+                <Text style={styles.bildirSubtitle}>
+                  {bildirItem.ad} {bildirItem.soyad} · Oda seçin, KBS'ye gönderilecek.
+                </Text>
+                <Text style={styles.inputLabel}>Misafir tipi</Text>
+                <View style={styles.misafirTipiRow}>
+                  {[
+                    { value: 'tc_vatandasi', label: 'T.C. Vatandaşı' },
+                    { value: 'ykn', label: 'YKN' },
+                    { value: 'yabanci', label: 'Yabancı' },
+                  ].map(({ value, label }) => (
+                    <TouchableOpacity
+                      key={value}
+                      style={[styles.misafirTipiBtn, misafirTipi === value && styles.misafirTipiBtnActive]}
+                      onPress={() => setMisafirTipi(value)}
+                    >
+                      <Text style={[styles.misafirTipiBtnText, misafirTipi === value && styles.misafirTipiBtnTextActive]}>{label}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+                <Text style={styles.inputLabel}>Oda seçin</Text>
+                {odalarLoading ? (
+                  <ActivityIndicator size="small" color={theme.colors.primary} style={{ marginVertical: 12 }} />
+                ) : odalar.length === 0 ? (
+                  <Text style={styles.emptyOdaText}>Boş oda yok. Önce Odalar ekranından oda ekleyin.</Text>
+                ) : (
+                  <ScrollView style={styles.odaList} nestedScrollEnabled>
+                    {odalar.map((oda) => (
+                      <TouchableOpacity
+                        key={oda.id}
+                        style={[styles.odaItem, selectedOda?.id === oda.id && styles.odaItemSelected]}
+                        onPress={() => setSelectedOda(oda)}
+                      >
+                        <Text style={styles.odaItemText}>Oda {oda.odaNumarasi}</Text>
+                        {oda.odaTipi ? <Text style={styles.odaItemMeta}>{oda.odaTipi}</Text> : null}
+                        {selectedOda?.id === oda.id && <Ionicons name="checkmark-circle" size={22} color={theme.colors.primary} />}
+                      </TouchableOpacity>
+                    ))}
+                  </ScrollView>
+                )}
+                <View style={styles.bildirModalActions}>
+                  <TouchableOpacity
+                    style={[styles.bildirSubmitBtn, { backgroundColor: theme.colors.primary }]}
+                    onPress={handleBildir}
+                    disabled={bildirLoading || !selectedOda}
+                  >
+                    {bildirLoading ? (
+                      <ActivityIndicator size="small" color="#fff" />
+                    ) : (
+                      <>
+                        <Ionicons name="send" size={20} color="#fff" />
+                        <Text style={styles.bildirSubmitBtnText}>KBS'ye gönder</Text>
+                      </>
+                    )}
+                  </TouchableOpacity>
+                  <TouchableOpacity style={styles.bildirCancelBtn} onPress={() => setBildirItem(null)}>
+                    <Text style={styles.bildirCancelBtnText}>İptal</Text>
+                  </TouchableOpacity>
+                </View>
+              </>
             )}
           </TouchableOpacity>
         </TouchableOpacity>
@@ -211,7 +345,66 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: theme.colors.border,
   },
-  rowMain: { flex: 1 },
+  rowMain: { flex: 1, minWidth: 0 },
+  bildirBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    marginRight: 4,
+    borderRadius: theme.spacing.borderRadius.button,
+    backgroundColor: theme.colors.primary + '18',
+  },
+  bildirBtnText: { fontSize: 13, fontWeight: '600', color: theme.colors.primary },
+  bildirBtnDetail: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    marginTop: theme.spacing.lg,
+    paddingVertical: 12,
+    borderWidth: 1,
+    borderColor: theme.colors.primary,
+    borderRadius: theme.spacing.borderRadius.button,
+  },
+  bildirBtnDetailText: { fontSize: 15, fontWeight: '600', color: theme.colors.primary },
+  bildirModal: { maxHeight: '85%' },
+  bildirSubtitle: { fontSize: 14, color: theme.colors.textSecondary, marginBottom: theme.spacing.lg },
+  inputLabel: { fontSize: 13, fontWeight: '600', color: theme.colors.textSecondary, marginBottom: 8 },
+  misafirTipiRow: { flexDirection: 'row', gap: 8, marginBottom: theme.spacing.lg },
+  misafirTipiBtn: { paddingVertical: 8, paddingHorizontal: 14, borderRadius: 8, borderWidth: 1, borderColor: theme.colors.border },
+  misafirTipiBtnActive: { borderColor: theme.colors.primary, backgroundColor: theme.colors.primary + '15' },
+  misafirTipiBtnText: { fontSize: 14, color: theme.colors.textSecondary },
+  misafirTipiBtnTextActive: { color: theme.colors.primary, fontWeight: '600' },
+  odaList: { maxHeight: 200, marginBottom: theme.spacing.lg },
+  odaItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    marginBottom: 6,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+  },
+  odaItemSelected: { borderColor: theme.colors.primary, backgroundColor: theme.colors.primary + '12' },
+  odaItemText: { fontSize: 15, fontWeight: '600', color: theme.colors.textPrimary },
+  odaItemMeta: { fontSize: 13, color: theme.colors.textSecondary },
+  emptyOdaText: { fontSize: 14, color: theme.colors.textSecondary, marginVertical: 12 },
+  bildirModalActions: { gap: 10 },
+  bildirSubmitBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 14,
+    borderRadius: theme.spacing.borderRadius.button,
+  },
+  bildirSubmitBtnText: { fontSize: 16, fontWeight: '600', color: '#fff' },
+  bildirCancelBtn: { alignItems: 'center', paddingVertical: 10 },
+  bildirCancelBtnText: { fontSize: 15, color: theme.colors.textSecondary },
   rowName: { fontSize: theme.typography.fontSize.base, fontWeight: '600', color: theme.colors.textPrimary },
   rowMeta: { fontSize: theme.typography.fontSize.sm, color: theme.colors.textSecondary, marginTop: 2 },
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', padding: theme.spacing.lg },
