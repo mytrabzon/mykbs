@@ -6,10 +6,11 @@ const rateLimit = require('express-rate-limit');
 const path = require('path');
 const crypto = require('crypto');
 
-// Environment variables (fallbacks only in development; production requires .env)
+// Environment variables (fallbacks only in development; production requires env vars from platform)
 const isProduction = process.env.NODE_ENV === 'production';
 if (isProduction && !process.env.JWT_SECRET) {
-  console.error('[server] Production ortamında JWT_SECRET zorunludur. .env dosyasında tanımlayın.');
+  console.error('[server] Production ortamında JWT_SECRET zorunludur.');
+  console.error('[server] Deploy platformunda ortam değişkeni olarak tanımlayın: Supabase Dashboard → Project Settings → Edge Functions → Secrets veya Railway Variables.');
   process.exit(1);
 }
 process.env.JWT_SECRET = process.env.JWT_SECRET || "mykbs-super-secret-jwt-key-2024-change-this";

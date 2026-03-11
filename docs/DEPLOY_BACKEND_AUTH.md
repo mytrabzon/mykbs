@@ -23,8 +23,16 @@
 4. Railway’da backend servisinin **Environment** kısmında şunların tanımlı olduğundan emin ol:
    - `SUPABASE_URL`
    - `SUPABASE_SERVICE_ROLE_KEY` (push + KBS credentials için gerekli)
-   - `JWT_SECRET`
+   - `JWT_SECRET` — **Zorunlu:** production’da yoksa uygulama başlamaz (`[server] Production ortamında JWT_SECRET zorunludur`).
    - İsteğe bağlı: `ADMIN_KULLANICI_ID`, `KBS_SECRET_KEY`
+
+#### A2) Container / Supabase vb. (Docker veya platform)
+Container veya Supabase ile backend çalıştırıyorsan `.env` dosyası image’a kopyalanmaz. **JWT_SECRET**’ı mutlaka platform ortam değişkeni olarak ver:
+- **Supabase:** Project Settings → Edge Functions → Secrets (veya ilgili servis env)
+- **Diğer (Railway, Render, Fly.io vb.):** Servis → Variables / Environment
+Ayrıca `DATABASE_URL`, `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` tanımlı olmalı.
+
+**Not:** Build sırasında `npm warn config production Use --omit=dev instead` uyarısı alırsan, platform `npm install --production` kullanıyordur. Build komutunu `npm ci --omit=dev` veya `npm install --omit=dev` olacak şekilde değiştirirsen uyarı gider.
 
 #### B) Yerel backend (geliştirme)
 Yeni route’ların çalışması için backend’i yeniden başlat:
