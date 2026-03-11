@@ -597,6 +597,27 @@ router.post('/users/:id/force-logout', async (req, res) => {
   }
 });
 
+/**
+ * Kullanıcıyı kalıcı sil (Supabase Auth deleteUser).
+ */
+router.post('/users/:id/delete', async (req, res) => {
+  try {
+    const userId = req.params.id;
+    if (!supabaseAdmin) return res.status(503).json({ message: 'Supabase yapılandırılmamış' });
+    const { error } = await supabaseAdmin.auth.admin.deleteUser(userId);
+    if (error) return res.status(500).json({ message: 'Kullanıcı silinemedi', error: error.message });
+    try {
+      await supabaseAdmin.from('user_profiles').delete().eq('user_id', userId);
+    } catch (e) {
+      console.warn('[appAdmin] user_profiles delete', e?.message);
+    }
+    res.json({ message: 'Kullanıcı silindi' });
+  } catch (err) {
+    console.error('[appAdmin] users delete', err);
+    res.status(500).json({ message: 'İşlem başarısız', error: err.message });
+  }
+});
+
 // --- Tesis kullanıcıları (Prisma Kullanici: yetkiler, rol, giriş onayı) ---
 const bcrypt = require('bcryptjs');
 
@@ -817,14 +838,44 @@ router.post('/satislar/:id/odendi', async (req, res) => {
 });
 
 /**
- * POST /app-admin/satislar/:id/iptal — Sipariş iptal
+ * POST /app-admin/satislar/:id/iptal — Sipariş iptal (pending veya odendi).
+ * Odendi ise: tesis kota/kullanilanKota, iptal edilen paket kredisi kadar düşürülür.
  */
 router.post('/satislar/:id/iptal', async (req, res) => {
   try {
     const id = req.params.id;
-    const siparis = await prisma.siparis.findUnique({ where: { id } });
+    const siparis = await prisma.siparis.findUnique({ where: { id }, include: { tesis: true } });
     if (!siparis) return res.status(404).json({ message: 'Sipariş bulunamadı' });
-    if (siparis.durum !== 'pending') return res.status(400).json({ message: 'Sadece bekleyen sipariş iptal edilebilir' });
+    if (siparis.durum !== 'pending' && siparis.durum !== 'odendi') {
+      return res.status(400).json({ message: 'Sadece bekleyen veya ödenmiş sipariş iptal edilebilir' });
+    }
+
+    const kredi = getPackageCredits(siparis.paket);
+
+    if (siparis.durum === 'odendi' && siparis.tesisId && kredi > 0) {
+      const tesis = siparis.tesis;
+      const mevcutKota = tesis.kota ?? 0;
+      const mevcutKullanilan = tesis.kullanilanKota ?? 0;
+      const yeniKota = Math.max(0, mevcutKota - kredi);
+      const yeniKullanilan = Math.min(mevcutKullanilan, yeniKota);
+
+      await prisma.$transaction([
+        prisma.siparis.update({ where: { id }, data: { durum: 'iptal' } }),
+        prisma.tesis.update({
+          where: { id: siparis.tesisId },
+          data: {
+            kota: yeniKota,
+            kullanilanKota: yeniKullanilan,
+            ...(yeniKota === 0 ? { paket: 'deneme' } : {}),
+          },
+        }),
+      ]);
+      return res.json({
+        message: 'Sipariş iptal edildi. Tesis bildirim kotası ' + kredi + ' adet düşürüldü.',
+        siparisNo: siparis.siparisNo,
+        kotaDusurulen: kredi,
+      });
+    }
 
     await prisma.siparis.update({ where: { id }, data: { durum: 'iptal' } });
     res.json({ message: 'Sipariş iptal edildi', siparisNo: siparis.siparisNo });

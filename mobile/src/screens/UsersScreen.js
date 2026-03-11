@@ -22,12 +22,16 @@ import { getBackendUrl } from '../services/apiSupabase';
 const HIT_SLOP = { top: 12, bottom: 12, left: 12, right: 12 };
 const PADDING = 16;
 
-function UserRow({ item, colors }) {
+function UserRow({ item, colors, onPress }) {
   const lastSign = item.last_sign_in_at
     ? new Date(item.last_sign_in_at).toLocaleDateString('tr-TR', { day: '2-digit', month: '2-digit', year: 'numeric' })
     : '—';
   return (
-    <View style={[styles.row, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+    <TouchableOpacity
+      style={[styles.row, { backgroundColor: colors.surface, borderColor: colors.border }]}
+      onPress={() => onPress(item)}
+      activeOpacity={0.7}
+    >
       <View style={styles.rowMain}>
         <Text style={[styles.rowTitle, { color: colors.textPrimary }]} numberOfLines={1}>
           {item.email || item.id?.slice(0, 8) || '—'}
@@ -40,7 +44,7 @@ function UserRow({ item, colors }) {
         </Text>
       </View>
       <Ionicons name="chevron-forward" size={20} color={colors.textSecondary} />
-    </View>
+    </TouchableOpacity>
   );
 }
 
@@ -133,7 +137,13 @@ export default function UsersScreen() {
         <FlatList
           data={users}
           keyExtractor={(item) => item.id}
-          renderItem={({ item }) => <UserRow item={item} colors={colors} />}
+          renderItem={({ item }) => (
+            <UserRow
+              item={item}
+              colors={colors}
+              onPress={(u) => navigation.navigate('UserDetail', { userId: u.id })}
+            />
+          )}
           contentContainerStyle={[styles.listContent, { paddingBottom: insets.bottom + 24 }]}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => load(true)} colors={[colors.primary]} />}
         />

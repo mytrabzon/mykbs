@@ -708,16 +708,16 @@ router.post('/document-base64', authenticateTesisOrSupabase, tenantMiddleware, e
         return res.status(400).json({ message: 'Görsel formatı desteklenmiyor veya bozuk. JPEG/PNG deneyin.' });
       }
     }
-    const docTypeHint = req.body?.docTypeHint === 'id' ? 'id' : undefined;
-    console.log(logPrefix, 'runMrzPipeline başlıyor', { paperMode, docTypeHint });
-    const mrzResult = await runMrzPipeline(filePath, { paperMode, docTypeHint });
+    const requestDocTypeHint = req.body?.docTypeHint === 'id' ? 'id' : undefined;
+    console.log(logPrefix, 'runMrzPipeline başlıyor', { paperMode, docTypeHint: requestDocTypeHint });
+    const mrzResult = await runMrzPipeline(filePath, { paperMode, docTypeHint: requestDocTypeHint });
     let mrzRaw = mrzResult.mrzRaw || null;
     let mrzPayload = mrzResult.payload || null;
     if (!mrzPayload && mrzRaw) mrzPayload = parseMrzToPayload(mrzRaw);
     const mrzFailureReason = !mrzRaw ? buildMrzFailureReason(mrzResult, false) : null;
     const lineCount = mrzRaw ? mrzRaw.trim().split('\n').filter(Boolean).length : 0;
-    const docTypeHint = mrzRaw ? (lineCount >= 3 ? 'TC_KIMLIK (TD1, 3 satır)' : 'PASAPORT (TD3, 2 satır)') : null;
-    console.log(logPrefix, 'runMrzPipeline bitti', { ok: mrzResult.ok, hasMrzRaw: !!mrzRaw, docType: docTypeHint, score: mrzResult.score, attemptsUsed: mrzResult.attemptsUsed });
+    const inferredDocType = mrzRaw ? (lineCount >= 3 ? 'TC_KIMLIK (TD1, 3 satır)' : 'PASAPORT (TD3, 2 satır)') : null;
+    console.log(logPrefix, 'runMrzPipeline bitti', { ok: mrzResult.ok, hasMrzRaw: !!mrzRaw, docType: inferredDocType, score: mrzResult.score, attemptsUsed: mrzResult.attemptsUsed });
     if (!mrzRaw && mrzFailureReason) console.log(logPrefix, 'MRZ bulunamadı', { reason: mrzFailureReason.slice(0, 120) });
     let text = '';
     let front = {};

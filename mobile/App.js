@@ -48,7 +48,7 @@ import LiveStreamScreen from './src/screens/LiveStreamScreen';
 import MusterilerScreen from './src/screens/MusterilerScreen';
 import LisanslarScreen from './src/screens/LisanslarScreen';
 import PendingUsersScreen from './src/screens/PendingUsersScreen';
-import UsersScreen from './src/screens/UsersScreen';
+import UsersStack from './src/screens/UsersStack';
 import PaymentsScreen from './src/screens/PaymentsScreen';
 import DestekScreen from './src/screens/DestekScreen';
 import AuditLogScreen from './src/screens/AuditLogScreen';
@@ -641,7 +641,7 @@ function AppNavigator() {
                   <Drawer.Screen name="Lisanslar" component={LisanslarScreen} options={{ drawerLabel: 'Lisanslar' }} />
                   <Drawer.Screen name="Destek" component={DestekScreen} options={{ drawerLabel: 'Destek' }} />
                   <Drawer.Screen name="PendingUsers" component={PendingUsersScreen} options={{ drawerLabel: 'Onay Bekleyenler' }} />
-                  <Drawer.Screen name="Users" component={UsersScreen} options={{ drawerLabel: 'Kullanıcılar' }} />
+                  <Drawer.Screen name="Users" component={UsersStack} options={{ drawerLabel: 'Kullanıcılar' }} />
                   <Drawer.Screen name="Identity" component={MrzScanScreen} options={{ drawerLabel: 'Kimlik & Pasaport' }} />
                   <Drawer.Screen name="Payments" component={PaymentsScreen} options={{ drawerLabel: 'Paketler & Ödemeler' }} />
                   <Drawer.Screen name="Tesisler" component={TesisListScreen} options={{ drawerLabel: 'Tesis Listesi' }} />
@@ -677,7 +677,7 @@ function AppNavigator() {
                   <Drawer.Screen name="Lisanslar" component={LisanslarScreen} options={{ drawerLabel: 'Lisanslar' }} />
                   <Drawer.Screen name="Destek" component={DestekScreen} options={{ drawerLabel: 'Destek' }} />
                   <Drawer.Screen name="PendingUsers" component={PendingUsersScreen} options={{ drawerLabel: 'Onay Bekleyenler' }} />
-                  <Drawer.Screen name="Users" component={UsersScreen} options={{ drawerLabel: 'Kullanıcılar' }} />
+                  <Drawer.Screen name="Users" component={UsersStack} options={{ drawerLabel: 'Kullanıcılar' }} />
                   <Drawer.Screen name="Identity" component={MrzScanScreen} options={{ drawerLabel: 'Kimlik & Pasaport' }} />
                   <Drawer.Screen name="Payments" component={PaymentsScreen} options={{ drawerLabel: 'Paketler & Ödemeler' }} />
                   <Drawer.Screen name="Tesisler" component={TesisListScreen} options={{ drawerLabel: 'Tesis Listesi' }} />

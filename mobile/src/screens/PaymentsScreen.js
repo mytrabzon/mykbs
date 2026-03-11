@@ -46,8 +46,8 @@ function SiparisRow({ item, colors, onOdendi, onIptal, acting }) {
           <Text style={[styles.rowDurum, { color: durumColor }]}>{item.durum || '—'}</Text>
         </View>
       </View>
-      {item.durum === 'pending' && (
-        <View style={styles.actions}>
+      <View style={styles.actions}>
+        {item.durum === 'pending' && (
           <TouchableOpacity
             style={[styles.actionBtn, { backgroundColor: '#22c55e' }]}
             onPress={() => onOdendi(item.id)}
@@ -55,15 +55,17 @@ function SiparisRow({ item, colors, onOdendi, onIptal, acting }) {
           >
             {loading ? <ActivityIndicator size="small" color="#fff" /> : <Ionicons name="checkmark" size={18} color="#fff" />}
           </TouchableOpacity>
+        )}
+        {(item.durum === 'pending' || item.durum === 'odendi') && (
           <TouchableOpacity
             style={[styles.actionBtn, { backgroundColor: '#ef4444' }]}
             onPress={() => onIptal(item.id)}
             disabled={loading}
           >
-            <Ionicons name="close" size={18} color="#fff" />
+            {loading ? <ActivityIndicator size="small" color="#fff" /> : <Ionicons name="close" size={18} color="#fff" />}
           </TouchableOpacity>
-        </View>
-      )}
+        )}
+      </View>
     </View>
   );
 }
@@ -138,35 +140,39 @@ export default function PaymentsScreen() {
   };
 
   const handleIptal = (id) => {
-    Alert.alert('Sipariş iptal', 'Bu siparişi iptal etmek istediğinize emin misiniz?', [
-      { text: 'İptal', style: 'cancel' },
-      {
-        text: 'İptal et',
-        style: 'destructive',
-        onPress: async () => {
-          setActing(id);
-          const base = getBackendUrl();
-          try {
-            const r = await fetch(`${base}/api/app-admin/satislar/${id}/iptal`, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-              body: '{}',
-            });
-            if (r.ok) {
-              Toast.show({ type: 'success', text1: 'Sipariş iptal edildi' });
-              load(true);
-            } else {
+    Alert.alert(
+      'Sipariş iptal',
+      'Bu siparişi iptal etmek istediğinize emin misiniz? Ödenmiş siparişte tesis bildirim kotası iptal edilen paket kadar düşürülür.',
+      [
+        { text: 'Vazgeç', style: 'cancel' },
+        {
+          text: 'İptal et',
+          style: 'destructive',
+          onPress: async () => {
+            setActing(id);
+            const base = getBackendUrl();
+            try {
+              const r = await fetch(`${base}/api/app-admin/satislar/${id}/iptal`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+                body: '{}',
+              });
               const json = await r.json().catch(() => ({}));
-              Toast.show({ type: 'error', text1: json.message || 'İşlem başarısız' });
+              if (r.ok) {
+                Toast.show({ type: 'success', text1: json.message || 'Sipariş iptal edildi', text2: json.kotaDusurulen != null ? `Kota ${json.kotaDusurulen} adet düşürüldü` : undefined });
+                load(true);
+              } else {
+                Toast.show({ type: 'error', text1: json.message || 'İşlem başarısız' });
+              }
+            } catch (e) {
+              Toast.show({ type: 'error', text1: e?.message || 'İşlem başarısız' });
+            } finally {
+              setActing(null);
             }
-          } catch (e) {
-            Toast.show({ type: 'error', text1: e?.message || 'İşlem başarısız' });
-          } finally {
-            setActing(null);
-          }
+          },
         },
-      },
-    ]);
+      ]
+    );
   };
 
   const headerPaddingTop = Platform.OS === 'ios' ? Math.max(insets.top, 12) : 12;
