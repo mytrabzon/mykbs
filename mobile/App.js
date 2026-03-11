@@ -28,6 +28,7 @@ import OdalarScreen from './src/screens/OdalarScreen';
 import CheckInScreen from './src/screens/CheckInScreen';
 import QRRoomScanScreen from './src/screens/QRRoomScanScreen';
 import KaydedilenlerScreen from './src/screens/KaydedilenlerScreen';
+import ManuelBildirimScreen from './src/screens/ManuelBildirimScreen';
 import AyarlarScreen from './src/screens/AyarlarScreen';
 import OdaDetayScreen from './src/screens/OdaDetayScreen';
 import AdminPanelScreen from './src/screens/AdminPanelScreen';
@@ -327,6 +328,7 @@ function MainStack() {
       <Stack.Screen name="QRRoomScan" component={QRRoomScanScreen} />
       <Stack.Screen name="FamilyCheckIn" component={FamilyCheckInScreen} />
       <Stack.Screen name="Kaydedilenler" component={KaydedilenlerScreen} />
+      <Stack.Screen name="ManuelBildirim" component={ManuelBildirimScreen} />
       <Stack.Screen name="OdaDetay" component={OdaDetayScreen} />
       <Stack.Screen name="AddRoom" component={AddRoomScreen} />
       <Stack.Screen name="PostDetay" component={PostDetayScreen} />

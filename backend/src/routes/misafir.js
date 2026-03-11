@@ -258,6 +258,190 @@ router.post('/checkin', async (req, res) => {
 });
 
 /**
+ * Manuel bilgi ile KBS'ye bildirim (belge okutmadan)
+ * Body: kimlikNo veya pasaportNo, ad, soyad, babaAdi (ad2), dogumTarihi, uyruk, odaNumarasi,
+ *       misafirTipi?, girisTarihi? (yoksa bildirildiği tarih kullanılır), telefon?, plaka?
+ */
+router.post('/manuel-bildirim', async (req, res) => {
+  try {
+    if (req.authSource !== 'supabase' && !req.user.checkInYetki) {
+      return res.status(403).json({ message: 'Check-in yetkiniz yok' });
+    }
+
+    const {
+      kimlikNo,
+      pasaportNo,
+      ad,
+      soyad,
+      babaAdi,
+      dogumTarihi,
+      uyruk,
+      odaNumarasi,
+      misafirTipi,
+      girisTarihi,
+      telefon,
+      plaka
+    } = req.body;
+
+    const tesisId = getTesisId(req);
+
+    if (!ad || !soyad || !dogumTarihi || !uyruk || !odaNumarasi) {
+      return res.status(400).json({ message: 'TC/Pasaport, ad, soyad, baba adı, doğum tarihi, uyruk ve oda no zorunludur' });
+    }
+
+    if (!kimlikNo && !pasaportNo) {
+      return res.status(400).json({ message: 'Kimlik veya pasaport numarası gerekli' });
+    }
+
+    const odaNoTrim = String(odaNumarasi || '').trim();
+    if (!odaNoTrim) {
+      return res.status(400).json({ message: 'Oda numarası girin' });
+    }
+
+    const oda = await prisma.oda.findFirst({
+      where: { tesisId, odaNumarasi: odaNoTrim }
+    });
+
+    if (!oda) {
+      return res.status(404).json({ message: 'Bu oda numarası tesisinizde bulunamadı' });
+    }
+
+    if (oda.durum === 'dolu') {
+      return res.status(400).json({ message: 'Oda dolu' });
+    }
+
+    const sendCheck = canSendBildirim(getTesisOrBranch(req));
+    if (!sendCheck.allowed) {
+      const message = sendCheck.reason === 'trial_ended'
+        ? 'Deneme süren tamamlandı. Bildirimlerine kesintisiz devam etmek için paket seç.'
+        : 'Bildirim hakkın doldu. Devam etmek için paket seç.';
+      return res.status(402).json({ message, code: sendCheck.reason });
+    }
+
+    const girisTarihiVal = girisTarihi ? new Date(girisTarihi) : new Date();
+
+    const misafir = await prisma.misafir.create({
+      data: {
+        tesisId,
+        odaId: oda.id,
+        ad,
+        ad2: babaAdi ? String(babaAdi).trim() || null : null,
+        soyad,
+        kimlikNo: kimlikNo ? String(kimlikNo).trim() || null : null,
+        pasaportNo: pasaportNo ? String(pasaportNo).trim() || null : null,
+        dogumTarihi: new Date(dogumTarihi),
+        uyruk: String(uyruk).trim(),
+        misafirTipi: misafirTipi || null,
+        girisTarihi: girisTarihiVal
+      }
+    });
+
+    await prisma.oda.update({
+      where: { id: oda.id },
+      data: { durum: 'dolu' }
+    });
+
+    const tesisSnapshot = getTesisOrBranch(req);
+    const bildirim = await prisma.bildirim.create({
+      data: {
+        tesisId,
+        misafirId: misafir.id,
+        durum: 'beklemede',
+        hataMesaji: null,
+        kbsTuru: tesisSnapshot.kbsTuru || 'jandarma',
+        kbsYanit: null
+      }
+    });
+
+    if (tesisSnapshot.kbsTuru && tesisSnapshot.kbsTesisKodu && tesisSnapshot.kbsWebServisSifre) {
+      setImmediate(async () => {
+        try {
+          const kbsService = createKBSService(tesisSnapshot);
+          const kbsResult = await kbsService.bildirimGonder({
+            ad: misafir.ad,
+            ad2: misafir.ad2 || null,
+            soyad: misafir.soyad,
+            kimlikNo: misafir.kimlikNo,
+            pasaportNo: misafir.pasaportNo,
+            dogumTarihi: misafir.dogumTarihi,
+            uyruk: misafir.uyruk,
+            misafirTipi: misafir.misafirTipi || null,
+            girisTarihi: misafir.girisTarihi,
+            odaNumarasi: oda.odaNumarasi
+          });
+          await prisma.bildirim.update({
+            where: { id: bildirim.id },
+            data: {
+              durum: kbsResult.durum,
+              hataMesaji: kbsResult.hataMesaji || null,
+              denemeSayisi: { increment: 1 },
+              sonDenemeTarihi: new Date(),
+              kbsYanit: kbsResult.yanit ? JSON.stringify(kbsResult.yanit) : null
+            }
+          });
+          if (kbsResult.success && tesisSnapshot.kullanilanKota < tesisSnapshot.kota) {
+            await prisma.tesis.update({
+              where: { id: tesisSnapshot.id },
+              data: { kullanilanKota: { increment: 1 } }
+            });
+          }
+        } catch (error) {
+          await prisma.bildirim.update({
+            where: { id: bildirim.id },
+            data: {
+              durum: 'hatali',
+              hataMesaji: error.message,
+              denemeSayisi: { increment: 1 },
+              sonDenemeTarihi: new Date(),
+              kbsYanit: JSON.stringify({ error: error.message })
+            }
+          });
+          await prisma.hata.create({
+            data: {
+              tesisId: tesisSnapshot.id,
+              bildirimId: bildirim.id,
+              hataTipi: 'kbs-yanit',
+              hataMesaji: error.message || 'Bildirim gönderilemedi',
+              durum: 'acik'
+            }
+          });
+        }
+      });
+    }
+
+    const logDetay = { odaNumarasi: oda.odaNumarasi, misafirId: misafir.id, manuel: true };
+    if (telefon) logDetay.telefon = String(telefon).trim();
+    if (plaka) logDetay.plaka = String(plaka).trim();
+
+    await prisma.log.create({
+      data: {
+        tesisId,
+        kullaniciId: req.user?.id,
+        islem: 'manuel-bildirim',
+        detay: JSON.stringify(logDetay),
+        basarili: true
+      }
+    });
+
+    res.status(201).json({
+      message: 'Manuel bildirim alındı',
+      misafir: {
+        id: misafir.id,
+        ad: misafir.ad,
+        soyad: misafir.soyad
+      },
+      kbsBildirimi: {
+        durum: 'beklemede',
+        mesaj: getTesisOrBranch(req).kbsTuru ? 'Bildirim arka planda gönderiliyor' : 'KBS yapılandırılmamış'
+      }
+    });
+  } catch (error) {
+    console.error('Manuel bildirim hatası:', error);
+    res.status(500).json({ message: 'Manuel bildirim başarısız', error: error.message });
+  }
+});
+
+/**
  * Check-out (Misafir çıkışı)
  */
 router.post('/checkout/:misafirId', async (req, res) => {

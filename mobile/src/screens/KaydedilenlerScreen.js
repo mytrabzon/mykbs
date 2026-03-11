@@ -123,7 +123,13 @@ export default function KaydedilenlerScreen({ navigation }) {
           <Ionicons name="arrow-back" size={24} color={theme.colors.textPrimary} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Kaydedilenler</Text>
-        <View style={styles.headerPlaceholder} />
+        <TouchableOpacity
+          style={styles.manuelBildirBtn}
+          onPress={() => navigation.navigate('ManuelBildirim')}
+        >
+          <Ionicons name="create-outline" size={20} color={theme.colors.primary} />
+          <Text style={styles.manuelBildirBtnText}>Manuel bildir</Text>
+        </TouchableOpacity>
       </View>
 
       <View style={styles.section}>
@@ -327,6 +333,16 @@ const styles = StyleSheet.create({
     color: theme.colors.textPrimary,
   },
   headerPlaceholder: { width: 40 },
+  manuelBildirBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: theme.spacing.borderRadius.button,
+    backgroundColor: theme.colors.primary + '18',
+  },
+  manuelBildirBtnText: { fontSize: 14, fontWeight: '600', color: theme.colors.primary },
   section: { paddingHorizontal: theme.spacing.screenPadding, paddingTop: theme.spacing.base, marginBottom: theme.spacing.sm },
   sectionSubtitle: { fontSize: theme.typography.fontSize.sm, color: theme.colors.textSecondary },
   center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
