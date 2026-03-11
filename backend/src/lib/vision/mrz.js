@@ -215,9 +215,10 @@ function parseTD1(lines) {
   };
 }
 
-/** 86-94 karakter tek blok (88 hariç): önce 3x30 (TD1 kimlik), başarısızsa 2x44 (TD3) dene. */
-function parseMrzRawAmbiguous(one) {
+/** 86-94 karakter tek blok (88 hariç): TD1 (Türk kimlik 3x30) veya TD3 (pasaport 2x44). docTypeHint 'id' ise TD1 öncelikli. */
+function parseMrzRawAmbiguous(one, opts = {}) {
   if (!one || one.length < 86 || one.length > 94 || one.length === 88) return null;
+  const preferIdCard = opts.docTypeHint === 'id';
   const asTd1 = [
     one.slice(0, 30).padEnd(30, '<'),
     one.slice(30, 60).padEnd(30, '<'),
@@ -226,6 +227,7 @@ function parseMrzRawAmbiguous(one) {
   const asTd3 = [one.slice(0, 44).padEnd(44, '<'), one.slice(44).padEnd(44, '<')];
   const p1 = parseTD1(asTd1);
   const p3 = parseTD3(asTd3);
+  if (preferIdCard && p1) return p1;
   if (p1 && p1.checks && p1.checks.compositeCheck) return p1;
   if (p3 && p3.checks && p3.checks.compositeCheck) return p3;
   if (p1) return p1;
@@ -235,16 +237,20 @@ function parseMrzRawAmbiguous(one) {
 
 /**
  * Parse MRZ raw string into fields + checks.
+ * @param {string} mrzRaw
+ * @param {{ docTypeHint?: string }} [opts] - docTypeHint 'id' → Türk kimlik (TD1) öncelikli
  * @returns {{ fields: object, checks: { passportNoCheck, birthCheck, expiryCheck, compositeCheck } } | null}
  */
-function parseMrzRaw(mrzRaw) {
+function parseMrzRaw(mrzRaw, opts = {}) {
   if (!mrzRaw || typeof mrzRaw !== 'string') return null;
   const one = mrzRaw.trim().toUpperCase().replace(/\s/g, '');
   if (one.length >= 86 && one.length <= 94 && one.length !== 88 && /^[A-Z0-9<]+$/.test(one)) {
-    const ambiguous = parseMrzRawAmbiguous(one);
+    const ambiguous = parseMrzRawAmbiguous(one, opts);
     if (ambiguous) return ambiguous;
   }
   const lines = normalizeMrzLines(mrzRaw);
+  const preferId = opts.docTypeHint === 'id';
+  if (preferId && lines.length >= 3 && lines[0].length >= 28) return parseTD1(lines);
   if (lines.length >= 2 && lines[0].length >= 38) return parseTD3(lines);
   if (lines.length >= 2 && lines[0].length >= 34 && lines[0].length <= 36) return parseTD2(lines);
   if (lines.length >= 3 && lines[0].length >= 28) return parseTD1(lines);
@@ -281,7 +287,7 @@ function runOcr(imagePath) {
  * Tesseract PSM 6 + MRZ whitelist for speed and accuracy. On failure, paper mode retries with stronger preprocessing.
  * @param {string} imagePath - Preprocessed image path
  * @param {string} correlationId - For logging
- * @param {{ paperMode?: boolean }} [opts] - paperMode: ilk denemede bulunamazsa kağıt ön işlemi ile tekrar dene
+ * @param {{ paperMode?: boolean, docTypeHint?: string }} [opts] - paperMode: kağıt ön işlemi; docTypeHint: 'id' = TC kimlik (TD1) öncelikli
  * @returns {Promise<{ ok: boolean, confidence: number, mrzRaw: string, mrzRawMasked: string, fields: object, checks: object, errorCode?: string }>}
  */
 async function runMrzPipeline(imagePath, correlationId, opts = {}) {
@@ -331,7 +337,8 @@ async function runMrzPipeline(imagePath, correlationId, opts = {}) {
     return { ok: false, confidence: 0, mrzRaw: '', mrzRawMasked: '', fields: {}, checks: {}, errorCode: 'mrz_not_found' };
   }
 
-  const parsed = parseMrzRaw(mrzRaw);
+  const parseOpts = opts.docTypeHint ? { docTypeHint: opts.docTypeHint } : {};
+  const parsed = parseMrzRaw(mrzRaw, parseOpts);
   if (!parsed) {
     logScanEvent(correlationId, 'parse_done', { found: true, validFormat: false });
     return { ok: false, confidence: 0, mrzRaw, mrzRawMasked: maskMrz(mrzRaw), fields: {}, checks: {}, errorCode: 'invalid_format' };

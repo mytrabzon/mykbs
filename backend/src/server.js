@@ -94,6 +94,7 @@ app.use('/api/kyc', require('./routes/kyc'));
 app.use('/api/okutulan-belgeler', require('./routes/okutulanBelgeler'));
 app.use('/api/app-admin', require('./routes/appAdmin'));
 app.use('/api/siparis', require('./routes/siparis'));
+app.use('/api/support', require('./routes/support'));
 app.use('/api/push', require('./routes/push'));
 app.use('/api/kbs/credentials', require('./routes/kbsCredentials'));
 

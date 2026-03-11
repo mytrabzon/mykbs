@@ -23,7 +23,7 @@ const MENU_ITEMS = [
   { name: 'Canlı Akış', icon: 'radio-outline', screen: 'LiveStream', roles: ['admin', 'super_admin'] },
   { name: 'Müşteriler (B2B)', icon: 'people-outline', screen: 'Musteriler', roles: ['super_admin'] },
   { name: 'Lisanslar', icon: 'card-outline', screen: 'Lisanslar', roles: ['super_admin'] },
-  { name: 'Destek', icon: 'help-buoy-outline', screen: 'Destek', roles: ['admin', 'super_admin'] },
+  { name: 'Destek', icon: 'help-buoy-outline', screen: 'Destek', roles: ['user', 'admin', 'super_admin'] },
   { name: 'Onay Bekleyenler', icon: 'time-outline', screen: 'PendingUsers', roles: ['super_admin'] },
   { name: 'Kullanıcılar', icon: 'person-outline', screen: 'Users', roles: ['super_admin'] },
   { name: 'Kimlik & Pasaport', icon: 'document-text-outline', screen: 'Identity', roles: ['user', 'admin', 'super_admin'] },

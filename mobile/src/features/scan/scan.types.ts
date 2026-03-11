@@ -8,6 +8,10 @@ export type MrzDocTypeHint = 'passport' | 'id' | 'unknown';
 
 export interface MrzFields {
   documentNumber: string;
+  /** T.C. kimlik no (11 hane) — TUR belgelerde doldurulur */
+  kimlikNo?: string | null;
+  /** Pasaport / belge no — TUR dışı veya pasaport */
+  pasaportNo?: string | null;
   nationality: string;
   surname: string;
   givenNames: string;

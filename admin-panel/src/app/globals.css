@@ -1646,3 +1646,117 @@ body {
   border-radius: 14px;
   color: var(--kbs-text-muted);
 }
+
+/* Destek talepleri sayfası */
+.destek-page .admin-page-sub {
+  font-size: 0.95rem;
+  color: var(--kbs-text-muted);
+  margin-top: 0.35rem;
+  margin-bottom: 1.25rem;
+}
+.destek-list {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+.destek-card {
+  background: var(--kbs-surface);
+  border: 1px solid var(--kbs-border);
+  border-radius: 14px;
+  padding: 1.25rem;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+.destek-card:hover {
+  border-color: var(--kbs-border-bright);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.12);
+}
+.destek-card-header {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  margin-bottom: 0.5rem;
+}
+.destek-card-id {
+  font-size: 0.85rem;
+  font-family: monospace;
+  color: var(--kbs-text-muted);
+}
+.destek-badge {
+  padding: 0.2rem 0.6rem;
+  border-radius: 8px;
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+.destek-status-acik {
+  background: rgba(34, 211, 238, 0.2);
+  color: var(--kbs-accent);
+}
+.destek-status-cevaplandi {
+  background: rgba(52, 211, 153, 0.2);
+  color: var(--kbs-success);
+}
+.destek-status-kapatildi {
+  background: var(--kbs-surface-elevated);
+  color: var(--kbs-text-muted);
+}
+.destek-card-date {
+  margin-left: auto;
+  font-size: 0.85rem;
+  color: var(--kbs-text-muted);
+}
+.destek-card-subject {
+  font-size: 1.1rem;
+  font-weight: 700;
+  margin: 0 0 0.5rem 0;
+  color: var(--kbs-text);
+}
+.destek-card-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 1rem;
+  font-size: 0.85rem;
+  color: var(--kbs-text-muted);
+  margin-bottom: 0.75rem;
+}
+.destek-meta-item::after {
+  content: '·';
+  margin-left: 0.5rem;
+  color: var(--kbs-border-bright);
+}
+.destek-meta-item:last-child::after {
+  display: none;
+}
+.destek-card-message {
+  font-size: 0.95rem;
+  line-height: 1.5;
+  color: var(--kbs-text);
+  margin: 0 0 0.75rem 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.destek-admin-note {
+  font-size: 0.9rem;
+  padding: 0.75rem;
+  background: var(--kbs-bg);
+  border-radius: 8px;
+  border-left: 3px solid var(--kbs-accent);
+  margin-bottom: 0.75rem;
+  color: var(--kbs-text-muted);
+}
+.destek-link {
+  color: var(--kbs-accent);
+  text-decoration: none;
+  font-size: 0.9rem;
+  font-weight: 500;
+}
+.destek-link:hover {
+  text-decoration: underline;
+}
+.destek-error {
+  color: var(--kbs-danger);
+  margin: 0;
+}
+.destek-retry-btn {
+  margin-top: 12px;
+}

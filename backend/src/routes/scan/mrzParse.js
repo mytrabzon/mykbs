@@ -27,12 +27,24 @@ router.post('/mrz/parse', authenticateTesisOrSupabase, express.json({ limit: '8m
     const { filePath: fp } = await preprocessFromBase64(imageBase64, uploadsDir, { paperMode: usePaperMode });
     filePath = fp;
 
-    const result = await runMrzPipeline(filePath, corr, { paperMode: usePaperMode });
+    const docHint = (docTypeHint || '').toLowerCase();
+    const result = await runMrzPipeline(filePath, corr, { paperMode: usePaperMode, docTypeHint: docHint === 'id' ? 'id' : undefined });
+
+    const fields = { ...(result.fields || {}) };
+    // Türkiye Cumhuriyeti kimlik kartı: TUR + 11 hane belge no → kimlikNo alanı
+    const issuingCountry = (fields.issuingCountry || '').trim().toUpperCase();
+    const documentNumber = String(fields.documentNumber || '').replace(/\D/g, '');
+    if (issuingCountry === 'TUR' && /^\d{11}$/.test(documentNumber)) {
+      fields.kimlikNo = documentNumber;
+      fields.pasaportNo = null;
+    } else if (issuingCountry === 'TUR' && documentNumber) {
+      fields.pasaportNo = fields.documentNumber;
+    }
 
     const response = {
       ok: result.ok,
       confidence: result.confidence,
-      fields: result.fields || {},
+      fields,
       checks: result.checks || {},
     };
     if (result.mrzRawMasked != null) response.mrzRawMasked = result.mrzRawMasked;

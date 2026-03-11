@@ -298,6 +298,21 @@ export const api = {
         throwIfNotOk(r, data as Record<string, unknown>, 'Liste alınamadı');
         return toResponse(data);
       }
+      if (pathname === '/checkin/tc-lookup' || pathname === 'checkin/tc-lookup') {
+        const backendUrl = getBackendUrl();
+        const tc = (query?.tc ?? '') as string;
+        if (backendUrl && token && tc) {
+          const qs = `?tc=${encodeURIComponent(String(tc).replace(/\D/g, '').slice(0, 11))}`;
+          const r = await fetchWithLog(`${backendUrl}/api/checkin/tc-lookup${qs}`, {
+            method: 'GET',
+            headers: { Authorization: `Bearer ${token}` },
+          });
+          const data = await r.json().catch(() => ({})) as { found?: boolean; ad?: string; soyad?: string; dogumTarihi?: string; uyruk?: string };
+          if (!r.ok) return toResponse({ found: false });
+          return toResponse(data);
+        }
+        return toResponse({ found: false });
+      }
       if (pathname === '/aktif-misafirler' || pathname === '/checkin/aktif-misafirler' || pathname === 'aktif-misafirler') {
         const backendUrl = getBackendUrl();
         if (backendUrl && token) {

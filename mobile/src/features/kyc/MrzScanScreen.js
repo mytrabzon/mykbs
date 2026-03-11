@@ -1685,7 +1685,7 @@ export default function MrzScanScreen({ navigation }) {
         </View>
         <View style={[styles.bannerFloating, { bottom: insets.bottom + 80 }]} pointerEvents="box-none">
           <Text style={[styles.bannerText, { marginLeft: 0 }]}>
-            Otomatik algılama: kimlik/pasaport arka MRZ çizgileri veya ön yüz net görünsün
+            Otomatik algılama: Türkiye Cumhuriyeti kimlik kartı (arka yüz 3 satır MRZ) veya pasaport MRZ; ön yüz net görünsün
           </Text>
         </View>
         <View style={[styles.androidFallbackBar, { bottom: insets.bottom + 72 }]} pointerEvents="box-none">
@@ -1744,7 +1744,10 @@ export default function MrzScanScreen({ navigation }) {
                 setScanMode(DocType.ID);
               }}
             >
-              <Text style={[styles.docTypeBtnText, selectedDocType === DocType.ID && styles.docTypeBtnTextActive]}>Kimlik</Text>
+              <Text style={[styles.docTypeBtnText, selectedDocType === DocType.ID && styles.docTypeBtnTextActive]}>TC Kimlik Kartı</Text>
+              {selectedDocType === DocType.ID && (
+                <Text style={styles.docTypeHint}>3 satır MRZ (arka yüz)</Text>
+              )}
             </TouchableOpacity>
           </View>
         </View>
@@ -1780,9 +1783,9 @@ export default function MrzScanScreen({ navigation }) {
           <Ionicons name="warning-outline" size={18} color={theme.colors.warning} />
           <Text style={styles.bannerText}>
             {lastMrzChecksReason === 'invalid_format'
-              ? 'MRZ tanınmadı. Kimlik: 3 satır, pasaport: 2 satır. Kartı düz tutun, 3 satırı birden gösterin.'
+              ? 'MRZ tanınmadı. TC Kimlik: 3 satır (arka yüz), pasaport: 2 satır. Kartı düz tutun, tüm satırları gösterin.'
               : (Platform.OS === 'ios' && selectedDocType === DocType.ID
-                ? 'Kimlik 3 satır MRZ\'yi tam gösterin. Işık ve hizayı kontrol edin.'
+                ? 'T.C. kimlik kartı: arka yüzdeki 3 satır MRZ\'yi tam gösterin.'
                 : 'Işık veya hizayı kontrol edin.')}
           </Text>
         </View>

@@ -76,6 +76,49 @@ export default function CheckInScreen({ navigation, route }) {
   const nfcProcessingRef = useRef(false);
   const processNfcTagRef = useRef(null);
   const { readNfcDirect, isReading: nfcChipReading } = useIndependentNfcReader();
+  const tcLookupTimeoutRef = useRef(null);
+  const tcLookupInProgressRef = useRef(false);
+
+  // TC 11 hane girilince (bu tesiste daha önce check-in yapılmışsa) ad, soyad, doğum tarihi, uyruk otomatik doldurulur
+  useEffect(() => {
+    const kimlikNo = (formData.kimlikNo || '').replace(/\D/g, '');
+    if (kimlikNo.length !== 11) return;
+    if (tcLookupInProgressRef.current) return;
+    if (tcLookupTimeoutRef.current) clearTimeout(tcLookupTimeoutRef.current);
+    const tcToLookup = kimlikNo.slice(0, 11);
+    tcLookupTimeoutRef.current = setTimeout(async () => {
+      tcLookupTimeoutRef.current = null;
+      tcLookupInProgressRef.current = true;
+      try {
+        const data = await api.get(`/checkin/tc-lookup?tc=${encodeURIComponent(tcToLookup)}`);
+        const resolved = data?.data ?? data;
+        if (resolved?.found && (resolved.ad || resolved.soyad)) {
+          setFormData(prev => {
+            const currentTc = (prev.kimlikNo || '').replace(/\D/g, '').slice(0, 11);
+            if (currentTc !== tcToLookup) return prev;
+            return {
+              ...prev,
+              ad: (resolved.ad || '').trim() || prev.ad,
+              soyad: (resolved.soyad || '').trim() || prev.soyad,
+              dogumTarihi: (resolved.dogumTarihi || '').trim() || prev.dogumTarihi,
+              uyruk: (resolved.uyruk || 'TÜRK').trim() || prev.uyruk,
+            };
+          });
+          Toast.show({ type: 'success', text1: 'Bilgiler getirildi', text2: 'Daha önce bu TC ile kayıt bulundu.' });
+        }
+      } catch (e) {
+        logger.warn('TC lookup failed', e);
+      } finally {
+        tcLookupInProgressRef.current = false;
+      }
+    }, 500);
+    return () => {
+      if (tcLookupTimeoutRef.current) {
+        clearTimeout(tcLookupTimeoutRef.current);
+        tcLookupTimeoutRef.current = null;
+      }
+    };
+  }, [formData.kimlikNo]);
 
   useEffect(() => {
     logger.log('CheckInScreen mounted');
@@ -1024,7 +1067,7 @@ export default function CheckInScreen({ navigation, route }) {
               </Text>
               <TextInput
                 style={styles.input}
-                placeholder="11 haneli"
+                placeholder="11 haneli — yazınca kayıtlıysa otomatik doldurulur"
                 placeholderTextColor={theme.colors.textDisabled}
                 value={formData.kimlikNo}
                 onChangeText={(text) => setFormData({ ...formData, kimlikNo: text })}

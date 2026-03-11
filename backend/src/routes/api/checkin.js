@@ -51,7 +51,63 @@ router.post('/kbs/test-baglanti', async (req, res) => {
 });
 
 /**
- * GET /api/checkin/aktif-misafirler
+ * GET /api/checkin/tc-lookup?tc=12345678901
+ * Bu tesiste daha önce bu TC ile check-in yapılmış misafiri arar; bulursa ad, soyad, doğum tarihi, uyruk döner (TC ile otomatik doldurma için).
+ */
+router.get('/checkin/tc-lookup', async (req, res) => {
+  try {
+    const branchId = req.branchId;
+    const tc = (req.query.tc || '').toString().replace(/\D/g, '').slice(0, 11);
+    if (!branchId) {
+      return res.status(409).json({ found: false, message: 'Tesis/şube bilgisi yüklenemedi.' });
+    }
+    if (tc.length !== 11) {
+      return res.json({ found: false });
+    }
+    if (!supabaseAdmin) {
+      return res.status(503).json({ found: false, message: 'Veritabanı yapılandırılmamış' });
+    }
+    const { data: row, error } = await supabaseAdmin
+      .from('guests')
+      .select('full_name, birth_date, nationality')
+      .eq('branch_id', branchId)
+      .eq('document_type', 'tc')
+      .eq('document_no', tc)
+      .order('checkin_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (error) {
+      console.warn('[tc-lookup]', error);
+      return res.json({ found: false });
+    }
+    if (!row || !row.full_name) {
+      return res.json({ found: false });
+    }
+    const parts = (row.full_name || '').trim().split(/\s+/).filter(Boolean);
+    const ad = parts.length > 0 ? parts[0] : '';
+    const soyad = parts.length > 1 ? parts.slice(1).join(' ') : '';
+    let dogumTarihi = '';
+    if (row.birth_date) {
+      const d = new Date(row.birth_date);
+      if (!Number.isNaN(d.getTime())) {
+        dogumTarihi = [d.getDate().toString().padStart(2, '0'), (d.getMonth() + 1).toString().padStart(2, '0'), d.getFullYear()].join('.');
+      }
+    }
+    return res.json({
+      found: true,
+      ad,
+      soyad,
+      dogumTarihi,
+      uyruk: (row.nationality || 'TÜRK').trim() || 'TÜRK',
+    });
+  } catch (err) {
+    console.warn('[checkin/tc-lookup]', err);
+    return res.json({ found: false });
+  }
+});
+
+/**
+ * GET /api/aktif-misafirler
  * Branch'taki çıkış yapmamış misafirler (KBS'ye bildirdiğimiz kayıtlar). Oda bazlı gruplu, milisaniyeler içinde.
  */
 router.get('/aktif-misafirler', async (req, res) => {

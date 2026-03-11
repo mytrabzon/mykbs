@@ -43,6 +43,7 @@ import RaporlarScreen from './src/screens/RaporlarScreen';
 import DahaFazlaScreen from './src/screens/DahaFazlaScreen';
 import ReceptionistPanelScreen from './src/screens/ReceptionistPanelScreen';
 import PlaceholderScreen from './src/screens/PlaceholderScreen';
+import DestekScreen from './src/screens/DestekScreen';
 import AuditLogScreen from './src/screens/AuditLogScreen';
 import DrawerMenu from './src/components/DrawerMenu';
 import PrivacyConsentScreen from './src/screens/PrivacyConsentScreen';
@@ -623,7 +624,7 @@ function AppNavigator() {
                   <Drawer.Screen name="LiveStream" component={PlaceholderScreen} initialParams={{ title: 'Canlı Akış', webPath: 'live' }} options={{ drawerLabel: 'Canlı Akış' }} />
                   <Drawer.Screen name="Musteriler" component={PlaceholderScreen} initialParams={{ title: 'Müşteriler (B2B)', webPath: 'musteriler' }} options={{ drawerLabel: 'Müşteriler (B2B)' }} />
                   <Drawer.Screen name="Lisanslar" component={PlaceholderScreen} initialParams={{ title: 'Lisanslar', webPath: 'lisanslar' }} options={{ drawerLabel: 'Lisanslar' }} />
-                  <Drawer.Screen name="Destek" component={PlaceholderScreen} initialParams={{ title: 'Destek', webPath: 'destek' }} options={{ drawerLabel: 'Destek' }} />
+                  <Drawer.Screen name="Destek" component={DestekScreen} options={{ drawerLabel: 'Destek' }} />
                   <Drawer.Screen name="PendingUsers" component={PlaceholderScreen} initialParams={{ title: 'Onay Bekleyenler', webPath: 'pending-users' }} options={{ drawerLabel: 'Onay Bekleyenler' }} />
                   <Drawer.Screen name="Users" component={PlaceholderScreen} initialParams={{ title: 'Kullanıcılar', webPath: 'users' }} options={{ drawerLabel: 'Kullanıcılar' }} />
                   <Drawer.Screen name="Identity" component={MrzScanScreen} options={{ drawerLabel: 'Kimlik & Pasaport' }} />
@@ -659,7 +660,7 @@ function AppNavigator() {
                   <Drawer.Screen name="LiveStream" component={PlaceholderScreen} initialParams={{ title: 'Canlı Akış', webPath: 'live' }} options={{ drawerLabel: 'Canlı Akış' }} />
                   <Drawer.Screen name="Musteriler" component={PlaceholderScreen} initialParams={{ title: 'Müşteriler (B2B)', webPath: 'musteriler' }} options={{ drawerLabel: 'Müşteriler (B2B)' }} />
                   <Drawer.Screen name="Lisanslar" component={PlaceholderScreen} initialParams={{ title: 'Lisanslar', webPath: 'lisanslar' }} options={{ drawerLabel: 'Lisanslar' }} />
-                  <Drawer.Screen name="Destek" component={PlaceholderScreen} initialParams={{ title: 'Destek', webPath: 'destek' }} options={{ drawerLabel: 'Destek' }} />
+                  <Drawer.Screen name="Destek" component={DestekScreen} options={{ drawerLabel: 'Destek' }} />
                   <Drawer.Screen name="PendingUsers" component={PlaceholderScreen} initialParams={{ title: 'Onay Bekleyenler', webPath: 'pending-users' }} options={{ drawerLabel: 'Onay Bekleyenler' }} />
                   <Drawer.Screen name="Users" component={PlaceholderScreen} initialParams={{ title: 'Kullanıcılar', webPath: 'users' }} options={{ drawerLabel: 'Kullanıcılar' }} />
                   <Drawer.Screen name="Identity" component={MrzScanScreen} options={{ drawerLabel: 'Kimlik & Pasaport' }} />

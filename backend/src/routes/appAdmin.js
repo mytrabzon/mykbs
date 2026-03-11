@@ -167,6 +167,36 @@ router.get('/dashboard', async (req, res) => {
 });
 
 /**
+ * Destek taleplerini listele (admin panel — en yeniler üstte; anında yenileme için polling kullanılır)
+ */
+router.get('/support', async (req, res) => {
+  try {
+    const tickets = await prisma.supportTicket.findMany({
+      orderBy: { createdAt: 'desc' },
+      include: { tesis: { select: { id: true, tesisAdi: true } } },
+    });
+    res.json({
+      tickets: tickets.map((t) => ({
+        id: t.id,
+        tesisId: t.tesisId,
+        tesisAdi: t.tesis?.tesisAdi ?? null,
+        authorName: t.authorName,
+        authorEmail: t.authorEmail,
+        subject: t.subject,
+        message: t.message,
+        status: t.status,
+        adminNote: t.adminNote,
+        createdAt: t.createdAt,
+        updatedAt: t.updatedAt,
+      })),
+    });
+  } catch (err) {
+    console.error('[appAdmin] support list', err);
+    res.status(500).json({ message: 'Destek talepleri alınamadı', error: err.message });
+  }
+});
+
+/**
  * KBS tesis bilgisi taleplerini listele (pending)
  */
 router.get('/requests', async (req, res) => {
