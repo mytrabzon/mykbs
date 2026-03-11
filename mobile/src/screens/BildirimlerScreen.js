@@ -7,21 +7,32 @@ import {
   TouchableOpacity,
   RefreshControl,
   ActivityIndicator,
+  Image,
+  Linking,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
+import { useNotificationUnread } from '../context/NotificationContext';
 import AppHeader from '../components/AppHeader';
 import * as communityApi from '../services/communityApi';
 import Toast from 'react-native-toast-message';
+import { useFocusEffect } from '@react-navigation/native';
 
 export default function BildirimlerScreen({ navigation }) {
   const { tesis, user, isLoggedIn, getSupabaseToken } = useAuth();
   const { colors } = useTheme();
+  const { refresh: refreshUnreadCount } = useNotificationUnread();
   const [list, setList] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [token, setToken] = useState(null);
+
+  useFocusEffect(
+    useCallback(() => {
+      refreshUnreadCount();
+    }, [refreshUnreadCount])
+  );
 
   const loadToken = useCallback(async () => {
     const t = await getSupabaseToken();
@@ -68,12 +79,15 @@ export default function BildirimlerScreen({ navigation }) {
     try {
       await communityApi.markNotificationRead(item.id, t);
       setList((prev) => prev.map((n) => (n.id === item.id ? { ...n, is_read: true } : n)));
+      refreshUnreadCount();
     } catch (_) {}
   };
 
   const openNotification = (item) => {
     markRead(item);
-    if (item.data?.post_id) {
+    if (item.data?.link) {
+      Linking.openURL(item.data.link).catch(() => {});
+    } else if (item.data?.post_id) {
       navigation.navigate('PostDetay', { postId: item.data.post_id });
     }
   };
@@ -150,13 +164,21 @@ export default function BildirimlerScreen({ navigation }) {
               onPress={() => openNotification(item)}
               activeOpacity={0.7}
             >
-              <View style={[styles.cardIcon, { backgroundColor: colors.primarySoft }]}>
-                <Ionicons
-                  name={item.type === 'kbs_status' ? 'document-text' : item.type === 'announcement' ? 'megaphone' : 'chatbubble'}
-                  size={22}
-                  color={colors.primary}
+              {item.data?.image_url ? (
+                <Image
+                  source={{ uri: item.data.image_url }}
+                  style={[styles.cardImage, { backgroundColor: colors.primarySoft }]}
+                  resizeMode="cover"
                 />
-              </View>
+              ) : (
+                <View style={[styles.cardIcon, { backgroundColor: colors.primarySoft }]}>
+                  <Ionicons
+                    name={item.type === 'kbs_status' ? 'document-text' : item.type === 'admin_broadcast' ? 'megaphone' : item.type === 'announcement' ? 'megaphone' : 'chatbubble'}
+                    size={22}
+                    color={colors.primary}
+                  />
+                </View>
+              )}
               <View style={styles.cardContent}>
                 <Text style={[styles.cardTitle, { color: colors.textPrimary }]}>{item.title}</Text>
                 <Text style={[styles.cardBody, { color: colors.textSecondary }]} numberOfLines={2}>{item.body}</Text>
@@ -193,6 +215,12 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     justifyContent: 'center',
     alignItems: 'center',
+    marginRight: 14,
+  },
+  cardImage: {
+    width: 56,
+    height: 56,
+    borderRadius: 14,
     marginRight: 14,
   },
   cardContent: { flex: 1 },

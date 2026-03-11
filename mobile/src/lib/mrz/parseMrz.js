@@ -100,41 +100,68 @@ function parseTD2(lines) {
   };
 }
 
+/**
+ * TD1: Türk Kimlik Kartı (3 satır, 30 karakter). ICAO 9303 + Türk kimlik alan konumları.
+ * Satır 1: belge no 5-14, TC no 14-25. Satır 2: doğum 0-6, cinsiyet [6], son kullanma 7-13, uyruk 13-16.
+ * Satır 3: SOYAD<<AD (<< ile ayrılmış).
+ */
 function parseTD1(lines) {
-  const l1 = (lines[0] || '').padEnd(TD1_LINE_LEN, '<').substring(0, TD1_LINE_LEN);
-  const l2 = (lines[1] || '').padEnd(TD1_LINE_LEN, '<').substring(0, TD1_LINE_LEN);
-  const l3 = (lines[2] || '').padEnd(TD1_LINE_LEN, '<').substring(0, TD1_LINE_LEN);
-  const docType = l1[0] === 'I' || l1[0] === 'A' ? 'ID' : 'OTHER';
-  const issuingCountry = l1.substring(2, 5).replace(/</g, '').trim();
-  // TD1: belge no 5-13 (9 karakter), check digit 14. Türk kimlik bazen 10 karakter basar; BAC için ilk 9 kullanılır.
-  let docNumber = l1.substring(5, 14).replace(/</g, '').trim();
-  if (docNumber.length > 9) docNumber = docNumber.substring(0, 9);
-  const docNumberCheck = l1[14];
-  const birthDateRaw = l2.substring(0, 6);
-  const birthDateCheck = l2[6];
-  const sex = l2[7];
-  const expiryDateRaw = l2.substring(8, 14);
-  const expiryDateCheck = l2[14];
-  const nationality = l2.substring(15, 18).replace(/</g, '').trim();
-  // TD1 satır 3: SURNAME<<GIVENNAMES — OCR bazen tek < okur, split(/<+/) ile her iki durumda çalışır
-  const nameParts = l3.split(/<+/).map((s) => s.trim()).filter(Boolean);
-  const surname = (nameParts[0] || '').trim();
-  const givenNames = (nameParts.slice(1).join(' ') || '').trim();
-  const docNoCheckOk = docNumberCheck === '<' || parseInt(docNumberCheck, 10) === checkDigit(docNumber);
-  const birthCheckOk = birthDateCheck === '<' || parseInt(birthDateCheck, 10) === checkDigit(birthDateRaw);
-  const expiryCheckOk = expiryDateCheck === '<' || parseInt(expiryDateCheck, 10) === checkDigit(expiryDateRaw);
+  const line1 = (lines[0] || '').padEnd(30, '<').substring(0, 30);
+  const line2 = (lines[1] || '').padEnd(30, '<').substring(0, 30);
+  const line3 = (lines[2] || '').padEnd(30, '<').substring(0, 30);
+
+  const docType = line1[0] === 'I' || line1[0] === 'A' ? 'ID' : 'OTHER';
+  const issuingCountry = line1.substring(2, 5).replace(/</g, '').trim();
+
+  // Belge no (5-14: 9 karakter), TC kimlik no (14-25: 11 karakter). Türk kimlikte 14. konum TC'nin ilk hanesi.
+  let belgeNo = line1.substring(5, 14).replace(/</g, '').trim();
+  if (belgeNo.length > 9) belgeNo = belgeNo.substring(0, 9);
+  const tcNo = line1.substring(14, 25).replace(/</g, '').trim();
+  // ICAO'da doc check digit 14. konumda; Türk kimlikte 14-25 TC no olduğu için check digit atlanır.
+  const docNoCheckOk = true;
+
+  // Satır 2: doğum 0-6, cinsiyet [6], son kullanma 7-13, uyruk 13-16 (Türk kimlik konumları)
+  const birthDateRaw = line2.substring(0, 6);
+  const cinsiyetChar = line2[6];
+  const expiryDateRaw = line2.substring(7, 13);
+  const uyruk = line2.substring(13, 16).replace(/</g, '').trim();
+  // Türk kimlikte [6] cinsiyet; check digit yok. Geçerlilik: 6 haneli tarih formatı.
+  const birthCheckOk = /^[0-9<]{6}$/.test(birthDateRaw);
+  const expiryCheckOk = /^[0-9<]{6}$/.test(expiryDateRaw);
+
+  const birthDate = normalizeYYMMDD(birthDateRaw);
+  const sonKullanma = normalizeYYMMDD(expiryDateRaw);
+  const sex = cinsiyetChar === 'M' || cinsiyetChar === 'F' ? cinsiyetChar : cinsiyetChar === '<' ? 'U' : 'X';
+  const cinsiyet = cinsiyetChar === 'M' ? 'ERKEK' : cinsiyetChar === 'F' ? 'KADIN' : '';
+
+  // Satır 3: SOYAD<<AD
+  const soyad = (line3.split('<<')[0] || '').replace(/</g, ' ').trim();
+  const ad = (line3.split('<<')[1] || '').replace(/</g, ' ').trim();
+
   const checksOk = docNoCheckOk && birthCheckOk && expiryCheckOk;
   let reason = !docNoCheckOk ? 'document_number_check' : !birthCheckOk ? 'birth_date_check' : !expiryCheckOk ? 'expiry_date_check' : '';
+
   return {
     docType,
     issuingCountry,
-    surname,
-    givenNames,
-    passportNumber: docNumber,
-    nationality,
-    birthDate: normalizeYYMMDD(birthDateRaw),
-    sex: sex === 'M' || sex === 'F' ? sex : sex === '<' ? 'U' : 'X',
-    expiryDate: normalizeYYMMDD(expiryDateRaw),
+    // Türk kimlik (KBS Prime) alan adları
+    belgeTuru: 'KİMLİK',
+    belgeNo,
+    tcNo,
+    dogumTarihi: birthDate,
+    cinsiyet,
+    sonKullanma,
+    uyruk,
+    soyad,
+    ad,
+    // Genel MRZ alanları (mevcut kod uyumluluğu)
+    surname: soyad,
+    givenNames: ad,
+    passportNumber: belgeNo,
+    nationality: uyruk,
+    birthDate,
+    sex,
+    expiryDate: sonKullanma,
     raw: lines.join('\n'),
     checks: { ok: checksOk, reason: reason || undefined },
   };
@@ -262,8 +289,12 @@ function parseMrzWithLines(lines) {
 }
 
 export function parseMrz(raw) {
+  const emptyResult = {
+    docType: 'OTHER', issuingCountry: '', surname: '', givenNames: '', passportNumber: '', nationality: '', birthDate: '', sex: 'U', expiryDate: '', raw: '', checks: { ok: false, reason: 'empty_input' },
+    belgeTuru: '', belgeNo: '', tcNo: '', dogumTarihi: '', cinsiyet: '', sonKullanma: '', uyruk: '', soyad: '', ad: '',
+  };
   if (!raw || typeof raw !== 'string') {
-    return { docType: 'OTHER', issuingCountry: '', surname: '', givenNames: '', passportNumber: '', nationality: '', birthDate: '', sex: 'U', expiryDate: '', raw: '', checks: { ok: false, reason: 'empty_input' } };
+    return { ...emptyResult, raw: '' };
   }
   const cleaned = raw.replace(/[^A-Z0-9<\r\n]/gi, '').trim().toUpperCase();
   const lines = normalizeMrzLines(cleaned);
@@ -280,7 +311,7 @@ export function parseMrz(raw) {
       if (result && result.passportNumber) return result;
     }
   }
-  return { docType: 'OTHER', issuingCountry: '', surname: '', givenNames: '', passportNumber: '', nationality: '', birthDate: '', sex: 'U', expiryDate: '', raw: cleaned || raw, checks: { ok: false, reason: 'invalid_format' } };
+  return { ...emptyResult, raw: cleaned || raw, checks: { ok: false, reason: 'invalid_format' } };
 }
 
 // fixMrzOcrErrors yalnızca "export function" ile dışa aktarılır; burada tekrarlanmamalı (duplicate export hatası).

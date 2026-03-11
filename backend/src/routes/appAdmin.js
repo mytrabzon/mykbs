@@ -96,6 +96,109 @@ async function requireAdminPanelUser(req, res, next) {
 router.use(requireAdminPanelUser);
 
 /**
+ * Tüm kullanıcılara bildirim gönder (resimli, tıklanabilir link). in_app_notifications + notification_outbox;
+ * push_dispatch tetiklenir, push bildirim gider.
+ * POST /api/app-admin/broadcast — body: { title, body, image_url?, link? }
+ */
+router.post('/broadcast', express.json(), async (req, res) => {
+  try {
+    const { title, body, image_url, link } = req.body || {};
+    if (!title || typeof title !== 'string' || !title.trim()) {
+      return res.status(400).json({ message: 'Başlık gerekli' });
+    }
+    const bodyText = typeof body === 'string' ? body.trim() : '';
+    if (!supabaseAdmin) {
+      return res.status(503).json({ message: 'Supabase yapılandırılmamış' });
+    }
+
+    const { data: profiles, error: profErr } = await supabaseAdmin
+      .from('user_profiles')
+      .select('user_id, branch_id')
+      .eq('is_disabled', false);
+    if (profErr) {
+      return res.status(500).json({ message: 'Kullanıcılar alınamadı', error: profErr.message });
+    }
+    const users = profiles || [];
+    if (users.length === 0) {
+      return res.json({ sent: 0, message: 'Hedef kullanıcı yok' });
+    }
+
+    const notifTitle = title.trim().slice(0, 200);
+    const notifBody = bodyText.slice(0, 2000);
+    const dataPayload = {
+      type: 'admin_broadcast',
+      ...(image_url && typeof image_url === 'string' && image_url.trim() ? { image_url: image_url.trim() } : {}),
+      ...(link && typeof link === 'string' && link.trim() ? { link: link.trim() } : {}),
+    };
+
+    for (const u of users) {
+      const { error: inErr } = await supabaseAdmin.from('in_app_notifications').insert({
+        branch_id: u.branch_id,
+        user_id: u.user_id,
+        type: 'admin_broadcast',
+        title: notifTitle,
+        body: notifBody,
+        data: dataPayload,
+        is_read: false,
+      });
+      if (inErr) {
+        console.error('[appAdmin] broadcast in_app insert', u.user_id, inErr);
+      }
+    }
+
+    const byBranch = new Map();
+    for (const u of users) {
+      const bid = u.branch_id;
+      if (!byBranch.has(bid)) byBranch.set(bid, []);
+      byBranch.get(bid).push(u.user_id);
+    }
+    for (const [branchId, userIds] of byBranch) {
+      const { error: outErr } = await supabaseAdmin.from('notification_outbox').insert({
+        branch_id: branchId,
+        target_user_ids: userIds,
+        payload: {
+          title: notifTitle,
+          body: notifBody,
+          data: { ...dataPayload },
+        },
+        status: 'queued',
+      });
+      if (outErr) {
+        console.error('[appAdmin] broadcast outbox insert', branchId, outErr);
+      }
+    }
+
+    const SUPABASE_URL = process.env.SUPABASE_URL;
+    const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
+    if (SUPABASE_URL && SUPABASE_SERVICE_ROLE_KEY) {
+      const url = `${SUPABASE_URL.replace(/\/$/, '')}/functions/v1/push_dispatch`;
+      let totalProcessed = 0;
+      for (let i = 0; i < 10; i++) {
+        const pushRes = await fetch(url, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+          },
+        });
+        const result = await pushRes.json().catch(() => ({}));
+        const processed = result.processed ?? 0;
+        totalProcessed += processed;
+        if (processed === 0) break;
+      }
+    }
+
+    return res.json({
+      sent: users.length,
+      message: 'Bildirim tüm kullanıcılara gönderildi; push kuyruğu işlendi.',
+    });
+  } catch (err) {
+    console.error('[appAdmin] broadcast', err);
+    return res.status(500).json({ message: 'Gönderim hatası', error: err.message });
+  }
+});
+
+/**
  * Dashboard istatistikleri (uygulama içi admin).
  * Her blok ayrı try/catch ile korunur; bir sorgu hata verse bile diğerleri döner.
  */
@@ -553,18 +656,31 @@ router.get('/users', async (req, res) => {
 });
 
 /**
- * Kullanıcı detay (auth + user_profiles)
+ * Kullanıcı detay (auth + user_profiles + bildirim sayısı)
  */
 router.get('/users/:id', async (req, res) => {
   try {
     if (!supabaseAdmin) return res.status(503).json({ message: 'Supabase yapılandırılmamış' });
-    const { data: { user }, error } = await supabaseAdmin.auth.admin.getUserById(req.params.id);
+    const userId = req.params.id;
+    const { data: { user }, error } = await supabaseAdmin.auth.admin.getUserById(userId);
     if (error || !user) return res.status(404).json({ message: 'Kullanıcı bulunamadı' });
     const { data: profile } = await supabaseAdmin
       .from('user_profiles')
       .select('branch_id, role, display_name, approval_status, approved_at, approved_by, is_disabled, rejected_reason')
-      .eq('user_id', req.params.id)
+      .eq('user_id', userId)
       .single();
+
+    let notification_count = 0;
+    try {
+      const { count } = await supabaseAdmin
+        .from('in_app_notifications')
+        .select('id', { count: 'exact', head: true })
+        .eq('user_id', userId);
+      notification_count = count ?? 0;
+    } catch (e) {
+      console.warn('[appAdmin] user detail notification count', e?.message);
+    }
+
     res.json({
       id: user.id,
       email: user.email,
@@ -572,6 +688,7 @@ router.get('/users/:id', async (req, res) => {
       created_at: user.created_at,
       last_sign_in_at: user.last_sign_in_at,
       profile: profile || null,
+      notification_count,
     });
   } catch (err) {
     console.error('[appAdmin] user detail', err);
@@ -976,6 +1093,22 @@ router.patch('/kullanicilar/:id', async (req, res) => {
   } catch (err) {
     console.error('[appAdmin] kullanici patch', err);
     res.status(500).json({ message: 'Güncelleme başarısız', error: err.message });
+  }
+});
+
+/**
+ * DELETE /app-admin/kullanicilar/:id — Tesis kullanıcısını kalıcı sil (listeden kaldır).
+ */
+router.delete('/kullanicilar/:id', async (req, res) => {
+  try {
+    const id = req.params.id;
+    const k = await prisma.kullanici.findUnique({ where: { id } });
+    if (!k) return res.status(404).json({ message: 'Kullanıcı bulunamadı' });
+    await prisma.kullanici.delete({ where: { id } });
+    res.json({ message: 'Kullanıcı tesis listesinden kaldırıldı' });
+  } catch (err) {
+    console.error('[appAdmin] kullanici delete', err);
+    res.status(500).json({ message: 'Silinemedi', error: err.message });
   }
 });
 

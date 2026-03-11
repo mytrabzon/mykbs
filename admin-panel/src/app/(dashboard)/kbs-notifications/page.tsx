@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import Link from 'next/link'
 import toast from 'react-hot-toast'
 import { callEdgeFunction } from '@/services/supabaseEdge'
 
@@ -61,6 +62,11 @@ export default function KBSNotificationsPage() {
 
   return (
     <div className="admin-page">
+      <p className="admin-page-breadcrumb">
+        <Link href="/" className="kbs-page-back">← Ana sayfa</Link>
+        <span className="kbs-page-back-sep"> · </span>
+        <span className="kbs-page-back-current">KBS Bildirim Kuyruğu</span>
+      </p>
       <h1 className="kbs-page-title">Push / KBS Bildirim Kuyruğu</h1>
       <p className="kbs-page-sub">notification_outbox: queued / sent / failed.</p>
       {configRequired && (

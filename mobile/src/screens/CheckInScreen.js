@@ -35,6 +35,7 @@ import {
   getTtsLocale,
 } from '../utils/feedback';
 import { useLanguage } from '../context/LanguageContext';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { FREQUENT_NATIONALITIES } from '../constants/frequentNationalities';
 import { getVisaWarningFromDate } from '../utils/visaWarning';
 import { getLastMrzForBac, setLastMrzForBac } from '../utils/lastMrzForBac';
@@ -82,6 +83,8 @@ export default function CheckInScreen({ navigation, route }) {
   const nfcProcessingRef = useRef(false);
   const processNfcTagRef = useRef(null);
   const { readNfcDirect, isReading: nfcChipReading } = useIndependentNfcReader();
+  const insets = useSafeAreaInsets();
+  const headerSafeStyle = { paddingTop: insets.top + theme.spacing.lg, paddingBottom: theme.spacing.lg };
   const tcLookupTimeoutRef = useRef(null);
   const tcLookupInProgressRef = useRef(false);
 
@@ -649,7 +652,7 @@ export default function CheckInScreen({ navigation, route }) {
         <StatusBar barStyle="dark-content" backgroundColor={theme.colors.background} />
         
         {/* Header */}
-        <View style={styles.header}>
+        <View style={[styles.header, headerSafeStyle]}>
           <TouchableOpacity
             style={[styles.backButton, { minWidth: MIN_BUTTON_SIZE, minHeight: MIN_BUTTON_SIZE }]}
             onPress={() => navigation.goBack()}
@@ -752,7 +755,7 @@ export default function CheckInScreen({ navigation, route }) {
         <StatusBar barStyle="dark-content" backgroundColor={theme.colors.background} />
         
         {/* Header */}
-        <View style={styles.header}>
+        <View style={[styles.header, headerSafeStyle]}>
           <TouchableOpacity
             style={styles.backButton}
             onPress={() => setStep(1)}
@@ -790,52 +793,56 @@ export default function CheckInScreen({ navigation, route }) {
           )}
 
           <View style={styles.readerContainer}>
-            <View style={styles.readerIconContainer}>
-              {nfcSupported && nfcEnabledInSettings ? (
-                <View style={[styles.readerIcon, { backgroundColor: theme.colors.primary + '15' }]}>
-                  <Ionicons name="hardware-chip-outline" size={80} color={theme.colors.primary} />
-                </View>
-              ) : (
-                <View style={[styles.readerIcon, { backgroundColor: theme.colors.secondary + '15' }]}>
-                  <Ionicons name="camera" size={80} color={theme.colors.secondary} />
+            <View style={styles.readerTopBlock}>
+              <View style={styles.readerIconContainer}>
+                {nfcSupported && nfcEnabledInSettings ? (
+                  <View style={[styles.readerIcon, { backgroundColor: theme.colors.primary + '15' }]}>
+                    <Ionicons name="hardware-chip-outline" size={80} color={theme.colors.primary} />
+                  </View>
+                ) : (
+                  <View style={[styles.readerIcon, { backgroundColor: theme.colors.secondary + '15' }]}>
+                    <Ionicons name="camera" size={80} color={theme.colors.secondary} />
+                  </View>
+                )}
+              </View>
+
+              <Text style={styles.readerTitle}>
+                {nfcSupported && nfcEnabledInSettings ? 'NFC ile Okut' : 'Kamera ile Okut'}
+              </Text>
+
+              <Text style={styles.readerDescription}>
+                {nfcSupported && nfcEnabledInSettings
+                  ? (nfcListening
+                      ? 'Kimliği telefonun arka kısmına yaklaştırın — otomatik okunacak'
+                      : 'Kimlik veya pasaportu yaklaştırın veya aşağıdaki düğmeyle okuyun. İlk kullanımda NFC izni istenebilir.')
+                  : 'Kimliğinizin ön yüzünün fotoğrafını çekin veya MRZ için "MRZ Tara" sekmesine gidin'}
+              </Text>
+
+              {nfcSupported && nfcEnabledInSettings && nfcListening && (
+                <View style={[styles.nfcListeningBadge, { backgroundColor: theme.colors.primary + '20' }]}>
+                  <Ionicons name="hardware-chip-outline" size={18} color={theme.colors.primary} />
+                  <Text style={[styles.nfcListeningText, { color: theme.colors.primary }]}>Dinleniyor…</Text>
                 </View>
               )}
+
+              <TouchableOpacity 
+                style={[styles.okutButton, (nfcSupported && nfcEnabledInSettings) ? styles.okutButtonNFC : styles.okutButtonCamera, { minHeight: MIN_BUTTON_SIZE, opacity: nfcChipReading ? 0.7 : 1 }]}
+                onPress={handleOkut}
+                disabled={nfcChipReading}
+              >
+                <Ionicons 
+                  name={(nfcSupported && nfcEnabledInSettings) ? "hardware-chip-outline" : "camera"} 
+                  size={24} 
+                  color={theme.colors.white} 
+                  style={styles.okutButtonIcon}
+                />
+                <Text style={styles.okutButtonText}>
+                  {(nfcSupported && nfcEnabledInSettings) ? (nfcChipReading ? 'Okunuyor…' : (nfcListening ? 'Yeniden oku' : 'NFC ile Okut')) : 'Kamera ile Okut'}
+                </Text>
+              </TouchableOpacity>
             </View>
 
-            <Text style={styles.readerTitle}>
-              {nfcSupported && nfcEnabledInSettings ? 'NFC ile Okut' : 'Kamera ile Okut'}
-            </Text>
-            
-            <Text style={styles.readerDescription}>
-              {nfcSupported && nfcEnabledInSettings
-                ? (nfcListening
-                    ? 'Kimliği telefonun arka kısmına yaklaştırın — otomatik okunacak'
-                    : 'Kimlik veya pasaportu yaklaştırın veya aşağıdaki düğmeyle okuyun. İlk kullanımda NFC izni istenebilir.')
-                : 'Kimliğinizin ön yüzünün fotoğrafını çekin veya MRZ için "MRZ Tara" sekmesine gidin'}
-            </Text>
-
-            {nfcSupported && nfcEnabledInSettings && nfcListening && (
-              <View style={[styles.nfcListeningBadge, { backgroundColor: theme.colors.primary + '20' }]}>
-                <Ionicons name="hardware-chip-outline" size={18} color={theme.colors.primary} />
-                <Text style={[styles.nfcListeningText, { color: theme.colors.primary }]}>Dinleniyor…</Text>
-              </View>
-            )}
-
-            <TouchableOpacity 
-              style={[styles.okutButton, (nfcSupported && nfcEnabledInSettings) ? styles.okutButtonNFC : styles.okutButtonCamera, { minHeight: MIN_BUTTON_SIZE, opacity: nfcChipReading ? 0.7 : 1 }]}
-              onPress={handleOkut}
-              disabled={nfcChipReading}
-            >
-              <Ionicons 
-                name={(nfcSupported && nfcEnabledInSettings) ? "hardware-chip-outline" : "camera"} 
-                size={24} 
-                color={theme.colors.white} 
-                style={styles.okutButtonIcon}
-              />
-              <Text style={styles.okutButtonText}>
-                {(nfcSupported && nfcEnabledInSettings) ? (nfcChipReading ? 'Okunuyor…' : (nfcListening ? 'Yeniden oku' : 'NFC ile Okut')) : 'Kamera ile Okut'}
-              </Text>
-            </TouchableOpacity>
+            <View style={styles.readerSpacer} />
 
             <TouchableOpacity
               style={[styles.manualButton, { minHeight: MIN_BUTTON_SIZE }]}
@@ -849,7 +856,7 @@ export default function CheckInScreen({ navigation, route }) {
                 }
               }}
             >
-              <Ionicons name="create-outline" size={18} color={theme.colors.primary} style={styles.manualButtonIcon} />
+              <Ionicons name="create-outline" size={20} color={theme.colors.primary} style={styles.manualButtonIcon} />
               <Text style={styles.manualButtonText}>Manuel Giriş Yap</Text>
             </TouchableOpacity>
 
@@ -909,7 +916,7 @@ export default function CheckInScreen({ navigation, route }) {
     return (
       <View style={styles.container}>
         <StatusBar barStyle="dark-content" backgroundColor={theme.colors.background} />
-        <View style={styles.header}>
+        <View style={[styles.header, headerSafeStyle]}>
           <TouchableOpacity style={styles.backButton} onPress={() => setStep(2)}>
             <Ionicons name="arrow-back" size={24} color={theme.colors.textPrimary} />
           </TouchableOpacity>
@@ -990,7 +997,7 @@ export default function CheckInScreen({ navigation, route }) {
       <StatusBar barStyle="dark-content" backgroundColor={theme.colors.background} />
       
       {/* Header */}
-      <View style={styles.header}>
+      <View style={[styles.header, headerSafeStyle]}>
         <TouchableOpacity
           style={styles.backButton}
           onPress={() => setStep(3)}
@@ -1299,8 +1306,10 @@ const styles = StyleSheet.create({
   content: {
     padding: theme.spacing.screenPadding,
     paddingBottom: theme.spacing['4xl'],
+    flexGrow: 1,
   },
   section: {
+    flex: 1,
     marginBottom: theme.spacing.xl,
   },
   sectionTitle: {
@@ -1403,8 +1412,16 @@ const styles = StyleSheet.create({
     marginTop: theme.spacing.sm,
   },
   readerContainer: {
+    flex: 1,
     alignItems: 'center',
     paddingVertical: theme.spacing.xl,
+  },
+  readerTopBlock: {
+    alignItems: 'center',
+  },
+  readerSpacer: {
+    flex: 1,
+    minHeight: 24,
   },
   readerIconContainer: {
     marginBottom: theme.spacing.xl,
@@ -1458,15 +1475,20 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    marginTop: theme.spacing.xl,
-    padding: theme.spacing.base,
+    marginTop: theme.spacing.lg,
+    paddingVertical: theme.spacing.base,
+    paddingHorizontal: theme.spacing.lg,
+    borderRadius: theme.spacing.borderRadius.base,
+    borderWidth: 2,
+    borderColor: theme.colors.primary,
+    backgroundColor: theme.colors.primary + '18',
   },
   manualButtonIcon: {
     marginRight: theme.spacing.sm,
   },
   manualButtonText: {
     fontSize: theme.typography.fontSize.base,
-    fontWeight: theme.typography.fontWeight.medium,
+    fontWeight: theme.typography.fontWeight.semibold,
     color: theme.colors.primary,
   },
   nfcInfo: {

@@ -56,6 +56,8 @@ export default function KullaniciDuzenlePage() {
     hatalar: Array<{ id: string; hataTipi: string; hataMesaji: string; durum: string; createdAt: string }>
   } | null>(null)
   const [activityLoading, setActivityLoading] = useState(false)
+  const [deleting, setDeleting] = useState(false)
+  const [banning, setBanning] = useState(false)
   const [form, setForm] = useState({
     adSoyad: '',
     telefon: '',
@@ -166,6 +168,37 @@ export default function KullaniciDuzenlePage() {
   const toggle = (key: keyof typeof form, value?: boolean) => {
     if (key === 'biyometriAktif' || key === 'checkInYetki' || key === 'odaDegistirmeYetki' || key === 'bilgiDuzenlemeYetki' || key === 'girisOnaylandi') {
       setForm((f) => ({ ...f, [key]: value !== undefined ? value : !f[key] }))
+    }
+  }
+
+  const handleBan = async () => {
+    if (!id) return
+    setBanning(true)
+    try {
+      await api.patch(`/app-admin/kullanicilar/${id}`, { girisOnaylandi: false })
+      toast.success('Giriş engellendi (giriş onayı kaldırıldı)')
+      setForm((f) => ({ ...f, girisOnaylandi: false }))
+      load()
+    } catch (err: unknown) {
+      const e = err as { response?: { data?: { message?: string } } }
+      toast.error(e.response?.data?.message || 'İşlem başarısız')
+    } finally {
+      setBanning(false)
+    }
+  }
+
+  const handleDeleteKullanici = async () => {
+    if (!id || !k) return
+    if (!confirm(`"${k.adSoyad}" kullanıcısını tesis listesinden kalıcı olarak kaldırmak istediğinize emin misiniz? Bu işlem geri alınamaz.`)) return
+    setDeleting(true)
+    try {
+      await api.delete(`/app-admin/kullanicilar/${id}`)
+      toast.success('Kullanıcı tesis listesinden kaldırıldı')
+      router.push(k.tesisId ? `/tesisler/${k.tesisId}/kullanicilar` : '/tesisler')
+    } catch (err: unknown) {
+      const e = err as { response?: { data?: { message?: string } } }
+      toast.error(e.response?.data?.message || 'Silinemedi')
+      setDeleting(false)
     }
   }
 
@@ -417,9 +450,20 @@ export default function KullaniciDuzenlePage() {
       <div className="kbs-card admin-user-danger-zone">
         <h2 className="kbs-card-title admin-danger-title">Tehlikeli işlemler</h2>
         <p className="admin-tesis-summary-sm">
-          Bu kullanıcıyı devre dışı bırakmak (ban) veya tesis kullanıcı listesinden kaldırmak için backend API kullanılır.
-          Paylaşım sayısı, bildirilen kimlik/pasaport sayısı ve son konum bilgisi mobil uygulama / topluluk modülü üzerinden takip edilir.
+          Girişi engelle: kullanıcının tesis kodu + PIN ile giriş yapmasını kapatır. Tesis kullanıcısını sil: kullanıcıyı tesis listesinden kalıcı kaldırır (geri alınamaz).
         </p>
+        <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap', marginTop: '1rem' }}>
+          {form.girisOnaylandi ? (
+            <button type="button" className="admin-btn secondary" style={{ background: '#b7791f', color: '#fff', border: 'none' }} onClick={handleBan} disabled={banning}>
+              {banning ? 'Yapılıyor...' : 'Girişi engelle (ban)'}
+            </button>
+          ) : (
+            <span className="admin-badge-danger">Giriş zaten engelli</span>
+          )}
+          <button type="button" className="admin-btn secondary" style={{ background: '#c53030', color: '#fff', border: 'none' }} onClick={handleDeleteKullanici} disabled={deleting}>
+            {deleting ? 'Siliniyor...' : 'Tesis kullanıcısını sil'}
+          </button>
+        </div>
       </div>
     </div>
   )

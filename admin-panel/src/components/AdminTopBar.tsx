@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useCallback } from 'react'
-import { useRouter } from 'next/navigation'
+import { useRouter, usePathname } from 'next/navigation'
 import Link from 'next/link'
 
 interface AdminTopBarProps {
@@ -10,7 +10,9 @@ interface AdminTopBarProps {
 
 export default function AdminTopBar({ onOpenCommandPalette }: AdminTopBarProps) {
   const router = useRouter()
+  const pathname = usePathname()
   const [search, setSearch] = useState('')
+  const showBack = pathname !== '/' && pathname != null
 
   const handleSearch = useCallback(
     (e: React.FormEvent) => {
@@ -34,6 +36,11 @@ export default function AdminTopBar({ onOpenCommandPalette }: AdminTopBarProps) 
   return (
     <header className="admin-topbar">
       <div className="admin-topbar-left">
+        {showBack && (
+          <Link href="/" className="admin-topbar-back" title="Ana sayfaya dön">
+            ← Ana sayfa
+          </Link>
+        )}
         <form onSubmit={handleSearch} className="admin-topbar-search-wrap">
           <input
             type="search"

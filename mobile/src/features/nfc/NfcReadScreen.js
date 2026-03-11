@@ -61,16 +61,19 @@ export default function NfcReadScreen() {
             dogumTarihi: d.dogumTarihi || null,
             uyruk: d.uyruk || 'TÜRK',
             chipPhotoBase64: d.chipPhotoBase64 || null,
+            chipSignatureBase64: d.chipSignatureBase64 || null,
+            ikametAdresi: d.ikametAdresi || null,
+            dogumYeri: d.dogumYeri || null,
             type: d.type || 'id_card',
           },
         });
       } else {
         logger.warn('[NFC] Okuma başarısız', { error: result?.error, fallback: result?.fallback });
-        Toast.show({ type: 'info', text1: 'NFC okunamadı', text2: result?.error || 'Belgeyi yaklaştırıp tekrar deneyin veya MRZ kullanın.' });
+        Toast.show({ type: 'info', text1: 'NFC okunamadı', text2: result?.error || 'Kartı yaklaştırıp tekrar deneyin.' });
       }
     } catch (e) {
       logger.error('[NFC] Okuma hatası (exception)', e?.message || e);
-      Toast.show({ type: 'error', text1: 'Hata', text2: 'NFC okunamadı. MRZ kamerayı deneyin.' });
+      Toast.show({ type: 'error', text1: 'Hata', text2: 'NFC okunamadı. Tekrar deneyin.' });
     }
   }, [isSupported, readNfcDirect, navigation]);
 

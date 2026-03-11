@@ -303,6 +303,7 @@ const styles = StyleSheet.create({
 // Context (useAuth used in MisafirlerScreen, RaporlarScreen)
 import { AuthProvider, useAuth } from './src/context/AuthContext';
 import { ThemeProvider, useTheme } from './src/context/ThemeContext';
+import { NotificationProvider } from './src/context/NotificationContext';
 import { useLanguage } from './src/context/LanguageContext';
 import { CreditsProvider, useCredits } from './src/context/CreditsContext';
 import { CameraProvider } from './src/context/CameraContext';
@@ -795,12 +796,14 @@ export default function App() {
         <LanguageProvider>
           <CameraProvider>
             <AuthProvider>
-              <FamilyCheckInProvider>
-              <CreditsProvider>
-                <AppNavigator />
-                <Toast />
-              </CreditsProvider>
-              </FamilyCheckInProvider>
+              <NotificationProvider>
+                <FamilyCheckInProvider>
+                <CreditsProvider>
+                  <AppNavigator />
+                  <Toast />
+                </CreditsProvider>
+                </FamilyCheckInProvider>
+              </NotificationProvider>
             </AuthProvider>
           </CameraProvider>
         </LanguageProvider>

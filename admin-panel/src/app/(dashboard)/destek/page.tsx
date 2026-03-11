@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
-import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import { api } from '@/services/api'
 
 interface Ticket {
@@ -51,13 +51,14 @@ function statusLabel(status: string) {
 }
 
 export default function DestekPage() {
+  const router = useRouter()
   const [tickets, setTickets] = useState<Ticket[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
   const fetchTickets = useCallback(async () => {
     try {
-      const res = await api.get<{ tickets: Ticket[] }>('app-admin/support')
+      const res = await api.get<{ tickets: Ticket[] }>('/app-admin/support')
       setTickets(res.data?.tickets ?? [])
       setError(null)
     } catch (e: unknown) {
@@ -109,28 +110,36 @@ export default function DestekPage() {
         <div className="destek-list">
           {tickets.map((t) => {
             const sl = statusLabel(t.status)
+            const href = `/destek/ticket/${t.id}`
             return (
-              <div key={t.id} className="destek-card">
-                <div className="destek-card-header">
-                  <span className="destek-card-id">#{t.id.slice(-8)}</span>
-                  <span className={`destek-badge ${sl.className}`}>{sl.text}</span>
-                  <span className="destek-card-date">{formatDate(t.createdAt)}</span>
-                </div>
-                <h3 className="destek-card-subject">{t.subject}</h3>
-                <div className="destek-card-meta">
-                  {t.tesisAdi && <span className="destek-meta-item">Tesis: {t.tesisAdi}</span>}
-                  <span className="destek-meta-item">{t.authorName}</span>
-                  {t.authorEmail && <span className="destek-meta-item">{t.authorEmail}</span>}
-                </div>
-                <p className="destek-card-message">{t.message}</p>
-                {t.adminNote && (
-                  <div className="destek-admin-note">
-                    <strong>Admin notu:</strong> {t.adminNote}
+              <div
+                key={t.id}
+                role="button"
+                tabIndex={0}
+                className="destek-card-link"
+                onClick={() => router.push(href)}
+                onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); router.push(href); } }}
+              >
+                <div className="destek-card">
+                  <div className="destek-card-header">
+                    <span className="destek-card-id">#{t.id.slice(-8)}</span>
+                    <span className={`destek-badge ${sl.className}`}>{sl.text}</span>
+                    <span className="destek-card-date">{formatDate(t.createdAt)}</span>
                   </div>
-                )}
-                <Link href={`/destek/ticket/${t.id}`} className="admin-link destek-link">
-                  Detay →
-                </Link>
+                  <h3 className="destek-card-subject">{t.subject}</h3>
+                  <div className="destek-card-meta">
+                    {t.tesisAdi && <span className="destek-meta-item">Tesis: {t.tesisAdi}</span>}
+                    <span className="destek-meta-item">{t.authorName}</span>
+                    {t.authorEmail && <span className="destek-meta-item">{t.authorEmail}</span>}
+                  </div>
+                  <p className="destek-card-message">{t.message}</p>
+                  {t.adminNote && (
+                    <div className="destek-admin-note">
+                      <strong>Admin notu:</strong> {t.adminNote}
+                    </div>
+                  )}
+                  <span className="admin-link destek-link">Detay →</span>
+                </div>
               </div>
             )
           })}

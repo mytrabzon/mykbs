@@ -29,6 +29,15 @@ async function getLastMrzForBac() {
   }
 }
 
+function getDefaultBacKeys() {
+  try {
+    const { getDefaultBacKeysForTurkishId } = require('../../utils/lastMrzForBac');
+    return getDefaultBacKeysForTurkishId();
+  } catch (_) {
+    return [];
+  }
+}
+
 function mapPassportReaderResultToPayload(r) {
   if (!r) return null;
   const birth = (r.birthDate || '').trim();
@@ -46,8 +55,9 @@ function mapPassportReaderResultToPayload(r) {
     cinsiyet: r.gender || null,
     sonKullanma: r.expiryDate ? (r.expiryDate.includes('-') ? r.expiryDate.split('-').reverse().join('.') : r.expiryDate) : null,
     chipPhotoBase64: r.originalFacePhoto || null,
+    chipSignatureBase64: r.signatureImage || r.originalSignature || null,
     dogumYeri: r.placeOfBirth || null,
-    ikametAdresi: null,
+    ikametAdresi: r.address || r.placeOfResidence || null,
   };
 }
 
@@ -186,7 +196,7 @@ async function readPassportWithoutMRZ() {
   } catch (e) {
     logger.warn('[IndependentNfc] Pasaport GET CHALLENGE hatası', e?.message);
   }
-  throw new Error('Pasaport çipi MRZ ile açılmalı. MRZ kamerayı kullanın.');
+  throw new Error('NFC okunamadı, tekrar dener misiniz?');
 }
 
 /**
@@ -194,7 +204,7 @@ async function readPassportWithoutMRZ() {
  * Türk kimlik yapısı farklı olabilir; ortak eMRTD tag'leri kullanıyoruz.
  */
 async function readIDCard() {
-  const { readDG1, readDG2, readDG11, parseDG1ToPayload, extractFieldFromTLV, extractFaceImageFromDG2 } = require('./IdCardReader');
+  const { readDG1, readDG2, readDG7, readDG11, parseDG1ToPayload, extractFieldFromTLV, extractFaceImageFromDG2, extractSignatureFromDG7 } = require('./IdCardReader');
   const dg1 = await readDG1(transceive);
   logger.info('[NFC] DG1 okundu', { length: dg1?.length ?? 0 });
   const payload = parseDG1ToPayload(dg1);
@@ -211,6 +221,14 @@ async function readIDCard() {
         chipPhotoBase64 = bytesToBase64(dg2);
         logger.info('[NFC] DG2 (foto) ham okundu', { length: dg2.length, hasBase64: !!chipPhotoBase64 });
       }
+    }
+  } catch (_) {}
+  let chipSignatureBase64 = null;
+  try {
+    const dg7 = await readDG7(transceive);
+    if (dg7 && dg7.length > 0) {
+      const sigBytes = extractSignatureFromDG7(dg7);
+      if (sigBytes && sigBytes.length > 0) chipSignatureBase64 = bytesToBase64(sigBytes);
     }
   } catch (_) {}
   let dogumYeri = null;
@@ -234,6 +252,7 @@ async function readIDCard() {
     cinsiyet: payload.cinsiyet || null,
     sonKullanma: payload.sonKullanma || null,
     chipPhotoBase64,
+    chipSignatureBase64: chipSignatureBase64 || null,
     dogumYeri: dogumYeri || null,
     ikametAdresi: ikametAdresi || null,
   };
@@ -303,41 +322,40 @@ export function useIndependentNfcReader() {
         // iOS'ta isEnabled bazen atar veya desteklenmez; okumayı dene
       }
 
-      // BAC anahtarı (son MRZ) varsa önce NfcPassportReader kullan — tek oturumda algıla + oku, "algılanmadı" önlenir
-      const bacKey = await getLastMrzForBac();
-      logger.info('[NFC] BAC anahtarı kontrolü', { hasBacKey: !!(bacKey?.documentNo && bacKey?.birthDate && bacKey?.expiryDate), hasNfcPassportReader: !!NfcPassportReader });
-      if (NfcPassportReader && bacKey?.documentNo && bacKey?.birthDate && bacKey?.expiryDate) {
-        setProgress('Kimlik veya pasaport kartını telefonun arkasına yaklaştırın ve sabit tutun...');
-        logger.info('[NFC] NfcPassportReader.startReading ile okuma başlıyor (BAC ile)');
-        try {
-          const nfcResult = await NfcPassportReader.startReading({
-            bacKey: {
-              documentNo: bacKey.documentNo,
-              birthDate: bacKey.birthDate,
-              expiryDate: bacKey.expiryDate,
-            },
-          });
-          const result = mapPassportReaderResultToPayload(nfcResult);
-          logger.info('[NFC] NfcPassportReader sonucu', { hasResult: !!result, ad: result?.ad, soyad: result?.soyad });
-          if (result && (result.ad || result.soyad || result.kimlikNo || result.pasaportNo)) {
-            setLastResult(result);
-            logger.info('[NFC] BAC ile okuma başarılı, payload dönülüyor');
-            return { success: true, data: result };
+      // NfcPassportReader ile BAC dene: önce saklı MRZ, yoksa varsayılan Türk kimlik BAC anahtarları (MRZ gerekmez)
+      const bacKeyStored = await getLastMrzForBac();
+      const defaultKeys = getDefaultBacKeys();
+      const keysToTry = [];
+      if (bacKeyStored?.documentNo && bacKeyStored?.birthDate && bacKeyStored?.expiryDate) {
+        keysToTry.push({ documentNo: bacKeyStored.documentNo, birthDate: bacKeyStored.birthDate, expiryDate: bacKeyStored.expiryDate });
+      }
+      keysToTry.push(...defaultKeys);
+
+      if (NfcPassportReader && keysToTry.length > 0) {
+        setProgress('Kimlik veya pasaport kartını telefonun arkasına yaklaştırın...');
+        for (let i = 0; i < keysToTry.length; i++) {
+          const bacKey = keysToTry[i];
+          logger.info('[NFC] NfcPassportReader BAC denemesi', { i: i + 1, total: keysToTry.length, docNo: bacKey.documentNo?.slice(0, 3) + '...' });
+          try {
+            const nfcResult = await NfcPassportReader.startReading({
+              bacKey: {
+                documentNo: bacKey.documentNo,
+                birthDate: bacKey.birthDate,
+                expiryDate: bacKey.expiryDate,
+              },
+            });
+            const result = mapPassportReaderResultToPayload(nfcResult);
+            if (result && (result.ad || result.soyad || result.kimlikNo || result.pasaportNo)) {
+              setLastResult(result);
+              logger.info('[NFC] BAC ile okuma başarılı', { ad: result.ad, soyad: result.soyad });
+              return { success: true, data: result };
+            }
+          } catch (bacErr) {
+            if ((bacErr?.message || '').includes('cancel')) {
+              return { success: false, error: 'Okuma iptal edildi.', fallback: null };
+            }
+            logger.warn('[NFC] BAC denemesi başarısız', bacErr?.message);
           }
-        } catch (bacErr) {
-          if ((bacErr?.message || '').includes('cancel')) {
-            return { success: false, error: 'Okuma iptal edildi.', fallback: 'MRZ' };
-          }
-          logger.warn('[IndependentNfc] NfcPassportReader hatası', bacErr?.message);
-          const msg = bacErr?.message || '';
-          const notDetected = /algılanmadı|not found|tag|timeout|connection/i.test(msg);
-          return {
-            success: false,
-            error: notDetected
-              ? 'Kart algılanmadı. Kimlik veya pasaportu telefonun arkasına tam yaslayıp sabit tutun, tekrar deneyin.'
-              : 'Çip okunamadı. MRZ sekmesinden kimlik/pasaportu okutup tekrar NFC deneyin.',
-            fallback: 'MRZ',
-          };
         }
       }
 
@@ -363,43 +381,33 @@ export function useIndependentNfcReader() {
           return { success: true, data: result };
         } catch (idErr) {
           logger.warn('[IndependentNfc] Kimlik okuma hatası', idErr?.message);
-          const sw = (idErr?.message || '').match(/69 82|6982/);
           return {
             success: false,
-            error: sw
-              ? 'Kimlik çipi MRZ ile açılır. Önce MRZ sekmesinden kartı okutun, sonra tekrar NFC deneyin.'
-              : 'Kimlik çipi okunamadı. MRZ sekmesinden kartı okutup tekrar deneyin.',
-            fallback: 'MRZ',
+            error: 'NFC okunamadı, tekrar dener misiniz? Kartı arkaya tam yaslayıp sabit tutun.',
+            fallback: null,
           };
         }
       }
 
       if (docType === 'passport') {
         setProgress('Pasaport okunuyor...');
-        logger.info('[NFC] Pasaport algılandı ama BAC yok, MRZ ile okutulması gerekiyor');
         return {
           success: false,
-          error: 'Pasaport çipi MRZ ile açılır. Önce MRZ sekmesinden pasaportu okutun, sonra burada NFC ile kartı yaklaştırın.',
-          fallback: 'MRZ',
+          error: 'NFC okunamadı, tekrar dener misiniz? Pasaportu arkaya yaklaştırıp sabit tutun.',
+          fallback: null,
         };
       }
 
       setProgress('Belge tanınamadı.');
-      logger.warn('[NFC] Belge tipi unknown, çip tanınamadı');
-      return { success: false, error: 'Çip tanınamadı. Kimlik veya pasaport (MRZ okutulmuş olabilir) kullanın.', fallback: 'MRZ' };
+      return { success: false, error: 'NFC okunamadı, tekrar dener misiniz?', fallback: null };
     } catch (error) {
       const msg = error?.message || '';
       logger.warn('[NFC] Okuma hatası (catch)', msg);
-      let userMsg = msg;
+      let userMsg = 'NFC okunamadı, tekrar dener misiniz?';
       if (msg.includes('cancelled') || msg.includes('Cancel')) userMsg = 'Okuma iptal edildi.';
-      else if (msg.includes('timeout') || msg.includes('Timeout') || msg.includes('algılanmadı') || /tag.*not|not.*found|connection.*lost/i.test(msg)) userMsg = 'Kart algılanmadı. Kimlik veya pasaportu telefonun arkasına tam yaslayıp sabit tutun, tekrar deneyin.';
-      else if (msg.includes('tag') || msg.includes('lost')) userMsg = 'Bağlantı koptu. Kimlik veya pasaportu sabit tutup tekrar deneyin.';
-      else if (msg.includes('IsoDep') || msg.includes('Tech')) userMsg = 'NFC bağlantısı kurulamadı. MRZ sekmesinden kimlik/pasaportu okutup tekrar NFC deneyin.';
-      return {
-        success: false,
-        error: userMsg,
-        fallback: 'MRZ',
-      };
+      else if (msg.includes('timeout') || msg.includes('Timeout') || /tag.*not|not.*found|connection.*lost/i.test(msg)) userMsg = 'Kart algılanmadı. Telefonun arkasına tam yaslayıp sabit tutun, tekrar deneyin.';
+      else if (msg.includes('tag') || msg.includes('lost')) userMsg = 'Bağlantı koptu. Kartı sabit tutup tekrar deneyin.';
+      return { success: false, error: userMsg, fallback: null };
     } finally {
       if (techRequestedRef.current) closeNfc();
       setIsReading(false);

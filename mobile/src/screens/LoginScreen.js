@@ -49,10 +49,6 @@ export default function LoginScreen({ route }) {
   const [otp, setOtp] = useState(['', '', '', '', '', '']);
   const [sendCodeLoading, setSendCodeLoading] = useState(false);
   const otpRefs = useRef([]);
-  const [showOzelGirisModal, setShowOzelGirisModal] = useState(false);
-  const [ozelGirisSifre, setOzelGirisSifre] = useState('');
-  const [ozelGirisLoading, setOzelGirisLoading] = useState(false);
-
   useEffect(() => {
     (async () => {
       try {
@@ -198,32 +194,6 @@ export default function LoginScreen({ route }) {
     setKodModu(false);
     setOtpGonderildi(false);
     setOtp(['', '', '', '', '', '']);
-  };
-
-  const handleOzelGiris = async () => {
-    const sifreTrim = (ozelGirisSifre || '').trim();
-    if (!sifreTrim) {
-      Toast.show({ type: 'error', text1: 'Giriş kodu', text2: 'Şifreyi girin' });
-      return;
-    }
-    setOzelGirisLoading(true);
-    try {
-      const res = await api.post('/auth/ozel-giris', { sifre: sifreTrim });
-      const { token: newToken, kullanici, tesis: tesisData } = res.data || {};
-      if (newToken && kullanici && tesisData) {
-        await loginWithToken(newToken, kullanici, tesisData, null);
-        setShowOzelGirisModal(false);
-        setOzelGirisSifre('');
-        Toast.show({ type: 'success', text1: 'Giriş başarılı' });
-        navigation.reset({ index: 0, routes: [{ name: 'Main' }] });
-      } else {
-        Toast.show({ type: 'error', text1: 'Giriş başarısız', text2: res.data?.message || 'Beklenmeyen yanıt' });
-      }
-    } catch (e) {
-      const msg = e?.response?.data?.message || e?.message || 'Özel giriş başarısız';
-      Toast.show({ type: 'error', text1: 'Özel giriş', text2: msg });
-    }
-    setOzelGirisLoading(false);
   };
 
   return (
@@ -385,35 +355,26 @@ export default function LoginScreen({ route }) {
             </TouchableOpacity>
           </View>
 
-          <View style={[styles.guestRow, { borderTopColor: colors.border, marginTop: 0, paddingTop: spacing.md }]}>
-            <TouchableOpacity
-              onPress={() => { setShowOzelGirisModal(true); setOzelGirisSifre(''); }}
-              style={[styles.guestBtn, { borderColor: colors.textSecondary }]}
-            >
-              <Text style={[styles.guestBtnText, { color: colors.textSecondary }]}>Şifre ile giriş</Text>
-            </TouchableOpacity>
-          </View>
-
           <View style={styles.registerRow}>
             <Text style={[styles.registerText, { color: colors.textSecondary }]}>Hesabınız yok mu?</Text>
             <TouchableOpacity onPress={() => navigation.navigate('Kayit')}>
               <Text style={[styles.registerLink, { color: colors.primary }]}>Kayıt ol</Text>
             </TouchableOpacity>
           </View>
-
-          {(needsPrivacyConsent || needsTermsConsent) ? (
-            <TouchableOpacity
-              style={[styles.consentBar, { backgroundColor: colors.primary + '20', borderColor: colors.primary }]}
-              onPress={() => navigation.navigate('ConsentGate')}
-              activeOpacity={0.8}
-            >
-              <Ionicons name="document-text-outline" size={20} color={colors.primary} />
-              <Text style={[styles.consentBarText, { color: colors.primary }]}>
-                Gizlilik politikası ve kullanım şartları
-              </Text>
-            </TouchableOpacity>
-          ) : null}
         </View>
+
+        {(needsPrivacyConsent || needsTermsConsent) ? (
+          <TouchableOpacity
+            style={[styles.consentBar, styles.consentBarBelowCard, { backgroundColor: colors.primary + '20', borderColor: colors.primary }]}
+            onPress={() => navigation.navigate('ConsentGate')}
+            activeOpacity={0.8}
+          >
+            <Ionicons name="document-text-outline" size={20} color={colors.primary} />
+            <Text style={[styles.consentBarText, { color: colors.primary }]}>
+              Gizlilik politikası ve kullanım şartları
+            </Text>
+          </TouchableOpacity>
+        ) : null}
       </ScrollView>
 
       <Modal visible={showErrorModal} transparent animationType="slide">
@@ -435,35 +396,6 @@ export default function LoginScreen({ route }) {
         </View>
       </Modal>
 
-      <Modal visible={showOzelGirisModal} transparent animationType="fade">
-        <View style={styles.modalOverlay}>
-          <View style={[styles.modalContent, { backgroundColor: colors.surface }]}>
-            <View style={[styles.modalHeader, { borderBottomColor: colors.border }]}>
-              <Text style={[styles.modalTitle, { color: colors.textPrimary }]}>Giriş</Text>
-              <TouchableOpacity onPress={() => { setShowOzelGirisModal(false); setOzelGirisSifre(''); }}>
-                <Ionicons name="close" size={24} color={colors.textPrimary} />
-              </TouchableOpacity>
-            </View>
-            <Input
-              label=""
-              value={ozelGirisSifre}
-              onChangeText={setOzelGirisSifre}
-              placeholder="Şifre"
-              secureTextEntry
-              autoCapitalize="none"
-              autoCorrect={false}
-            />
-            <Button
-              variant="primary"
-              onPress={handleOzelGiris}
-              loading={ozelGirisLoading}
-              disabled={ozelGirisLoading || !(ozelGirisSifre || '').trim()}
-            >
-              Giriş Yap
-            </Button>
-          </View>
-        </View>
-      </Modal>
     </KeyboardAvoidingView>
   );
 }
@@ -596,6 +528,11 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     gap: 8,
     marginTop: spacing.lg,
+  },
+  consentBarBelowCard: {
+    marginHorizontal: spacing.screenPadding,
+    marginTop: spacing.xl,
+    marginBottom: spacing.lg,
   },
   consentBarText: { fontSize: 14, fontWeight: '600' },
   modalOverlay: {

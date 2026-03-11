@@ -688,6 +688,11 @@ router.post('/giris/yeni', async (req, res) => {
               status: 'acik',
             },
           });
+          require('../lib/notifyAdminPush').notifyAdminPush({
+            title: 'Hesap silindi - giriş denemesi',
+            body: emailStr,
+            data: { type: 'deleted_account_ticket' },
+          }).catch((e) => console.warn('[auth] admin push', e?.message));
         } catch (e) {
           console.warn('[auth] deleted ticket', e?.message);
         }
@@ -713,6 +718,11 @@ router.post('/giris/yeni', async (req, res) => {
                 status: 'acik',
               },
             });
+            require('../lib/notifyAdminPush').notifyAdminPush({
+              title: 'Hesap silindi - giriş denemesi',
+              body: p,
+              data: { type: 'deleted_account_ticket' },
+            }).catch((err) => console.warn('[auth] admin push', err?.message));
           } catch (e) {
             console.warn('[auth] deleted ticket', e?.message);
           }

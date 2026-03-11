@@ -42,8 +42,9 @@ export default function ManuelBildirimScreen({ navigation }) {
   const [ad, setAd] = useState('');
   const [soyad, setSoyad] = useState('');
   const [babaAdi, setBabaAdi] = useState('');
+  const [anaAdi, setAnaAdi] = useState('');
   const [dogumTarihi, setDogumTarihi] = useState('');
-  const [uyruk, setUyruk] = useState('TÜRK');
+  const [uyruk, setUyruk] = useState('Türkiye');
   const [odaNumarasi, setOdaNumarasi] = useState('');
   const [misafirTipi, setMisafirTipi] = useState('tc_vatandasi');
   const [telefon, setTelefon] = useState('');
@@ -76,6 +77,14 @@ export default function ManuelBildirimScreen({ navigation }) {
       Toast.show({ type: 'info', text1: 'Soyad girin' });
       return;
     }
+    if (!(babaAdi || '').trim()) {
+      Toast.show({ type: 'info', text1: 'Baba adı zorunludur' });
+      return;
+    }
+    if (!(anaAdi || '').trim()) {
+      Toast.show({ type: 'info', text1: 'Ana adı zorunludur' });
+      return;
+    }
     const dogum = parseDateStr(dogumTarihi);
     if (!dogum) {
       Toast.show({ type: 'info', text1: 'Doğum tarihi girin', text2: 'Örn: 15.05.1990' });
@@ -96,7 +105,8 @@ export default function ManuelBildirimScreen({ navigation }) {
       const payload = {
         ad: ad.trim(),
         soyad: soyad.trim(),
-        babaAdi: (babaAdi || '').trim() || undefined,
+        babaAdi: babaAdi.trim(),
+        anaAdi: anaAdi.trim(),
         dogumTarihi: dogum,
         uyruk: uyruk.trim(),
         odaNumarasi: odaNo,
@@ -128,6 +138,7 @@ export default function ManuelBildirimScreen({ navigation }) {
     ad,
     soyad,
     babaAdi,
+    anaAdi,
     dogumTarihi,
     uyruk,
     odaNumarasi,
@@ -165,7 +176,7 @@ export default function ManuelBildirimScreen({ navigation }) {
           showsVerticalScrollIndicator={false}
         >
           <Text style={styles.sectionSubtitle}>
-            Belge okutmadan TC, ad soyad, baba adı, doğum tarihi, uyruk ve oda no ile KBS'ye bildirim yapın.
+            Belge okutmadan TC, ad soyad, baba adı, ana adı, doğum tarihi, uyruk ve oda no ile KBS'ye bildirim yapın.
           </Text>
 
           <Text style={styles.label}>TC No</Text>
@@ -209,12 +220,22 @@ export default function ManuelBildirimScreen({ navigation }) {
             autoCapitalize="words"
           />
 
-          <Text style={styles.label}>Baba adı</Text>
+          <Text style={styles.label}>Baba adı *</Text>
           <TextInput
             style={styles.input}
             value={babaAdi}
             onChangeText={setBabaAdi}
-            placeholder="Opsiyonel"
+            placeholder="Zorunlu"
+            placeholderTextColor={theme.colors.textSecondary}
+            autoCapitalize="words"
+          />
+
+          <Text style={styles.label}>Ana adı *</Text>
+          <TextInput
+            style={styles.input}
+            value={anaAdi}
+            onChangeText={setAnaAdi}
+            placeholder="Zorunlu"
             placeholderTextColor={theme.colors.textSecondary}
             autoCapitalize="words"
           />
@@ -234,9 +255,9 @@ export default function ManuelBildirimScreen({ navigation }) {
             style={styles.input}
             value={uyruk}
             onChangeText={setUyruk}
-            placeholder="TÜRK, ALMAN vb."
+            placeholder="Türkiye, Almanya vb."
             placeholderTextColor={theme.colors.textSecondary}
-            autoCapitalize="characters"
+            autoCapitalize="words"
           />
 
           <Text style={styles.label}>Misafir tipi</Text>

@@ -73,6 +73,7 @@ router.get('/', async (req, res) => {
       id: m.id,
       ad: m.ad,
       ad2: m.ad2 || null,
+      anaAdi: m.anaAdi || null,
       soyad: m.soyad,
       kimlikNo: kimlikGorebilir ? m.kimlikNo : maskKimlikNo(m.kimlikNo),
       pasaportNo: m.pasaportNo ? (kimlikGorebilir ? m.pasaportNo : maskPasaportNo(m.pasaportNo)) : null,
@@ -259,7 +260,7 @@ router.post('/checkin', async (req, res) => {
 
 /**
  * Manuel bilgi ile KBS'ye bildirim (belge okutmadan)
- * Body: kimlikNo veya pasaportNo, ad, soyad, babaAdi (ad2), dogumTarihi, uyruk, odaNumarasi,
+ * Body: kimlikNo veya pasaportNo, ad, soyad, babaAdi, anaAdi, dogumTarihi, uyruk, odaNumarasi,
  *       misafirTipi?, girisTarihi? (yoksa bildirildiği tarih kullanılır), telefon?, plaka?
  */
 router.post('/manuel-bildirim', async (req, res) => {
@@ -274,6 +275,7 @@ router.post('/manuel-bildirim', async (req, res) => {
       ad,
       soyad,
       babaAdi,
+      anaAdi,
       dogumTarihi,
       uyruk,
       odaNumarasi,
@@ -286,7 +288,13 @@ router.post('/manuel-bildirim', async (req, res) => {
     const tesisId = getTesisId(req);
 
     if (!ad || !soyad || !dogumTarihi || !uyruk || !odaNumarasi) {
-      return res.status(400).json({ message: 'TC/Pasaport, ad, soyad, baba adı, doğum tarihi, uyruk ve oda no zorunludur' });
+      return res.status(400).json({ message: 'Ad, soyad, doğum tarihi, uyruk ve oda no zorunludur' });
+    }
+    if (!(babaAdi || '').trim()) {
+      return res.status(400).json({ message: 'Baba adı zorunludur' });
+    }
+    if (!(anaAdi || '').trim()) {
+      return res.status(400).json({ message: 'Ana adı zorunludur' });
     }
 
     if (!kimlikNo && !pasaportNo) {
@@ -325,7 +333,8 @@ router.post('/manuel-bildirim', async (req, res) => {
         tesisId,
         odaId: oda.id,
         ad,
-        ad2: babaAdi ? String(babaAdi).trim() || null : null,
+        ad2: String(babaAdi).trim() || null,
+        anaAdi: (anaAdi || '').trim() || null,
         soyad,
         kimlikNo: kimlikNo ? String(kimlikNo).trim() || null : null,
         pasaportNo: pasaportNo ? String(pasaportNo).trim() || null : null,
@@ -631,7 +640,7 @@ router.put('/:misafirId', async (req, res) => {
     }
 
     const { misafirId } = req.params;
-    const { ad, ad2, soyad, dogumTarihi, uyruk, misafirTipi, email } = req.body;
+    const { ad, ad2, anaAdi, soyad, dogumTarihi, uyruk, misafirTipi, email } = req.body;
 
     const misafir = await prisma.misafir.findFirst({
       where: {
@@ -647,6 +656,7 @@ router.put('/:misafirId', async (req, res) => {
     const updateData = {};
     if (ad !== undefined) updateData.ad = ad;
     if (ad2 !== undefined) updateData.ad2 = ad2 || null;
+    if (anaAdi !== undefined) updateData.anaAdi = anaAdi || null;
     if (soyad !== undefined) updateData.soyad = soyad;
     if (dogumTarihi !== undefined) updateData.dogumTarihi = new Date(dogumTarihi);
     if (uyruk !== undefined) updateData.uyruk = uyruk;

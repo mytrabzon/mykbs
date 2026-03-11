@@ -1,9 +1,11 @@
 /**
  * Destek talepleri: mobil hamburger menüden POST; admin panel GET /api/app-admin/support ile listeler.
+ * Yeni ticket açıldığında admin hesaplara push bildirimi gider.
  */
 const express = require('express');
 const { prisma } = require('../lib/prisma');
 const { authenticateTesisOrSupabase } = require('../middleware/authTesisOrSupabase');
+const { notifyAdminPush } = require('../lib/notifyAdminPush');
 
 const router = express.Router();
 
@@ -92,6 +94,12 @@ router.post('/', authenticateTesisOrSupabase, express.json(), async (req, res) =
         status: 'acik',
       },
     });
+
+    notifyAdminPush({
+      title: 'Yeni destek talebi',
+      body: subject.trim().slice(0, 120),
+      data: { type: 'support_ticket', ticketId: ticket.id },
+    }).catch((err) => console.warn('[support] admin push', err?.message));
 
     res.status(201).json({
       message: 'Destek talebiniz alındı. En kısa sürede dönüş yapacağız.',

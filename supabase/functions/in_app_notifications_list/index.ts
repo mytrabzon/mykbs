@@ -42,5 +42,16 @@ serve(async (req) => {
     console.error("in_app_notifications_list error:", error);
     return errorResponse(error.message, 500);
   }
-  return jsonResponse({ notifications: list || [], total: count ?? 0 });
+
+  const { count: unreadCount } = await auth.supabase
+    .from("in_app_notifications")
+    .select("id", { count: "exact", head: true })
+    .eq("user_id", auth.userId)
+    .eq("is_read", false);
+
+  return jsonResponse({
+    notifications: list || [],
+    total: count ?? 0,
+    unread_count: unreadCount ?? 0,
+  });
 });

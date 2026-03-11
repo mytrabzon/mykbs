@@ -57,7 +57,7 @@ export default function DestekTicketDetayPage() {
     setLoading(true)
     setError(null)
     try {
-      const res = await api.get<{ ticket: Ticket }>(`app-admin/support/${id}`)
+      const res = await api.get<{ ticket: Ticket }>(`/app-admin/support/${id}`)
       const t = res.data?.ticket
       setTicket(t ?? null)
       if (t) {
@@ -85,9 +85,9 @@ export default function DestekTicketDetayPage() {
     setSaving(true)
     setSaveMessage(null)
     try {
-      await api.patch(`app-admin/support/${id}`, { status, adminNote: adminNote.trim() || undefined })
+      await api.patch(`/app-admin/support/${id}`, { status, adminNote: adminNote.trim() || undefined })
       setSaveMessage('Kaydedildi. Kullanıcıya bildirim gitti (varsa push token).')
-      const res = await api.get<{ ticket: Ticket }>(`app-admin/support/${id}`)
+      const res = await api.get<{ ticket: Ticket }>(`/app-admin/support/${id}`)
       const t = res.data?.ticket
       if (t) {
         setTicket(t)

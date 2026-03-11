@@ -35,27 +35,30 @@ serve(async (req) => {
     auth: { autoRefreshToken: false, persistSession: false },
   });
 
-  const {
-    data: { user },
-    error: userError,
-  } = await supabase.auth.getUser(token);
-  if (userError || !user) {
-    return new Response(
-      JSON.stringify({ error: "Gecersiz oturum" }),
-      { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
-  }
-
-  const { data: profile } = await supabase
-    .from("user_profiles")
-    .select("role")
-    .eq("user_id", user.id)
-    .single();
-  if (!["admin", "moderator"].includes(profile?.role || "")) {
-    return new Response(
-      JSON.stringify({ error: "Yetkiniz yok" }),
-      { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
+  // Service role ile çağrı (backend'den admin push tetikleme): kullanıcı kontrolü atlanır
+  const isServiceRole = token === serviceKey;
+  if (!isServiceRole) {
+    const {
+      data: { user },
+      error: userError,
+    } = await supabase.auth.getUser(token);
+    if (userError || !user) {
+      return new Response(
+        JSON.stringify({ error: "Gecersiz oturum" }),
+        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+    const { data: profile } = await supabase
+      .from("user_profiles")
+      .select("role")
+      .eq("user_id", user.id)
+      .single();
+    if (!["admin", "moderator"].includes(profile?.role || "")) {
+      return new Response(
+        JSON.stringify({ error: "Yetkiniz yok" }),
+        { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
   }
 
   const { data: rows, error: fetchErr } = await supabase
@@ -78,6 +81,19 @@ serve(async (req) => {
   for (const row of tokenRows || []) {
     if (!tokensByUser.has(row.user_id)) tokensByUser.set(row.user_id, []);
     tokensByUser.get(row.user_id)!.push(row.token);
+  }
+  // Backend JWT ile kayıtlı token'lar (push_registrations): user_identifier = "supabase:UUID"
+  const { data: regRows } = await supabase
+    .from("push_registrations")
+    .select("user_identifier, expo_push_token");
+  for (const row of regRows || []) {
+    const uid = typeof row?.user_identifier === "string" && row.user_identifier.startsWith("supabase:")
+      ? row.user_identifier.slice("supabase:".length)
+      : null;
+    if (uid && row?.expo_push_token) {
+      if (!tokensByUser.has(uid)) tokensByUser.set(uid, []);
+      tokensByUser.get(uid)!.push(row.expo_push_token);
+    }
   }
 
   let sent = 0;

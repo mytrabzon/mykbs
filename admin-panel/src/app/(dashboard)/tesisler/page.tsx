@@ -108,46 +108,45 @@ export default function TesislerPage() {
               </tr>
             </thead>
             <tbody>
-              {tesisler.map((tesis) => (
-                <tr
-                  key={tesis.id}
-                  className="kbs-table-row-clickable"
-                  onClick={() => router.push(`/tesisler/${tesis.id}`)}
-                >
-                  <td className="kbs-table-cell-link">
-                    <Link href={`/tesisler/${tesis.id}`} onClick={(e) => e.stopPropagation()} className="kbs-table-cell-link-inner">
-                      {tesis.tesisAdi}
-                    </Link>
-                  </td>
-                  <td className="kbs-table-cell-link">
-                    <Link href={`/tesisler/${tesis.id}`} onClick={(e) => e.stopPropagation()} className="kbs-table-cell-link-inner">
-                      {tesis.yetkiliAdSoyad}
-                    </Link>
-                  </td>
-                  <td>{tesis.telefon}</td>
-                  <td>{tesis.il}</td>
-                  <td>{tesis.paket}</td>
-                  <td>{tesis.kullanilanKota} / {tesis.kota}</td>
-                  <td>
-                    <span className={`kbs-badge ${tesis.durum === 'aktif' ? 'kbs-badge--sent' : tesis.durum === 'onaylandi' ? 'kbs-badge--queued' : tesis.durum === 'incelemede' ? 'kbs-badge--queued' : 'kbs-badge--failed'}`}>
-                      {tesis.durum}
-                    </span>
-                  </td>
-                  <td onClick={(e) => e.stopPropagation()}>
-                    {tesis.durum === 'incelemede' && (
-                      <button type="button" onClick={() => handleOnayla(tesis.id)} className="kbs-btn-primary kbs-btn-sm kbs-btn-sm-mr">
-                        Onayla
-                      </button>
-                    )}
-                    <Link href={`/tesisler/${tesis.id}/kullanicilar`} className="kbs-btn-primary kbs-btn-sm-alt" style={{ marginRight: 6 }}>
-                      Kullanıcılar
-                    </Link>
-                    <Link href={`/tesisler/${tesis.id}`} className="kbs-btn-primary kbs-btn-sm-alt">
-                      Detay
-                    </Link>
-                  </td>
-                </tr>
-              ))}
+              {tesisler.map((tesis) => {
+                const detailHref = `/tesisler/${tesis.id}`
+                return (
+                  <tr
+                    key={tesis.id}
+                    className="kbs-table-row-clickable"
+                    onClick={(e) => {
+                      const target = e.target as HTMLElement
+                      if (target.closest('td:last-child')) return
+                      router.push(detailHref)
+                    }}
+                  >
+                    <td className="kbs-table-cell-link">{tesis.tesisAdi}</td>
+                    <td className="kbs-table-cell-link">{tesis.yetkiliAdSoyad}</td>
+                    <td>{tesis.telefon}</td>
+                    <td>{tesis.il}</td>
+                    <td>{tesis.paket}</td>
+                    <td>{tesis.kullanilanKota} / {tesis.kota}</td>
+                    <td>
+                      <span className={`kbs-badge ${tesis.durum === 'aktif' ? 'kbs-badge--sent' : tesis.durum === 'onaylandi' ? 'kbs-badge--queued' : tesis.durum === 'incelemede' ? 'kbs-badge--queued' : 'kbs-badge--failed'}`}>
+                        {tesis.durum}
+                      </span>
+                    </td>
+                    <td onClick={(e) => e.stopPropagation()}>
+                      {tesis.durum === 'incelemede' && (
+                        <button type="button" onClick={() => handleOnayla(tesis.id)} className="kbs-btn-primary kbs-btn-sm kbs-btn-sm-mr">
+                          Onayla
+                        </button>
+                      )}
+                      <Link href={`/tesisler/${tesis.id}/kullanicilar`} className="kbs-btn-primary kbs-btn-sm-alt" style={{ marginRight: 6 }} onClick={(e) => e.stopPropagation()}>
+                        Kullanıcılar
+                      </Link>
+                      <Link href={detailHref} className="kbs-btn-primary kbs-btn-sm-alt" onClick={(e) => e.stopPropagation()}>
+                        Detay
+                      </Link>
+                    </td>
+                  </tr>
+                )
+              })}
             </tbody>
           </table>
         </div>

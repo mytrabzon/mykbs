@@ -160,8 +160,9 @@ export default function NfcResultScreen({ route, navigation }) {
     );
   }
 
-  const adSoyad = [data.ad, data.soyad].filter(Boolean).join(' ') || '—';
+  const adSoyad = [data.ad, data.soyad].filter(Boolean).join(' ').trim() || '—';
   const docLabel = isTc ? 'TC' : 'Pasaport';
+  const sadeceUyrukGorunuyor = (adSoyad === '—' && !docNo && !data.dogumTarihi);
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background, paddingTop: insets.top }]}>
@@ -201,8 +202,18 @@ export default function NfcResultScreen({ route, navigation }) {
               <Text style={[styles.meta, { color: colors.textSecondary }]}>
                 🌍 {data.uyruk || 'TÜRK'}
               </Text>
+              {data.ikametAdresi ? (
+                <Text style={[styles.meta, { color: colors.textSecondary }]}>
+                  📍 {data.ikametAdresi}
+                </Text>
+              ) : null}
               {photoUri ? (
                 <Text style={[styles.photoLabel, { color: colors.textSecondary }]}>📸 Fotoğraf mevcut</Text>
+              ) : null}
+              {sadeceUyrukGorunuyor ? (
+                <Text style={[styles.hint, { color: colors.textSecondary, marginTop: 8 }]}>
+                  Ad, belge no ve doğum tarihi çipten okunamadı. Tekrar deneyin.
+                </Text>
               ) : null}
             </View>
           </View>
@@ -404,6 +415,7 @@ const styles = StyleSheet.create({
   name: { fontSize: 17, fontWeight: '700', marginBottom: 4 },
   meta: { fontSize: 13, marginBottom: 2 },
   photoLabel: { fontSize: 12, marginTop: 4 },
+  hint: { fontSize: 12, lineHeight: 18, fontStyle: 'italic' },
   actions: {
     flexDirection: 'row',
     flexWrap: 'wrap',

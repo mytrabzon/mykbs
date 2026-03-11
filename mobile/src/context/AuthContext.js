@@ -197,6 +197,7 @@ export const AuthProvider = ({ children }) => {
   const mounted = useRef(true);
   const lastMe429AtRef = useRef(0);
   const lastFetchMeAtRef = useRef(0);
+  const getSupabaseAwareTokenProviderRef = useRef(null);
   const ME_REFRESH_THROTTLE_MS = 45000; // TOKEN_REFRESHED / focus'tan en fazla 45 sn'de bir /auth/me
   const me429Options = { last429Ref: lastMe429AtRef, backoffMs: ME_429_BACKOFF_MS };
 
@@ -232,6 +233,7 @@ export const AuthProvider = ({ children }) => {
       return await AsyncStorage.getItem(AUTH_STORAGE_KEYS.SUPABASE_TOKEN) || await AsyncStorage.getItem(AUTH_STORAGE_KEYS.TOKEN);
     };
   };
+  getSupabaseAwareTokenProviderRef.current = getSupabaseAwareTokenProvider;
 
   const isAuthenticated = !!token && !!user;
 
@@ -673,12 +675,48 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
+  /**
+   * 401 alındığında önce token yenilemeyi dene; başarılı olursa profil bilgilerini geri yükle, çıkış yapma.
+   * Böylece "hesabımda bir süre kalınca bilgiler kayboluyor" (token süresi dolunca tek istek 401 verip tüm state siliniyordu) önlenir.
+   */
+  const handle401OrLogout = useCallback(async () => {
+    if (!mounted.current) return;
+    if (supabase) {
+      try {
+        const { data: { session: refreshed }, error } = await refreshSessionWithRetry();
+        if (!error && refreshed?.access_token && mounted.current) {
+          const newToken = refreshed.access_token;
+          await AsyncStorage.setItem(AUTH_STORAGE_KEYS.TOKEN, newToken);
+          await AsyncStorage.setItem(AUTH_STORAGE_KEYS.SUPABASE_TOKEN, newToken);
+          setToken(newToken);
+          const provider = () => Promise.resolve(newToken);
+          setApiTokenProvider(provider);
+          setDataServiceTokenProvider(provider);
+          const getTokenProviderForMe = () => (async () => newToken);
+          const ok = await fetchMeAndSetState(newToken, setUser, setTesis, setToken, getTokenProviderForMe, setPrivacyPolicyAcceptedAt, setTermsOfServiceAcceptedAt, setAccountPendingDeletion, setDeletionAt, setGuest, undefined, me429Options);
+          if (ok && mounted.current) {
+            const getProvider = getSupabaseAwareTokenProviderRef.current;
+            if (getProvider) {
+              setApiTokenProvider(getProvider());
+              setDataServiceTokenProvider(getProvider());
+            }
+            logger.log('AuthContext: 401 sonrası token yenilendi, oturum korundu');
+            return;
+          }
+        }
+      } catch (e) {
+        logger.warn('AuthContext: 401 sonrası token yenileme başarısız', e?.message || e);
+      }
+    }
+    await logout();
+  }, []);
+
   useEffect(() => {
     setOnUnauthorized(() => {
-      logout();
+      handle401OrLogout();
     });
     return () => setOnUnauthorized(null);
-  }, []);
+  }, [handle401OrLogout]);
 
   return (
     <AuthContext.Provider

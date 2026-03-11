@@ -137,14 +137,45 @@ function extractFaceImageFromDG2(dg2Bytes) {
 }
 
 /**
- * GET DATA ile DG11 oku (ek bilgiler: doğum yeri, adres vb.); varsa TLV'dan alan çıkar.
+ * GET DATA ile DG7 oku (imza / displayed signature). 61 XX dönerse GET RESPONSE ile al.
+ */
+async function readDG7(transceiveFn) {
+  if (typeof transceiveFn !== 'function') return [];
+  const GET_DATA_DG7 = [0x00, 0xca, 0x07, 0x00, 0x00];
+  const bytes = await getDataWithResponse(transceiveFn, GET_DATA_DG7);
+  return bytes || [];
+}
+
+/** DG7 ham baytlarından imza görseli (JPEG) çıkar. */
+function extractSignatureFromDG7(dg7Bytes) {
+  if (!dg7Bytes || !Array.isArray(dg7Bytes) || dg7Bytes.length < 4) return null;
+  const data = dg7Bytes;
+  let soi = -1;
+  for (let i = 0; i < data.length - 1; i++) {
+    if (data[i] === 0xff && data[i + 1] === 0xd8) {
+      soi = i;
+      break;
+    }
+  }
+  if (soi < 0) return null;
+  let eoi = -1;
+  for (let j = soi + 2; j < data.length - 1; j++) {
+    if (data[j] === 0xff && data[j + 1] === 0xd9) {
+      eoi = j + 2;
+      break;
+    }
+  }
+  return eoi > 0 ? data.slice(soi, eoi) : null;
+}
+
+/**
+ * GET DATA ile DG11 oku (ek bilgiler: doğum yeri, adres vb.); 61 XX dönerse GET RESPONSE ile al.
  */
 async function readDG11(transceiveFn) {
   try {
     const cmd = [0x00, 0xca, 0x0b, 0x00, 0x00];
-    const res = await transceiveFn(cmd);
-    if (!isSuccessResponse(res)) return null;
-    return getDataBytes(res);
+    const bytes = await getDataWithResponse(transceiveFn, cmd);
+    return bytes && bytes.length > 0 ? bytes : null;
   } catch (_) {
     return null;
   }
@@ -181,19 +212,25 @@ function parseDG1ToPayload(dg1Bytes) {
   };
   if (!dg1Bytes || dg1Bytes.length === 0) return payload;
 
-  // TLV önce: Türk kimlik çipleri sıklıkla 0x61 / 0x5F ile sarılı TLV döner
+  // TLV önce: Türk kimlik çipleri sıklıkla 0x61 / 0x5F ile sarılı TLV döner (5F1E ad, 5F1F soyad, 5F0E tam ad, 5F20 no, 5F2B doğum, 5F2C uyruk)
   const firstByte = dg1Bytes[0];
   if (firstByte === 0x61 || firstByte === 0x5f) {
     try {
       parseTLV(dg1Bytes, payload);
-      // Bazen tek alanda "SOYAD<<AD" gelir; ayır
+      // Bazen tek alanda "SOYAD<<AD" gelir; ayır (5F1F veya 5F0E'den)
       if (payload.soyad && !payload.ad && payload.soyad.includes('<<')) {
         const parts = payload.soyad.split('<<').map((s) => s.trim()).filter(Boolean);
         if (parts.length >= 2) {
           payload.soyad = parts[0] || '';
           payload.ad = parts.slice(1).join(' ') || '';
+        } else if (parts.length === 1 && parts[0]) payload.soyad = parts[0];
+      }
+      if (payload.ad && !payload.soyad && payload.ad.includes('<<')) {
+        const parts = payload.ad.split('<<').map((s) => s.trim()).filter(Boolean);
+        if (parts.length >= 2) {
+          payload.soyad = parts[0] || '';
+          payload.ad = parts.slice(1).join(' ') || '';
         }
-        if (parts.length === 1 && parts[0]) payload.soyad = parts[0];
       }
       if (payload.ad || payload.soyad || payload.kimlikNo || payload.pasaportNo) {
         return payload;
@@ -500,8 +537,26 @@ function parseTLV(bytes, payload) {
       const value = bytes.slice(valueStart, valueStart + len);
       const str = bytesToUtf8(value).replace(/\0/g, '').trim();
       if (tagByte2 === 0x1e && str) payload.ad = str;
-      else if (tagByte2 === 0x1f && str) payload.soyad = str;
-      else if (tagByte2 === 0x20 && str) payload.kimlikNo = str || null;
+      else if (tagByte2 === 0x1f && str) {
+        // 5F1F bazen soyad, bazen tam MRZ (44+ karakter); MRZ ise soyad diye atamayalım
+        if (str.length < 44) payload.soyad = str;
+      }
+      else if (tagByte2 === 0x0e && str) {
+        // 5F0E = name of holder (bazı eID/pasaportlarda tam ad burada: "SOYAD<<AD" veya "SOYAD AD")
+        const parts = str.split('<<').map((s) => s.trim()).filter(Boolean);
+        if (parts.length >= 2) {
+          if (!payload.soyad) payload.soyad = parts[0];
+          if (!payload.ad) payload.ad = parts.slice(1).join(' ');
+        } else if (parts.length === 1) {
+          const lastSpace = parts[0].lastIndexOf(' ');
+          if (lastSpace > 0) {
+            if (!payload.soyad) payload.soyad = parts[0].slice(0, lastSpace).trim();
+            if (!payload.ad) payload.ad = parts[0].slice(lastSpace + 1).trim();
+          } else if (!payload.soyad && !payload.ad) {
+            payload.soyad = parts[0];
+          }
+        }
+      } else if (tagByte2 === 0x20 && str) payload.kimlikNo = str || null;
       else if (tagByte2 === 0x2b && str) payload.dogumTarihi = str || null;
       else if (tagByte2 === 0x2c && str) payload.uyruk = str || payload.uyruk;
       i = valueStart + len;
@@ -541,8 +596,10 @@ function parseTLV(bytes, payload) {
 module.exports = {
   readDG1,
   readDG2,
+  readDG7,
   readDG11,
   parseDG1ToPayload,
   extractFieldFromTLV,
   extractFaceImageFromDG2,
+  extractSignatureFromDG7,
 };

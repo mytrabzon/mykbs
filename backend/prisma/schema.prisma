@@ -247,7 +247,8 @@ model Misafir {
   odaId             String
   tesisId           String
   ad                String   // 1. ad
-  ad2               String?  // 2. ad (opsiyonel)
+  ad2               String?  // baba adı (KBS için)
+  anaAdi            String?  // ana adı
   soyad             String
   kimlikNo          String?  // TC no (maskeli saklanacak)
   pasaportNo        String?  // Pasaport no (maskeli saklanacak)

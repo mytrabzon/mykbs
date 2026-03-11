@@ -49,3 +49,18 @@ export async function getLastMrzForBac() {
     return null;
   }
 }
+
+/** Türk kimlik kartı için denenecek varsayılan BAC anahtarları (MRZ olmadan). documentNo 9 karakter, birth/expiry YYMMDD. */
+export function getDefaultBacKeysForTurkishId() {
+  const birth = '900101';
+  const expiry = '300101';
+  return [
+    { documentNo: '000000000', birthDate: birth, expiryDate: expiry },
+    { documentNo: '111111111', birthDate: birth, expiryDate: expiry },
+    { documentNo: '123456789', birthDate: birth, expiryDate: expiry },
+    { documentNo: 'A1B2C3D4E', birthDate: birth, expiryDate: expiry },
+    { documentNo: '00000000000', birthDate: birth, expiryDate: expiry },
+    { documentNo: '11111111111', birthDate: birth, expiryDate: expiry },
+    { documentNo: '12345678901', birthDate: birth, expiryDate: expiry },
+  ];
+}

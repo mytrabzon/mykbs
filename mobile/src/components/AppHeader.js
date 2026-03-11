@@ -5,6 +5,7 @@ import { useNavigation } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../context/ThemeContext';
 import { useAuth } from '../context/AuthContext';
+import { useNotificationUnread } from '../context/NotificationContext';
 import { getIsAdminPanelUser } from '../utils/adminAuth';
 import { typography, spacing } from '../theme';
 
@@ -27,6 +28,7 @@ export default function AppHeader({
   const { colors } = useTheme();
   const navigation = useNavigation();
   const { user } = useAuth();
+  const { unreadCount } = useNotificationUnread();
   const isSuperAdmin = getIsAdminPanelUser(user);
 
   const isPrimary = variant === 'primary';
@@ -91,6 +93,11 @@ export default function AppHeader({
                   accessibilityRole="button"
                 >
                   <Ionicons name="notifications-outline" size={22} color={isPrimary ? '#FFF' : colors.textSecondary} />
+                  {unreadCount > 0 && (
+                    <View style={styles.notificationBadge}>
+                      <Text style={styles.notificationBadgeText} numberOfLines={1}>{unreadCount > 99 ? '99+' : unreadCount}</Text>
+                    </View>
+                  )}
                 </TouchableOpacity>
               )}
               {onProfile != null && (
@@ -176,6 +183,23 @@ const styles = StyleSheet.create({
   adminBadgeText: {
     color: '#fff',
     fontSize: 9,
+    fontWeight: 'bold',
+  },
+  notificationBadge: {
+    position: 'absolute',
+    top: -2,
+    right: -2,
+    backgroundColor: '#f43f5e',
+    minWidth: 16,
+    height: 16,
+    borderRadius: 8,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 4,
+  },
+  notificationBadgeText: {
+    color: '#fff',
+    fontSize: 10,
     fontWeight: 'bold',
   },
 });
