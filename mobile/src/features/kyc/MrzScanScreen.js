@@ -24,7 +24,6 @@ import * as FileSystem from 'expo-file-system/legacy';
 import { useAuth } from '../../context/AuthContext';
 import { useNfcAutoScanner } from '../nfc/NfcAutoScanner';
 import { useIndependentNfcReader } from '../nfc/IndependentNfcReader';
-import { CameraFallback } from '../../components/CameraFallback';
 import { getNfcEnabled } from '../../utils/nfcSetting';
 import { useFamilyCheckIn } from '../../context/FamilyCheckInContext';
 
@@ -432,6 +431,8 @@ export default function MrzScanScreen({ navigation }) {
         const photo = await cam.takePictureAsync({ quality: 0.9, base64: true, skipProcessing: true });
         if (!photo?.base64 || !mounted.current) return;
         if (hasAcceptedForUnifiedRef.current) return;
+        const docTypeLabel = selectedDocTypeRef.current === DocType.ID ? 'TC_KIMLIK' : 'PASAPORT';
+        logger.info('[MRZ okuma] unified capture → document-base64', { docType: docTypeLabel, base64Len: photo.base64?.length });
         const res = await api.post('/ocr/document-base64', { imageBase64: photo.base64, paperMode: true });
         const data = res?.data;
         if (!mounted.current || hasAcceptedForUnifiedRef.current) return;
@@ -439,6 +440,7 @@ export default function MrzScanScreen({ navigation }) {
         const mrzPayload = data?.mrzPayload;
         const front = data?.front;
         const merged = data?.merged;
+        logger.info('[MRZ okuma] document-base64 cevabı', { hasMrz: !!mrzRaw, hasMerged: !!(merged?.ad || merged?.soyad), hasFront: !!(front?.ad || front?.soyad), failureReason: data?.mrzFailureReason ? data.mrzFailureReason.slice(0, 80) : null });
         if (mrzRaw) {
           const minimalPayload = {
             passportNumber: (mrzPayload?.documentNumber || merged?.pasaportNo || merged?.kimlikNo || '').trim(),
@@ -449,9 +451,12 @@ export default function MrzScanScreen({ navigation }) {
           };
           const enriched = processNewMrz(minimalPayload, { source: 'unified' });
           if (!enriched) {
+            logger.info('[MRZ okuma] unified – aynı belge (duplicate)');
             Toast.show({ type: 'info', text1: 'Aynı belge', text2: 'Bu belge zaten okundu' });
             return;
           }
+          const kind = /^\d{11}$/.test(String(minimalPayload.passportNumber || '').replace(/\D/g, '')) ? 'TC_KIMLIK' : 'PASAPORT';
+          logger.info('[MRZ okuma] unified okundu (MRZ)', { tip: kind });
           hasAcceptedForUnifiedRef.current = true;
           triggerReadSuccessFeedback();
           setFrontImageUri(photo?.uri || null);
@@ -482,9 +487,11 @@ export default function MrzScanScreen({ navigation }) {
           };
           const enriched = processNewMrz(minimalPayload, { source: 'unified' });
           if (!enriched) {
+            logger.info('[MRZ okuma] unified – aynı belge (duplicate, merged)');
             Toast.show({ type: 'info', text1: 'Aynı belge', text2: 'Bu belge zaten okundu' });
             return;
           }
+          logger.info('[MRZ okuma] unified okundu (merged, MRZ yok)', { hasKimlikNo: !!merged.kimlikNo, hasPasaportNo: !!merged.pasaportNo });
           hasAcceptedForUnifiedRef.current = true;
           triggerReadSuccessFeedback();
           setFrontImageUri(photo?.uri || null);
@@ -509,9 +516,11 @@ export default function MrzScanScreen({ navigation }) {
           };
           const enriched = processNewMrz(minimalPayload, { source: 'unified' });
           if (!enriched) {
+            logger.info('[MRZ okuma] unified – aynı belge (duplicate, front)');
             Toast.show({ type: 'info', text1: 'Aynı belge', text2: 'Bu belge zaten okundu' });
             return;
           }
+          logger.info('[MRZ okuma] unified okundu (sadece ön yüz OCR)', { hasKimlikNo: !!front.kimlikNo, hasPasaportNo: !!front.pasaportNo });
           hasAcceptedForUnifiedRef.current = true;
           triggerReadSuccessFeedback();
           setFrontImageUri(photo?.uri || null);
@@ -532,6 +541,7 @@ export default function MrzScanScreen({ navigation }) {
           setScanDurationMs(scanStartTimeRef.current ? Date.now() - scanStartTimeRef.current : 0);
           return;
         }
+        if (data?.mrzFailureReason) logger.info('[MRZ okuma] unified – MRZ tespit edilemedi', { reason: data.mrzFailureReason.slice(0, 100) });
         const failureReason = data?.mrzFailureReason;
         if (failureReason && mounted.current && !hasAcceptedForUnifiedRef.current) {
           Toast.show({ type: 'info', text1: 'MRZ tespit edilemedi', text2: failureReason.length > 70 ? failureReason.slice(0, 67) + '…' : failureReason });
@@ -643,6 +653,8 @@ export default function MrzScanScreen({ navigation }) {
       if (!raw || !mounted.current) return;
       if (acceptedRawRef.current === raw) return;
       const rawCleaned = cleanMrzMergedLines(raw);
+      const docTypeLabel = selectedDocTypeRef.current === DocType.ID ? 'TC_KIMLIK' : 'PASAPORT';
+      logger.info('[MRZ okuma] native callback', { docType: docTypeLabel, rawLen: rawCleaned?.length, lineCount: (rawCleaned || '').split(/\r?\n/).length });
       if (__DEV__ && rawCleaned !== raw) logger.info('[MRZ] HAM MRZ (native)', { raw: raw.slice(0, 60) + '…', cleaned: rawCleaned.slice(0, 60) + '…' });
       const scanDurationMs = Date.now() - scanStartTimeRef.current;
       let payload = parseMrz(rawCleaned);
@@ -714,10 +726,12 @@ export default function MrzScanScreen({ navigation }) {
         setLastMrzChecksReason('');
         const enriched = processNewMrz(payload, { source: 'native', raw: rawCleaned });
         if (!enriched) {
+          logger.info('[MRZ okuma] native – aynı belge (duplicate)');
           Toast.show({ type: 'info', text1: 'Aynı belge', text2: 'Bu belge zaten okundu' });
           return;
         }
-        if (__DEV__) logger.info('[MRZ] Yeni MRZ okundu (native)', { documentNumber: enriched.documentNumber, scanId: enriched.scanId });
+        const kind = /^\d{11}$/.test(String(enriched.documentNumber || '').replace(/\D/g, '')) ? 'TC_KIMLIK' : 'PASAPORT';
+        logger.info('[MRZ okuma] native okundu', { tip: kind, docNoMask: (enriched.documentNumber || '').slice(0, 2) + '***', scanId: enriched.scanId });
         triggerReadSuccessFeedback();
         Toast.show({ type: 'success', text1: 'Okundu', text2: ((enriched.surname || '') + ' ' + (enriched.givenNames || '')).trim() || 'Belge okundu' });
         if (route.params?.mode === 'family' && familyCheckIn?.addMemberFromScan) {
@@ -738,9 +752,11 @@ export default function MrzScanScreen({ navigation }) {
         setMrzCheckFailed(true);
         const enriched = processNewMrz(payload, { source: 'native', raw: rawCleaned });
         if (!enriched) {
+          logger.info('[MRZ okuma] native – aynı belge (check fail path)');
           Toast.show({ type: 'info', text1: 'Aynı belge', text2: 'Bu belge zaten okundu' });
           return;
         }
+        logger.info('[MRZ okuma] native okundu (kontrol hanesi hatalı, minimal kabul)', { docType: docTypeLabel });
         triggerReadSuccessFeedback();
         Toast.show({ type: 'success', text1: 'Okundu', text2: ((enriched.surname || '') + ' ' + (enriched.givenNames || '')).trim() || 'Belge okundu' });
         if (route.params?.mode === 'family' && familyCheckIn?.addMemberFromScan) {
@@ -795,10 +811,12 @@ export default function MrzScanScreen({ navigation }) {
       if (hasMinimal) {
         const enriched = processNewMrz(payload, { source: 'backend', raw: rawCleaned });
         if (!enriched) {
+          logger.info('[MRZ okuma] backend/galeri – aynı belge (duplicate)');
           Toast.show({ type: 'info', text1: 'Aynı belge', text2: 'Bu belge zaten okundu' });
           return;
         }
-        if (__DEV__) logger.info('[MRZ] Yeni MRZ işlendi (backend)', { documentNumber: enriched.documentNumber, scanId: enriched.scanId });
+        const kind = /^\d{11}$/.test(String(enriched.documentNumber || '').replace(/\D/g, '')) ? 'TC_KIMLIK' : 'PASAPORT';
+        logger.info('[MRZ okuma] backend/galeri okundu', { tip: kind });
         setMrzCheckFailed(!payload.checks?.ok);
         triggerReadSuccessFeedback();
         setFrontImageUri(null);
@@ -903,11 +921,11 @@ export default function MrzScanScreen({ navigation }) {
             return;
           }
         }
-        logger.info('[Galeri kimlik] Base64 okundu', { base64Len: base64?.length ?? 0 });
+        logger.info('[MRZ okuma] galeri → document-base64', { base64Len: base64?.length ?? 0 });
         const res = await api.post('/ocr/document-base64', { imageBase64: base64, paperMode: true });
         const data = res?.data;
         if (!mounted.current) return;
-        logger.info('[Galeri kimlik] Backend cevabı', {
+        logger.info('[MRZ okuma] galeri cevabı', {
           hasMrz: !!data?.mrz,
           hasMrzPayload: !!data?.mrzPayload,
           hasMerged: !!data?.merged,
@@ -918,7 +936,7 @@ export default function MrzScanScreen({ navigation }) {
         const front = data?.front;
         const merged = data?.merged;
         if (mrzRaw) {
-          logger.info('[Galeri kimlik] MRZ bulundu, processMrzRaw çağrılıyor');
+          logger.info('[MRZ okuma] galeri – MRZ bulundu');
           processMrzRaw(mrzRaw);
           return;
         }
@@ -963,7 +981,7 @@ export default function MrzScanScreen({ navigation }) {
           setPortraitBase64(data?.portraitBase64 || null);
           return;
         }
-        logger.warn('[Galeri kimlik] MRZ ve merged/front yok, belge okunamadı');
+        logger.warn('[MRZ okuma] galeri – MRZ ve merged/front yok');
         const fallbackReason = data?.mrzFailureReason || 'Belge net görünsün (MRZ bandı veya ön yüz), işık yeterli olsun. Tekrar deneyin.';
         Toast.show({ type: 'error', text1: 'Okunamadı – tekrar deneyin', text2: fallbackReason });
       } catch (e) {
@@ -1270,16 +1288,14 @@ export default function MrzScanScreen({ navigation }) {
     };
   }, [useUnifiedMrzFlow, permission?.granted, permissionGrantedLocal]);
 
-  // Siyah ekran önlemi: CameraView mount edildi ama onCameraReady gelmezse belirli süre sonra fallback göster.
+  // onCameraReady gecikse bile ekran değiştirme; kamera açık kalır.
   useEffect(() => {
     if (!useUnifiedMrzFlow || !unifiedCameraMountReady || unifiedCameraReady || unifiedCameraError) return;
     if (unifiedCameraReadyTimeoutRef.current) clearTimeout(unifiedCameraReadyTimeoutRef.current);
     unifiedCameraReadyTimeoutRef.current = setTimeout(() => {
       unifiedCameraReadyTimeoutRef.current = null;
       if (mounted.current && !unifiedCameraError) {
-        logger.warn('[MRZ] Kamera onCameraReady gelmedi – siyah ekran timeout, fallback gösteriliyor');
-        setUnifiedCameraError(true);
-        Toast.show({ type: 'info', text1: 'Kamera açılamadı', text2: 'Galeriden görsel seçebilir veya Tekrar dene.' });
+        logger.info('[MRZ] Kamera onCameraReady gecikti (ekran değişmedi)');
       }
     }, UNIFIED_CAMERA_READY_TIMEOUT_MS);
     return () => {
@@ -1290,14 +1306,12 @@ export default function MrzScanScreen({ navigation }) {
     };
   }, [useUnifiedMrzFlow, unifiedCameraMountReady, unifiedCameraReady, unifiedCameraError]);
 
-  // Kamera önizlemesi hazır olmazsa (onCameraReady gelmezse) timeout sonunda fallback. Android'de native MrzReaderView kamera hazır sinyali göndermediği için timeout çalıştırma (siyah ekran yanlış tetiklemesin).
+  // Native kamera: onCameraReady gelmezse bile ekran değiştirme; kamera açık kalır.
   useEffect(() => {
     if (useUnifiedMrzFlow || (Platform.OS === 'android' && !USE_UNIFIED_AUTO_SCAN) || !mrzCameraMountReady || !permission?.granted || cameraPreviewReady) return;
-    logger.info('[MRZ] Kamera timeout başlatıldı (onCameraReady bekleniyor)', { ms: CAMERA_READY_TIMEOUT_MS, platform: Platform.OS });
     cameraReadyTimeoutRef.current = setTimeout(() => {
       cameraReadyTimeoutRef.current = null;
-      logger.warn('[MRZ] Kamera onCameraReady gelmedi – timeout tetiklendi, fallback gösteriliyor', { platform: Platform.OS });
-      if (mounted.current) setCameraOpenFailed(true);
+      if (mounted.current) logger.info('[MRZ] Native kamera onCameraReady gecikti (ekran değişmedi)');
     }, CAMERA_READY_TIMEOUT_MS);
     return () => {
       if (cameraReadyTimeoutRef.current) {
@@ -1574,35 +1588,6 @@ export default function MrzScanScreen({ navigation }) {
   }
 
   if (useUnifiedMrzFlow) {
-    // Kamera açılamadı: CameraFallback (Galeriden seç / Tekrar dene)
-    if (unifiedCameraError) {
-      return (
-        <SafeAreaView style={styles.container} edges={['top']}>
-          <View style={styles.header}>
-            <TouchableOpacity onPress={goBack} style={styles.iconBtn}>
-              <Ionicons name="arrow-back" size={24} color="#fff" />
-            </TouchableOpacity>
-            <Text style={styles.title}>Kimlik / Pasaport</Text>
-            <View style={styles.iconBtn} />
-          </View>
-          <View style={{ flex: 1 }}>
-            <CameraFallback
-              onImageSelected={(asset) => asset?.uri && uploadImageForDocument(asset.uri)}
-              onRetry={() => {
-                setUnifiedCameraError(false);
-                setUnifiedCameraMountKey((k) => k + 1);
-                setUnifiedCameraMountReady(false);
-                setTimeout(() => setUnifiedCameraMountReady(true), 200);
-              }}
-            />
-          </View>
-          <TouchableOpacity style={[styles.mrzPickSecondaryBtn, { marginHorizontal: 20, marginBottom: 16 }]} onPress={goBack}>
-            <Text style={styles.mrzPickSecondaryBtnText}>Geri</Text>
-          </TouchableOpacity>
-        </SafeAreaView>
-      );
-    }
-
     return (
       <View style={[styles.container, styles.unifiedCameraRoot]}>
         <View
@@ -1663,6 +1648,23 @@ export default function MrzScanScreen({ navigation }) {
           <TouchableOpacity onPress={goBack} style={styles.overlayBackBtn} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }} activeOpacity={0.8}>
             <Ionicons name="arrow-back" size={26} color="#fff" />
           </TouchableOpacity>
+          <View style={styles.docTypeWrap} pointerEvents="box-none">
+            <View style={styles.docTypeRow}>
+              <TouchableOpacity
+                style={[styles.docTypeBtn, selectedDocType === DocType.Passport && styles.docTypeBtnActive]}
+                onPress={() => { setMrzDocType(DocType.Passport); setScanMode(DocType.Passport); }}
+              >
+                <Text style={[styles.docTypeBtnText, selectedDocType === DocType.Passport && styles.docTypeBtnTextActive]}>Pasaport</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.docTypeBtn, selectedDocType === DocType.ID && styles.docTypeBtnActive]}
+                onPress={() => { setMrzDocType(DocType.ID); setScanMode(DocType.ID); }}
+              >
+                <Text style={[styles.docTypeBtnText, selectedDocType === DocType.ID && styles.docTypeBtnTextActive]}>TC Kimlik Kartı</Text>
+                {selectedDocType === DocType.ID && <Text style={styles.docTypeHint}>3 satır MRZ (arka yüz)</Text>}
+              </TouchableOpacity>
+            </View>
+          </View>
           <View style={styles.overlayBackBtn} />
         </View>
         <View style={[styles.overlayBottom, styles.overlayZIndex, { paddingBottom: insets.bottom + 20 }]} pointerEvents="box-none">
@@ -1679,8 +1681,12 @@ export default function MrzScanScreen({ navigation }) {
           </View>
         )}
         <View style={[StyleSheet.absoluteFill, styles.mrzBandOverlay]} pointerEvents="none">
-          <View style={styles.mrzBandFrame}>
-            <Text style={styles.mrzBandLabel}>MRZ bandını veya ön yüzü bu alana hizalayın</Text>
+          <View style={[styles.mrzBandFrame, selectedDocType === DocType.ID && styles.mrzBandFrameKimlik]}>
+            <Text style={styles.mrzBandLabel}>
+              {selectedDocType === DocType.ID
+                ? 'TC Kimlik Kartı – arka yüzdeki 3 satır MRZ\'yi çerçeveye hizalayın'
+                : 'MRZ bandını veya ön yüzü bu alana hizalayın'}
+            </Text>
           </View>
         </View>
         <View style={[styles.bannerFloating, { bottom: insets.bottom + 80 }]} pointerEvents="box-none">
@@ -1730,19 +1736,13 @@ export default function MrzScanScreen({ navigation }) {
           <View style={styles.docTypeRow}>
             <TouchableOpacity
               style={[styles.docTypeBtn, selectedDocType === DocType.Passport && styles.docTypeBtnActive]}
-              onPress={() => {
-                setMrzDocType(DocType.Passport);
-                setScanMode(DocType.Passport);
-              }}
+              onPress={() => { setMrzDocType(DocType.Passport); setScanMode(DocType.Passport); }}
             >
               <Text style={[styles.docTypeBtnText, selectedDocType === DocType.Passport && styles.docTypeBtnTextActive]}>Pasaport</Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={[styles.docTypeBtn, selectedDocType === DocType.ID && styles.docTypeBtnActive]}
-              onPress={() => {
-                setMrzDocType(DocType.ID);
-                setScanMode(DocType.ID);
-              }}
+              onPress={() => { setMrzDocType(DocType.ID); setScanMode(DocType.ID); }}
             >
               <Text style={[styles.docTypeBtnText, selectedDocType === DocType.ID && styles.docTypeBtnTextActive]}>TC Kimlik Kartı</Text>
               {selectedDocType === DocType.ID && (
@@ -1927,6 +1927,10 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0,0,0,0.25)',
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  mrzBandFrameKimlik: {
+    borderColor: 'rgba(6,182,212,0.85)',
+    borderWidth: 2.5,
   },
   mrzBandLabel: { color: 'rgba(255,255,255,0.9)', fontSize: 13, textAlign: 'center', paddingHorizontal: 16 },
   bannerFloating: { position: 'absolute', left: 12, right: 12, flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.75)', padding: 10, borderRadius: 8 },

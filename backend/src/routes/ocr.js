@@ -637,6 +637,7 @@ router.post('/document-base64', authenticateTesisOrSupabase, tenantMiddleware, e
   const clientId = req.headers['x-client-id'] || req.ip || 'unknown';
 
   try {
+    console.log(logPrefix, 'istek (kimlik/pasaport okuma)', { paperMode, base64Len: base64?.length ?? 0, clientId: clientId.slice(0, 24) });
     const lastRequest = documentBase64RateLimit.get(clientId);
     if (lastRequest && Date.now() - lastRequest < DOCUMENT_BASE64_TTL_MS) {
       console.log(logPrefix, 'Çok hızlı tekrar istek, engellendi', { clientId: clientId.slice(0, 20) });
@@ -680,11 +681,14 @@ router.post('/document-base64', authenticateTesisOrSupabase, tenantMiddleware, e
     }
     console.log(logPrefix, 'runMrzPipeline başlıyor', { paperMode });
     const mrzResult = await runMrzPipeline(filePath, { paperMode });
-    console.log(logPrefix, 'runMrzPipeline bitti', { ok: mrzResult.ok, hasMrzRaw: !!mrzResult.mrzRaw, score: mrzResult.score, attemptsUsed: mrzResult.attemptsUsed });
     let mrzRaw = mrzResult.mrzRaw || null;
     let mrzPayload = mrzResult.payload || null;
     if (!mrzPayload && mrzRaw) mrzPayload = parseMrzToPayload(mrzRaw);
     const mrzFailureReason = !mrzRaw ? buildMrzFailureReason(mrzResult, false) : null;
+    const lineCount = mrzRaw ? mrzRaw.trim().split(/\r?\n/).filter(Boolean).length;
+    const docTypeHint = mrzRaw ? (lineCount >= 3 ? 'TC_KIMLIK (TD1, 3 satır)' : 'PASAPORT (TD3, 2 satır)') : null;
+    console.log(logPrefix, 'runMrzPipeline bitti', { ok: mrzResult.ok, hasMrzRaw: !!mrzRaw, docType: docTypeHint, score: mrzResult.score, attemptsUsed: mrzResult.attemptsUsed });
+    if (!mrzRaw && mrzFailureReason) console.log(logPrefix, 'MRZ bulunamadı', { reason: mrzFailureReason.slice(0, 120) });
     let text = '';
     let front = {};
     try {

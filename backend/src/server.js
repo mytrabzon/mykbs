@@ -17,8 +17,9 @@ process.env.JWT_SECRET = process.env.JWT_SECRET || "mykbs-super-secret-jwt-key-2
 process.env.JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || "365d";
 process.env.DATABASE_URL = process.env.DATABASE_URL || "file:./dev.db";
 
-// Supabase pooler (PgBouncer/Supavisor): 08P01 önlemek için pgbouncer=true,
-// "MaxClientsInSessionMode: max clients reached" önlemek için connection_limit=1 (tek process bağlantı).
+// Supabase pooler (PgBouncer/Supavisor): 08P01 önlemek için pgbouncer=true.
+// connection_limit: Session mode sınırına takılmamak için 5–10 arası; tek bağlantı eşzamanlı istekte timeout verir.
+// connect_timeout / pool_timeout: Bağlantı ve havuz bekleme süreleri (çökmeyi önler).
 // Session mode: pooler.supabase.com:6543
 const dbUrl = process.env.DATABASE_URL;
 if (dbUrl && dbUrl.startsWith('postgres')) {
@@ -29,7 +30,16 @@ if (dbUrl && dbUrl.startsWith('postgres')) {
       u = u.includes('?') ? u + '&pgbouncer=true' : u + '?pgbouncer=true';
     }
     if (!/connection_limit=\d+/.test(u)) {
-      u = u.includes('?') ? u + '&connection_limit=1' : u + '?connection_limit=1';
+      const raw = process.env.DATABASE_POOL_SIZE;
+      const num = raw ? parseInt(String(raw), 10) : (process.env.NODE_ENV === 'production' ? 5 : 3);
+      const limit = Math.min(Math.max(Number.isNaN(num) ? 5 : num, 1), 10);
+      u = u.includes('?') ? u + '&connection_limit=' + limit : u + '?connection_limit=' + limit;
+    }
+    if (!/connect_timeout=\d+/.test(u)) {
+      u = u.includes('?') ? u + '&connect_timeout=15' : u + '?connect_timeout=15';
+    }
+    if (!/pool_timeout=\d+/.test(u)) {
+      u = u.includes('?') ? u + '&pool_timeout=20' : u + '&pool_timeout=20';
     }
     process.env.DATABASE_URL = u;
   }
@@ -186,7 +196,8 @@ function logDatabaseUrlStatus() {
 }
 logDatabaseUrlStatus();
 
-app.listen(PORT, HOST, () => {
+// Graceful shutdown: Railway/PM2 SIGTERM/SIGINT'te bağlantıları temiz kapat (çökme önleme)
+const server = app.listen(PORT, HOST, () => {
   console.log(`Server running on http://${HOST}:${PORT}`);
   console.log(`Local: http://localhost:${PORT}`);
   console.log(`Health: GET http://localhost:${PORT}/health  |  DB: GET http://localhost:${PORT}/health/db`);
@@ -200,6 +211,31 @@ app.listen(PORT, HOST, () => {
     console.warn('SUPABASE_* eksik: KBS worker başlatılmadı.');
   }
 });
+
+function shutdown(signal) {
+  console.log(`[shutdown] ${signal} alındı, kapatılıyor...`);
+  server.close(() => {
+    const { prisma } = require('./lib/prisma');
+    prisma
+      .$disconnect()
+      .then(() => {
+        console.log('[shutdown] Prisma bağlantısı kapatıldı.');
+        process.exit(0);
+      })
+      .catch((err) => {
+        console.error('[shutdown] Prisma disconnect hatası:', err);
+        process.exit(1);
+      });
+  });
+  // İstekler 30s içinde bitmezse zorla çık (Railway timeout)
+  setTimeout(() => {
+    console.error('[shutdown] Zaman aşımı, zorla çıkılıyor.');
+    process.exit(1);
+  }, 30000);
+}
+
+process.on('SIGTERM', () => shutdown('SIGTERM'));
+process.on('SIGINT', () => shutdown('SIGINT'));
 
 module.exports = app;
 

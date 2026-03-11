@@ -6,9 +6,12 @@
 const { PrismaClient } = require('@prisma/client');
 
 const globalForPrisma = globalThis;
+const isProduction = process.env.NODE_ENV === 'production';
 
 if (!globalForPrisma.prisma) {
-  globalForPrisma.prisma = new PrismaClient();
+  globalForPrisma.prisma = new PrismaClient({
+    log: isProduction ? [{ level: 'error', emit: 'stdout' }] : undefined,
+  });
 }
 
 const prisma = globalForPrisma.prisma;

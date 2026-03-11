@@ -85,7 +85,7 @@ Hâlâ bağlanamıyorsa: Supabase → **Settings → Database** → Connection s
 
 ### "MaxClientsInSessionMode: max clients reached" / pool bağlantı limiti
 
-Supabase **Session mode** pooler’da eşzamanlı bağlantı sayısı sınırlıdır. Prisma çok bağlantı açarsa bu hata log’da görünür. Backend, pooler URL’si kullanıyorsa otomatik olarak `connection_limit=1` ekler (tek bağlantı ile pool limiti aşılmaz). Railway’de `DATABASE_URL`’i pooler (port 6543 veya `pooler.supabase.com`) ile verirsen ek bir ayar gerekmez; yoksa URL’ye `?connection_limit=1` ekleyebilirsin.
+Supabase **Session mode** pooler’da eşzamanlı bağlantı sayısı sınırlıdır. Prisma çok bağlantı açarsa bu hata log’da görünür. Backend, pooler URL’si kullanıyorsa otomatik olarak `connection_limit (varsayılan 3; DATABASE_POOL_SIZE ile değiştirilebilir). "Timed out fetching a new connection" için URL'de connection_limit=1 kullanmayın` ekler (tek bağlantı ile pool limiti aşılmaz). Railway’de `DATABASE_URL`’i pooler (port 6543 veya `pooler.supabase.com`) ile verirsen ek bir ayar gerekmez; yoksa URL’ye `?connection_limit (varsayılan 3; DATABASE_POOL_SIZE ile değiştirilebilir). "Timed out fetching a new connection" için URL'de connection_limit=1 kullanmayın` ekleyebilirsin.
 
 ### "Backend Bağlantı Hatası" / "Sunucu adresi doğrulanamadı" / "Bilgi alınamadı"
 
