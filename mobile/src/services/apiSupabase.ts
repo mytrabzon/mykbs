@@ -1031,6 +1031,19 @@ export const api = {
         if (!r.ok) throw Object.assign(new Error((data as { message?: string })?.message || 'Talep gönderilemedi'), { response: { status: r.status, data } });
         return toResponse(data);
       }
+      // Manuel KBS bildirimi — Node backend POST /api/misafir/manuel-bildirim (Supabase'ta Edge Function yok)
+      if (pathname === '/misafir/manuel-bildirim' || pathname === 'misafir/manuel-bildirim') {
+        const backendUrl = getBackendUrl();
+        if (!backendUrl || !token) throw Object.assign(new Error('Giriş gerekli'), { response: { status: 401, data: {} } });
+        const r = await fetchWithLog(`${backendUrl}/api/misafir/manuel-bildirim`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+          body: JSON.stringify(payload || {}),
+        });
+        const data = await r.json().catch(() => ({}));
+        if (!r.ok) throw Object.assign(new Error((data as { message?: string })?.message || 'Manuel bildirim gönderilemedi'), { response: { status: r.status, data } });
+        return toResponse(data);
+      }
       logger.warn('[apiSupabase] Unmapped POST', path);
       return toResponse(await callFn(pathname.replace(/^\//, '').replace(/\//g, '_'), payload, token));
     } catch (e) {
