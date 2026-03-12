@@ -301,7 +301,7 @@ export function useIndependentNfcReader() {
     techRequestedRef.current = false;
   }, []);
 
-  const readNfcDirect = useCallback(async () => {
+  const readNfcDirect = useCallback(async (options = {}) => {
     const tech = getNfcTechForRequest();
     logger.info('[NFC] readNfcDirect çağrıldı', { hasNfcManager: !!NfcManager, tech: tech ?? 'yok' });
     if (!NfcManager || !tech) {
@@ -331,9 +331,11 @@ export function useIndependentNfcReader() {
       }
 
       // Önce tam okuyucu: kart yaklaştığı anda BAC + tüm DG'ler (foto, imza, adres vb.) tek seferde
+      const extraKeys = options?.extraKeys ?? [];
       const fullResult = await readAllDataWhenCardNear({
         includeImages: true,
         onProgress: (msg) => setProgress(msg),
+        extraKeys: extraKeys.length > 0 ? extraKeys : undefined,
       });
       if (fullResult.success && fullResult.data) {
         const data = fullResult.data;

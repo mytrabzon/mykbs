@@ -1,7 +1,7 @@
 /**
  * Hızlı NFC toplu okuma — okutulanlar backend'de kalıcı, liste tıklanabilir, foto + Oda Seç / Bildir.
  */
-import React, { useState, useRef, useCallback } from 'react';
+import React, { useState, useRef, useCallback, useEffect } from 'react';
 import {
   View,
   Text,
@@ -32,6 +32,7 @@ import { useIndependentNfcReader } from '../features/nfc/IndependentNfcReader';
 import { getApiBaseUrl } from '../config/api';
 import { api } from '../services/api';
 import { logger } from '../utils/logger';
+import NfcRoundAnimatedButton from '../components/nfc/NfcRoundAnimatedButton';
 
 let NfcPassportReader = null;
 try {
@@ -91,6 +92,10 @@ export default function QuickNfcScanScreen() {
   useFocusEffect(
     useCallback(() => {
       loadOkutulanlar({ silent: true });
+      return () => {
+        setOkutulanlar([]);
+        setDetail(null);
+      };
     }, [loadOkutulanlar])
   );
 
@@ -441,8 +446,7 @@ export default function QuickNfcScanScreen() {
           </View>
         )}
 
-        <TouchableOpacity
-          style={[styles.nfcBtnWrap, { borderColor: colors.primary + '50' }]}
+        <NfcRoundAnimatedButton
           onPress={() => {
             if (processing) return;
             NfcManager.unregisterTagEvent().catch(() => {});
@@ -456,16 +460,7 @@ export default function QuickNfcScanScreen() {
             });
           }}
           disabled={processing}
-          activeOpacity={0.85}
-        >
-          <View style={[styles.nfcBtnOuter, { borderColor: colors.primary + '40', backgroundColor: colors.primary + '12' }]}>
-            <View style={[styles.nfcBtnInner, { backgroundColor: colors.primary }]}>
-              <Ionicons name="nfc" size={36} color="#fff" />
-            </View>
-          </View>
-          <Text style={[styles.nfcBtnLabel, { color: colors.textPrimary }]}>NFC ile Okut</Text>
-          <Text style={[styles.nfcBtnHint, { color: colors.textSecondary }]}>Kartı arkaya yaklaştırıp dokunun</Text>
-        </TouchableOpacity>
+        />
 
         <View style={styles.listHead}>
           <Text style={[styles.listTitle, { color: colors.textPrimary }]}>Okutulan kişiler</Text>
@@ -635,37 +630,6 @@ const styles = StyleSheet.create({
   },
   statusDot: { width: 8, height: 8, borderRadius: 4 },
   statusText: { fontSize: 13, fontWeight: '600' },
-  nfcBtnWrap: {
-    alignItems: 'center',
-    marginTop: 20,
-    paddingVertical: 24,
-    paddingHorizontal: 20,
-    borderRadius: 24,
-    borderWidth: 2,
-  },
-  nfcBtnOuter: {
-    width: 88,
-    height: 88,
-    borderRadius: 44,
-    borderWidth: 2,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 14,
-  },
-  nfcBtnInner: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
-    alignItems: 'center',
-    justifyContent: 'center',
-    elevation: 3,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 4,
-  },
-  nfcBtnLabel: { fontSize: 18, fontWeight: '800', letterSpacing: 0.3 },
-  nfcBtnHint: { fontSize: 13, marginTop: 4, fontWeight: '500' },
   listHead: {
     flexDirection: 'row',
     alignItems: 'baseline',

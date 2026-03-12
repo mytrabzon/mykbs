@@ -1,28 +1,53 @@
 /**
  * Ayrı NFC okuma ekranı — MRZ kameradan bağımsız.
- * Ayarlardan NFC açıkken ana ekrandaki "NFC Oku" ile bu ekrana gelinir.
+ * Çip okumak için BAC anahtarı gerekir: önce MRZ okuyabilir veya belge no / doğum / son kullanma girebilir.
  */
-import React, { useCallback, useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, useWindowDimensions } from 'react-native';
+import React, { useCallback, useEffect, useState } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, TextInput, ScrollView } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import Toast from 'react-native-toast-message';
 import { useTheme } from '../../context/ThemeContext';
 import { useIndependentNfcReader } from './IndependentNfcReader';
+import { setLastMrzForBac, getLastMrzForBac } from '../../utils/lastMrzForBac';
 import { logger } from '../../utils/logger';
+
+function toYYYYMMDD(val) {
+  if (!val || typeof val !== 'string') return '';
+  const s = val.trim().replace(/\s/g, '');
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+  if (/^\d{2}\.\d{2}\.\d{4}$/.test(s)) {
+    const [d, m, y] = s.split('.');
+    return `${y}-${m}-${d}`;
+  }
+  if (/^\d{2}\/\d{2}\/\d{4}$/.test(s)) {
+    const [d, m, y] = s.split('/');
+    return `${y}-${m}-${d}`;
+  }
+  if (/^\d{8}$/.test(s)) return `${s.slice(4, 8)}-${s.slice(2, 4)}-${s.slice(0, 2)}`;
+  return '';
+}
 
 export default function NfcReadScreen() {
   const navigation = useNavigation();
   const insets = useSafeAreaInsets();
   const { colors } = useTheme();
-  const { width } = useWindowDimensions();
   const {
     readNfcDirect,
     isReading,
     progress,
     isSupported,
   } = useIndependentNfcReader();
+
+  const [manualDocNo, setManualDocNo] = useState('');
+  const [manualBirth, setManualBirth] = useState('');
+  const [manualExpiry, setManualExpiry] = useState('');
+  const [hasStoredKey, setHasStoredKey] = useState(false);
+
+  useEffect(() => {
+    getLastMrzForBac().then((k) => setHasStoredKey(!!(k?.documentNo && k?.birthDate && k?.expiryDate)));
+  }, []);
 
   const goBack = useCallback(() => navigation.goBack(), [navigation]);
   const goToMrz = useCallback(() => {
@@ -41,16 +66,34 @@ export default function NfcReadScreen() {
       Toast.show({ type: 'info', text1: 'NFC desteklenmiyor', text2: 'MRZ kamerayı kullanın.' });
       return;
     }
-    logger.info('[NFC] Okuma başlatıldı (NFC ile oku butonu)');
+    let extraKeys = [];
+    const docNo = (manualDocNo || '').trim().replace(/\s/g, '');
+    const birth = toYYYYMMDD(manualBirth);
+    const expiry = toYYYYMMDD(manualExpiry);
+    if (docNo && birth && expiry) {
+      const key = { documentNo: docNo, birthDate: birth, expiryDate: expiry };
+      extraKeys = [key];
+      try {
+        await setLastMrzForBac({ passportNumber: docNo, documentNumber: docNo, birthDate: birth, expiryDate: expiry });
+        setHasStoredKey(true);
+      } catch (_) {}
+    } else if (!hasStoredKey && !docNo && !manualBirth && !manualExpiry) {
+      Toast.show({
+        type: 'info',
+        text1: 'Çip için belge bilgisi gerekli',
+        text2: 'Önce MRZ okuyun veya aşağıya kimlik no, doğum ve son kullanma girin.',
+      });
+      return;
+    }
+
+    logger.info('[NFC] Okuma başlatıldı', { extraKeysCount: extraKeys.length });
     try {
-      const result = await readNfcDirect();
+      const result = await readNfcDirect(extraKeys.length > 0 ? { extraKeys } : {});
       logger.info('[NFC] readNfcDirect sonucu', { success: result?.success, hasData: !!result?.data, error: result?.error });
       if (result?.success && result?.data) {
         const d = result.data;
         logger.info('[NFC] Okuma başarılı', { ad: d.ad, soyad: d.soyad, kimlikNo: d.kimlikNo, pasaportNo: d.pasaportNo, hasPhoto: !!d.chipPhotoBase64 });
         Toast.show({ type: 'success', text1: 'NFC okundu', text2: `${d.ad || ''} ${d.soyad || ''}`.trim() || 'Kimlik bilgisi alındı.' });
-        // Tam sonuç ekranına geç: foto + bilgiler + Oda Seç / Bildir / Kaydet
-        logger.info('[NFC] NfcResult ekranına yönlendiriliyor');
         navigation.replace('NfcResult', {
           data: {
             ad: d.ad || '',
@@ -75,7 +118,7 @@ export default function NfcReadScreen() {
       logger.error('[NFC] Okuma hatası (exception)', e?.message || e);
       Toast.show({ type: 'error', text1: 'Hata', text2: 'NFC okunamadı. Tekrar deneyin.' });
     }
-  }, [isSupported, readNfcDirect, navigation]);
+  }, [isSupported, readNfcDirect, navigation, manualDocNo, manualBirth, manualExpiry, hasStoredKey]);
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
@@ -87,13 +130,54 @@ export default function NfcReadScreen() {
         <View style={styles.backBtn} />
       </View>
 
-      <View style={styles.content}>
+      <ScrollView
+        style={styles.scroll}
+        contentContainerStyle={styles.content}
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
+      >
         <View style={[styles.iconWrap, { backgroundColor: colors.surface }]}>
           <Ionicons name="hardware-chip-outline" size={64} color={colors.primary} />
         </View>
         <Text style={[styles.instruction, { color: colors.textSecondary }]}>
-          Kimlik veya pasaport kartını telefonun arkasına yaklaştırın, sabit tutun ve butona basın. NFC açık olmalı. Çip için önce MRZ sekmesinden belgeyi okutup sonra NFC ile okuyabilirsiniz.
+          Kimlik/pasaport çipini okumak için önce MRZ okuyun veya aşağıya belge bilgilerini girin. Sonra kartı telefonun arkasına yaslayıp «NFC ile oku»ya basın.
         </Text>
+
+        <View style={[styles.formBox, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+          <Text style={[styles.formTitle, { color: colors.textPrimary }]}>Belge bilgisi (çip erişimi)</Text>
+          <Text style={[styles.formHint, { color: colors.textSecondary }]}>Kimlik no (11 hane) veya pasaport no</Text>
+          <TextInput
+            style={[styles.input, { backgroundColor: colors.background, borderColor: colors.border, color: colors.text }]}
+            placeholder="Belge no"
+            placeholderTextColor={colors.textSecondary}
+            value={manualDocNo}
+            onChangeText={setManualDocNo}
+            keyboardType="number-pad"
+            maxLength={20}
+            editable={!isReading}
+          />
+          <Text style={[styles.formHint, { color: colors.textSecondary }]}>Doğum tarihi (GG.AA.YYYY veya YYYY-MM-DD)</Text>
+          <TextInput
+            style={[styles.input, { backgroundColor: colors.background, borderColor: colors.border, color: colors.text }]}
+            placeholder="Örn. 15.05.1990"
+            placeholderTextColor={colors.textSecondary}
+            value={manualBirth}
+            onChangeText={setManualBirth}
+            keyboardType="numbers-and-punctuation"
+            editable={!isReading}
+          />
+          <Text style={[styles.formHint, { color: colors.textSecondary }]}>Son kullanma tarihi</Text>
+          <TextInput
+            style={[styles.input, { backgroundColor: colors.background, borderColor: colors.border, color: colors.text }]}
+            placeholder="Örn. 01.01.2030"
+            placeholderTextColor={colors.textSecondary}
+            value={manualExpiry}
+            onChangeText={setManualExpiry}
+            keyboardType="numbers-and-punctuation"
+            editable={!isReading}
+          />
+        </View>
+
         {progress ? (
           <View style={styles.progressWrap}>
             <ActivityIndicator size="small" color={colors.primary} />
@@ -121,7 +205,7 @@ export default function NfcReadScreen() {
           <Ionicons name="camera-outline" size={20} color={colors.primary} />
           <Text style={[styles.secondaryBtnText, { color: colors.text }]}>MRZ / kamera ile oku</Text>
         </TouchableOpacity>
-      </View>
+      </ScrollView>
     </View>
   );
 }
@@ -148,11 +232,27 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: '600',
   },
+  scroll: { flex: 1 },
   content: {
-    flex: 1,
     paddingHorizontal: 24,
+    paddingBottom: 40,
     alignItems: 'center',
-    justifyContent: 'center',
+  },
+  formBox: {
+    width: '100%',
+    borderRadius: 12,
+    borderWidth: 1,
+    padding: 16,
+    marginBottom: 20,
+  },
+  formTitle: { fontSize: 15, fontWeight: '600', marginBottom: 8 },
+  formHint: { fontSize: 12, marginBottom: 4, marginTop: 8 },
+  input: {
+    borderWidth: 1,
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: 16,
   },
   iconWrap: {
     width: 120,
