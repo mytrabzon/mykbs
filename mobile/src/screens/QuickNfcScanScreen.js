@@ -127,8 +127,10 @@ export default function QuickNfcScanScreen() {
   const saveToBackend = useCallback(async (d) => {
     const docNo = (d.kimlikNo || d.pasaportNo || '').trim();
     const isTc = /^\d{11}$/.test(docNo);
+    const isTurkish = String(d.uyruk || '').toUpperCase().includes('TÜRK');
+    const isKimlik = d.type === 'id_card' || isTc || (isTurkish && d.type !== 'passport');
     const body = {
-      belgeTuru: (d.type === 'id_card' || isTc) ? 'kimlik' : 'pasaport',
+      belgeTuru: isKimlik ? 'kimlik' : 'pasaport',
       ad: (d.ad || '').trim() || '—',
       soyad: (d.soyad || '').trim() || '—',
       kimlikNo: isTc ? docNo : null,
@@ -231,14 +233,19 @@ export default function QuickNfcScanScreen() {
     if (processingRef.current || !mountedRef.current) return;
     processingRef.current = true;
     setProcessing(true);
+    NfcManager.setEventListener(NfcEvents.DiscoverTag, null);
     NfcManager.unregisterTagEvent().catch(() => {});
-    // Kısa gecikme: unregister sonrası cihazın tag'i tekrar sunması için (bazı cihazlarda gerekli)
     const reRegister = () => {
       if (!mountedRef.current) return;
+      NfcManager.setEventListener(NfcEvents.DiscoverTag, handleTagDiscovered);
       NfcManager.registerTagEvent({
         invalidateAfterFirstRead: false,
         alertMessage: 'Bir sonraki kartı yaklaştırın',
-      }).then(() => {}).catch(() => setListening(false));
+      }).then(() => {
+        if (mountedRef.current) setListening(true);
+      }).catch(() => {
+        if (mountedRef.current) setListening(false);
+      });
     };
     setTimeout(() => {
       const fn = readOneRef.current;
@@ -246,12 +253,12 @@ export default function QuickNfcScanScreen() {
         fn().finally(() => {
           processingRef.current = false;
           if (mountedRef.current) setProcessing(false);
-          reRegister();
+          setTimeout(reRegister, 200);
         });
       } else {
         processingRef.current = false;
         if (mountedRef.current) setProcessing(false);
-        reRegister();
+        setTimeout(reRegister, 200);
       }
     }, 150);
   }, []);
@@ -449,13 +456,15 @@ export default function QuickNfcScanScreen() {
         <NfcRoundAnimatedButton
           onPress={() => {
             if (processing) return;
+            NfcManager.setEventListener(NfcEvents.DiscoverTag, null);
             NfcManager.unregisterTagEvent().catch(() => {});
             readOne().finally(() => {
-              if (mountedRef.current && listening) {
+              if (mountedRef.current && listening && !isIos) {
+                NfcManager.setEventListener(NfcEvents.DiscoverTag, handleTagDiscovered);
                 NfcManager.registerTagEvent({
                   invalidateAfterFirstRead: false,
                   alertMessage: 'Kimlik veya pasaport kartını yaklaştırın',
-                }).then(() => {}).catch(() => setListening(false));
+                }).then(() => { if (mountedRef.current) setListening(true); }).catch(() => setListening(false));
               }
             });
           }}

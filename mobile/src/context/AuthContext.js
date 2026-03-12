@@ -413,11 +413,14 @@ export const AuthProvider = ({ children }) => {
     };
   }, []);
 
-  // Uygulama ön plana geldiğinde sessizce token yenile (arka plandan dönünce 401 önlenir)
+  // Uygulama ön plana geldiğinde sessizce token yenile (arka plandan dönünce 401 önlenir).
+  // Sadece zaten Supabase oturumu varken çalıştır; backend-only (KBS) girişte Supabase token ile üzerine yazmayalım (hesap bilgisi kaybı önlenir).
   useEffect(() => {
-    if (!supabase) return;
+    if (!supabase?.auth) return;
     const refreshTokenSilently = async () => {
       try {
+        const { data: { session: currentSession } } = await supabase.auth.getSession();
+        if (!currentSession?.access_token || !mounted.current) return;
         const { data: { session: refreshed }, error } = await refreshSessionWithRetry();
         if (!mounted.current || error || !refreshed?.access_token) return;
         await AsyncStorage.setItem(AUTH_STORAGE_KEYS.TOKEN, refreshed.access_token);

@@ -112,10 +112,12 @@ export default function DestekScreen({ navigation }) {
     setMyTicketsRefreshing(false);
   }, [isAdmin]);
 
+  // Sadece isAdmin veya token değişince bir kez yükle; callback referansları yüzünden sürekli yenilenmeyi önler
   useEffect(() => {
     if (isAdmin) fetchTickets();
     else fetchMyTickets();
-  }, [isAdmin, fetchTickets, fetchMyTickets]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isAdmin, token]);
 
   const handleBack = () => {
     if (navigation.canGoBack()) navigation.goBack();
@@ -159,7 +161,13 @@ export default function DestekScreen({ navigation }) {
     <View style={[styles.container, { backgroundColor: colors.background, paddingTop: insets.top }]}>
       {/* Header */}
       <View style={[styles.header, { borderBottomColor: borderColor }]}>
-        <TouchableOpacity onPress={handleBack} style={[styles.backBtn, styles.backBtnLeft]} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
+        <TouchableOpacity
+          onPress={handleBack}
+          style={styles.backBtn}
+          hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+          accessibilityLabel="Geri"
+          accessibilityRole="button"
+        >
           <Ionicons name="arrow-back" size={24} color={colors.textPrimary} />
         </TouchableOpacity>
         <Text style={[styles.headerTitle, { color: colors.textPrimary }]}>Destek</Text>
@@ -286,8 +294,7 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
   },
   backBtn: { width: 44, height: 44, justifyContent: 'center', alignItems: 'center' },
-  backBtnLeft: { marginLeft: -44 },
-  headerTitle: { fontSize: 18, fontWeight: '600' },
+  headerTitle: { fontSize: 18, fontWeight: '600', flex: 1, textAlign: 'center' },
   keyboard: { flex: 1 },
   scroll: { flex: 1 },
   scrollContent: { padding: 20, paddingTop: 24 },
