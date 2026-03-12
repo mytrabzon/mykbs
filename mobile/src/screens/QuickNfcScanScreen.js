@@ -116,7 +116,7 @@ export default function QuickNfcScanScreen() {
       ikametAdresi: d.ikametAdresi || null,
       odaNo: null,
       createdAt: resData?.createdAt || new Date().toISOString(),
-      portraitPhotoUrl: null,
+      portraitPhotoUrl: d.chipPhotoBase64 ? `data:image/jpeg;base64,${d.chipPhotoBase64}` : null,
       photoUrl: null,
     };
     LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
@@ -356,6 +356,7 @@ export default function QuickNfcScanScreen() {
   const photoUri = useCallback((item) => {
     const url = item?.portraitPhotoUrl || item?.photoUrl;
     if (!url) return null;
+    if (url.startsWith('data:')) return url;
     if (url.startsWith('http')) return url;
     const base = getApiBaseUrl();
     return base ? `${base.replace(/\/$/, '')}${url}` : url;

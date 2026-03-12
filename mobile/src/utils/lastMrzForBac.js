@@ -53,10 +53,14 @@ export async function getLastMrzForBac() {
 /** Native NfcPassportReader yyyy-MM-dd bekler. Varsayılan anahtarlar bu formatta. */
 const DEFAULT_BIRTH_YYYYMMDD = '1990-01-01';
 const DEFAULT_EXPIRY_YYYYMMDD = '2030-01-01';
+const BIRTH_1985 = '1985-05-15';
+const BIRTH_2000 = '2000-12-31';
+const EXPIRY_2025 = '2025-06-01';
+const EXPIRY_2028 = '2028-12-31';
 
-/** Türk kimlik kartı için denenecek varsayılan BAC anahtarları (MRZ olmadan, test/örnek kartlar). Gerçek kartlarda MRZ gerekir. */
+/** Türk kimlik kartı için denenecek varsayılan BAC anahtarları (MRZ olmadan). Çip açılamazsa MRZ ile okutup tekrar deneyin. */
 export function getDefaultBacKeysForTurkishId() {
-  return [
+  const keys = [
     { documentNo: '000000000', birthDate: DEFAULT_BIRTH_YYYYMMDD, expiryDate: DEFAULT_EXPIRY_YYYYMMDD },
     { documentNo: '111111111', birthDate: DEFAULT_BIRTH_YYYYMMDD, expiryDate: DEFAULT_EXPIRY_YYYYMMDD },
     { documentNo: '123456789', birthDate: DEFAULT_BIRTH_YYYYMMDD, expiryDate: DEFAULT_EXPIRY_YYYYMMDD },
@@ -64,5 +68,24 @@ export function getDefaultBacKeysForTurkishId() {
     { documentNo: '00000000000', birthDate: DEFAULT_BIRTH_YYYYMMDD, expiryDate: DEFAULT_EXPIRY_YYYYMMDD },
     { documentNo: '11111111111', birthDate: DEFAULT_BIRTH_YYYYMMDD, expiryDate: DEFAULT_EXPIRY_YYYYMMDD },
     { documentNo: '12345678901', birthDate: DEFAULT_BIRTH_YYYYMMDD, expiryDate: DEFAULT_EXPIRY_YYYYMMDD },
+    { documentNo: '000000000', birthDate: BIRTH_1985, expiryDate: DEFAULT_EXPIRY_YYYYMMDD },
+    { documentNo: '000000000', birthDate: BIRTH_2000, expiryDate: EXPIRY_2025 },
+    { documentNo: '12345678901', birthDate: BIRTH_1985, expiryDate: EXPIRY_2025 },
+    { documentNo: '98765432101', birthDate: DEFAULT_BIRTH_YYYYMMDD, expiryDate: DEFAULT_EXPIRY_YYYYMMDD },
+    { documentNo: '55555555555', birthDate: BIRTH_2000, expiryDate: EXPIRY_2028 },
+    { documentNo: 'AAAAAAAAAAA', birthDate: DEFAULT_BIRTH_YYYYMMDD, expiryDate: DEFAULT_EXPIRY_YYYYMMDD },
+    { documentNo: 'IDTURK12345', birthDate: DEFAULT_BIRTH_YYYYMMDD, expiryDate: DEFAULT_EXPIRY_YYYYMMDD },
+    { documentNo: '123456789012', birthDate: DEFAULT_BIRTH_YYYYMMDD, expiryDate: DEFAULT_EXPIRY_YYYYMMDD },
+  ];
+  return keys;
+}
+
+/** Pasaport için denenecek varsayılan BAC anahtarları (MRZ olmadan; birçok pasaportta MRZ gerekir). */
+export function getDefaultBacKeysForPassport() {
+  return [
+    { documentNo: '000000000', birthDate: DEFAULT_BIRTH_YYYYMMDD, expiryDate: DEFAULT_EXPIRY_YYYYMMDD },
+    { documentNo: '111111111', birthDate: DEFAULT_BIRTH_YYYYMMDD, expiryDate: DEFAULT_EXPIRY_YYYYMMDD },
+    { documentNo: 'A12345678', birthDate: DEFAULT_BIRTH_YYYYMMDD, expiryDate: DEFAULT_EXPIRY_YYYYMMDD },
+    { documentNo: '123456789', birthDate: BIRTH_1985, expiryDate: EXPIRY_2025 },
   ];
 }

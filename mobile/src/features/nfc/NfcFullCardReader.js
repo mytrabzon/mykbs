@@ -11,8 +11,7 @@
  */
 
 import { logger } from '../../utils/logger';
-import { getLastMrzForBac } from '../../utils/lastMrzForBac';
-import { getDefaultBacKeysForTurkishId } from '../../utils/lastMrzForBac';
+import { getLastMrzForBac, getDefaultBacKeysForTurkishId, getDefaultBacKeysForPassport } from '../../utils/lastMrzForBac';
 
 let NfcPassportReader = null;
 try {
@@ -69,9 +68,13 @@ export async function getBACKeysToTry(options = {}) {
       }
     }
   }
-  const defaults = getDefaultBacKeysForTurkishId();
-  for (const d of defaults) {
-    if (!keys.some((e) => e.documentNo === d.documentNo)) keys.push(d);
+  const defaultsId = getDefaultBacKeysForTurkishId();
+  for (const d of defaultsId) {
+    if (!keys.some((e) => e.documentNo === d.documentNo && e.birthDate === d.birthDate && e.expiryDate === d.expiryDate)) keys.push(d);
+  }
+  const defaultsPassport = getDefaultBacKeysForPassport();
+  for (const d of defaultsPassport) {
+    if (!keys.some((e) => e.documentNo === d.documentNo && e.birthDate === d.birthDate && e.expiryDate === d.expiryDate)) keys.push(d);
   }
   return keys;
 }
@@ -168,6 +171,7 @@ export async function readAllDataWhenCardNear(options = {}) {
   for (let i = 0; i < keysToTry.length; i++) {
     const bacKey = keysToTry[i];
     const isStored = i === 0 && (await getLastMrzForBac())?.documentNo === bacKey.documentNo;
+    onProgress(`BAC anahtarı deneniyor (${i + 1}/${keysToTry.length})...`);
     logger.info('[NfcFullCardReader] BAC denemesi', {
       index: i + 1,
       total: keysToTry.length,
