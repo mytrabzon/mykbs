@@ -2,6 +2,7 @@
   "cli": { "version": ">= 5.0.0", "appVersionSource": "local" },
   "build": {
     "development": {
+      "node": "20.19.4",
       "developmentClient": true,
       "distribution": "internal",
       "env": {
@@ -14,6 +15,7 @@
       "ios": { "buildConfiguration": "Debug" }
     },
     "preview": {
+      "node": "20.19.4",
       "distribution": "internal",
       "env": {
         "EXPO_PUBLIC_SUPABASE_URL": "https://iuxnpxszfvyrdifchwvr.supabase.co",
@@ -23,6 +25,7 @@
       "android": { "buildType": "apk" }
     },
     "production": {
+      "node": "20.19.4",
       "env": {
         "EXPO_PUBLIC_SUPABASE_URL": "https://iuxnpxszfvyrdifchwvr.supabase.co",
         "EXPO_PUBLIC_SUPABASE_ANON_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Iml1eG5weHN6ZnZ5cmRpZmNod3ZyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njg0MTg4ODMsImV4cCI6MjA4Mzk5NDg4M30.0Ye4jGaauWA12lvUqhLcaDS7qqod9ijC9_wow8TJY7k",
@@ -34,8 +37,8 @@
   "submit": {
     "production": {
       "ios": {
-        "appleId": "YOUR_APPLE_ID_EMAIL",
-        "ascAppId": "APP_STORE_CONNECT_APP_ID"
+        "appleId": "developerilksepet@gmail.com",
+        "ascAppId": "6759846278"
       },
       "android": {
         "serviceAccountKeyPath": "./play-service-account.json"

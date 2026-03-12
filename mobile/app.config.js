@@ -27,7 +27,7 @@ export default {
     slug: "mykbs",
     owner: "luvolive",
     scheme: "kbsprime",
-    version: "1.0.4",
+    version: "1.0.6",
     orientation: "default",
     icon: "./assets/icon.png",
     userInterfaceStyle: "light",
@@ -41,14 +41,13 @@ export default {
     ],
     ios: {
       supportsTablet: false,
-      bundleIdentifier: "com.litxtech.mykbs",
+      bundleIdentifier: "com.litxtech.kbsprime",
       infoPlist: {
         UIDeviceFamily: [1],
         ITSAppUsesNonExemptEncryption: false,
         NSCameraUsageDescription: "Kimlik ve pasaport bilgilerinin doğrulanması amacıyla belge görüntüsünün taranabilmesi için kamera erişimi gereklidir. Alınan görüntüler yalnızca yasal bildirim süreci kapsamında işlenir.",
         NSPhotoLibraryUsageDescription: "Kimlik veya pasaport görsellerinin sistem üzerinden yüklenebilmesi için fotoğraf arşivine erişim gereklidir. Yüklenen veriler yalnızca yasal bildirim ve kayıt işlemleri için kullanılır.",
         NSLocationWhenInUseUsageDescription: "Gerçekleştirilen bildirimin ilgili resmi makamlara doğru konum bilgisiyle iletilebilmesi amacıyla uygulama kullanım sırasında konum erişimi talep eder.",
-        NSUserTrackingUsageDescription: "Uygulama kullanıcı takibi yapmaz.",
         NFCReaderUsageDescription: "Kimlik ve pasaport çipi okuma amacıyla NFC erişimi gereklidir."
       }
     },
@@ -59,8 +58,8 @@ export default {
       },
       // FCM (push) için: mobile/google-services.json ekleyin; detay: mobile/docs/PUSH_ANDROID_FCM.md
       ...(fs.existsSync(path.join(__dirname, "google-services.json")) && { googleServicesFile: "./google-services.json" }),
-      package: "com.litxtech.mykbs",
-      versionCode: 3,
+      package: "com.litxtech.kbsprime",
+      versionCode: 6,
       permissions: [
         "android.permission.NFC",
         "android.permission.CAMERA",
@@ -98,6 +97,8 @@ export default {
         "react-native-nfc-manager",
         {
           nfcPermission: "Kimlik okumak için NFC izni gerekli",
+          // SDK 26 + min OS 15.1 ile NDEF entitlement reddediliyor (90778). Sadece pasaport/kimlik çipi (TAG/ISO7816) kullanıyoruz.
+          includeNdefEntitlement: false,
           // iOS: Pasaport/kimlik çipi (ISO 7816) okumak için AID listesi gerekli; yoksa çip okuma açılmaz.
           selectIdentifiers: [
             "A0000002471001", // e-Pasaport (ICAO)

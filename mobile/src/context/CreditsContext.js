@@ -1,7 +1,10 @@
-import React, { createContext, useContext, useState, useMemo, useEffect } from 'react';
+import React, { createContext, useContext, useState, useMemo, useEffect, useRef } from 'react';
 import { useAuth } from './AuthContext';
 
 const CreditsContext = createContext({});
+
+/** Uygulama açılışında tesis önce cache'den gelir; /auth/me gelene kadar kalan=0 görünüp yanlışlıkla paywall açılabiliyordu. Bu süre kadar bekleyip tekrar kontrol ediyoruz. */
+const PAYWALL_AUTO_SHOW_DELAY_MS = 1800;
 
 function shouldShowPaywall(tesis) {
   if (!tesis || tesis.kota == null) return { show: false };
@@ -28,15 +31,32 @@ export function CreditsProvider({ children }) {
   const [showPaywall, setShowPaywall] = useState(false);
   const [paywallReason, setPaywallReason] = useState('no_credits');
   const [dismissedWelcomeTrial, setDismissedWelcomeTrial] = useState(false);
+  const paywallDelayRef = useRef(null);
 
   useEffect(() => {
     const { show, reason } = shouldShowPaywall(tesis);
+    if (paywallDelayRef.current) {
+      clearTimeout(paywallDelayRef.current);
+      paywallDelayRef.current = null;
+    }
     if (show) {
-      setShowPaywall(true);
-      setPaywallReason(reason ?? 'no_credits');
+      paywallDelayRef.current = setTimeout(() => {
+        paywallDelayRef.current = null;
+        const recheck = shouldShowPaywall(tesis);
+        if (recheck.show) {
+          setShowPaywall(true);
+          setPaywallReason(recheck.reason ?? 'no_credits');
+        }
+      }, PAYWALL_AUTO_SHOW_DELAY_MS);
     } else {
       setShowPaywall(false);
     }
+    return () => {
+      if (paywallDelayRef.current) {
+        clearTimeout(paywallDelayRef.current);
+        paywallDelayRef.current = null;
+      }
+    };
   }, [tesis?.id, tesis?.kota, tesis?.kullanilanKota, tesis?.paket, tesis?.trialEndsAt]);
 
   const triggerPaywall = (reason = 'no_credits') => {

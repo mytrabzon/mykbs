@@ -2,6 +2,9 @@
   "name": "mykbs-mobile",
   "version": "1.0.0",
   "main": "index.js",
+  "engines": {
+    "node": ">=20.19.4"
+  },
   "scripts": {
     "postinstall": "node scripts/ensure-patch-package-state.js && npx patch-package",
     "start": "expo start",
@@ -15,7 +18,8 @@
     "build:android:development": "eas build --platform android --profile development",
     "build:android:production": "eas build --platform android --profile production",
     "build:ios:development": "eas build --platform ios --profile development",
-    "build:ios:production": "eas build --platform ios --profile production"
+    "build:ios:production": "eas build --platform ios --profile production",
+    "submit:ios:production": "node scripts/ios-submit-with-env.js"
   },
   "dependencies": {
     "@corupta/react-native-mrz-reader": "^0.1.6",

@@ -7,9 +7,9 @@
 /** Uygulama satın alınabilir paketleri: sadece starter, pro, business. */
 export const IAP_PRODUCT_IDS = {
   apple: {
-    starter: 'com.litxtech.mykbs.paket.starter',
-    pro: 'com.litxtech.mykbs.paket.pro',
-    business: 'com.litxtech.mykbs.paket.business',
+    starter: 'com.litxtech.kbsprime.paket.starter.credits',
+    pro: 'com.litxtech.kbsprime.paket.pro.credits',
+    business: 'com.litxtech.kbsprime.paket.business.credits',
   },
   google: {
     starter: 'mykbs_paket_starter',

@@ -5,6 +5,7 @@
   },
   "build": {
     "development": {
+      "node": "20.19.4",
       "developmentClient": true,
       "distribution": "internal",
       "env": {
@@ -12,9 +13,11 @@
       }
     },
     "preview": {
+      "node": "20.19.4",
       "distribution": "internal"
     },
     "production": {
+      "node": "20.19.4",
       "autoIncrement": true
     }
   },

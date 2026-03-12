@@ -1002,8 +1002,9 @@ export default function MrzScanScreen({ navigation }) {
             return;
           }
         }
-        logger.info('[MRZ okuma] galeri → document-base64', { base64Len: base64?.length ?? 0 });
-        const res = await api.post('/ocr/document-base64', { imageBase64: base64, paperMode: true });
+        const docTypeHint = selectedDocTypeRef.current === DocType.ID ? 'id' : undefined;
+        logger.info('[MRZ okuma] galeri → document-base64', { base64Len: base64?.length ?? 0, docTypeHint });
+        const res = await api.post('/ocr/document-base64', { imageBase64: base64, paperMode: true, docTypeHint });
         const data = res?.data;
         if (!mounted.current) return;
         logger.info('[MRZ okuma] galeri cevabı', {
@@ -1776,8 +1777,8 @@ export default function MrzScanScreen({ navigation }) {
           </View>
           <View style={styles.overlayBackBtn} />
         </View>
-        <View style={[styles.overlayBottom, styles.overlayZIndex, { paddingBottom: insets.bottom + 20 }]} pointerEvents="box-none">
-          <TouchableOpacity style={[styles.overlayBottomBtn]} onPress={handlePickImage} disabled={ocrLoading} activeOpacity={0.8}>
+        <View style={[styles.overlayBottom, styles.overlayBottomZIndex, { paddingBottom: insets.bottom + 20 }]} pointerEvents="box-none">
+          <TouchableOpacity style={[styles.overlayBottomBtn]} onPress={handlePickImage} disabled={ocrLoading} activeOpacity={0.8} hitSlop={{ top: 16, bottom: 16, left: 16, right: 16 }}>
             <Ionicons name="images-outline" size={28} color="#fff" />
           </TouchableOpacity>
           <View style={styles.overlayBottomBtn} />
@@ -1864,8 +1865,8 @@ export default function MrzScanScreen({ navigation }) {
         </View>
         <View style={styles.overlayBackBtn} />
       </View>
-      <View style={[styles.overlayBottom, styles.overlayZIndex, { paddingBottom: insets.bottom + 20 }]} pointerEvents="box-none">
-        <TouchableOpacity style={[styles.overlayBottomBtn]} onPress={handlePickImage} disabled={ocrLoading} activeOpacity={0.8}>
+      <View style={[styles.overlayBottom, styles.overlayBottomZIndex, { paddingBottom: insets.bottom + 20 }]} pointerEvents="box-none">
+        <TouchableOpacity style={[styles.overlayBottomBtn]} onPress={handlePickImage} disabled={ocrLoading} activeOpacity={0.8} hitSlop={{ top: 16, bottom: 16, left: 16, right: 16 }}>
           <Ionicons name="images-outline" size={28} color="#fff" />
         </TouchableOpacity>
         <View style={styles.overlayBottomBtn} />
@@ -1996,6 +1997,7 @@ const styles = StyleSheet.create({
   cameraPlaceholder: { backgroundColor: '#000' },
   cameraAreaWrap: { flex: 1, minHeight: 280 },
   overlayZIndex: { zIndex: 20, elevation: 20 },
+  overlayBottomZIndex: { zIndex: 25, elevation: 25 },
   overlayTop: { position: 'absolute', top: 0, left: 0, right: 0, zIndex: 10, elevation: 10, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 12 },
   overlayBackBtn: { width: 44, height: 44, borderRadius: 22, backgroundColor: 'rgba(0,0,0,0.5)', alignItems: 'center', justifyContent: 'center' },
   overlayIconBtn: { width: 44, height: 44, borderRadius: 22, backgroundColor: 'rgba(0,0,0,0.35)', alignItems: 'center', justifyContent: 'center' },

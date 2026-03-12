@@ -158,7 +158,7 @@ router.post('/iap-verify', authenticateTesisOrSupabase, async (req, res) => {
       }
       idempotencyKey = verifyResult.transactionId;
     } else {
-      const pkgName = packageName && typeof packageName === 'string' ? packageName.trim() : 'com.litxtech.mykbs';
+      const pkgName = packageName && typeof packageName === 'string' ? packageName.trim() : 'com.litxtech.kbsprime';
       if (!bodyProductId || !purchaseToken) {
         return res.status(400).json({ message: 'Android için productId ve purchaseToken gerekli' });
       }

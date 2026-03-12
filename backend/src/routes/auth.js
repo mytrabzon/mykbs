@@ -355,13 +355,15 @@ router.post('/kayit', async (req, res) => {
 
     console.log('Yeni kayıt başarılı:', { tesisId: tesis.id, kullaniciId: kullanici.id });
 
-    // Supabase kullanılıyorsa: access_token ile user_profiles + branch_id oluştur (şube atanması)
+    // Supabase kullanılıyorsa: access_token ile user_profiles + branch_id oluştur ve şifreyi Supabase Auth'a yaz (e-posta+şifre ile giriş çalışsın)
     const accessToken = req.body.access_token;
     if (accessToken && typeof accessToken === 'string' && supabaseAdmin) {
       try {
         const { data: { user: supabaseUser }, error } = await supabaseAdmin.auth.getUser(accessToken);
         if (!error && supabaseUser?.id) {
           await ensureSupabaseBranchAndProfile(supabaseUser.id, kullanici, tesis);
+          const { error: updateErr } = await supabaseAdmin.auth.admin.updateUserById(supabaseUser.id, { password: sifre });
+          if (updateErr) console.warn('[auth/kayit] Supabase şifre güncellemesi atlandı:', updateErr?.message);
         }
       } catch (e) {
         console.warn('[auth/kayit] Supabase sync atlandı:', e?.message);
@@ -1745,6 +1747,8 @@ router.post('/kayit/supabase-create', async (req, res) => {
     });
 
     await ensureSupabaseBranchAndProfile(supabaseUser.id, kullanici, tesis);
+    const { error: updateErr } = await supabaseAdmin.auth.admin.updateUserById(supabaseUser.id, { password: sifre });
+    if (updateErr) console.warn('[auth/kayit/supabase-create] Supabase şifre güncellemesi atlandı:', updateErr?.message);
 
     const token = jwt.sign(
       { userId: kullanici.id, tesisId: tesis.id },

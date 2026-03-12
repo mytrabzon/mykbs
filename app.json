@@ -1,0 +1,15 @@
+{
+  "expo": {
+    "ios": {
+      "bundleIdentifier": "com.litxtech.kbsprime",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
+    },
+    "extra": {
+      "eas": {
+        "projectId": "89b94f18-d723-4cac-a113-5259fbed0af7"
+      }
+    }
+  }
+}

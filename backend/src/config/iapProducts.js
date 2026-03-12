@@ -3,10 +3,13 @@
  */
 
 const APPLE_PRODUCT_TO_PAKET = {
-  'com.litxtech.mykbs.paket.starter': 'starter',
-  'com.litxtech.mykbs.paket.pro': 'pro',
-  'com.litxtech.mykbs.paket.business': 'business',
-  'com.litxtech.mykbs.paket.enterprise': 'enterprise',
+  'com.litxtech.kbsprime.paket.starter.credits': 'starter',
+  'com.litxtech.kbsprime.paket.pro.credits': 'pro',
+  'com.litxtech.kbsprime.paket.business.credits': 'business',
+  'com.litxtech.kbsprime.paket.starter': 'starter',
+  'com.litxtech.kbsprime.paket.pro': 'pro',
+  'com.litxtech.kbsprime.paket.business': 'business',
+  'com.litxtech.kbsprime.paket.enterprise': 'enterprise',
 };
 
 const GOOGLE_PRODUCT_TO_PAKET = {

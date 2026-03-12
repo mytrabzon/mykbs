@@ -60,6 +60,7 @@ export default function PaywallModal({ visible, onClose, reason = 'no_credits' }
 
   const pendingIapRef = useRef(null);
   const iapListenerRef = useRef(null);
+  const iapErrorShownRef = useRef(false);
 
   useEffect(() => {
     if (Platform.OS !== 'ios' && Platform.OS !== 'android') return;
@@ -74,8 +75,11 @@ export default function PaywallModal({ visible, onClose, reason = 'no_credits' }
         setLoading(false);
         setLoadingPackageId(null);
         pendingIapRef.current = null;
-        if (err?.code !== 'E_USER_CANCELLED') {
-          Alert.alert('Satın alma hatası', err?.message || 'İşlem başarısız.');
+        if (err?.code !== 'E_USER_CANCELLED' && !iapErrorShownRef.current) {
+          iapErrorShownRef.current = true;
+          Alert.alert('Satın alınamadı', err?.message || 'İşlem başarısız.', [
+            { text: 'Tamam', style: 'cancel' },
+          ]);
         }
       }
     });
@@ -97,7 +101,7 @@ export default function PaywallModal({ visible, onClose, reason = 'no_credits' }
                 platform: 'android',
                 productId,
                 purchaseToken: purchase.purchaseToken,
-                packageName: 'com.litxtech.mykbs',
+                packageName: 'com.litxtech.kbsprime',
               };
         if (!body.receipt && !body.purchaseToken) {
           Alert.alert('Hata', 'Satın alma bilgisi alınamadı.');
@@ -137,6 +141,7 @@ export default function PaywallModal({ visible, onClose, reason = 'no_credits' }
     const useIap = platform === 'ios' || platform === 'android';
 
     if (useIap) {
+      iapErrorShownRef.current = false;
       try {
         const RNIap = require('react-native-iap');
         const productId = getProductIdForPackage(pkg.id, platform);
@@ -153,10 +158,14 @@ export default function PaywallModal({ visible, onClose, reason = 'no_credits' }
         await RNIap.requestPurchase({ sku: productId });
         return;
       } catch (err) {
-        const msg = err?.message || getApiErrorMessage(err);
-        Alert.alert('Satın alınamadı', msg, [{ text: 'Tamam', style: 'cancel' }]);
         setLoading(false);
         setLoadingPackageId(null);
+        pendingIapRef.current = null;
+        if (!iapErrorShownRef.current) {
+          iapErrorShownRef.current = true;
+          const msg = err?.message || getApiErrorMessage(err);
+          Alert.alert('Satın alınamadı', msg, [{ text: 'Tamam', style: 'cancel' }]);
+        }
         return;
       }
     }

@@ -2,6 +2,8 @@
   "name": "mykbs",
   "private": true,
   "scripts": {
+    "build:ios": "cd mobile && npx eas build --platform ios --profile production",
+    "build:android": "cd mobile && npx eas build --platform android --profile production",
     "start": "NODE_OPTIONS=--no-deprecation npm start --prefix backend",
     "postinstall": "node -e \"var env = Object.assign({}, process.env); if (process.env.NODE_ENV === 'production') { delete env.NODE_ENV; require('child_process').execSync('npm install --prefix backend --omit=dev', { stdio: 'inherit', env: env }); } else { require('child_process').execSync('npm install --prefix backend', { stdio: 'inherit' }); }\"",
     "mobile": "npm run start --prefix mobile",
