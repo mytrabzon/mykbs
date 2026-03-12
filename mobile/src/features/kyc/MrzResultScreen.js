@@ -201,7 +201,7 @@ function Row({ label, value, mask }) {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: theme.colors.background },
   header: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: theme.spacing.base, borderBottomWidth: 1, borderBottomColor: theme.colors.border },
-  headerBack: { flexDirection: 'row', alignItems: 'center', paddingVertical: 8, paddingRight: 8 },
+  headerBack: { flexDirection: 'row', alignItems: 'center', paddingVertical: 8, paddingRight: 8, marginLeft: -44 },
   headerBackText: { fontSize: theme.typography.fontSize.base, color: theme.colors.textPrimary, marginLeft: 4 },
   headerTitle: { flex: 1, textAlign: 'center', fontSize: theme.typography.fontSize.lg, fontWeight: theme.typography.fontWeight.semibold, color: theme.colors.textPrimary },
   headerPlaceholder: { width: 80 },

@@ -26,7 +26,6 @@ import KayitScreen from './src/screens/KayitScreen';
 import BasvuruScreen from './src/screens/BasvuruScreen';
 import OdalarScreen from './src/screens/OdalarScreen';
 import CheckInScreen from './src/screens/CheckInScreen';
-import QRRoomScanScreen from './src/screens/QRRoomScanScreen';
 import KaydedilenlerScreen from './src/screens/KaydedilenlerScreen';
 import ManuelBildirimScreen from './src/screens/ManuelBildirimScreen';
 import AyarlarScreen from './src/screens/AyarlarScreen';
@@ -82,15 +81,14 @@ import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { LanguageProvider } from './src/context/LanguageContext';
 import { loadFeedbackSettings } from './src/utils/feedback';
 
-// Misafirler sekmesi: Oteldeki mevcut kişiler (check-in yapılan misafirler) listelenir.
+// Misafirler sekmesi: Oteldeki mevcut konuklar (check-in yapılmış, odada kalan kişiler) listelenir.
+// İşe yararı: Konuk listesini görmek, hangi odada kimin kaldığını takip etmek, KBS bildirimi yapılmış misafirleri görmek.
 function MisafirlerScreen({ navigation }) {
   const { colors } = useTheme();
-  const { tesis } = useAuth();
   const [misafirler, setMisafirler] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
-  // Arka planda yenileme bittiğinde listeyi güncelle (stale-while-revalidate)
   useEffect(() => {
     const unsub = dataService.subscribe('misafirler:updated', (list) => {
       setMisafirler(list || []);
@@ -132,37 +130,50 @@ function MisafirlerScreen({ navigation }) {
   }, [loadMisafirler]);
 
   const renderMisafir = useCallback(({ item }) => {
+    const adSoyad = [item.ad, item.soyad].filter(Boolean).join(' ') || 'Misafir';
+    const initial = adSoyad.charAt(0).toUpperCase();
     const girisStr = item.girisTarihi
-      ? new Date(item.girisTarihi).toLocaleDateString('tr-TR', { day: '2-digit', month: '2-digit', year: 'numeric' })
+      ? new Date(item.girisTarihi).toLocaleDateString('tr-TR', { day: '2-digit', month: 'short', year: 'numeric' })
       : '';
     return (
-      <View style={[styles.misafirCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-        <View style={styles.misafirCardLeft}>
-          <Ionicons name="person-circle-outline" size={32} color={colors.primary} />
-          <View style={styles.misafirCardBody}>
-            <Text style={[styles.misafirCardName, { color: colors.text }]} numberOfLines={1}>
-              {item.ad} {item.soyad}
-            </Text>
-            <Text style={[styles.misafirCardOda, { color: colors.textSecondary }]}>
-              Oda {item.odaNumarasi || '—'}
-            </Text>
+      <TouchableOpacity
+        activeOpacity={0.7}
+        style={[styles.misafirCard, { backgroundColor: colors.surface, borderColor: colors.border }]}
+        onPress={() => item.odaId && navigation.navigate('OdaDetay', { odaId: item.odaId })}
+      >
+        <View style={[styles.misafirAvatar, { backgroundColor: colors.primary + '22' }]}>
+          <Text style={[styles.misafirAvatarText, { color: colors.primary }]}>{initial}</Text>
+        </View>
+        <View style={styles.misafirCardBody}>
+          <Text style={[styles.misafirCardName, { color: colors.textPrimary }]} numberOfLines={1}>
+            {adSoyad}
+          </Text>
+          <View style={styles.misafirCardMeta}>
+            <View style={[styles.misafirOdaPill, { backgroundColor: colors.primary + '18' }]}>
+              <Ionicons name="bed-outline" size={14} color={colors.primary} />
+              <Text style={[styles.misafirOdaPillText, { color: colors.primary }]}>Oda {item.odaNumarasi || '—'}</Text>
+            </View>
             {girisStr ? (
-              <Text style={[styles.misafirCardDate, { color: colors.textSecondary }]}>
-                Giriş: {girisStr}
-              </Text>
+              <Text style={[styles.misafirCardDate, { color: colors.textSecondary }]}>Giriş {girisStr}</Text>
             ) : null}
           </View>
         </View>
-      </View>
+        <Ionicons name="chevron-forward" size={20} color={colors.textSecondary} />
+      </TouchableOpacity>
     );
-  }, [colors]);
+  }, [colors, navigation]);
 
   const keyExtractor = useCallback((item) => item.id, []);
 
   return (
     <View style={[styles.screenContainer, { backgroundColor: colors.background }]}>
-      <AppHeader title="Misafirler" tesis={tesis} onNotification={() => navigation.navigate('Bildirimler')} onProfile={() => navigation.navigate('DahaFazla', { screen: 'Ayarlar' })} />
-      <View style={styles.contentContainer}>
+      <AppHeader
+        title="Misafirler"
+        onBack={() => (navigation.canGoBack() ? navigation.goBack() : navigation.navigate('Odalar'))}
+        onNotification={() => navigation.navigate('Bildirimler')}
+        onProfile={() => navigation.navigate('DahaFazla', { screen: 'Ayarlar' })}
+      />
+      <View style={styles.misafirlerContent}>
         {loading && misafirler.length === 0 ? (
           <View style={styles.misafirlerLoading}>
             <ActivityIndicator size="large" color={colors.primary} />
@@ -171,21 +182,28 @@ function MisafirlerScreen({ navigation }) {
         ) : misafirler.length === 0 ? (
           <EmptyState
             icon="people-outline"
-            title="Misafir Bulunamadı"
-            message="Henüz kayıtlı misafir bulunmuyor. Odalar ekranından check-in yaparak misafir ekleyebilirsiniz."
+            title="Misafir yok"
+            message="Check-in yapılmış konuk bulunmuyor. Odalar ekranından check-in yaparak misafir ekleyebilirsiniz."
             primaryCta={{ label: 'Hızlı Check-in', onPress: () => navigation.navigate('CheckIn') }}
-            secondaryCta={{ label: 'Oda Ekle', onPress: () => navigation.navigate('Odalar') }}
+            secondaryCta={{ label: 'Odalar', onPress: () => navigation.navigate('Odalar') }}
           />
         ) : (
-          <FlatList
-            data={misafirler}
-            renderItem={renderMisafir}
-            keyExtractor={keyExtractor}
-            contentContainerStyle={styles.misafirListContent}
-            refreshControl={
-              <RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[colors.primary]} />
-            }
-          />
+          <>
+            <View style={[styles.misafirlerSummary, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+              <Text style={[styles.misafirlerSummaryText, { color: colors.textSecondary }]}>
+                <Text style={{ fontWeight: '600', color: colors.textPrimary }}>{misafirler.length}</Text> konuk
+              </Text>
+            </View>
+            <FlatList
+              data={misafirler}
+              renderItem={renderMisafir}
+              keyExtractor={keyExtractor}
+              contentContainerStyle={styles.misafirListContent}
+              refreshControl={
+                <RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[colors.primary]} />
+              }
+            />
+          </>
         )}
       </View>
     </View>
@@ -260,21 +278,48 @@ const styles = StyleSheet.create({
   },
   connectionErrorButtonText: { color: '#fff', fontWeight: '600', fontSize: 16 },
   contentContainer: { flex: 1, paddingHorizontal: 20, paddingBottom: 120 },
-  misafirListContent: { paddingVertical: 12, paddingBottom: 120 },
+  misafirlerContent: { flex: 1, paddingHorizontal: 20, paddingBottom: 120 },
+  misafirlerSummary: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    borderRadius: 12,
+    borderWidth: 1,
+    marginBottom: 12,
+  },
+  misafirlerSummaryText: { fontSize: 14 },
+  misafirListContent: { paddingBottom: 120 },
   misafirCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: 16,
-    marginHorizontal: 4,
+    padding: 14,
     marginBottom: 10,
-    borderRadius: 12,
+    borderRadius: 14,
     borderWidth: 1,
   },
-  misafirCardLeft: { flexDirection: 'row', alignItems: 'center', flex: 1 },
-  misafirCardBody: { marginLeft: 12, flex: 1 },
+  misafirAvatar: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 12,
+  },
+  misafirAvatarText: { fontSize: 18, fontWeight: '700' },
+  misafirCardBody: { flex: 1, minWidth: 0 },
   misafirCardName: { fontSize: 16, fontWeight: '600' },
-  misafirCardOda: { fontSize: 14, marginTop: 2 },
-  misafirCardDate: { fontSize: 12, marginTop: 2 },
+  misafirCardMeta: { flexDirection: 'row', alignItems: 'center', marginTop: 6, gap: 10 },
+  misafirOdaPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 10,
+    gap: 4,
+  },
+  misafirOdaPillText: { fontSize: 12, fontWeight: '600' },
+  misafirCardDate: { fontSize: 12 },
   misafirlerLoading: { flex: 1, justifyContent: 'center', alignItems: 'center', gap: 12 },
   misafirlerLoadingText: { fontSize: 14 },
   mrzTabIconWrap: { width: 48, height: 48, borderRadius: 24, alignItems: 'center', justifyContent: 'center', marginTop: -20 },
@@ -337,7 +382,6 @@ function MainStack() {
     <Stack.Navigator screenOptions={{ headerShown: false }} initialRouteName="MainTabs">
       <Stack.Screen name="MainTabs" component={MainTabs} />
       <Stack.Screen name="CheckIn" component={CheckInScreen} />
-      <Stack.Screen name="QRRoomScan" component={QRRoomScanScreen} />
       <Stack.Screen name="FamilyCheckIn" component={FamilyCheckInScreen} />
       <Stack.Screen name="Kaydedilenler" component={KaydedilenlerScreen} />
       <Stack.Screen name="ManuelBildirim" component={ManuelBildirimScreen} />
@@ -636,7 +680,17 @@ function AppNavigator() {
                   screenOptions={{
                     headerShown: false,
                     drawerType: 'front',
-                    drawerStyle: { width: 300 },
+                    drawerStyle: {
+                      width: 300,
+                      borderTopRightRadius: 20,
+                      borderBottomRightRadius: 20,
+                      overflow: 'hidden',
+                      shadowColor: '#000',
+                      shadowOffset: { width: -2, height: 0 },
+                      shadowOpacity: 0.08,
+                      shadowRadius: 12,
+                      elevation: 16,
+                    },
                     swipeEdgeWidth: 60,
                   }}
                 >
@@ -672,7 +726,17 @@ function AppNavigator() {
                   screenOptions={{
                     headerShown: false,
                     drawerType: 'front',
-                    drawerStyle: { width: 300 },
+                    drawerStyle: {
+                      width: 300,
+                      borderTopRightRadius: 20,
+                      borderBottomRightRadius: 20,
+                      overflow: 'hidden',
+                      shadowColor: '#000',
+                      shadowOffset: { width: -2, height: 0 },
+                      shadowOpacity: 0.08,
+                      shadowRadius: 12,
+                      elevation: 16,
+                    },
                     swipeEdgeWidth: 60,
                   }}
                 >

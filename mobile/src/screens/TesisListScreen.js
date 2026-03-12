@@ -112,7 +112,7 @@ export default function TesisListScreen() {
         <TouchableOpacity
           hitSlop={HIT_SLOP}
           activeOpacity={0.7}
-          style={[styles.headerBtn, { backgroundColor: colors.background }]}
+          style={[styles.headerBtn, styles.headerBtnBack, { backgroundColor: colors.background }]}
           onPress={() => (navigation.canGoBack() ? navigation.goBack() : navigation.navigate('Main'))}
         >
           <Ionicons name="arrow-back" size={24} color={colors.textPrimary} />
@@ -184,6 +184,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
+  headerBtnBack: { marginLeft: -44 },
   headerTitle: { fontSize: 18, fontWeight: '600' },
   centerWrap: {
     flex: 1,

@@ -31,7 +31,16 @@ export default function BildirimlerScreen({ navigation }) {
   useFocusEffect(
     useCallback(() => {
       refreshUnreadCount();
-    }, [refreshUnreadCount])
+      // Sayfa açıldığında (bildirim butonuna tıklanınca) tümünü okundu işaretle, rozet kalksın
+      (async () => {
+        const t = await getSupabaseToken();
+        if (!t) return;
+        try {
+          await communityApi.markAllNotificationsRead(t);
+          refreshUnreadCount();
+        } catch (_) {}
+      })();
+    }, [refreshUnreadCount, getSupabaseToken])
   );
 
   const loadToken = useCallback(async () => {
@@ -99,7 +108,8 @@ export default function BildirimlerScreen({ navigation }) {
       <View style={[styles.screenContainer, { backgroundColor: colors.background }]}>
         <AppHeader
           title="Bildirimler"
-          tesis={tesis}
+          minimal
+          onBack={() => (navigation.canGoBack() ? navigation.goBack() : navigation.navigate('Main'))}
           onNotification={() => navigation.navigate('Bildirimler')}
           onProfile={() => navigation.navigate('DahaFazla', { screen: 'Ayarlar' })}
         />
@@ -120,7 +130,8 @@ export default function BildirimlerScreen({ navigation }) {
       <View style={[styles.screenContainer, { backgroundColor: colors.background }]}>
         <AppHeader
           title="Bildirimler"
-          tesis={tesis}
+          minimal
+          onBack={() => (navigation.canGoBack() ? navigation.goBack() : navigation.navigate('Main'))}
           onNotification={() => navigation.navigate('Bildirimler')}
           onProfile={() => navigation.navigate('DahaFazla', { screen: 'Ayarlar' })}
         />
@@ -137,7 +148,7 @@ export default function BildirimlerScreen({ navigation }) {
     <View style={[styles.screenContainer, { backgroundColor: colors.background }]}>
       <AppHeader
         title="Bildirimler"
-        tesis={tesis}
+        minimal
         onBack={() => (navigation.canGoBack() ? navigation.goBack() : navigation.navigate('Main'))}
         onNotification={() => navigation.navigate('Bildirimler')}
         onProfile={() => navigation.navigate('DahaFazla', { screen: 'Ayarlar' })}

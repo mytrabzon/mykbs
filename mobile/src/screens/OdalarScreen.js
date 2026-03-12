@@ -69,7 +69,7 @@ export default function OdalarScreen() {
   const { tesis, token, user, isLoading: authLoading, logout } = useAuth();
   const [odalar, setOdalar] = useState([]);
   const [ozet, setOzet] = useState(null);
-  const [filtre, setFiltre] = useState('tumu');
+  const [filtre, setFiltre] = useState('bos');
   const [initialLoading, setInitialLoading] = useState(true);
   const [filterLoading, setFilterLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
@@ -395,6 +395,8 @@ export default function OdalarScreen() {
           setRefreshing(false);
           logger.warn('[OdalarScreen] loadData timeout – showing screen so user is not stuck');
         }, 10000);
+      } else {
+        setFilterLoading(true);
       }
       const apiFiltre = filtre === 'cikisaYakin' ? 'dolu' : filtre;
       logger.log('[OdalarScreen] loadData başladı', { filtre, apiFiltre, isInitial });
@@ -835,7 +837,14 @@ export default function OdalarScreen() {
           odalar={displayOdalar}
           sonGirenler={sonGirenler}
           filtre={filtre}
-          onFilterChange={(key) => { logger.button('Filtre', key); setFiltre(key); }}
+          onFilterChange={(key) => {
+            logger.button('Filtre', key);
+            if (filtre === key) {
+              loadData(false);
+              return;
+            }
+            setFiltre(key);
+          }}
           onOdaPress={setSheetRoom}
           onRefresh={onRefresh}
           refreshing={refreshing}
@@ -843,20 +852,12 @@ export default function OdalarScreen() {
           getBackendUrl={getBackendUrl}
           backendOk={backendStatus.isOnline === true}
           onOpenMenu={() => navigation.getParent()?.getParent()?.openDrawer?.()}
+          nfcEnabled={nfcEnabledInSettings}
         />
       )}
 
-      {/* NFC (ayarda açıksa) + FAB — tab menü ile artı butonu arasında */}
-      <View style={[styles.fabContainer, { zIndex: 20 }]}>
-        {nfcEnabledInSettings && (
-          <TouchableOpacity
-            style={[styles.nfcFab, { backgroundColor: colors.surface, borderColor: colors.primary }]}
-            onPress={() => navigation.navigate('QuickNfcScan')}
-            activeOpacity={0.8}
-          >
-            <Ionicons name="hardware-chip-outline" size={26} color={colors.primary} />
-          </TouchableOpacity>
-        )}
+      {/* Ana FAB — NFC ayarda açıksa hızlı işlemler satırında (Hızlı NFC) gösteriliyor */}
+      <View style={[styles.fabContainer, { zIndex: 20 }]} pointerEvents="box-none">
         <TouchableOpacity
           style={[styles.fab, { backgroundColor: colors.primary }]}
           onPress={() => setFabSheetVisible(true)}

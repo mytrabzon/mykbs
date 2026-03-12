@@ -160,11 +160,6 @@ export default function CheckInScreen({ navigation, route }) {
   const [documentPhotoUri, setDocumentPhotoUri] = useState(null);
   useFocusEffect(
     React.useCallback(() => {
-      const odaFromParams = route.params?.selectedOda;
-      if (odaFromParams) {
-        setSelectedOda(odaFromParams);
-        setStep(2); // QR ile oda seçildiyse doğrudan kimlik okumaya geç
-      }
       const doc = route.params?.documentPayload;
       if (doc) {
         setFormData(prev => ({
@@ -653,14 +648,14 @@ export default function CheckInScreen({ navigation, route }) {
         
         {/* Header */}
         <View style={[styles.header, headerSafeStyle]}>
+          <View style={styles.headerPlaceholder} />
+          <Text style={styles.headerTitle}>Oda Seçimi</Text>
           <TouchableOpacity
-            style={[styles.backButton, { minWidth: MIN_BUTTON_SIZE, minHeight: MIN_BUTTON_SIZE }]}
+            style={[styles.backButton, styles.backButtonRight, { minWidth: MIN_BUTTON_SIZE, minHeight: MIN_BUTTON_SIZE }]}
             onPress={() => navigation.goBack()}
           >
             <Ionicons name="arrow-back" size={24} color={theme.colors.textPrimary} />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>Oda Seçimi</Text>
-          <View style={styles.headerPlaceholder} />
         </View>
 
         <ScrollView style={styles.scrollView} contentContainerStyle={styles.content}>
@@ -669,18 +664,9 @@ export default function CheckInScreen({ navigation, route }) {
               <Ionicons name="bed-outline" size={20} color={theme.colors.primary} /> Boş Odalar
             </Text>
             <Text style={styles.sectionSubtitle}>
-              Check-in yapmak için bir oda seçin veya QR ile okuyun
+              Check-in yapmak için aşağıdan bir oda seçin
             </Text>
           </View>
-
-          <TouchableOpacity
-            style={[styles.qrRoomButton, { backgroundColor: theme.colors.primary, minHeight: MIN_BUTTON_SIZE }]}
-            onPress={() => navigation.navigate('QRRoomScan', { fromCheckIn: true })}
-            activeOpacity={0.8}
-          >
-            <Ionicons name="qr-code" size={24} color="#fff" />
-            <Text style={styles.qrRoomButtonText}>QR ile oda seç</Text>
-          </TouchableOpacity>
 
           {odalar.length === 0 ? (
             <View style={styles.emptyContainer}>
@@ -756,14 +742,14 @@ export default function CheckInScreen({ navigation, route }) {
         
         {/* Header */}
         <View style={[styles.header, headerSafeStyle]}>
+          <View style={styles.headerPlaceholder} />
+          <Text style={styles.headerTitle}>Kimlik Okuma</Text>
           <TouchableOpacity
-            style={styles.backButton}
+            style={[styles.backButton, styles.backButtonRight]}
             onPress={() => setStep(1)}
           >
             <Ionicons name="arrow-back" size={24} color={theme.colors.textPrimary} />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>Kimlik Okuma</Text>
-          <View style={styles.headerPlaceholder} />
         </View>
 
         <ScrollView style={styles.scrollView} contentContainerStyle={styles.content}>
@@ -917,11 +903,11 @@ export default function CheckInScreen({ navigation, route }) {
       <View style={styles.container}>
         <StatusBar barStyle="dark-content" backgroundColor={theme.colors.background} />
         <View style={[styles.header, headerSafeStyle]}>
-          <TouchableOpacity style={styles.backButton} onPress={() => setStep(2)}>
+          <View style={styles.headerPlaceholder} />
+          <Text style={styles.headerTitle}>Ne yapmak istiyorsunuz?</Text>
+          <TouchableOpacity style={[styles.backButton, styles.backButtonRight]} onPress={() => setStep(2)}>
             <Ionicons name="arrow-back" size={24} color={theme.colors.textPrimary} />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>Ne yapmak istiyorsunuz?</Text>
-          <View style={styles.headerPlaceholder} />
         </View>
         <ScrollView style={styles.scrollView} contentContainerStyle={styles.content}>
           <View style={styles.section}>
@@ -1014,14 +1000,14 @@ export default function CheckInScreen({ navigation, route }) {
       
       {/* Header */}
       <View style={[styles.header, headerSafeStyle]}>
+        <View style={styles.headerPlaceholder} />
+        <Text style={styles.headerTitle}>Bilgi Onayı</Text>
         <TouchableOpacity
-          style={styles.backButton}
+          style={[styles.backButton, styles.backButtonRight]}
           onPress={() => setStep(3)}
         >
           <Ionicons name="arrow-back" size={24} color={theme.colors.textPrimary} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Bilgi Onayı</Text>
-        <View style={styles.headerPlaceholder} />
       </View>
 
       <ScrollView style={styles.scrollView} contentContainerStyle={styles.content}>
@@ -1270,17 +1256,6 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: theme.colors.border,
   },
-  qrRoomButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: theme.spacing.base,
-    paddingHorizontal: theme.spacing.xl,
-    borderRadius: theme.spacing.borderRadius.base,
-    marginBottom: theme.spacing.lg,
-    gap: theme.spacing.sm,
-  },
-  qrRoomButtonText: { color: '#fff', fontSize: theme.typography.fontSize.base, fontWeight: '600' },
   visaWarningCard: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1307,6 +1282,9 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.gray100,
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  backButtonRight: {
+    marginRight: 0,
   },
   headerTitle: {
     fontSize: theme.typography.fontSize.lg,

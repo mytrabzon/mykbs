@@ -54,9 +54,7 @@ export default function DahaFazlaScreen() {
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
-      <View style={[styles.header, { borderBottomColor: colors.border }]}>
-        <Text style={[styles.title, { color: colors.textPrimary }]}>Daha Fazla</Text>
-      </View>
+      <View style={[styles.header, { borderBottomColor: colors.border }]} />
       <View style={styles.list}>
         {items.map((item) => (
           <TouchableOpacity

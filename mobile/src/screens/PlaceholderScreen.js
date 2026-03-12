@@ -40,7 +40,7 @@ export default function PlaceholderScreen() {
   return (
     <View style={[styles.container, { backgroundColor: colors.background, paddingTop: insets.top + 16, paddingBottom: insets.bottom + 24 }]}>
       <View style={[styles.header, { borderBottomColor: colors.border }]}>
-        <TouchableOpacity onPress={handleBack} style={styles.backBtn} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
+        <TouchableOpacity onPress={handleBack} style={[styles.backBtn, styles.backBtnLeft]} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
           <Ionicons name="arrow-back" size={24} color={colors.textPrimary} />
         </TouchableOpacity>
         <Text style={[styles.title, { color: colors.textPrimary }]}>{title}</Text>
@@ -80,6 +80,7 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
   },
   backBtn: { width: 44, height: 44, justifyContent: 'center', alignItems: 'center' },
+  backBtnLeft: { marginLeft: -44 },
   title: { fontSize: 18, fontWeight: '600' },
   content: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 24 },
   icon: { marginBottom: 20 },

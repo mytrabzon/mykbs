@@ -245,7 +245,7 @@ export default function AdminPanelScreen() {
       <View style={[styles.container, { backgroundColor: colors.background }]}>
         <StatusBar barStyle="dark-content" backgroundColor={colors.surface} />
         <View style={[styles.header, { backgroundColor: colors.surface, paddingTop: Platform.OS === 'ios' ? Math.max(insets.top, 12) : 12, borderBottomColor: colors.border }]}>
-          <TouchableOpacity hitSlop={HIT_SLOP} activeOpacity={0.7} style={[styles.headerBtn, { backgroundColor: colors.background }]} onPress={handleBack}>
+          <TouchableOpacity hitSlop={HIT_SLOP} activeOpacity={0.7} style={[styles.headerBtn, styles.headerBtnBack, { backgroundColor: colors.background }]} onPress={handleBack}>
             <Ionicons name="arrow-back" size={24} color={colors.textPrimary} />
           </TouchableOpacity>
           <Text style={[styles.headerTitle, { color: colors.textPrimary }]}>Admin Paneli</Text>
@@ -477,6 +477,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
+  headerBtnBack: { marginLeft: -44 },
   headerTitle: {
     fontSize: 18,
     fontWeight: '600',

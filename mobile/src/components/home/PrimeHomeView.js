@@ -9,14 +9,17 @@ import {
   StyleSheet,
   ScrollView,
   TouchableOpacity,
+  Pressable,
   RefreshControl,
   Dimensions,
+  Image,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../context/ThemeContext';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '../../context/AuthContext';
 import { useLanguage } from '../../context/LanguageContext';
+import { useNotificationUnread } from '../../context/NotificationContext';
 import { getIsAdminPanelUser } from '../../utils/adminAuth';
 
 let LinearGradient;
@@ -32,7 +35,6 @@ const { width } = Dimensions.get('window');
 const ROOM_CARD_WIDTH = (width - 52) / 2;
 
 const FILTER_KEYS = [
-  { key: 'tumu', tKey: 'home.filterTumu' },
   { key: 'bos', tKey: 'home.filterBos' },
   { key: 'dolu', tKey: 'home.filterDolu' },
   { key: 'temizlik', tKey: 'home.filterTemizlik' },
@@ -62,7 +64,7 @@ function StatCard({ title, value, icon, color, subtitle }) {
 
 function QuickAction({ title, icon, color, onPress, badge }) {
   return (
-    <TouchableOpacity style={styles.quickAction} onPress={onPress} activeOpacity={0.7}>
+    <TouchableOpacity style={styles.quickAction} onPress={onPress} activeOpacity={0.7} hitSlop={{ top: 12, bottom: 12, left: 8, right: 8 }}>
       <View style={[styles.quickIcon, { backgroundColor: color + '25' }]}>
         <Ionicons name={icon} size={28} color={color} />
       </View>
@@ -152,22 +154,29 @@ export default function PrimeHomeView({
   headerContent,
   /** Hamburger menüyü açar (Drawer açıkken kullanılır) */
   onOpenMenu,
+  /** Ayarlarda NFC açıksa hızlı işlemler satırında NFC butonu gösterilir */
+  nfcEnabled = false,
 }) {
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
   const { user } = useAuth();
   const { t } = useLanguage();
+  const { unreadCount: notificationUnreadCount } = useNotificationUnread();
   const isSuperAdmin = getIsAdminPanelUser(user);
 
   const dolulukPct = ozet?.toplamOda > 0
     ? Math.round((ozet.doluOda / ozet.toplamOda) * 100)
     : 0;
   const hotelName = tesis?.tesisAdi || tesis?.adi || 'Tesis';
+  const displayName = [user?.ad, user?.soyad].filter(Boolean).join(' ') || user?.adSoyad || user?.display_name || 'K';
+  const avatarUrl = user?.avatar_url || null;
 
   return (
     <ScrollView
       style={[styles.container, { backgroundColor: colors.background }]}
       contentContainerStyle={{ paddingBottom: insets.bottom + 24 }}
+      keyboardShouldPersistTaps="always"
+      nestedScrollEnabled
       refreshControl={
         onRefresh ? (
           <RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[colors.primary]} tintColor={colors.primary} />
@@ -176,52 +185,77 @@ export default function PrimeHomeView({
       showsVerticalScrollIndicator={false}
     >
       {headerContent}
-      {/* Üst Bar */}
-      <View style={[styles.header, { paddingTop: insets.top + 8, paddingBottom: 16 }]}>
-        <View style={styles.headerLeft}>
-          {typeof onOpenMenu === 'function' && (
+      {/* Üst Bar — renkli gradient + profil resmi (dış View her zaman yükseklik alır) */}
+      <View style={[styles.headerWrap, styles.headerWrapMinHeight, { paddingTop: insets.top + 12, paddingBottom: 18 }]}>
+        <LinearGradient
+          colors={['#06B6D4', '#8B5CF6', '#6366F1']}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={StyleSheet.absoluteFill}
+        />
+        <View style={[styles.header, { paddingBottom: 0 }]}>
+          <View style={styles.headerLeft}>
             <TouchableOpacity
-              style={styles.menuButton}
-              onPress={onOpenMenu}
-              activeOpacity={0.7}
-              accessibilityLabel="Menü"
+              style={styles.headerAvatarWrap}
+              onPress={() => navigation?.navigate('DahaFazla', { screen: 'Ayarlar' })}
+              activeOpacity={0.9}
             >
-              <Ionicons name="menu" size={28} color={colors.textPrimary} />
+              {avatarUrl ? (
+                <Image source={{ uri: avatarUrl }} style={styles.headerAvatarImg} />
+              ) : (
+                <View style={styles.headerAvatarPlaceholder}>
+                  <Text style={styles.headerAvatarInitials}>{String(displayName).charAt(0).toUpperCase()}</Text>
+                </View>
+              )}
             </TouchableOpacity>
-          )}
-          <View>
-            <Text style={[styles.greeting, { color: colors.textSecondary }]}>{t('home.greeting')}</Text>
-            <Text style={[styles.hotelName, { color: colors.textPrimary }]}>{hotelName} 🏨</Text>
+            <View style={styles.headerTitleBlock}>
+              <Text style={styles.greetingHeader}>{t('home.greeting')}</Text>
+              <Text style={styles.hotelNameHeader} numberOfLines={1}>{hotelName}</Text>
+              {user?.title ? (
+                <Text style={styles.headerUserTitle} numberOfLines={1}>
+                  {(() => {
+                    const raw = String(user.title).trim();
+                    return raw ? raw.charAt(0).toUpperCase() + raw.slice(1) : '';
+                  })()}
+                </Text>
+              ) : null}
+            </View>
           </View>
-        </View>
-        <View style={styles.headerRight}>
-          {isSuperAdmin && (
+          <View style={[styles.headerRight, { top: 0, bottom: 0, right: -4 }]}>
+            {isSuperAdmin && (
+              <TouchableOpacity
+                style={styles.adminButtonWrapHeader}
+                onPress={() => navigation?.navigate('AdminPanel')}
+                activeOpacity={0.7}
+              >
+                <Ionicons name="shield" size={22} color="#FFF" />
+                <View style={styles.adminBadge}>
+                  <Text style={styles.adminBadgeText}>A</Text>
+                </View>
+              </TouchableOpacity>
+            )}
             <TouchableOpacity
-              style={styles.adminButtonWrap}
-              onPress={() => navigation?.navigate('AdminPanel')}
-              activeOpacity={0.7}
+              style={styles.iconButtonHeader}
+              onPress={() => navigation?.navigate('Bildirimler')}
             >
-              <Ionicons name="shield" size={24} color="#8B5CF6" />
-              <View style={styles.adminBadge}>
-                <Text style={styles.adminBadgeText}>A</Text>
-              </View>
+              <Ionicons name="notifications-outline" size={22} color="#FFF" />
+              {notificationUnreadCount > 0 ? <View style={styles.notificationBadge} /> : null}
             </TouchableOpacity>
-          )}
-          <TouchableOpacity
-            style={styles.notificationButton}
-            onPress={() => navigation?.navigate('Bildirimler')}
-          >
-            <Ionicons name="notifications-outline" size={24} color={colors.textPrimary} />
-            <View style={styles.notificationBadge} />
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={styles.profileButton}
-            onPress={() => navigation?.navigate('DahaFazla', { screen: 'Ayarlar' })}
-          >
-            <LinearGradient colors={['#06B6D4', '#8B5CF6']} style={styles.profileGradient}>
-              <Text style={styles.profileInitials}>KBS</Text>
-            </LinearGradient>
-          </TouchableOpacity>
+            {typeof onOpenMenu === 'function' && (
+              <TouchableOpacity
+                style={styles.iconButtonHeader}
+                onPress={onOpenMenu}
+                activeOpacity={0.7}
+                accessibilityLabel="Menü"
+              >
+                <View style={styles.menuIconWrap}>
+                  <View style={[styles.menuLine, styles.menuLineWhite]} />
+                  <View style={[styles.menuLine, styles.menuLineMid, styles.menuLineWhite]} />
+                  <View style={[styles.menuLine, styles.menuLineWhite]} />
+                </View>
+              </TouchableOpacity>
+            )}
+          </View>
         </View>
       </View>
 
@@ -262,8 +296,8 @@ export default function PrimeHomeView({
         />
       </ScrollView>
 
-      {/* Hızlı İşlemler */}
-      <View style={styles.quickActions}>
+      {/* Hızlı İşlemler — zIndex ile üstte kalır, Tümü vb. tıklanabilir */}
+      <View style={[styles.quickActions, { zIndex: 10 }]} pointerEvents="box-none">
         <QuickAction
           title={t('home.quickFamily')}
           icon="people"
@@ -282,12 +316,15 @@ export default function PrimeHomeView({
           color="#10B981"
           onPress={() => navigation?.navigate('CheckIn')}
         />
-        <QuickAction
-          title={t('home.quickAll')}
-          icon="grid"
-          color="#F59E0B"
-          onPress={() => onFilterChange?.('tumu')}
-        />
+        {/* Ayarlarda NFC açıksa görünür, kapalıysa buton yok */}
+        {nfcEnabled && (
+          <QuickAction
+            title={t('home.quickNfc')}
+            icon="hardware-chip-outline"
+            color="#6366F1"
+            onPress={() => navigation?.navigate('QuickNfcScan')}
+          />
+        )}
         <QuickAction
           title={t('home.quickKaydedilenler')}
           icon="document-text-outline"
@@ -296,42 +333,62 @@ export default function PrimeHomeView({
         />
       </View>
 
-      {/* Filtreler */}
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        style={styles.filterScroll}
-        contentContainerStyle={styles.filterScrollContent}
-      >
-        {FILTER_KEYS.map(({ key, tKey }) => (
-          <TouchableOpacity
-            key={key}
-            style={[
-              styles.filterChip,
-              {
-                backgroundColor: filtre === key ? colors.primary : colors.surface,
-                borderColor: filtre === key ? colors.primary : colors.border,
-              },
-            ]}
-            onPress={() => onFilterChange?.(key)}
-          >
-            <Text
-              style={[
-                styles.filterText,
-                { color: filtre === key ? '#fff' : colors.textPrimary },
+      {/* Filtreler — Pressable + always tap: ScrollView dokunmaları çalmadan butonlar tetiklensin */}
+      <View style={styles.filterRowWrap} pointerEvents="box-none">
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          style={styles.filterScroll}
+          contentContainerStyle={styles.filterScrollContent}
+          keyboardShouldPersistTaps="always"
+          nestedScrollEnabled
+        >
+          {FILTER_KEYS.map(({ key, tKey }) => (
+            <Pressable
+              key={key}
+              style={({ pressed }) => [
+                styles.filterChip,
+                {
+                  backgroundColor: filtre === key ? colors.primary : colors.surface,
+                  borderColor: filtre === key ? colors.primary : colors.border,
+                  opacity: pressed ? 0.85 : 1,
+                },
               ]}
+              onPress={() => {
+                if (typeof onFilterChange === 'function') onFilterChange(key);
+              }}
+              hitSlop={{ top: 14, bottom: 14, left: 10, right: 10 }}
             >
-              {t(tKey)}
-            </Text>
-          </TouchableOpacity>
-        ))}
-      </ScrollView>
+              <Text
+                style={[
+                  styles.filterText,
+                  { color: filtre === key ? '#fff' : colors.textPrimary },
+                ]}
+              >
+                {t(tKey)}
+              </Text>
+            </Pressable>
+          ))}
+        </ScrollView>
+      </View>
 
       {/* Odalar Grid */}
       <View style={styles.roomsSection}>
-        <View style={styles.sectionHeader}>
-          <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>🛏️ {t('home.roomsTitle')}</Text>
-          <Text style={[styles.sectionCount, { color: colors.textSecondary }]}>{odalar.length} {t('home.roomCount')}</Text>
+        <View style={[styles.sectionHeader, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+          <View style={styles.sectionTitleRow}>
+            <View style={[styles.sectionIconWrap, { backgroundColor: colors.primary + '18' }]}>
+              <Ionicons name="bed-outline" size={22} color={colors.primary} />
+            </View>
+            <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>
+              {(() => {
+                const s = t('home.roomsTitle');
+                return s ? s.charAt(0).toUpperCase() + s.slice(1) : '';
+              })()}
+            </Text>
+          </View>
+          <View style={[styles.sectionCountPill, { backgroundColor: colors.textPrimary + '12' }]}>
+            <Text style={[styles.sectionCount, { color: colors.textSecondary }]}>{odalar.length} {t('home.roomCount')}</Text>
+          </View>
         </View>
 
         {odalar.length === 0 ? (
@@ -406,18 +463,90 @@ export default function PrimeHomeView({
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
+  headerWrap: {
+    paddingHorizontal: 20,
+    borderBottomLeftRadius: 24,
+    borderBottomRightRadius: 24,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.12,
+    shadowRadius: 12,
+    elevation: 6,
+    overflow: 'hidden',
+    backgroundColor: '#06B6D4',
+  },
+  headerWrapMinHeight: { minHeight: 76 },
   header: {
+    position: 'relative',
+    zIndex: 1,
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: 20,
+    paddingHorizontal: 0,
   },
-  headerLeft: { flexDirection: 'row', alignItems: 'center', gap: 12, flex: 1, minWidth: 0 },
-  menuButton: { padding: 8, marginLeft: -8 },
-  greeting: { fontSize: 14 },
-  hotelName: { fontSize: 24, fontWeight: 'bold' },
-  headerRight: { flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', gap: 12, flexShrink: 0, marginLeft: 'auto', paddingLeft: 24 },
+  headerLeft: { flexDirection: 'row', alignItems: 'center', flex: 1, minWidth: 0, gap: 12 },
+  headerAvatarWrap: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    overflow: 'hidden',
+  },
+  headerAvatarImg: { width: 44, height: 44, borderRadius: 22 },
+  headerAvatarPlaceholder: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: 'rgba(255,255,255,0.35)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  headerAvatarInitials: { fontSize: 18, fontWeight: '700', color: '#FFF' },
+  headerTitleBlock: { flex: 1, minWidth: 0 },
+  greetingHeader: { fontSize: 12, fontWeight: '600', color: 'rgba(255,255,255,0.9)', marginBottom: 2 },
+  hotelNameHeader: { fontSize: 20, fontWeight: '700', color: '#FFF', letterSpacing: -0.2 },
+  headerUserTitle: { fontSize: 16, fontWeight: '700', color: '#FFF', letterSpacing: -0.2, marginTop: 4, paddingLeft: 0, textAlign: 'left' },
+  greeting: { fontSize: 12, fontWeight: '600', letterSpacing: 0.3, marginBottom: 2, opacity: 0.9 },
+  hotelName: { fontSize: 22, fontWeight: '700', letterSpacing: -0.3 },
+  iconButtonHeader: {
+    position: 'relative',
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(255,255,255,0.22)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  adminButtonWrapHeader: {
+    position: 'relative',
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(255,255,255,0.22)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  menuButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  menuIconWrap: { gap: 5, justifyContent: 'center', alignItems: 'center' },
+  menuLine: { width: 18, height: 2, borderRadius: 1 },
+  menuLineMid: { width: 14 },
+  headerRight: {
+    position: 'absolute',
+    right: -4,
+    top: 0,
+    bottom: 0,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    gap: 6,
+  },
   adminButtonWrap: { position: 'relative', padding: 8 },
+  menuLineWhite: { backgroundColor: '#FFF' },
   adminBadge: {
     position: 'absolute',
     top: 4,
@@ -433,8 +562,8 @@ const styles = StyleSheet.create({
   notificationButton: { position: 'relative', padding: 8 },
   notificationBadge: {
     position: 'absolute',
-    top: 8,
-    right: 8,
+    top: 6,
+    right: 6,
     width: 8,
     height: 8,
     borderRadius: 4,
@@ -480,7 +609,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     marginBottom: 20,
   },
-  quickAction: { alignItems: 'center', position: 'relative' },
+  quickAction: { alignItems: 'center', position: 'relative', minWidth: 56, minHeight: 64, justifyContent: 'flex-start' },
   quickIcon: {
     width: 56,
     height: 56,
@@ -502,14 +631,17 @@ const styles = StyleSheet.create({
     paddingHorizontal: 4,
   },
   badgeText: { color: '#fff', fontSize: 10, fontWeight: 'bold' },
-  filterScroll: { marginBottom: 20 },
-  filterScrollContent: { paddingHorizontal: 20, gap: 8 },
+  filterRowWrap: { minHeight: 52, marginBottom: 8 },
+  filterScroll: { marginBottom: 12 },
+  filterScrollContent: { paddingHorizontal: 20, gap: 8, alignItems: 'center', minHeight: 48 },
   filterChip: {
     paddingHorizontal: 16,
-    paddingVertical: 8,
+    paddingVertical: 10,
     borderRadius: 20,
     borderWidth: 1,
     marginRight: 8,
+    minHeight: 40,
+    justifyContent: 'center',
   },
   filterText: { fontSize: 14 },
   roomsSection: { paddingHorizontal: 20, marginBottom: 20 },
@@ -517,10 +649,27 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 12,
+    marginBottom: 14,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    borderRadius: 16,
+    borderWidth: 1,
   },
-  sectionTitle: { fontSize: 18, fontWeight: '600' },
-  sectionCount: { fontSize: 14 },
+  sectionTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  sectionIconWrap: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  sectionTitle: { fontSize: 18, fontWeight: '700', letterSpacing: -0.2 },
+  sectionCountPill: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 20,
+  },
+  sectionCount: { fontSize: 13, fontWeight: '600' },
   roomGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 12 },
   roomCard: {
     width: ROOM_CARD_WIDTH,

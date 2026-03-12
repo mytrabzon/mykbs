@@ -9,6 +9,7 @@ import {
   StyleSheet,
   TouchableOpacity,
   ScrollView,
+  Image,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation, DrawerActions } from '@react-navigation/native';
@@ -81,20 +82,33 @@ export default function DrawerMenu(props) {
     }
   };
 
-  const displayName = [user?.ad, user?.soyad].filter(Boolean).join(' ') || 'Kullanıcı';
+  const displayName = [user?.ad, user?.soyad].filter(Boolean).join(' ') || user?.adSoyad || user?.display_name || 'Kullanıcı';
   const roleLabel = isSuperAdmin ? 'Super Admin' : role === 'admin' ? 'Admin' : 'Kullanıcı';
+  const avatarUrl = user?.avatar_url || null;
 
   return (
-    <View style={[styles.container, { backgroundColor: colors.background, paddingTop: insets.top + 8, paddingBottom: insets.bottom + 16 }]}>
+    <View style={[styles.container, { backgroundColor: colors.background, paddingTop: insets.top + 12, paddingBottom: insets.bottom + 20 }]}>
       <View style={[styles.profile, { borderBottomColor: colors.border }]}>
         <View style={[styles.avatar, { backgroundColor: colors.primary }]}>
-          <Text style={styles.avatarText}>{displayName.charAt(0).toUpperCase()}</Text>
+          {avatarUrl ? (
+            <Image source={{ uri: avatarUrl }} style={styles.avatarImg} />
+          ) : (
+            <Text style={styles.avatarText}>{String(displayName).charAt(0).toUpperCase()}</Text>
+          )}
         </View>
         <Text style={[styles.userName, { color: colors.textPrimary }]} numberOfLines={1}>{displayName}</Text>
+        {user?.title ? (
+          <Text style={[styles.userTitle, { color: colors.textSecondary }]} numberOfLines={1}>
+            {(() => {
+              const raw = String(user.title).trim();
+              return raw ? raw.charAt(0).toUpperCase() + raw.slice(1) : '';
+            })()}
+          </Text>
+        ) : null}
         {user?.email ? (
           <Text style={[styles.userEmail, { color: colors.textSecondary }]} numberOfLines={1}>{user.email}</Text>
         ) : null}
-        <View style={[styles.roleBadge, { backgroundColor: colors.primary + '20' }]}>
+        <View style={[styles.roleBadge, { backgroundColor: colors.primary + '22' }]}>
           <Text style={[styles.roleText, { color: colors.primary }]}>{roleLabel}</Text>
         </View>
       </View>
@@ -110,19 +124,26 @@ export default function DrawerMenu(props) {
           return (
             <TouchableOpacity
               key={item.screen}
-              style={[styles.menuItem, isActive && { backgroundColor: colors.primary + '15' }]}
+              style={[
+                styles.menuItem,
+                { backgroundColor: isActive ? colors.primary + '18' : 'transparent' },
+                !isActive && { borderLeftColor: 'transparent' },
+                isActive && { borderLeftColor: colors.primary, borderLeftWidth: 3 },
+              ]}
               onPress={() => handleItemPress(item.screen)}
               activeOpacity={0.7}
             >
-              <Ionicons name={item.icon} size={24} color={isActive ? colors.primary : colors.textSecondary} />
-              <Text style={[styles.menuText, { color: isActive ? colors.primary : colors.textPrimary }]}>{item.name}</Text>
+              <View style={[styles.menuIconBox, { backgroundColor: isActive ? colors.primary + '25' : colors.textPrimary + '10' }]}>
+                <Ionicons name={item.icon} size={22} color={isActive ? colors.primary : colors.textSecondary} />
+              </View>
+              <Text style={[styles.menuText, { color: isActive ? colors.primary : colors.textPrimary, fontWeight: isActive ? '600' : '500' }]}>{item.name}</Text>
             </TouchableOpacity>
           );
         })}
       </ScrollView>
 
-      <TouchableOpacity style={[styles.logout, { borderTopColor: colors.border }]} onPress={handleLogout} activeOpacity={0.7}>
-        <Ionicons name="log-out-outline" size={24} color={colors.error || '#EF4444'} />
+      <TouchableOpacity style={[styles.logout, { borderTopColor: colors.border, backgroundColor: (colors.error || '#EF4444') + '08' }]} onPress={handleLogout} activeOpacity={0.7}>
+        <Ionicons name="log-out-outline" size={22} color={colors.error || '#EF4444'} />
         <Text style={[styles.logoutText, { color: colors.error || '#EF4444' }]}>Çıkış Yap</Text>
       </TouchableOpacity>
     </View>
@@ -132,42 +153,53 @@ export default function DrawerMenu(props) {
 const styles = StyleSheet.create({
   container: { flex: 1 },
   profile: {
-    paddingHorizontal: 20,
-    paddingBottom: 16,
+    paddingHorizontal: 24,
+    paddingBottom: 20,
     borderBottomWidth: 1,
     alignItems: 'center',
   },
   avatar: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
+    width: 72,
+    height: 72,
+    borderRadius: 36,
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 10,
+    marginBottom: 12,
+    overflow: 'hidden',
   },
-  avatarText: { fontSize: 26, fontWeight: '700', color: '#fff' },
-  userName: { fontSize: 18, fontWeight: '600', marginBottom: 2 },
-  userEmail: { fontSize: 13, marginBottom: 8 },
-  roleBadge: { paddingHorizontal: 12, paddingVertical: 4, borderRadius: 12 },
+  avatarImg: { width: 72, height: 72, borderRadius: 36 },
+  avatarText: { fontSize: 28, fontWeight: '700', color: '#fff' },
+  userName: { fontSize: 19, fontWeight: '600', marginBottom: 4 },
+  userTitle: { fontSize: 13, marginBottom: 4 },
+  userEmail: { fontSize: 13, marginBottom: 10 },
+  roleBadge: { paddingHorizontal: 14, paddingVertical: 6, borderRadius: 14 },
   roleText: { fontSize: 12, fontWeight: '600' },
   menuList: { flex: 1 },
-  menuListContent: { paddingVertical: 12, paddingHorizontal: 12 },
+  menuListContent: { paddingVertical: 16, paddingHorizontal: 16 },
   menuItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 14,
-    paddingHorizontal: 16,
-    borderRadius: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    borderRadius: 14,
     gap: 14,
-    marginBottom: 2,
+    marginBottom: 4,
+    borderLeftWidth: 0,
   },
-  menuText: { fontSize: 16, fontWeight: '500', flex: 1 },
+  menuIconBox: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  menuText: { fontSize: 16, flex: 1 },
   logout: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 10,
-    paddingVertical: 16,
+    paddingVertical: 18,
     paddingHorizontal: 20,
     borderTopWidth: 1,
   },

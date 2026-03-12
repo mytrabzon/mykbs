@@ -1,9 +1,11 @@
 /**
- * NFC bağımsız okuyucu — ID kartı / pasaport çipini oku.
- * Kimlik kartı: BAC anahtarı (son MRZ) varsa NfcPassportReader ile oku; yoksa doğrudan GET DATA dene.
+ * NFC bağımsız okuyucu — e‑pasaport ve eID (T.C. kimlik vb.) çiplerini oku.
+ * Önce NfcFullCardReader ile BAC + tüm veri grupları (DG1/DG2/DG7/DG11 vb.) tek seferde okunur;
+ * başarısızsa raw IsoDep ile belge tipi algılanıp DG1/DG2/DG11 manuel okunur.
  */
 import { useState, useRef, useCallback } from 'react';
 import { logger } from '../../utils/logger';
+import { readAllDataWhenCardNear, mapNativeResultToFullPayload } from './NfcFullCardReader';
 
 let NfcManager = null;
 let NfcTech = null;
@@ -38,7 +40,13 @@ function getDefaultBacKeys() {
   }
 }
 
+/** Native sonucunu uygulama payload'ına map eder (NfcFullCardReader ile uyumlu). */
 function mapPassportReaderResultToPayload(r) {
+  const mapped = mapNativeResultToFullPayload(r);
+  if (mapped && mapped.raw) {
+    const { raw, ...rest } = mapped;
+    return rest;
+  }
   if (!r) return null;
   const birth = (r.birthDate || '').trim();
   const dogumTarihi = birth.includes('-') ? birth.split('-').reverse().join('.') : birth;
@@ -322,41 +330,26 @@ export function useIndependentNfcReader() {
         // iOS'ta isEnabled bazen atar veya desteklenmez; okumayı dene
       }
 
-      // NfcPassportReader ile BAC dene: önce saklı MRZ, yoksa varsayılan Türk kimlik BAC anahtarları (MRZ gerekmez)
-      const bacKeyStored = await getLastMrzForBac();
-      const defaultKeys = getDefaultBacKeys();
-      const keysToTry = [];
-      if (bacKeyStored?.documentNo && bacKeyStored?.birthDate && bacKeyStored?.expiryDate) {
-        keysToTry.push({ documentNo: bacKeyStored.documentNo, birthDate: bacKeyStored.birthDate, expiryDate: bacKeyStored.expiryDate });
-      }
-      keysToTry.push(...defaultKeys);
-
-      if (NfcPassportReader && keysToTry.length > 0) {
-        setProgress('Kimlik veya pasaport kartını telefonun arkasına yaklaştırın...');
-        for (let i = 0; i < keysToTry.length; i++) {
-          const bacKey = keysToTry[i];
-          logger.info('[NFC] NfcPassportReader BAC denemesi', { i: i + 1, total: keysToTry.length, docNo: bacKey.documentNo?.slice(0, 3) + '...' });
-          try {
-            const nfcResult = await NfcPassportReader.startReading({
-              bacKey: {
-                documentNo: bacKey.documentNo,
-                birthDate: bacKey.birthDate,
-                expiryDate: bacKey.expiryDate,
-              },
-            });
-            const result = mapPassportReaderResultToPayload(nfcResult);
-            if (result && (result.ad || result.soyad || result.kimlikNo || result.pasaportNo)) {
-              setLastResult(result);
-              logger.info('[NFC] BAC ile okuma başarılı', { ad: result.ad, soyad: result.soyad });
-              return { success: true, data: result };
-            }
-          } catch (bacErr) {
-            if ((bacErr?.message || '').includes('cancel')) {
-              return { success: false, error: 'Okuma iptal edildi.', fallback: null };
-            }
-            logger.warn('[NFC] BAC denemesi başarısız', bacErr?.message);
-          }
+      // Önce tam okuyucu: kart yaklaştığı anda BAC + tüm DG'ler (foto, imza, adres vb.) tek seferde
+      const fullResult = await readAllDataWhenCardNear({
+        includeImages: true,
+        onProgress: (msg) => setProgress(msg),
+      });
+      if (fullResult.success && fullResult.data) {
+        const data = fullResult.data;
+        if (data.raw) {
+          const { raw, ...rest } = data;
+          setLastResult(rest);
+          return { success: true, data: rest };
         }
+        setLastResult(data);
+        return { success: true, data };
+      }
+      if (fullResult.error && (fullResult.error.includes('iptal') || fullResult.error.includes('cancel'))) {
+        return { success: false, error: fullResult.error, fallback: null };
+      }
+      if (fullResult.error && fullResult.fallback !== 'MRZ') {
+        return { success: false, error: fullResult.error, fallback: null };
       }
 
       setProgress('Kimlik veya pasaportu telefonun arkasına yaklaştırın...');

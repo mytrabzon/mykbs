@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -31,6 +31,8 @@ export default function KaydedilenlerScreen({ navigation }) {
   const [bildirLoading, setBildirLoading] = useState(false);
   const [selectedOda, setSelectedOda] = useState(null);
   const [misafirTipi, setMisafirTipi] = useState('tc_vatandasi');
+  const itemsRef = useRef([]);
+  itemsRef.current = items;
 
   const load = useCallback(async (isRefresh = false) => {
     if (isRefresh) setRefreshing(true);
@@ -46,9 +48,11 @@ export default function KaydedilenlerScreen({ navigation }) {
     }
   }, []);
 
+  // Sayfa her açıldığında: Zaten liste varsa arka planda yenile (tam ekran loading gösterme).
   useFocusEffect(
     useCallback(() => {
-      load();
+      const isRefresh = itemsRef.current.length > 0;
+      load(isRefresh);
     }, [load])
   );
 
@@ -98,7 +102,7 @@ export default function KaydedilenlerScreen({ navigation }) {
     return base ? `${base.replace(/\/$/, '')}${url}` : url;
   };
 
-  const renderItem = ({ item }) => {
+  const renderItem = useCallback(({ item }) => {
     const thumb = photoUri(item);
     const createdAtStr = item.createdAt
       ? new Date(item.createdAt).toLocaleString('tr-TR', { dateStyle: 'short', timeStyle: 'short' })
@@ -137,7 +141,7 @@ export default function KaydedilenlerScreen({ navigation }) {
         <Ionicons name="chevron-forward" size={20} color={theme.colors.textSecondary} />
       </TouchableOpacity>
     );
-  };
+  }, []);
 
   return (
     <View style={styles.container}>
@@ -161,7 +165,7 @@ export default function KaydedilenlerScreen({ navigation }) {
         </Text>
       </View>
 
-      {loading ? (
+      {loading && items.length === 0 ? (
         <View style={styles.center}>
           <ActivityIndicator size="large" color={theme.colors.primary} />
         </View>
@@ -179,6 +183,10 @@ export default function KaydedilenlerScreen({ navigation }) {
           keyExtractor={(item) => String(item.id)}
           renderItem={renderItem}
           contentContainerStyle={styles.listContent}
+          initialNumToRender={12}
+          maxToRenderPerBatch={10}
+          windowSize={6}
+          removeClippedSubviews={true}
           refreshControl={
             <RefreshControl refreshing={refreshing} onRefresh={() => load(true)} colors={[theme.colors.primary]} />
           }
@@ -363,6 +371,7 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.gray100,
     justifyContent: 'center',
     alignItems: 'center',
+    marginLeft: 8,
   },
   headerTitle: {
     fontSize: theme.typography.fontSize.lg,

@@ -80,7 +80,7 @@ export default function NfcReadScreen() {
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       <View style={[styles.header, { paddingTop: insets.top + 8 }]}>
-        <TouchableOpacity onPress={goBack} style={styles.backBtn} hitSlop={12} activeOpacity={0.8}>
+        <TouchableOpacity onPress={goBack} style={[styles.backBtn, styles.backBtnLeft]} hitSlop={12} activeOpacity={0.8}>
           <Ionicons name="arrow-back" size={26} color={colors.text} />
         </TouchableOpacity>
         <Text style={[styles.title, { color: colors.text }]}>NFC ile Oku</Text>
@@ -143,6 +143,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  backBtnLeft: { marginLeft: -44 },
   title: {
     fontSize: 18,
     fontWeight: '600',

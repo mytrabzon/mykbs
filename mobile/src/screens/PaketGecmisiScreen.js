@@ -95,7 +95,7 @@ export default function PaketGecmisiScreen() {
         <TouchableOpacity
           hitSlop={HIT_SLOP}
           onPress={() => (navigation.canGoBack() ? navigation.goBack() : navigation.navigate('Main'))}
-          style={[styles.headerBtn, { backgroundColor: colors.background }]}
+          style={[styles.headerBtn, styles.headerBtnBack, { backgroundColor: colors.background }]}
         >
           <Ionicons name="arrow-back" size={24} color={colors.textPrimary} />
         </TouchableOpacity>
@@ -189,6 +189,7 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
   },
   headerBtn: { width: 44, height: 44, borderRadius: 22, justifyContent: 'center', alignItems: 'center' },
+  headerBtnBack: { marginLeft: -44 },
   headerTitle: { fontSize: 18, fontWeight: '600' },
   centerWrap: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 24 },
   loadingText: { marginTop: 12, fontSize: 15 },

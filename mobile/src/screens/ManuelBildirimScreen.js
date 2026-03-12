@@ -373,6 +373,7 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.gray100,
     justifyContent: 'center',
     alignItems: 'center',
+    marginLeft: -44,
   },
   headerTitle: {
     fontSize: theme.typography.fontSize.lg,

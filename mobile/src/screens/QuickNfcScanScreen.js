@@ -619,8 +619,8 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     borderBottomWidth: 1,
   },
-  backBtn: { padding: 8 },
-  title: { fontSize: 18, fontWeight: '700' },
+  title: { flex: 1, fontSize: 18, fontWeight: '700', textAlign: 'center' },
+  backBtn: { padding: 8, marginLeft: -44 },
   clearBtn: { padding: 8 },
   mainContent: { flex: 1, paddingHorizontal: 16 },
   statusPill: {

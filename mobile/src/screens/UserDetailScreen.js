@@ -155,7 +155,7 @@ export default function UserDetailScreen() {
     return (
       <View style={[styles.container, { backgroundColor: colors.background }]}>
         <View style={[styles.header, { backgroundColor: colors.surface, paddingTop: headerPaddingTop, borderBottomColor: colors.border }]}>
-          <TouchableOpacity hitSlop={HIT_SLOP} onPress={() => navigation.goBack()} style={[styles.headerBtn, { backgroundColor: colors.background }]}>
+          <TouchableOpacity hitSlop={HIT_SLOP} onPress={() => navigation.goBack()} style={[styles.headerBtn, styles.headerBtnBack, { backgroundColor: colors.background }]}>
             <Ionicons name="arrow-back" size={24} color={colors.textPrimary} />
           </TouchableOpacity>
           <Text style={[styles.headerTitle, { color: colors.textPrimary }]}>Kullanıcı</Text>
@@ -176,7 +176,7 @@ export default function UserDetailScreen() {
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       <View style={[styles.header, { backgroundColor: colors.surface, paddingTop: headerPaddingTop, borderBottomColor: colors.border }]}>
-        <TouchableOpacity hitSlop={HIT_SLOP} onPress={() => navigation.goBack()} style={[styles.headerBtn, { backgroundColor: colors.background }]}>
+        <TouchableOpacity hitSlop={HIT_SLOP} onPress={() => navigation.goBack()} style={[styles.headerBtn, styles.headerBtnBack, { backgroundColor: colors.background }]}>
           <Ionicons name="arrow-back" size={24} color={colors.textPrimary} />
         </TouchableOpacity>
         <Text style={[styles.headerTitle, { color: colors.textPrimary }]} numberOfLines={1}>Kullanıcı detayı</Text>
@@ -249,6 +249,7 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
   },
   headerBtn: { width: 44, height: 44, borderRadius: 22, justifyContent: 'center', alignItems: 'center' },
+  headerBtnBack: { marginLeft: -44 },
   headerTitle: { fontSize: 18, fontWeight: '600' },
   centerWrap: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   scroll: { flex: 1 },

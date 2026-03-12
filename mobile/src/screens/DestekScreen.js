@@ -159,7 +159,7 @@ export default function DestekScreen({ navigation }) {
     <View style={[styles.container, { backgroundColor: colors.background, paddingTop: insets.top }]}>
       {/* Header */}
       <View style={[styles.header, { borderBottomColor: borderColor }]}>
-        <TouchableOpacity onPress={handleBack} style={styles.backBtn} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
+        <TouchableOpacity onPress={handleBack} style={[styles.backBtn, styles.backBtnLeft]} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
           <Ionicons name="arrow-back" size={24} color={colors.textPrimary} />
         </TouchableOpacity>
         <Text style={[styles.headerTitle, { color: colors.textPrimary }]}>Destek</Text>
@@ -286,6 +286,7 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
   },
   backBtn: { width: 44, height: 44, justifyContent: 'center', alignItems: 'center' },
+  backBtnLeft: { marginLeft: -44 },
   headerTitle: { fontSize: 18, fontWeight: '600' },
   keyboard: { flex: 1 },
   scroll: { flex: 1 },

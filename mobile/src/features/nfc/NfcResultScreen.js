@@ -167,7 +167,7 @@ export default function NfcResultScreen({ route, navigation }) {
   return (
     <View style={[styles.container, { backgroundColor: colors.background, paddingTop: insets.top }]}>
       <View style={[styles.header, { borderBottomColor: colors.border }]}>
-        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.headerBtn} hitSlop={12}>
+        <TouchableOpacity onPress={() => navigation.goBack()} style={[styles.headerBtn, styles.headerBtnBack]} hitSlop={12}>
           <Ionicons name="arrow-back" size={26} color={colors.textPrimary} />
         </TouchableOpacity>
         <Text style={[styles.headerTitle, { color: colors.textPrimary }]}>NFC Okundu</Text>
@@ -381,6 +381,7 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
   },
   headerBtn: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
+  headerBtnBack: { marginLeft: -44 },
   headerTitle: { fontSize: 18, fontWeight: '600' },
   scroll: { flex: 1 },
   scrollContent: { padding: 16, paddingBottom: 32 },

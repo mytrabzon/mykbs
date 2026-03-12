@@ -129,7 +129,7 @@ export default function FamilyCheckInScreen({ route }) {
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       <View style={[styles.header, { borderBottomColor: colors.border }]}>
-        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
+        <TouchableOpacity onPress={() => navigation.goBack()} style={[styles.backBtn, styles.backBtnLeft]}>
           <Ionicons name="arrow-back" size={24} color={colors.textPrimary} />
         </TouchableOpacity>
         <Text style={[styles.title, { color: colors.textPrimary }]}>👪 Aile Girişi</Text>
@@ -252,6 +252,7 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
   },
   backBtn: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
+  backBtnLeft: { marginLeft: -44 },
   title: { fontSize: 18, fontWeight: '700' },
   progressBar: {
     height: 28,

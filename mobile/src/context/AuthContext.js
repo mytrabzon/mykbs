@@ -108,7 +108,14 @@ async function fetchMeAndSetState(accessToken, setUser, setTesis, setToken, getT
     const status = e?.response?.status;
     const code = e?.response?.data?.code;
     const serverMessage = e?.response?.data?.message || '';
-    if (status === 401 || status === 404 || (status === 500 && code === 'GUEST_SETUP_FAILED')) {
+    // 401: Oturum süresi dolmuş olabilir. API katmanı onUnauthorized (handle401OrLogout) tetikler;
+    // o önce token yenilemeyi dener, başarılı olursa profil geri gelir. Burada oturumu silme,
+    // yoksa "hesaptayken profil kayboluyor" olur (hem yenileme hem silme aynı anda çalışıyordu).
+    if (status === 401) {
+      logger.warn('AuthContext fetch /me: 401 – token yenileme onUnauthorized üzerinden denenecek');
+      return false;
+    }
+    if (status === 404 || (status === 500 && code === 'GUEST_SETUP_FAILED')) {
       if (status === 404) {
         logger.warn('AuthContext fetch /me: kullanıcı bulunamadı (404), oturum temizleniyor');
       }

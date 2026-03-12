@@ -35,19 +35,17 @@ export default function AppHeader({
   return (
     <View style={[styles.wrap, { backgroundColor: isPrimary ? colors.primary : colors.surface, borderBottomWidth: 0, paddingTop: insets.top }]}>
       <View style={[styles.row, { minHeight: spacing.headerHeight }]}>
-        <View style={styles.left}>
-          {!hideTesisAndTitle && !minimal && (
+        <View style={[styles.left, onBack && styles.leftWithBack]}>
+          {onBack ? (
+            <TouchableOpacity onPress={onBack} style={styles.iconBtnBack} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
+              <Ionicons name="arrow-back" size={24} color={isPrimary ? '#FFF' : colors.textPrimary} />
+            </TouchableOpacity>
+          ) : !hideTesisAndTitle && !minimal ? (
             <>
-              {onBack ? (
-                <TouchableOpacity onPress={onBack} style={styles.iconBtn} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
-                  <Ionicons name="arrow-back" size={24} color={isPrimary ? '#FFF' : colors.textPrimary} />
-                </TouchableOpacity>
-              ) : (
-                <Text style={[styles.tesisName, { color: isPrimary ? '#FFF' : colors.textPrimary }]} numberOfLines={1}>
-                  {tesis?.tesisAdi || tesis?.adi || 'Tesis'}
-                </Text>
-              )}
-              {(tesis?.paket || tesis?.kota) && !onBack && (
+              <Text style={[styles.tesisName, { color: isPrimary ? '#FFF' : colors.textPrimary }]} numberOfLines={1}>
+                {tesis?.tesisAdi || tesis?.adi || 'Tesis'}
+              </Text>
+              {(tesis?.paket || tesis?.kota) && (
                 <Text style={[styles.package, { color: isPrimary ? 'rgba(255,255,255,0.8)' : colors.textSecondary }]} numberOfLines={1}>
                   {[
                     tesis?.paket,
@@ -58,9 +56,9 @@ export default function AppHeader({
                 </Text>
               )}
             </>
-          )}
+          ) : null}
         </View>
-        {title && !minimal ? (
+        {title ? (
           <Text style={[styles.title, { color: isPrimary ? '#FFF' : colors.textPrimary }]} numberOfLines={1}>
             {title}
           </Text>
@@ -132,7 +130,16 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.sm,
   },
   left: { flex: 1, minWidth: 0 },
-  tesisName: {
+  leftWithBack: { marginLeft: -52 },
+  iconBtnBack: {
+    minWidth: 44,
+    minHeight: 44,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingLeft: 0,
+    paddingRight: spacing.xs,
+  },
+  iconBtn: {
     fontSize: typography.text.bodyLarge.fontSize,
     fontWeight: typography.fontWeight.semibold,
   },
