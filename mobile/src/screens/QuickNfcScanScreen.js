@@ -158,6 +158,7 @@ export default function QuickNfcScanScreen() {
               birthDate: bacKey.birthDate,
               expiryDate: bacKey.expiryDate,
             },
+            includeImages: true,
           });
           if (nfcResult && (nfcResult.firstName || nfcResult.lastName || nfcResult.documentNo)) {
             const item = mapNfcResultToItem(nfcResult);
