@@ -210,7 +210,8 @@ model Kullanici {
   bildirimTercihi   Boolean  @default(true)
 
   // İlişkiler
-  kontorIslemleri   KontorIslem[]
+  kontorIslemleri         KontorIslem[]
+  kontorIslemleriAsAdmin  KontorIslem[] @relation("KontorIslemAdmin")
 
   // Hesap silme talebi (7 gün içinde kalıcı silinir; bu sürede geri alınabilir)
   deletion_requested_at DateTime?
@@ -238,7 +239,7 @@ model KontorIslem {
   createdAt    DateTime @default(now())
 
   kullanici    Kullanici @relation(fields: [kullaniciId], references: [id], onDelete: Cascade)
-  admin        Kullanici @relation("KontorIslemAdmin", fields: [adminId], references: [id], onDelete: SetNull)
+  admin        Kullanici? @relation("KontorIslemAdmin", fields: [adminId], references: [id], onDelete: SetNull)
 
   @@index([kullaniciId])
   @@index([adminId])
