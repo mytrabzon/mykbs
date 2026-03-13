@@ -25,6 +25,7 @@ import { dataService } from '../services/dataService';
 import { backendHealth } from '../services/backendHealth';
 import { getApiBaseUrl, isSupabaseConfigured } from '../config/api';
 import { getTtsEnabled, setTtsEnabled, getHapticEnabled, setHapticEnabled, getMrzVoiceEnabled, setMrzVoiceEnabled, loadFeedbackSettings } from '../utils/feedback';
+import { getNfcEnabled, setNfcEnabled } from '../utils/nfcSetting';
 import { useLanguage } from '../context/LanguageContext';
 import { exportGuestsToExcel } from '../utils/exportExcel';
 import { createBackup } from '../utils/backup';
@@ -77,6 +78,7 @@ export default function AyarlarScreen() {
   const [ttsEnabled, setTtsEnabledState] = useState(true);
   const [hapticEnabled, setHapticEnabledState] = useState(true);
   const [mrzVoiceEnabled, setMrzVoiceEnabledState] = useState(true);
+  const [nfcEnabled, setNfcEnabledState] = useState(true);
   const [exportLoading, setExportLoading] = useState(false);
   const [backupLoading, setBackupLoading] = useState(false);
   const { language, setLanguage, t, languageLabels } = useLanguage();
@@ -117,6 +119,7 @@ export default function AyarlarScreen() {
       setHapticEnabledState(getHapticEnabled());
       setMrzVoiceEnabledState(getMrzVoiceEnabled());
     });
+    getNfcEnabled().then((v) => setNfcEnabledState(!!v)).catch(() => setNfcEnabledState(true));
   }, []);
 
   // Tek seferde tüm ayar verilerini yükle (sonsuz döngü yok: ref ile bir kez, sadece token varken)
@@ -713,6 +716,20 @@ export default function AyarlarScreen() {
               onValueChange={(v) => { setMrzVoiceEnabled(v); setMrzVoiceEnabledState(v); }}
               trackColor={{ false: colors.border, true: colors.primarySoft }}
               thumbColor={mrzVoiceEnabled ? colors.primary : colors.textSecondary}
+            />
+          </View>
+          <View style={[styles.switchRow, { borderColor: colors.border }]}>
+            <Text style={[styles.label, { color: colors.textPrimary }]}>NFC ile okuma</Text>
+            <Switch
+              value={nfcEnabled}
+              onValueChange={async (v) => {
+                setNfcEnabledState(v);
+                try {
+                  await setNfcEnabled(v);
+                } catch (_) {}
+              }}
+              trackColor={{ false: colors.border, true: colors.primarySoft }}
+              thumbColor={nfcEnabled ? colors.primary : colors.textSecondary}
             />
           </View>
           <Text style={[styles.sectionDesc, { color: colors.textSecondary, marginTop: -8, marginBottom: 8 }]}>

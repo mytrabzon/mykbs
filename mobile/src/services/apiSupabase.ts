@@ -918,8 +918,18 @@ export const api = {
         return toResponse(res);
       }
       if (pathname.includes('/kyc/mrz-verify') || pathname.includes('kyc/mrz-verify')) {
-        const res = await callFn('document_scan', payload, token);
-        return toResponse(res);
+        const backendUrl = getBackendUrl();
+        if (!backendUrl || !token) {
+          throw Object.assign(new Error('Giriş gerekli'), { response: { status: 401, data: {} } });
+        }
+        const r = await fetchWithLog(`${backendUrl}/api/kyc/mrz-verify`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+          body: JSON.stringify(payload || {}),
+        });
+        const data = await r.json().catch(() => ({}));
+        throwIfNotOk(r, data as Record<string, unknown>, 'Doğrulama kaydedilemedi');
+        return toResponse(data);
       }
       if (pathname === '/tesis/kbs/test' || pathname === 'tesis/kbs/test') {
         const backendUrl = getBackendUrl();

@@ -2,8 +2,8 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const NFC_ENABLED_KEY = '@mykbs:app_nfc_enabled';
 
-/** Varsayılan: NFC kapalı (öncelik MRZ/kamera). */
-const DEFAULT_NFC_ENABLED = false;
+/** Varsayılan: NFC açık (MRZ sonrası NFC akışı aktif). */
+const DEFAULT_NFC_ENABLED = true;
 
 /**
  * Uygulama içi NFC ile okuma açık mı? (Ayarlardan açılıp kapatılır.)

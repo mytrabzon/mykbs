@@ -769,9 +769,12 @@ router.post('/users/:id/disable', async (req, res) => {
   try {
     const userId = req.params.id;
     const reason = req.body?.reason || null;
+    const duration = (req.body?.duration && typeof req.body.duration === 'string' && req.body.duration.trim())
+      ? req.body.duration.trim()
+      : '876000h';
     const adminId = req.user?.id || req.adminUserId;
     if (supabaseAdmin) {
-      const { error: authErr } = await supabaseAdmin.auth.admin.updateUserById(userId, { ban_duration: '876000h' });
+      const { error: authErr } = await supabaseAdmin.auth.admin.updateUserById(userId, { ban_duration: duration });
       if (authErr) return res.status(500).json({ message: 'Kullanıcı banlanamadı', error: authErr.message });
       const { error: profErr } = await supabaseAdmin
         .from('user_profiles')

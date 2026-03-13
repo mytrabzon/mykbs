@@ -17,8 +17,14 @@ export default function KycSubmitScreen({ route, navigation }) {
     try {
       const { data } = await require('../../services/api').api.post('/kyc/mrz-verify', minimal);
       setDone(true);
-      if (data?.next === 'DONE') navigation.replace('Main');
-      else navigation.replace('Main');
+      const next = data?.next;
+      const verificationId = data?.verification_id ?? null;
+      // Backend NFC adımı bekliyorsa ve bu ekran MRZ akışından geldiyse NFC doğrulama ekranına yönlendir
+      if (next === 'NFC' && route?.params?.fromMrz) {
+        navigation.replace('NfcIntro', { mrzPayload: minimal, verificationId });
+      } else {
+        navigation.replace('Main');
+      }
     } catch (e) {
       setLoading(false);
     }

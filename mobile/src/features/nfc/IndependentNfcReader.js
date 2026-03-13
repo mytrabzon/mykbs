@@ -7,6 +7,9 @@ import { useState, useRef, useCallback } from 'react';
 import { logger } from '../../utils/logger';
 import { readAllDataWhenCardNear, mapNativeResultToFullPayload } from './NfcFullCardReader';
 
+// Development-only test modu: gerçek NFC yerine sahte payload döndür.
+const NFC_TEST_MODE = false;
+
 let NfcManager = null;
 let NfcTech = null;
 try {
@@ -303,6 +306,26 @@ export function useIndependentNfcReader() {
   }, []);
 
   const readNfcDirect = useCallback(async (options = {}) => {
+    if (NFC_TEST_MODE) {
+      logger.info('[NFC] TEST_MODE aktif, sahte NFC sonucu döndürülüyor');
+      const mock = {
+        type: 'id_card',
+        ad: 'TEST',
+        soyad: 'NFC',
+        kimlikNo: '12345678901',
+        pasaportNo: null,
+        dogumTarihi: '01.01.1990',
+        uyruk: 'TÜRK',
+        cinsiyet: 'M',
+        sonKullanma: '01.01.2030',
+        chipPhotoBase64: null,
+        chipSignatureBase64: null,
+        dogumYeri: 'TEST ŞEHİR',
+        ikametAdresi: 'TEST ADRES',
+      };
+      setLastResult(mock);
+      return { success: true, data: mock };
+    }
     const tech = getNfcTechForRequest();
     logger.info('[NFC] readNfcDirect çağrıldı', { hasNfcManager: !!NfcManager, tech: tech ?? 'yok' });
     if (!NfcManager || !tech) {
