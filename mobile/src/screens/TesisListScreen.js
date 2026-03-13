@@ -20,13 +20,17 @@ import { getIsAdminPanelUser, getEffectiveRole } from '../utils/adminAuth';
 const HIT_SLOP = { top: 12, bottom: 12, left: 12, right: 12 };
 const CARD_PADDING = 16;
 
-function TesisRow({ item, colors }) {
+function TesisRow({ item, colors, onPress }) {
   const kotaText = item.kota != null && item.kullanilanKota != null
     ? `${item.kullanilanKota}/${item.kota}`
     : '—';
   const durumColor = item.durum === 'aktif' ? '#4CAF50' : colors.textSecondary;
   return (
-    <View style={[styles.row, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+    <TouchableOpacity
+      activeOpacity={0.7}
+      onPress={onPress}
+      style={[styles.row, { backgroundColor: colors.surface, borderColor: colors.border }]}
+    >
       <View style={styles.rowMain}>
         <Text style={[styles.rowTitle, { color: colors.textPrimary }]} numberOfLines={1}>
           {item.tesisAdi || '—'}
@@ -42,7 +46,7 @@ function TesisRow({ item, colors }) {
         </View>
       </View>
       <Ionicons name="chevron-forward" size={20} color={colors.textSecondary} />
-    </View>
+    </TouchableOpacity>
   );
 }
 
@@ -159,7 +163,13 @@ export default function TesisListScreen() {
         <FlatList
           data={tesisler}
           keyExtractor={(item) => String(item.id)}
-          renderItem={({ item }) => <TesisRow item={item} colors={colors} />}
+          renderItem={({ item }) => (
+            <TesisRow
+              item={item}
+              colors={colors}
+              onPress={() => navigation.navigate('TesisDetay', { tesisId: item.id, tesis: item })}
+            />
+          )}
           contentContainerStyle={[styles.listContent, { paddingBottom: insets.bottom + 24 }]}
           refreshControl={
             <RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[colors.primary]} />

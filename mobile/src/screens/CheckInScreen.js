@@ -129,6 +129,10 @@ export default function CheckInScreen({ navigation, route }) {
     React.useCallback(() => {
       const doc = route.params?.documentPayload;
       if (doc) {
+        const odaFromParams = route.params?.selectedOda;
+        if (odaFromParams && odaFromParams.id) {
+          setSelectedOda(odaFromParams);
+        }
         setFormData(prev => ({
           ...prev,
           ad: (doc.ad || '').trim() || prev.ad,
@@ -149,6 +153,10 @@ export default function CheckInScreen({ navigation, route }) {
       }
       const p = route.params?.mrzPayload;
       if (!p) return;
+      const odaFromParams = route.params?.selectedOda;
+      if (odaFromParams && odaFromParams.id) {
+        setSelectedOda(odaFromParams);
+      }
       const isoToDDMMYYYY = (iso) => {
         if (!iso) return '';
         const [y, m, d] = iso.split('-');
@@ -676,6 +684,9 @@ export default function CheckInScreen({ navigation, route }) {
               {formData.ad} {formData.soyad}
               {(formData.kimlikNo || formData.pasaportNo) && ` · ${(formData.kimlikNo || formData.pasaportNo).slice(0, 4)}****`}
             </Text>
+            <Text style={styles.sectionHint}>
+              Okuma optik MRZ ile yapıldı; özellikle ad, soyad ve numaraları kontrol edin.
+            </Text>
           </View>
 
           {savedOnly ? (
@@ -1062,6 +1073,11 @@ const styles = StyleSheet.create({
   },
   sectionSubtitle: {
     fontSize: theme.typography.fontSize.sm,
+    color: theme.colors.textSecondary,
+  },
+  sectionHint: {
+    marginTop: theme.spacing.xs,
+    fontSize: theme.typography.fontSize.xs,
     color: theme.colors.textSecondary,
   },
   odaChangeButton: {

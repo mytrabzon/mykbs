@@ -5,6 +5,9 @@ import Link from 'next/link'
 export default function LisanslarPage() {
   return (
     <div className="admin-page">
+      <div className="kbs-admin-mb-16">
+        <Link href="/" className="kbs-page-back">← Ana sayfa</Link>
+      </div>
       <header className="admin-page-header">
         <h1 className="admin-page-title">Lisans yönetimi</h1>
       </header>

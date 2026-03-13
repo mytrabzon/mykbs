@@ -114,11 +114,7 @@ export default function TesislerPage() {
                   <tr
                     key={tesis.id}
                     className="kbs-table-row-clickable"
-                    onClick={(e) => {
-                      const target = e.target as HTMLElement
-                      if (target.closest('td:last-child')) return
-                      router.push(detailHref)
-                    }}
+                    onClick={() => router.push(detailHref)}
                   >
                     <td className="kbs-table-cell-link">{tesis.tesisAdi}</td>
                     <td className="kbs-table-cell-link">{tesis.yetkiliAdSoyad}</td>

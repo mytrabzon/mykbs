@@ -33,6 +33,7 @@ import IzinlerScreen from './src/screens/IzinlerScreen';
 import OdaDetayScreen from './src/screens/OdaDetayScreen';
 import AdminPanelScreen from './src/screens/AdminPanelScreen';
 import TesisListScreen from './src/screens/TesisListScreen';
+import TesisDetayScreen from './src/screens/TesisDetayScreen';
 import ToplulukScreen from './src/screens/ToplulukScreen';
 import BildirimlerScreen from './src/screens/BildirimlerScreen';
 import PostDetayScreen from './src/screens/PostDetayScreen';
@@ -391,6 +392,7 @@ function MainStack() {
       <Stack.Screen name="ToplulukProfil" component={ToplulukProfilScreen} />
       <Stack.Screen name="AdminPanel" component={AdminPanelScreen} />
       <Stack.Screen name="TesisList" component={TesisListScreen} />
+      <Stack.Screen name="TesisDetay" component={TesisDetayScreen} />
       <Stack.Screen name="Bildirimler" component={BildirimlerScreen} />
       <Stack.Screen name="ReceptionistPanel" component={ReceptionistPanelScreen} options={{ title: 'KBS Senkronizasyon' }} />
       <Stack.Screen name="MrzScan" component={MrzScanScreen} />
