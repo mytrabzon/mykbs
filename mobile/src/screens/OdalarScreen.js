@@ -64,13 +64,13 @@ function LiveDotPulse() {
   return <Animated.View style={[styles.lobbyLiveDot, { opacity }]} />;
 }
 
-export default function OdalarScreen() {
+export default function OdalarScreen({ route }) {
   const navigation = useNavigation();
   const { colors } = useTheme();
   const { tesis, token, user, isLoading: authLoading, logout } = useAuth();
   const [odalar, setOdalar] = useState([]);
   const [ozet, setOzet] = useState(null);
-  const [filtre, setFiltre] = useState('bos');
+  const [filtre, setFiltre] = useState(route?.params?.filtre || 'bos');
   const [initialLoading, setInitialLoading] = useState(true);
   const [filterLoading, setFilterLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
@@ -200,16 +200,20 @@ export default function OdalarScreen() {
   const isFirstFocus = useRef(true);
   useFocusEffect(
     React.useCallback(() => {
-      // İlk açılışta loadData(true) zaten çalışıyor; sadece ekrana geri dönüşte yenile (silinen oda hemen kalkar)
+      const incomingFiltre = route?.params?.filtre;
+      if (incomingFiltre && ['bos', 'dolu', 'tumu', 'hatali'].includes(incomingFiltre)) {
+        setFiltre(incomingFiltre);
+        if (navigation.setParams) navigation.setParams({ filtre: undefined });
+      }
       if (isFirstFocus.current) {
         isFirstFocus.current = false;
         return () => {};
       }
-      if (!initialLoading) {
+      if (!incomingFiltre && !initialLoading) {
         loadData(false);
       }
       return () => {};
-    }, [initialLoading, loadData])
+    }, [initialLoading, loadData, route?.params?.filtre, navigation])
   );
 
   const setupWebSocket = () => {

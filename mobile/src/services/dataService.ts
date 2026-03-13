@@ -830,6 +830,15 @@ class DataService {
   }
 
   /**
+   * Sadece oda listesi cache'ini temizle (bildir sonrası güncel listeyi göstermek için).
+   */
+  invalidateOdalarCache() {
+    this.odalarCache.clear();
+    logger.log('[dataService] Odalar cache temizlendi');
+    this.emit('cache:cleared');
+  }
+
+  /**
    * Cache'i temizle
    */
   async clearCache() {

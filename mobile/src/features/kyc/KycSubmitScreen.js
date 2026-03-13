@@ -33,11 +33,19 @@ export default function KycSubmitScreen({ route, navigation }) {
     }
   };
 
+  const handleBack = () => {
+    if (navigation.canGoBack()) {
+      navigation.goBack();
+    } else {
+      navigation.replace('Main');
+    }
+  };
+
   if (!minimal) {
     return (
       <View style={styles.center}>
         <Text style={styles.text}>Veri yok</Text>
-        <TouchableOpacity style={styles.button} onPress={() => navigation.goBack()}>
+        <TouchableOpacity style={styles.button} onPress={handleBack}>
           <Text style={styles.buttonText}>Geri</Text>
         </TouchableOpacity>
       </View>
@@ -48,7 +56,7 @@ export default function KycSubmitScreen({ route, navigation }) {
     <View style={[styles.container, { paddingTop: insets.top }]}>
       <TouchableOpacity
         style={[styles.backBtn, { top: insets.top + 8 }]}
-        onPress={() => navigation.goBack()}
+        onPress={handleBack}
         hitSlop={12}
       >
         <Ionicons name="arrow-back" size={24} color={theme.colors.textPrimary} />

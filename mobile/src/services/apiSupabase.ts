@@ -106,6 +106,27 @@ function throwIfNotOk(r: Response, data: Record<string, unknown> | null, default
   throw Object.assign(new Error(message), { response: { status, data: data ?? {} } });
 }
 
+const KBS_REQUEST_TIMEOUT_MS = 28000;
+
+/** Timeout ile fetch: süre aşımında abort eder, axios-benzeri hata fırlatır (loading kalkar). fetchWithLog ile log korunur. */
+async function fetchWithTimeout(url: string, opts: RequestInit, timeoutMs: number = KBS_REQUEST_TIMEOUT_MS): Promise<Response> {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const r = await fetchWithLog(url, { ...opts, signal: controller.signal });
+    clearTimeout(timeoutId);
+    return r;
+  } catch (e) {
+    clearTimeout(timeoutId);
+    if ((e as { name?: string })?.name === 'AbortError') {
+      throw Object.assign(new Error('İstek zaman aşımına uğradı. Sunucu veya KBS yanıt vermedi.'), {
+        response: { status: 408, data: { message: 'Zaman aşımı' } },
+      });
+    }
+    throw e;
+  }
+}
+
 /** Backend fetch + her request için detaylı log: full URL, status, 429 ise RATE_LIMIT ve body önizleme */
 async function fetchWithLog(url: string, opts: RequestInit): Promise<Response> {
   const r = await fetch(url, opts);
@@ -944,11 +965,15 @@ export const api = {
         const body = (payload && typeof payload === 'object' && !Array.isArray(payload))
           ? { kbsTuru: (payload as { kbsTuru?: string })?.kbsTuru, kbsTesisKodu: (payload as { kbsTesisKodu?: string })?.kbsTesisKodu, kbsWebServisSifre: (payload as { kbsWebServisSifre?: string })?.kbsWebServisSifre }
           : {};
-        const r = await fetchWithLog(`${backendUrl}/api/tesis/kbs/test`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-          body: JSON.stringify(body),
-        });
+        const r = await fetchWithTimeout(
+          `${backendUrl}/api/tesis/kbs/test`,
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+            body: JSON.stringify(body),
+          },
+          KBS_REQUEST_TIMEOUT_MS
+        );
         const data = await r.json().catch(() => ({}));
         if (!r.ok) {
           throw Object.assign(new Error((data as { message?: string })?.message || 'KBS test başarısız'), {
@@ -981,11 +1006,15 @@ export const api = {
         if (!token) {
           throw Object.assign(new Error('Giriş gerekli'), { response: { status: 401, data: { message: 'Token yok' } } });
         }
-        const r = await fetchWithLog(`${backendUrl}/api/tesis/kbs/import`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-          body: JSON.stringify(payload || {}),
-        });
+        const r = await fetchWithTimeout(
+          `${backendUrl}/api/tesis/kbs/import`,
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+            body: JSON.stringify(payload || {}),
+          },
+          KBS_REQUEST_TIMEOUT_MS
+        );
         const data = await r.json().catch(() => ({}));
         if (!r.ok) {
           throw Object.assign(new Error((data as { message?: string })?.message || 'KBS aktarımı başarısız'), { response: { status: r.status, data } });
@@ -1188,14 +1217,18 @@ export const api = {
             err.response = { status: 401, data: { message: 'Token bulunamadı' } };
             throw err;
           }
-          const r = await fetchWithLog(`${backendUrl}/api/tesis/kbs`, {
-            method: 'PUT',
-            headers: {
-              'Content-Type': 'application/json',
-              Authorization: `Bearer ${token}`,
+          const r = await fetchWithTimeout(
+            `${backendUrl}/api/tesis/kbs`,
+            {
+              method: 'PUT',
+              headers: {
+                'Content-Type': 'application/json',
+                Authorization: `Bearer ${token}`,
+              },
+              body: JSON.stringify(body || {}),
             },
-            body: JSON.stringify(body || {}),
-          });
+            KBS_REQUEST_TIMEOUT_MS
+          );
           const data = await r.json().catch(() => ({}));
           if (!r.ok) throw Object.assign(new Error((data as { message?: string }).message || 'Ayarlar kaydedilemedi'), { response: { status: r.status, data } });
           return toResponse(data);

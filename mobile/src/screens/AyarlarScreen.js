@@ -12,6 +12,7 @@ import {
   Modal,
   Image,
   ActivityIndicator,
+  Keyboard,
 } from 'react-native';
 import Constants from 'expo-constants';
 import * as ImagePicker from 'expo-image-picker';
@@ -42,6 +43,20 @@ function withTimeout(promise, ms, msg = 'İstek zaman aşımına uğradı') {
     promise,
     new Promise((_, reject) => setTimeout(() => reject(new Error(msg)), ms)),
   ]);
+}
+
+/** IPv4: son oktet xxx; IPv6 veya diğer: son kısım gizli */
+function maskIpForDisplay(ip) {
+  if (!ip || typeof ip !== 'string') return '—';
+  const s = ip.trim();
+  const v4Match = s.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
+  if (v4Match) return `${v4Match[1]}.${v4Match[2]}.${v4Match[3]}.xxx`;
+  if (s.includes(':')) {
+    const parts = s.split(':').filter(Boolean);
+    if (parts.length >= 4) return parts.slice(0, 3).join(':') + ':xxx';
+    return s.slice(0, Math.max(0, s.length - 4)) + 'xxxx';
+  }
+  return s.length > 6 ? s.slice(0, -3) + 'xxx' : 'xxx';
 }
 
 export default function AyarlarScreen() {
@@ -359,12 +374,17 @@ export default function AyarlarScreen() {
   };
 
   const handleKBSTest = async () => {
+    Keyboard.dismiss();
     if (kbsTestInProgressRef.current) return;
     const kbsTuru = kbsSettings.kbsTuru || 'jandarma';
     const kbsTesisKodu = (kbsSettings.kbsTesisKodu || '').trim();
-    const kbsWebServisSifre = kbsSettings.kbsWebServisSifre || '';
+    const kbsWebServisSifre = (kbsSettings.kbsWebServisSifre || '').trim();
     if (!kbsTesisKodu || !kbsWebServisSifre) {
       Toast.show({ type: 'error', text1: 'Eksik alan', text2: 'KBS tesis kodu ve web servis şifresini girin.' });
+      return;
+    }
+    if (kbsWebServisSifre === '********') {
+      Toast.show({ type: 'error', text1: 'Şifre gerekli', text2: 'Bağlantı testi için web servis şifresini yeniden yazın (kayıtlı şifre ile test yapılamaz).' });
       return;
     }
     kbsTestInProgressRef.current = true;
@@ -397,12 +417,17 @@ export default function AyarlarScreen() {
   };
 
   const handleKBSImport = async () => {
+    Keyboard.dismiss();
     if (kbsImportInProgressRef.current) return;
     const kbsTuru = kbsSettings.kbsTuru || 'jandarma';
     const kbsTesisKodu = (kbsSettings.kbsTesisKodu || '').trim();
-    const kbsWebServisSifre = kbsSettings.kbsWebServisSifre || '';
+    const kbsWebServisSifre = (kbsSettings.kbsWebServisSifre || '').trim();
     if (!kbsTesisKodu || !kbsWebServisSifre) {
       Toast.show({ type: 'error', text1: 'Eksik alan', text2: 'KBS tesis kodu ve web servis şifresini girin.' });
+      return;
+    }
+    if (kbsWebServisSifre === '********') {
+      Toast.show({ type: 'error', text1: 'Şifre gerekli', text2: 'Senkronizasyon için web servis şifresini yeniden yazın.' });
       return;
     }
     kbsImportInProgressRef.current = true;
@@ -892,27 +917,37 @@ export default function AyarlarScreen() {
             editable={credentialState !== 'PENDING'}
           />
 
-          <View style={[styles.switchRow, { borderColor: colors.border }]}>
-            <Text style={[styles.label, { color: colors.textPrimary }]}>IP Kısıtı</Text>
-            <Switch
-              value={kbsSettings.ipKisitAktif}
-              onValueChange={(v) => setKbsSettings((prev) => ({ ...prev, ipKisitAktif: v }))}
-              trackColor={{ false: colors.border, true: colors.primarySoft }}
-              thumbColor={kbsSettings.ipKisitAktif ? colors.primary : colors.textSecondary}
-            />
-          </View>
-
           {kbsServerIp ? (
             <View style={[styles.serverIpBox, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-              <Text style={[styles.label, { color: colors.textPrimary }]}>Sunucu IP'si</Text>
-              <Text style={[styles.serverIpText, { color: colors.textPrimary }]} selectable>{kbsServerIp}</Text>
+              <Text style={[styles.label, { color: colors.textPrimary }]}>Sabit IP (platform)</Text>
+              <Text style={[styles.serverIpText, { color: colors.textPrimary }]}>
+                {maskIpForDisplay(kbsServerIp)}
+              </Text>
               <Text style={[styles.infoText, { color: colors.textSecondary, marginTop: 4 }]}>
-                Gerekirse teknik destekte kullanın.
+                Gerekirse teknik destekte kullanın. Son rakamlar gizlidir.
               </Text>
             </View>
           ) : null}
 
-          <Button variant="secondary" onPress={handleKBSTest} loading={testLoading} disabled={testLoading} style={[styles.actionBtnSecondary, { borderColor: colors.primary }]} textStyle={{ color: colors.primary }}>
+          {testResult?.mock && (
+            <Text style={[styles.infoText, { color: colors.textSecondary, marginBottom: 8 }]}>
+              Sunucuda (backend) KBS adresi tanımlı değil. Gerçek test için JANDARMA_KBS_URL veya POLIS_KBS_URL ortam değişkeni sunucu yöneticisi tarafından eklenmeli.
+            </Text>
+          )}
+
+          <Button
+            variant="secondary"
+            onPress={(e) => {
+              e?.preventDefault?.();
+              e?.stopPropagation?.();
+              handleKBSTest();
+            }}
+            loading={testLoading}
+            disabled={testLoading}
+            style={[styles.actionBtnSecondary, { borderColor: colors.primary }]}
+            textStyle={{ color: colors.primary }}
+            type="button"
+          >
             Bağlantıyı test et
           </Button>
           {testResult && (
@@ -943,11 +978,16 @@ export default function AyarlarScreen() {
           </Text>
           <Button
             variant="secondary"
-            onPress={handleKBSImport}
+            onPress={(e) => {
+              e?.preventDefault?.();
+              e?.stopPropagation?.();
+              handleKBSImport();
+            }}
             loading={kbsImportLoading}
             disabled={kbsImportLoading || !kbsSettings.kbsTesisKodu?.trim()}
             style={[styles.actionBtnSecondary, { marginTop: spacing.sm, borderColor: colors.primary }]}
             textStyle={{ color: colors.primary }}
+            type="button"
           >
             Senkronize et
           </Button>

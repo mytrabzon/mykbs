@@ -36,11 +36,13 @@ router.post('/mrz-verify', async (req, res) => {
     });
   } catch (e) {
     console.error('kyc mrz-verify error', e);
-    return res.status(500).json({
+    // Tablo yoksa (migration uygulanmamışsa) veya DB hatası: istemci 500 yerine 200 + REJECTED görsün, uygulama kilitlenmesin
+    const isTableMissing = e?.code === 'P2021' || (e?.message && /does not exist|relation.*not found/i.test(e.message));
+    return res.status(isTableMissing ? 200 : 500).json({
       verification_id: null,
       status: 'REJECTED',
       next: 'DONE',
-      error: 'server_error',
+      error: isTableMissing ? 'kyc_table_missing' : 'server_error',
     });
   }
 });

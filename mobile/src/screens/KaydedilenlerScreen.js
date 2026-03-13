@@ -18,9 +18,10 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { theme } from '../theme';
 import { api } from '../services/api';
 import { getApiBaseUrl } from '../config/api';
+import { dataService } from '../services/dataService';
 import OdaAtamaSheet from '../components/OdaAtamaSheet';
 
-export default function KaydedilenlerScreen({ navigation }) {
+export default function KaydedilenlerScreen({ navigation, route }) {
   const insets = useSafeAreaInsets();
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -57,7 +58,12 @@ export default function KaydedilenlerScreen({ navigation }) {
     useCallback(() => {
       const isRefresh = itemsRef.current.length > 0;
       load(isRefresh);
-    }, [load])
+      const openBildir = route?.params?.openBildirFor;
+      if (openBildir && openBildir.id) {
+        setBildirItem(openBildir);
+        navigation.setParams({ openBildirFor: undefined });
+      }
+    }, [load, route?.params?.openBildirFor, navigation])
   );
 
   const baseUrl = getApiBaseUrl();
@@ -87,9 +93,12 @@ export default function KaydedilenlerScreen({ navigation }) {
         odaId: selectedOda.id,
         misafirTipi,
       });
-      Toast.show({ type: 'success', text1: 'KBS\'ye gönderildi', text2: `${bildirItem.ad} ${bildirItem.soyad} · Oda ${selectedOda.odaNumarasi}` });
+      const odaNo = selectedOda.odaNumarasi;
+      dataService.invalidateOdalarCache?.();
+      Toast.show({ type: 'success', text1: 'KBS\'ye gönderildi', text2: `${bildirItem.ad} ${bildirItem.soyad} · Oda ${odaNo}` });
       setBildirItem(null);
       load(true);
+      navigation.navigate('MainTabs', { screen: 'Odalar', params: { filtre: 'dolu' } });
     } catch (err) {
       const msg = err.response?.data?.message || err.message || 'Bildirim gönderilemedi';
       Toast.show({ type: 'error', text1: 'Gönderilemedi', text2: msg });

@@ -34,6 +34,9 @@ export default function MrzResultScreen({ route, navigation }) {
     if (navigation.canGoBack()) navigation.goBack();
     else navigation.replace('MrzScan');
   };
+  const handleKapat = () => {
+    navigation.navigate('Main');
+  };
 
   const chipPhotoBase64 = payload?.chipPhotoBase64 && typeof payload.chipPhotoBase64 === 'string' ? payload.chipPhotoBase64 : null;
   const displayPhotoUri = portraitBase64 ? `data:image/jpeg;base64,${portraitBase64}` : chipPhotoBase64 ? `data:image/jpeg;base64,${chipPhotoBase64}` : photoUri;
@@ -102,15 +105,21 @@ export default function MrzResultScreen({ route, navigation }) {
     if (portrait && typeof portrait === 'string') body.portraitPhotoBase64 = portrait;
     setSavingOkutulan(true);
     try {
-      await api.post('/okutulan-belgeler', body);
+      const res = await api.post('/okutulan-belgeler', body);
+      const savedId = res?.data?.id;
       setSavedToOkutulan(true);
-      Toast.show({ type: 'success', text1: 'Kaydedildi', text2: 'Kaydedilenler sayfasından görüntüleyebilirsiniz.' });
+      Toast.show({ type: 'success', text1: 'Kaydedildi', text2: 'Oda seçip KBS\'ye bildirin.' });
+      if (savedId) {
+        navigation.navigate('Kaydedilenler', {
+          openBildirFor: { id: savedId, ad, soyad, odaNo: null },
+        });
+      }
     } catch (e) {
       Toast.show({ type: 'error', text1: 'Kayıt başarısız', text2: e?.response?.data?.message || 'Tekrar deneyin.' });
     } finally {
       setSavingOkutulan(false);
     }
-  }, [payload, photoUri, portraitBase64, chipPhotoBase64]);
+  }, [payload, photoUri, portraitBase64, chipPhotoBase64, navigation]);
 
   if (!payload) {
     return (
@@ -126,12 +135,14 @@ export default function MrzResultScreen({ route, navigation }) {
   return (
     <View style={styles.container}>
       <View style={[styles.header, { paddingTop: insets.top + 8, paddingBottom: 8 }]}>
-        <TouchableOpacity onPress={handleGeri} style={styles.headerBack} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
-          <Ionicons name="arrow-back" size={24} color={theme.colors.textPrimary} />
+        <TouchableOpacity onPress={handleGeri} style={styles.headerBack} hitSlop={12} activeOpacity={0.7}>
+          <Ionicons name="arrow-back" size={26} color={theme.colors.textPrimary} />
           <Text style={styles.headerBackText}>Geri</Text>
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Belge sonucu</Text>
-        <View style={styles.headerPlaceholder} />
+        <TouchableOpacity onPress={handleKapat} style={styles.headerRightBtn} hitSlop={12} activeOpacity={0.7}>
+          <Text style={styles.headerRightText}>Kapat</Text>
+        </TouchableOpacity>
       </View>
       <ScrollView style={styles.scroll} contentContainerStyle={styles.content}>
       <View style={styles.card}>
@@ -164,6 +175,10 @@ export default function MrzResultScreen({ route, navigation }) {
         <Row label="Ad" value={payload.givenNames || payload.ad} />
         <Text style={styles.masked}>{fromNfc ? 'NFC ile okundu' : `MRZ (maske): ${maskMrz(raw)}`}</Text>
       </View>
+      <TouchableOpacity style={[styles.buttonOutline]} onPress={handleGeri} activeOpacity={0.8}>
+        <Ionicons name="arrow-back" size={20} color={theme.colors.primary} />
+        <Text style={styles.buttonOutlineText}>Geri dön</Text>
+      </TouchableOpacity>
       <TouchableOpacity
         style={[styles.buttonSecondary, styles.buttonSave]}
         onPress={handleKaydetOkutulan}
@@ -209,11 +224,12 @@ function Row({ label, value, mask }) {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: theme.colors.background },
-  header: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: theme.spacing.base, borderBottomWidth: 1, borderBottomColor: theme.colors.border },
-  headerBack: { flexDirection: 'row', alignItems: 'center', paddingVertical: 8, paddingRight: 8, marginLeft: -44 },
-  headerBackText: { fontSize: theme.typography.fontSize.base, color: theme.colors.textPrimary, marginLeft: 4 },
+  header: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: theme.spacing.sm, borderBottomWidth: 1, borderBottomColor: theme.colors.border },
+  headerBack: { flexDirection: 'row', alignItems: 'center', paddingVertical: 10, paddingHorizontal: 8, minWidth: 80 },
+  headerBackText: { fontSize: theme.typography.fontSize.base, color: theme.colors.textPrimary, marginLeft: 4, fontWeight: '500' },
   headerTitle: { flex: 1, textAlign: 'center', fontSize: theme.typography.fontSize.lg, fontWeight: theme.typography.fontWeight.semibold, color: theme.colors.textPrimary },
-  headerPlaceholder: { width: 80 },
+  headerRightBtn: { paddingVertical: 10, paddingHorizontal: 12 },
+  headerRightText: { fontSize: theme.typography.fontSize.base, color: theme.colors.primary, fontWeight: '600' },
   scroll: { flex: 1 },
   content: { padding: theme.spacing.lg, paddingBottom: 40 },
   center: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: theme.spacing.lg },
@@ -235,6 +251,8 @@ const styles = StyleSheet.create({
   primary: {},
   buttonText: { color: '#fff', fontSize: theme.typography.fontSize.base, fontWeight: theme.typography.fontWeight.semibold },
   buttonTextDisabled: { opacity: 0.7 },
+  buttonOutline: { ...theme.styles.button.outline, marginTop: theme.spacing.xs, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 },
+  buttonOutlineText: { color: theme.colors.primary, fontSize: theme.typography.fontSize.base, fontWeight: '500' },
   buttonSecondary: { ...theme.styles.button.outline, marginTop: theme.spacing.xs, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 },
   buttonSecondaryText: { color: theme.colors.primary, fontSize: theme.typography.fontSize.base },
   buttonSave: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 },

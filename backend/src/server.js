@@ -115,6 +115,7 @@ app.use('/api/app-admin', require('./routes/appAdmin'));
 app.use('/api/siparis', require('./routes/siparis'));
 app.use('/api/support', require('./routes/support'));
 app.use('/api/push', require('./routes/push'));
+app.use('/api/kbs', require('./routes/kbs'));
 app.use('/api/kbs/credentials', require('./routes/kbsCredentials'));
 
 // KBS backend API (Supabase + outbox) — checkin, checkout, room-change

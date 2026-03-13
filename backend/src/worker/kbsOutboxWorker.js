@@ -25,6 +25,14 @@ async function processOne(row) {
     return;
   }
 
+  const sabitIp = (process.env.SABIT_IP || '').trim() || '(SABIT_IP tanımlı değil; GET /debug/egress-ip ile gerçek IP)';
+  console.log('[KBS Worker] Bildirim gönderiliyor', {
+    ip: sabitIp,
+    tesis: branch.kbs_tesis_kodu,
+    tur: branch.kbs_turu,
+    type,
+  });
+
   const client = createKBSClient(branch);
   let result;
 

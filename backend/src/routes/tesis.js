@@ -407,15 +407,21 @@ router.post('/kbs/test', async (req, res) => {
     }
 
     // Backend'de ilgili KBS URL boşsa mock modundayız; testi geçir, "yanıt vermiyor" hatası verme
-    const kbsUrl = (tesisLike.kbsTuru === 'jandarma'
+    const kbsTuruNorm = (tesisLike.kbsTuru || '').toString().trim().toLowerCase();
+    const kbsUrl = (kbsTuruNorm === 'jandarma'
       ? (process.env.JANDARMA_KBS_URL || '').trim()
-      : tesisLike.kbsTuru === 'polis'
+      : kbsTuruNorm === 'polis'
         ? (process.env.POLIS_KBS_URL || '').trim()
         : '');
     if (!kbsUrl) {
+      const urlVar = kbsTuruNorm === 'polis' ? 'POLIS_KBS_URL' : 'JANDARMA_KBS_URL';
+      const envSet = urlVar === 'POLIS_KBS_URL' ? !!process.env.POLIS_KBS_URL : !!process.env.JANDARMA_KBS_URL;
+      console.warn('[KBS test] URL boş', { kbsTuru: tesisLike.kbsTuru, kbsTuruNorm, urlVar, envVarSet: envSet });
       return res.json({
         success: true,
-        message: 'KBS sunucusu yapılandırılmamış. Test atlandı; check-in bildirimleri şu an mock işlenecek.',
+        message: envSet
+          ? `KBS türü "${tesisLike.kbsTuru}" tanınmadı; jandarma veya polis seçin. (${urlVar} sunucuda tanımlı.)`
+          : `Sunucuda KBS adresi tanımlı değil (${urlVar}). Gerçek bağlantı testi yapılamıyor; bildirimler şu an mock. Sunucu yöneticisine ${urlVar} ortam değişkenini eklemesini söyleyin.`,
         mock: true,
       });
     }

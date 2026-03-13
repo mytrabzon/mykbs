@@ -10,6 +10,7 @@ function createKBSService(tesis) {
     throw new Error('KBS bilgileri eksik');
   }
 
+  const kbsTuruNorm = String(tesis.kbsTuru).trim().toLowerCase();
   const raw = tesis.ipAdresleri;
   const ipAdresleri = Array.isArray(raw)
     ? raw
@@ -22,9 +23,9 @@ function createKBSService(tesis) {
     ipAdresleri
   };
 
-  if (tesis.kbsTuru === 'jandarma') {
+  if (kbsTuruNorm === 'jandarma') {
     return new JandarmaKBS(config.tesisKodu, config.webServisSifre, config.ipAdresleri);
-  } else if (tesis.kbsTuru === 'polis') {
+  } else if (kbsTuruNorm === 'polis') {
     return new PolisKBS(config.tesisKodu, config.webServisSifre, config.ipAdresleri);
   } else {
     throw new Error('Geçersiz KBS türü');
