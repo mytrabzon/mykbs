@@ -358,7 +358,78 @@ function calculateMrzScore(text) {
   const letterCount = (text.match(/[A-Z]/g) || []).length;
   if (digitCount > 10) score += 10;
   if (letterCount > 10) score += 10;
+  const parsed = parseMrzRaw(text);
+  if (parsed && parsed.checks && parsed.checks.compositeCheck) score += 20;
   return score;
+}
+
+/**
+ * Belge formatı algıla: TD1 (3x30), TD2 (2x36), TD3 (2x44).
+ * @param {string} text - MRZ ham metin (satırlar \n ile)
+ * @returns {{ format: string, type: string }}
+ */
+function detectDocumentFormat(text) {
+  if (!text || typeof text !== 'string') return { format: 'UNKNOWN', type: 'UNKNOWN' };
+  const lines = text.split(/\r\n|\r|\n/).map((l) => l.trim().replace(/\s/g, '')).filter((l) => l.length > 10);
+  if (lines.length === 3 && lines[0].length === 30) return { format: 'TD1', type: 'ID_CARD' };
+  if (lines.length === 2 && lines[0].length === 36) return { format: 'TD2', type: 'DRIVING_LICENSE' };
+  if (lines.length === 2 && lines[0].length === 44) return { format: 'TD3', type: 'PASSPORT' };
+  if (lines.length === 3 && lines[0].length >= 28 && lines[0].length <= 30) return { format: 'TD1', type: 'ID_CARD' };
+  if (lines.length === 2 && lines[0].length >= 34 && lines[0].length <= 46) return { format: 'TD3', type: 'PASSPORT' };
+  return { format: 'UNKNOWN', type: 'UNKNOWN' };
+}
+
+/**
+ * Parse sonucunda check digit doğrulaması geçti mi?
+ * @param {{ checks?: { compositeCheck?: boolean } } | null} parsed
+ * @returns {boolean}
+ */
+function validateCheckDigits(parsed) {
+  return !!(parsed && parsed.checks && parsed.checks.compositeCheck);
+}
+
+/**
+ * Evrensel MRZ okuma: 5 farklı ön işleme stratejisi dene, en iyi skorlu sonucu döndür.
+ * Kağıt/fotokopi/ekran/yıpranmış belge için.
+ * @param {Buffer} imageBuffer
+ * @returns {Promise<{ text: string, confidence: number, score: number, format: object, attemptName?: string } | null>}
+ */
+async function universalMrzRead(imageBuffer) {
+  const { UniversalPreprocessor } = require('./universalPreprocess');
+  const Jimp = (await import('jimp')).default;
+  const preprocessor = new UniversalPreprocessor();
+  const strategies = [
+    { type: 'original', name: 'Orijinal' },
+    { type: 'highContrast', name: 'Yüksek kontrast' },
+    { type: 'inverted', name: 'Negatif' },
+    { type: 'sharpened', name: 'Keskin' },
+    { type: 'denoised', name: 'Gürültü azaltılmış' },
+  ];
+  let bestResult = null;
+  let bestScore = 0;
+  for (let i = 0; i < strategies.length; i++) {
+    try {
+      const processed = await preprocessor.preprocessVariant(imageBuffer, i);
+      const buf = await processed.getBufferAsync(Jimp.MIME_JPEG);
+      const ocrText = await runOcrOnBuffer(buf);
+      const raw = extractMrzFromOcr(ocrText);
+      if (!raw) continue;
+      const parsed = parseMrzRaw(raw);
+      let score = calculateMrzScore(raw);
+      if (parsed && validateCheckDigits(parsed)) score += 20;
+      if (score > bestScore) {
+        bestScore = score;
+        bestResult = {
+          text: raw,
+          confidence: parsed && validateCheckDigits(parsed) ? 97 : Math.min(90, 50 + score),
+          score,
+          format: detectDocumentFormat(raw),
+          attemptName: strategies[i].name,
+        };
+      }
+    } catch (_) {}
+  }
+  return bestResult;
 }
 
 /**
@@ -568,6 +639,9 @@ module.exports = {
   runMrzPipeline,
   runOcrOnBuffer,
   calculateMrzScore,
+  detectDocumentFormat,
+  validateCheckDigits,
+  universalMrzRead,
   extractMrzWithMultipleAttempts,
   extractMultipleMRZ,
   checkDigit,

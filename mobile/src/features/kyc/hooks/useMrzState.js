@@ -91,6 +91,19 @@ export function useMrzState() {
     setIsProcessing(false);
   }, []);
 
+  /**
+   * Yeni tarama seferi başlat (her kamera açılışında çağrılmalı).
+   * Eski currentMrz temizlenir; bir sonraki okuma tek pasaport olarak işlenir (karışma önlenir).
+   */
+  const startNewScanSession = useCallback(() => {
+    scanIdRef.current = Date.now();
+    setCurrentMrz(null);
+    setPreviousMrz(null);
+    lastDocumentKeyRef.current = '';
+    lastScanTimeRef.current = 0;
+    if (__DEV__) console.log('[useMrzState] startNewScanSession');
+  }, []);
+
   const setCurrentMrzFromOutside = useCallback((payload) => {
     if (payload) {
       lastDocumentKeyRef.current = getDocumentKey(payload);
@@ -110,6 +123,7 @@ export function useMrzState() {
     isProcessing,
     processNewMrz,
     clearCurrent,
+    startNewScanSession,
     setCurrentMrzFromOutside,
     scanId: scanIdRef.current,
     lastScanTime: lastScanTimeRef.current,

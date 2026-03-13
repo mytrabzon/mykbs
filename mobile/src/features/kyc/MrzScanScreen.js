@@ -258,7 +258,7 @@ export default function MrzScanScreen({ navigation }) {
   selectedDocTypeRef.current = selectedDocType;
   const useUnifiedMrzFlow = USE_UNIFIED_AUTO_SCAN || (Platform.OS === 'ios' && selectedDocType === DocType.ID);
 
-  const { processNewMrz, isProcessing: mrzStateProcessing, clearCurrent: clearMrzState } = useMrzState();
+  const { processNewMrz, isProcessing: mrzStateProcessing, clearCurrent: clearMrzState, startNewScanSession } = useMrzState();
 
   const { readNfcDirect, isReading: nfcIndependentReading, progress: nfcIndependentProgress, closeNfc: closeIndependentNfc, isSupported: nfcReaderSupported } = useIndependentNfcReader();
 
@@ -344,7 +344,7 @@ export default function MrzScanScreen({ navigation }) {
       setPortraitBase64(null);
       setMrzCheckFailed(false);
       getNfcEnabled().then((v) => { if (mounted.current) setNfcEnabledInSettings(!!v); });
-      clearMrzState();
+      startNewScanSession();
       scanStartTimeRef.current = Date.now();
 
       setCameraOpenFailed(false);
@@ -402,11 +402,11 @@ export default function MrzScanScreen({ navigation }) {
         }
         if (TorchModule) {
           try {
-            TorchModule.switchState(false);
+            TorchModule.switchState(0);
           } catch (e) {}
         }
       };
-    }, [permission?.granted, clearMrzState])
+    }, [permission?.granted, startNewScanSession])
   );
 
   const goBack = useCallback(() => {
@@ -1442,7 +1442,17 @@ export default function MrzScanScreen({ navigation }) {
   const docTypeForReader = Platform.OS === 'ios' ? DocType.Passport : selectedDocType;
 
   const toggleTorch = useCallback(() => {
-    setTorchOn((prev) => !prev);
+    setTorchOn((prev) => {
+      const next = !prev;
+      if (TorchModule) {
+        try {
+          TorchModule.switchState(next ? 1 : 0);
+        } catch (e) {
+          logger.debug('Torch switchState', e?.message);
+        }
+      }
+      return next;
+    });
   }, []);
 
   // Siyah ekranda kalmayı önle: her durumda geri butonu göster (focus/exit geçişinde de)

@@ -67,7 +67,96 @@ function calculateThreshold(image) {
   return Math.round(Math.max(80, Math.min(180, avg)));
 }
 
+/** KBS Prime: 5 farklı ortam için ön işleme stratejileri */
+const STRATEGIES = {
+  PASSPORT: 'passport',
+  ID_CARD: 'idCard',
+  PHOTOCOPY: 'photocopy',
+  SCREEN: 'screen',
+  DAMAGED: 'damaged',
+};
+
 class UniversalPreprocessor {
+  static get STRATEGIES() {
+    return STRATEGIES;
+  }
+
+  /**
+   * Ana giriş: görüntü + tespit edilen tip. MRZ bölgesi tespit edilir, stratejiye göre işlenir.
+   * @param {Buffer} imageBuffer
+   * @param {string} [detectedType] - STRATEGIES.PASSPORT | ID_CARD | PHOTOCOPY | SCREEN | DAMAGED
+   * @returns {Promise<Jimp>}
+   */
+  async preprocess(imageBuffer, detectedType) {
+    const image = await Jimp.read(imageBuffer);
+    const mrzRegion = this.detectMrzRegion(image);
+    switch (detectedType) {
+      case STRATEGIES.PHOTOCOPY:
+        return this.processPhotocopy(image, mrzRegion);
+      case STRATEGIES.SCREEN:
+        return this.processScreen(image, mrzRegion);
+      case STRATEGIES.DAMAGED:
+        return this.processDamaged(image, mrzRegion);
+      case STRATEGIES.ID_CARD:
+        return this.processStandard(image, mrzRegion, { highContrast: true });
+      default:
+        return this.processStandard(image, mrzRegion);
+    }
+  }
+
+  /**
+   * Fotokopi: yüksek kontrast, gürültü azaltma, keskinleştirme, gerekirse invert.
+   */
+  async processPhotocopy(image, mrzRegion) {
+    const { y, height } = mrzRegion;
+    const w = image.bitmap.width;
+    let slice = image.clone().crop(0, y, w, height);
+    slice = slice.greyscale().normalize().contrast(0.8).brightness(0.08);
+    applySharpenKernel(slice);
+    applyThreshold(slice, 140);
+    return slice;
+  }
+
+  /**
+   * Ekran görüntüsü: Moiré azaltma (blur hafif), parlaklık, keskinleştirme.
+   */
+  async processScreen(image, mrzRegion) {
+    const { y, height } = mrzRegion;
+    const w = image.bitmap.width;
+    let slice = image.clone().crop(0, y, w, height);
+    slice = slice.greyscale().normalize().contrast(0.4);
+    applySharpenKernel(slice);
+    applyThreshold(slice, calculateThreshold(slice));
+    return slice;
+  }
+
+  /**
+   * Yıpranmış belge: adaptif eşik, kenar iyileştirme (keskinleştirme).
+   */
+  async processDamaged(image, mrzRegion) {
+    const { y, height } = mrzRegion;
+    const w = image.bitmap.width;
+    let slice = image.clone().crop(0, y, w, height);
+    slice = slice.greyscale().normalize().contrast(0.6);
+    applySharpenKernel(slice);
+    const th = calculateThreshold(slice);
+    applyThreshold(slice, Math.max(100, Math.min(160, th)));
+    return slice;
+  }
+
+  /**
+   * Standart belge (orijinal pasaport/kimlik): hafif kontrast, keskinleştirme, adaptif eşik.
+   */
+  async processStandard(image, mrzRegion, opts = {}) {
+    const { y, height } = mrzRegion;
+    const w = image.bitmap.width;
+    let slice = image.clone().crop(0, y, w, height);
+    slice = slice.greyscale().normalize().contrast(opts.highContrast ? 0.55 : 0.45);
+    applySharpenKernel(slice);
+    applyThreshold(slice, calculateThreshold(slice));
+    return slice;
+  }
+
   /**
    * MRZ bölgesini tespit et: belge alt 1/3 - 1/2 (pasaport/kimlik standart).
    */
@@ -178,4 +267,4 @@ class UniversalPreprocessor {
   }
 }
 
-module.exports = { UniversalPreprocessor, applySharpenKernel, applyThreshold, calculateThreshold };
+module.exports = { UniversalPreprocessor, STRATEGIES, applySharpenKernel, applyThreshold, calculateThreshold };
