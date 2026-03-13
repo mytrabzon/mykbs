@@ -84,7 +84,7 @@ export default function IzinlerScreen() {
         Toast.show({
           type: 'info',
           text1: 'İzin reddedildi',
-          text2: 'İsterseniz cihaz ayarlarından sonra açabilirsiniz.',
+          text2: 'İsterseniz tekrar "İzin ver" ile deneyebilirsiniz.',
         });
       }
     } catch (e) {
@@ -136,7 +136,7 @@ export default function IzinlerScreen() {
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={refresh} colors={[colors.primary]} />}
       >
         <Text style={[styles.intro, { color: colors.textSecondary }]}>
-          Uygulamanın hangi izinlere sahip olduğunu buradan görebilir, izin verebilir veya cihaz ayarlarından kaldırabilirsiniz.
+          Tüm izinler uygulama içinde "İzin ver" ile verilir. Hangi izinlerin açık olduğunu aşağıda görebilirsiniz.
         </Text>
 
         {(['camera', 'mediaLibrary', 'notifications']).map((key) => {
@@ -180,16 +180,16 @@ export default function IzinlerScreen() {
         })}
 
         <View style={[styles.section, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-          <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>İzinleri değiştirmek için</Text>
+          <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>İzinleri kaldırmak için</Text>
           <Text style={[styles.sectionDesc, { color: colors.textSecondary }]}>
-            İzinleri kaldırmak veya daha önce reddettiğiniz bir izni açmak için cihazın uygulama ayarlarını kullanın.
+            Verdiğiniz bir izni kapatmak isterseniz cihaz ayarlarından uygulamayı açıp ilgili izni kapatabilirsiniz. Yeni izin vermek için yukarıdaki "İzin ver" butonunu kullanın.
           </Text>
           <TouchableOpacity
             style={[styles.settingsBtn, { backgroundColor: colors.background, borderColor: colors.border }]}
             onPress={handleOpenSettings}
           >
             <Ionicons name="settings-outline" size={22} color={colors.primary} />
-            <Text style={[styles.settingsBtnText, { color: colors.primary }]}>Uygulama ayarlarına git</Text>
+            <Text style={[styles.settingsBtnText, { color: colors.primary }]}>Cihaz ayarlarını aç</Text>
           </TouchableOpacity>
         </View>
       </ScrollView>

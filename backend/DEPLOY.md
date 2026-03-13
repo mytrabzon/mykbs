@@ -12,7 +12,7 @@
 | `SYNC_BRANCH_SECRET` | Evet (OTP giriş için) | Rastgele uzun string; branch/profile sync için. Aynı değer Supabase Edge Function secret olarak da eklenmeli (`sync_branch_profile`) |
 | `WORKER_SECRET` | Evet (cron için) | Rastgele uzun string; cron isteğinde header `x-worker-secret` ile gönderilir |
 | `POLIS_KBS_URL` | Hayır | Polis KBS API base URL (boşsa mock) |
-| `JANDARMA_KBS_URL` | Hayır | Jandarma KBS API base URL (boşsa mock) |
+| `JANDARMA_KBS_URL` | **Evet (Jandarma KBS kullanıyorsanız)** | Jandarma KBS API base URL. Canlıda kimlik bildirimi için Railway Variables’a mutlaka ekleyin; yoksa "Jandarma ortam url yok / ortam değişkeni tanımlı değil" hatası alırsınız. Değer: `https://vatandas.jandarma.gov.tr/KBS_Tesis_Servis/SrvShsYtkTml.svc` |
 | `NODE_ENV` | Hayır | `production` |
 
 ## Railway
@@ -70,6 +70,7 @@ Bundan sonra `main`’e (veya `backend/` altında değişiklik içeren) push’l
 
 - **"[server] Production ortamında JWT_SECRET zorunludur" / container sürekli yeniden başlıyor:** Deploy platformunda (Railway Variables, Render env, vb.) `JWT_SECRET` tanımlı değil. Değeri ekleyin (en az 32 karakter; örn. `openssl rand -base64 32` ile üretin), kaydedin ve redeploy edin.
 - **"Supabase yapılandırması eksik" (kayıt / giriş 500):** Railway Variables’da `SUPABASE_URL` ve `SUPABASE_SERVICE_ROLE_KEY` (veya en azından `SUPABASE_ANON_KEY`) tanımlı olmalı. Ekledikten sonra redeploy edin.
+- **"Jandarma ortam url yok" / "JANDARMA_KBS_URL ortam değişkeni tanımlı değil" (kimlik bildirimi canlıda):** Canlı backend’de bu değişken **sadece yerel .env’de değil**, deploy platformunda da tanımlı olmalı. **Railway:** Proje → Backend servisi → **Variables** → **New Variable** → Name: `JANDARMA_KBS_URL`, Value: `https://vatandas.jandarma.gov.tr/KBS_Tesis_Servis/SrvShsYtkTml.svc` → Kaydet. Redeploy gerekmez; değişken kaydedilince servis yeniden başlar. Jandarma sözleşmenizde farklı adres verildiyse onu kullanın. Ayrıntı: `docs/KBS_ORTAM_DEGISKENLERI.md`.
 
 ### "Veritabanı hatası" / "Can't reach database server" (Supabase paused)
 

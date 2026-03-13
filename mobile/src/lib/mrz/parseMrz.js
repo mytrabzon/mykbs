@@ -121,9 +121,15 @@ function parseTD1(lines) {
   const docNoCheckOk = true;
 
   // Satır 2: doğum 0-6, cinsiyet [6], son kullanma 7-13, uyruk 13-16 (Türk kimlik konumları)
-  const birthDateRaw = line2.substring(0, 6);
+  // OCR: O/I/L/S/B/Z karışıklığını düzelt (ışık/hiza uyarısına rağmen okumayı kolaylaştır)
+  const fixDateRaw = (s) => {
+    if (!s || s.length < 6) return s;
+    const map = { O: '0', Q: '0', D: '0', U: '0', I: '1', L: '1', '|': '1', J: '1', S: '5', B: '8', Z: '2', G: '6' };
+    return s.split('').map((c) => map[c] ?? c).join('');
+  };
+  const birthDateRaw = fixDateRaw(line2.substring(0, 6));
   const cinsiyetChar = line2[6];
-  const expiryDateRaw = line2.substring(7, 13);
+  const expiryDateRaw = fixDateRaw(line2.substring(7, 13));
   const uyruk = line2.substring(13, 16).replace(/</g, '').trim();
   // Türk kimlikte [6] cinsiyet; check digit yok. Geçerlilik: 6 haneli tarih formatı.
   const birthCheckOk = /^[0-9<]{6}$/.test(birthDateRaw);

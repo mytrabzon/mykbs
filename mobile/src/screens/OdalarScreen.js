@@ -14,6 +14,8 @@ import {
   Alert,
   Platform,
   Animated,
+  Modal,
+  Pressable,
 } from 'react-native';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { useAuth } from '../context/AuthContext';
@@ -85,6 +87,7 @@ export default function OdalarScreen() {
   const filtreRef = useRef(filtre);
   const [notificationPermissionStatus, setNotificationPermissionStatus] = useState(null);
   const [notificationCardDismissed, setNotificationCardDismissed] = useState(false);
+  const [notificationPermissionRequesting, setNotificationPermissionRequesting] = useState(false);
   const [sonGirenler, setSonGirenler] = useState([]);
   const [nfcEnabledInSettings, setNfcEnabledInSettings] = useState(false);
   useEffect(() => {
@@ -712,7 +715,10 @@ export default function OdalarScreen() {
   const [sortKey, setSortKey] = useState('odaNo');
   const [commandMode, setCommandMode] = useState(false);
   const [sheetRoom, setSheetRoom] = useState(null);
-  const [fabSheetVisible, setFabSheetVisible] = useState(false);
+  const [arizaModalVisible, setArizaModalVisible] = useState(false);
+  const [arizaOdalar, setArizaOdalar] = useState([]);
+  const [arizaLoading, setArizaLoading] = useState(false);
+  const [arizaSavingId, setArizaSavingId] = useState(null);
   const isAdmin = getIsAdminPanelUser(user);
 
   const handleAddRoom = () => {
@@ -740,22 +746,43 @@ export default function OdalarScreen() {
   const screenBg = colors.background === '#0F172A' ? colors.background : '#EDF0F7';
   const showBackendError = backendStatus.isOnline === false || lastLoadErrorType !== null || backendStatus.dbOnline === false;
 
+  const handleNotificationPermissionAllow = async () => {
+    if (notificationPermissionRequesting) return;
+    setNotificationPermissionRequesting(true);
+    try {
+      const status = await requestNotificationPermissionAsync();
+      setNotificationPermissionStatus(status);
+      if (status === 'granted') {
+        await registerPushToken(() => token);
+        Toast.show({ type: 'success', text1: 'Bildirimler açıldı', text2: 'Oda ve KBS güncellemelerini alacaksınız.' });
+      } else if (status === 'denied') {
+        Toast.show({ type: 'info', text1: 'İzin verilmedi', text2: 'İsterseniz tekrar Kabul et ile deneyebilirsiniz.' });
+      }
+    } catch (e) {
+      logger.warn('[Odalar] requestNotificationPermissionAsync error', e?.message);
+      const latest = await getNotificationPermissionStatusAsync().catch(() => 'undetermined');
+      setNotificationPermissionStatus(latest);
+      Toast.show({ type: 'error', text1: 'İzin alınamadı', text2: e?.message || 'Tekrar deneyin.' });
+    } finally {
+      setNotificationPermissionRequesting(false);
+    }
+  };
+
+  const notificationPermissionCard = token && notificationPermissionStatus && notificationPermissionStatus !== 'granted' && !notificationCardDismissed ? (
+    <PermissionCard
+      icon="notifications-outline"
+      title="Bildirimlere izin verin"
+      description="Oda ve KBS güncellemelerini anında almak için bildirimlere izin verebilirsiniz."
+      onAllow={handleNotificationPermissionAllow}
+      onDismiss={() => setNotificationCardDismissed(true)}
+      allowLabel="Kabul et"
+      dismissLabel="Geri"
+      allowLoading={notificationPermissionRequesting}
+    />
+  ) : null;
+
   const primeHeaderContent = (
     <>
-      {token && notificationPermissionStatus && notificationPermissionStatus !== 'granted' && !notificationCardDismissed && (
-        <PermissionCard
-          icon="notifications-outline"
-          title="Bildirimlere izin verin"
-          description="Oda ve KBS güncellemelerini anında almak için bildirimlere izin verebilirsiniz. İstediğiniz zaman bu kartı kapatıp sonra tekrar açabilirsiniz."
-          onAllow={async () => {
-            const status = await requestNotificationPermissionAsync();
-            setNotificationPermissionStatus(status);
-            if (status === 'granted') await registerPushToken(() => token);
-          }}
-          onDismiss={() => setNotificationCardDismissed(true)}
-          dismissLabel="Şimdi değil"
-        />
-      )}
       {liveUpdates.length > 0 && (
         <View style={[styles.lobbyLiveContainer, { backgroundColor: colors.surface, borderColor: colors.border }]}>
           <View style={styles.lobbyLiveHeader}>
@@ -832,6 +859,7 @@ export default function OdalarScreen() {
       ) : (
         <PrimeHomeView
           headerContent={primeHeaderContent}
+          contentTopCard={notificationPermissionCard}
           tesis={tesis}
           ozet={ozet}
           odalar={displayOdalar}
@@ -856,26 +884,6 @@ export default function OdalarScreen() {
         />
       )}
 
-      {/* Ana FAB — NFC ayarda açıksa hızlı işlemler satırında (Hızlı NFC) gösteriliyor */}
-      <View style={[styles.fabContainer, { zIndex: 20 }]} pointerEvents="box-none">
-        <TouchableOpacity
-          style={[styles.fab, { backgroundColor: colors.primary }]}
-          onPress={() => setFabSheetVisible(true)}
-        >
-          <Ionicons name="add" size={28} color={colors.textInverse} />
-        </TouchableOpacity>
-      </View>
-
-      <FABHalfSheet
-        visible={fabSheetVisible}
-        onClose={() => setFabSheetVisible(false)}
-        onSelect={({ type, route }) => {
-          if (route === 'CheckIn') navigation.navigate('MrzScan', { fromCheckIn: true });
-          else if (route) navigation.navigate(route);
-        }}
-        isAdmin={isAdmin}
-      />
-
       <RoomDetailSheet
         visible={!!sheetRoom}
         room={sheetRoom}
@@ -892,6 +900,93 @@ export default function OdalarScreen() {
         getStatusColor={getStatusColor}
         getStatusLabel={getStatusLabel}
         getKBSDurumText={getKBSDurumText}
+      />
+
+      {/* Arıza kaydı — oda seçip bakıma alma */}
+      <Modal visible={arizaModalVisible} transparent animationType="fade">
+        <Pressable style={[styles.modalOverlay, { backgroundColor: 'rgba(0,0,0,0.5)' }]} onPress={() => setArizaModalVisible(false)}>
+          <Pressable style={[styles.arizaModalBox, { backgroundColor: colors.surface }]} onPress={(e) => e.stopPropagation()}>
+            <View style={[styles.arizaModalHeader, { borderBottomColor: colors.border }]}>
+              <Text style={[styles.arizaModalTitle, { color: colors.textPrimary }]}>Arıza kaydı</Text>
+              <TouchableOpacity onPress={() => setArizaModalVisible(false)} hitSlop={12}>
+                <Ionicons name="close" size={24} color={colors.textSecondary} />
+              </TouchableOpacity>
+            </View>
+            <Text style={[styles.arizaModalSubtitle, { color: colors.textSecondary }]}>
+              Bakıma almak istediğiniz odayı seçin
+            </Text>
+            {arizaLoading ? (
+              <ActivityIndicator size="small" color={colors.primary} style={{ marginVertical: 24 }} />
+            ) : arizaOdalar.length === 0 ? (
+              <Text style={[styles.arizaModalEmpty, { color: colors.textSecondary }]}>Oda bulunamadı</Text>
+            ) : (
+              <ScrollView style={styles.arizaModalList} contentContainerStyle={styles.arizaModalListContent} showsVerticalScrollIndicator={false}>
+                {arizaOdalar.map((room) => {
+                  const isSaving = arizaSavingId === room.id;
+                  const isAlreadyBakim = room.durum === 'bakim';
+                  return (
+                    <TouchableOpacity
+                      key={room.id}
+                      style={[
+                        styles.arizaModalItem,
+                        { borderColor: colors.border, backgroundColor: colors.background },
+                        isAlreadyBakim && { opacity: 0.8 },
+                      ]}
+                      onPress={async () => {
+                        if (isAlreadyBakim) {
+                          Toast.show({ type: 'info', text1: 'Oda zaten bakımda' });
+                          return;
+                        }
+                        if (arizaSavingId) return;
+                        setArizaSavingId(room.id);
+                        try {
+                          await api.put(`/oda/${room.id}`, { durum: 'bakim' });
+                          await dataService.clearCache();
+                          loadData(false);
+                          Toast.show({ type: 'success', text1: 'Arıza kaydı', text2: `Oda ${room.odaNumarasi} bakıma alındı` });
+                          setArizaModalVisible(false);
+                        } catch (err) {
+                          Toast.show({ type: 'error', text1: 'Hata', text2: err?.response?.data?.message || 'Oda güncellenemedi' });
+                        } finally {
+                          setArizaSavingId(null);
+                        }
+                      }}
+                      disabled={!!arizaSavingId}
+                    >
+                      <View style={[styles.arizaModalItemLeft, { backgroundColor: getStatusColor(room.durum) + '30' }]}>
+                        <Text style={[styles.arizaModalItemRoom, { color: colors.textPrimary }]}>Oda {room.odaNumarasi}</Text>
+                        <Text style={[styles.arizaModalItemStatus, { color: colors.textSecondary }]}>{getStatusLabel(room.durum)}</Text>
+                      </View>
+                      {isSaving ? (
+                        <ActivityIndicator size="small" color={colors.primary} />
+                      ) : isAlreadyBakim ? (
+                        <Ionicons name="checkmark-circle" size={22} color={colors.success} />
+                      ) : (
+                        <Ionicons name="construct-outline" size={22} color={colors.primary} />
+                      )}
+                    </TouchableOpacity>
+                  );
+                })}
+              </ScrollView>
+            )}
+          </Pressable>
+        </Pressable>
+      </Modal>
+
+      <FABHalfSheet
+        visible={showFabMenu}
+        onClose={() => setShowFabMenu(false)}
+        onSelect={(action) => {
+          setShowFabMenu(false);
+          if (action?.type === 'navigate' && action.route) {
+            if (action.route === 'AddRoom') handleAddRoom();
+            else if (action.route === 'CheckIn') handleQuickCheckIn();
+            else navigation.navigate(action.route);
+          } else if (action?.type === 'ariza') {
+            setArizaModalVisible(true);
+          }
+        }}
+        isAdmin={!!isAdmin}
       />
     </View>
   );
@@ -1305,32 +1400,51 @@ const styles = StyleSheet.create({
   listEmpty: {
     flexGrow: 1,
   },
-  fabContainer: {
-    position: 'absolute',
-    right: theme.spacing.screenPadding,
-    bottom: 130,
+  modalOverlay: {
+    flex: 1,
+    justifyContent: 'center',
+    padding: theme.spacing.screenPadding,
+  },
+  arizaModalBox: {
+    borderRadius: 20,
+    maxHeight: '80%',
+    overflow: 'hidden',
+  },
+  arizaModalHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
+    justifyContent: 'space-between',
+    paddingHorizontal: theme.spacing.screenPadding,
+    paddingVertical: 16,
+    borderBottomWidth: 1,
   },
-  nfcFab: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    borderWidth: 2,
-    justifyContent: 'center',
+  arizaModalTitle: { fontSize: 18, fontWeight: '700' },
+  arizaModalSubtitle: {
+    fontSize: 13,
+    paddingHorizontal: theme.spacing.screenPadding,
+    paddingTop: 12,
+    paddingBottom: 8,
+  },
+  arizaModalEmpty: {
+    padding: 24,
+    textAlign: 'center',
+    fontSize: 14,
+  },
+  arizaModalList: { maxHeight: 320 },
+  arizaModalListContent: { padding: theme.spacing.screenPadding, paddingTop: 4, paddingBottom: 24 },
+  arizaModalItem: {
+    flexDirection: 'row',
     alignItems: 'center',
-    ...theme.spacing.shadow.lg,
+    justifyContent: 'space-between',
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    borderRadius: 12,
+    borderWidth: 1,
+    marginBottom: 8,
   },
-  fab: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    backgroundColor: theme.colors.primary,
-    justifyContent: 'center',
-    alignItems: 'center',
-    ...theme.spacing.shadow.lg,
-  },
+  arizaModalItemLeft: { paddingRight: 12, borderRadius: 8, paddingVertical: 4, paddingHorizontal: 8 },
+  arizaModalItemRoom: { fontSize: 15, fontWeight: '600' },
+  arizaModalItemStatus: { fontSize: 12, marginTop: 2 },
   fabMenu: {
     position: 'absolute',
     bottom: 64,

@@ -18,6 +18,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { theme } from '../theme';
 import { api } from '../services/api';
 import { getApiBaseUrl } from '../config/api';
+import OdaAtamaSheet from '../components/OdaAtamaSheet';
 
 export default function KaydedilenlerScreen({ navigation }) {
   const insets = useSafeAreaInsets();
@@ -31,6 +32,9 @@ export default function KaydedilenlerScreen({ navigation }) {
   const [bildirLoading, setBildirLoading] = useState(false);
   const [selectedOda, setSelectedOda] = useState(null);
   const [misafirTipi, setMisafirTipi] = useState('tc_vatandasi');
+  const [showOdaAtamaSheet, setShowOdaAtamaSheet] = useState(false);
+  const [odaAtamaItem, setOdaAtamaItem] = useState(null);
+  const [odaAtamaLoading, setOdaAtamaLoading] = useState(false);
   const itemsRef = useRef([]);
   itemsRef.current = items;
 
@@ -94,6 +98,25 @@ export default function KaydedilenlerScreen({ navigation }) {
     }
   }, [bildirItem, selectedOda, misafirTipi, load]);
 
+  const handleOdaAtamaSelect = useCallback(async (oda) => {
+    if (!odaAtamaItem?.id) return;
+    setOdaAtamaLoading(true);
+    try {
+      await api.put(`/okutulan-belgeler/${odaAtamaItem.id}/oda`, { odaId: oda.id });
+      Toast.show({ type: 'success', text1: 'Oda atandı', text2: `Oda ${oda.odaNumarasi}` });
+      setDetail((prev) => (prev && prev.id === odaAtamaItem.id ? { ...prev, odaNo: oda.odaNumarasi } : prev));
+      setItems((prev) => prev.map((it) => (it.id === odaAtamaItem.id ? { ...it, odaNo: oda.odaNumarasi } : it)));
+      setOdaAtamaItem(null);
+      setShowOdaAtamaSheet(false);
+      load(true);
+    } catch (err) {
+      const msg = err?.response?.data?.message || err?.message || 'Oda atanamadı';
+      Toast.show({ type: 'error', text1: 'Atanamadı', text2: msg });
+    } finally {
+      setOdaAtamaLoading(false);
+    }
+  }, [odaAtamaItem, load]);
+
   const photoUri = (item) => {
     const url = item.portraitPhotoUrl || item.photoUrl;
     if (!url) return null;
@@ -128,7 +151,9 @@ export default function KaydedilenlerScreen({ navigation }) {
             {item.belgeTuru === 'kimlik' ? 'Kimlik' : 'Pasaport'}
             {(item.kimlikNo || item.pasaportNo || item.belgeNo) && ` · ${item.kimlikNo || item.pasaportNo || item.belgeNo}`}
           </Text>
-          <Text style={styles.rowTime}>{createdAtStr}</Text>
+          <Text style={styles.rowTime}>
+            {item.odaNo ? `Oda ${item.odaNo}` : 'Oda atanmadı'} {createdAtStr ? ` · ${createdAtStr}` : ''}
+          </Text>
         </View>
         <TouchableOpacity
           style={styles.bildirBtn}
@@ -227,9 +252,21 @@ export default function KaydedilenlerScreen({ navigation }) {
                 <Field label="Doğum tarihi" value={detail.dogumTarihi} />
                 <Field label="Uyruk" value={detail.uyruk} />
                 <Field
+                  label="Oda"
+                  value={detail.odaNo ? `Oda ${detail.odaNo}` : 'Atanmadı'}
+                />
+                <Field
                   label="Kayıt tarihi"
                   value={detail.createdAt ? new Date(detail.createdAt).toLocaleString('tr-TR') : null}
                 />
+                <TouchableOpacity
+                  style={styles.bildirBtnDetail}
+                  onPress={() => { setOdaAtamaItem(detail); setShowOdaAtamaSheet(true); }}
+                  disabled={odaAtamaLoading}
+                >
+                  <Ionicons name="bed-outline" size={20} color={theme.colors.primary} />
+                  <Text style={styles.bildirBtnDetailText}>{detail.odaNo ? 'Oda değiştir' : 'Oda ata'}</Text>
+                </TouchableOpacity>
                 <TouchableOpacity style={styles.bildirBtnDetail} onPress={() => { setDetail(null); setBildirItem(detail); }}>
                   <Ionicons name="send" size={20} color={theme.colors.primary} />
                   <Text style={styles.bildirBtnDetailText}>KBS'ye bildir</Text>
@@ -339,6 +376,15 @@ export default function KaydedilenlerScreen({ navigation }) {
           </TouchableOpacity>
         </TouchableOpacity>
       </Modal>
+
+      <OdaAtamaSheet
+        visible={showOdaAtamaSheet}
+        onClose={() => { setShowOdaAtamaSheet(false); setOdaAtamaItem(null); }}
+        onSelect={handleOdaAtamaSelect}
+        title={odaAtamaItem?.odaNo ? 'Oda değiştir' : 'Oda ata'}
+        currentOdaNo={odaAtamaItem?.odaNo ?? null}
+        onlyEmptyForBildir={false}
+      />
     </View>
   );
 }

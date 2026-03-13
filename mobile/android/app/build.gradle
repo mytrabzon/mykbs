@@ -87,16 +87,26 @@ android {
     buildToolsVersion rootProject.ext.buildToolsVersion
     compileSdk rootProject.ext.compileSdkVersion
 
-    namespace 'com.litxtech.mykbs'
+flavorDimensions "appstore"
+
+productFlavors {
+  googlePlay {
+    dimension "appstore"
+    missingDimensionStrategy "store", "play"
+  }
+
+  amazon {
+    dimension "appstore"
+    missingDimensionStrategy "store", "amazon"
+  }
+}
+    namespace 'com.litxtech.kbsprime'
     defaultConfig {
-        applicationId 'com.litxtech.mykbs'
+        applicationId 'com.litxtech.kbsprime'
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 2
-        versionName "1.0.2"
-
-        // react-native-iap "both" adds amazon/play flavors; app picks Play Store
-        missingDimensionStrategy "store", "play"
+        versionCode 6
+        versionName "1.0.6"
 
         buildConfigField "String", "REACT_NATIVE_RELEASE_LEVEL", "\"${findProperty('reactNativeReleaseLevel') ?: 'stable'}\""
     }
@@ -158,6 +168,8 @@ android {
 dependencies {
     // The version of react-native is set by the React Native Gradle Plugin
     implementation("com.facebook.react:react-android")
+    // Regula Document Reader (Tüm dünya belgeleri) — react-native-regula-document-reader kurulunca açın:
+    // implementation 'com.regula.documentreader:fullrfid:6.7.+'
 
     def isGifEnabled = (findProperty('expo.gif.enabled') ?: "") == "true";
     def isWebpEnabled = (findProperty('expo.webp.enabled') ?: "") == "true";

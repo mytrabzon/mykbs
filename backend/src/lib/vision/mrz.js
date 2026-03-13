@@ -216,6 +216,9 @@ function parseTD1(lines) {
   const expiryDateCheck = l2[14];
   const nationality = l2.substring(15, 18).replace(/</g, '').trim();
   const l3 = (lines[2] || '').padEnd(TD1_LINE_LEN, '<');
+  // TD1 satır 2: optional data (18-29) — Türk kimlikte 11 haneli TC no
+  const optionalData = l2.substring(18, 30).replace(/</g, '').trim();
+  const personalNumber = /^\d{11}$/.test(optionalData) ? optionalData : undefined;
   // TD1 satır 3: SURNAME<<GIVENNAMES — Türk kimlik: ACAR<<HAKAN. OCR bazen tek < okur, split(/<+/) ile her iki durumda çalışır
   const nameParts = l3.split(/<+/).map((s) => s.trim()).filter(Boolean);
   const surname = (nameParts[0] || '').trim();
@@ -229,6 +232,7 @@ function parseTD1(lines) {
   return {
     fields: {
       documentNumber,
+      personalNumber,
       nationality,
       surname,
       givenNames,
@@ -236,7 +240,7 @@ function parseTD1(lines) {
       sex: sex === 'M' || sex === 'F' ? sex : sex === '<' ? 'U' : 'X',
       expiryDate: normalizeYYMMDD(expiryDateRaw),
       issuingCountry,
-      optionalData: undefined,
+      optionalData: optionalData || undefined,
     },
     checks: { passportNoCheck, birthCheck, expiryCheck, compositeCheck },
   };

@@ -1,4 +1,4 @@
-package com.litxtech.mykbs
+package com.litxtech.kbsprime
 
 import android.os.Build
 import android.os.Bundle

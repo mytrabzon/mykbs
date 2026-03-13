@@ -433,10 +433,14 @@ export default function CheckInScreen({ navigation, route }) {
   const handleCameraRead = async () => {
     try {
       logger.log('Camera read started');
-      const { status: existing } = await ImagePicker.getCameraPermissionsAsync();
+      let { status: existing } = await ImagePicker.getCameraPermissionsAsync();
       if (existing !== 'granted') {
-        setShowCameraPermissionCard(true);
-        return;
+        const { status: requested } = await ImagePicker.requestCameraPermissionsAsync();
+        if (requested !== 'granted') {
+          setShowCameraPermissionCard(true);
+          return;
+        }
+        existing = requested;
       }
       await launchCameraForCheckIn();
     } catch (error) {
@@ -448,6 +452,12 @@ export default function CheckInScreen({ navigation, route }) {
   const launchCameraForCheckIn = async () => {
     try {
       logger.log('Launching camera');
+      // Bazı cihazlarda izin state güncel olmayabiliyor; açmadan hemen önce tekrar iste
+      const { status } = await ImagePicker.requestCameraPermissionsAsync();
+      if (status !== 'granted') {
+        setShowCameraPermissionCard(true);
+        return;
+      }
       const result = await ImagePicker.launchCameraAsync({
         mediaTypes: ImagePicker.MediaType?.Images ?? 'images',
         allowsEditing: false,
@@ -495,10 +505,14 @@ export default function CheckInScreen({ navigation, route }) {
       }
     } catch (error) {
       logger.error('Camera read error', error);
+      const msg = error?.message || '';
+      const isPermission = /permission|izin|denied|erişim/i.test(msg);
       Toast.show({
         type: 'error',
-        text1: 'Kamera Hatası',
-        text2: 'Fotoğraf çekilemedi'
+        text1: 'Kamera açılamadı',
+        text2: isPermission
+          ? 'Kamera iznini verin veya Ayarlar > İzinler\'den kontrol edin.'
+          : 'Fotoğraf çekilemedi. "Hızlı MRZ" veya galeri ile deneyebilirsiniz.',
       });
     }
   };
@@ -771,7 +785,7 @@ export default function CheckInScreen({ navigation, route }) {
                 const { status } = await ImagePicker.requestCameraPermissionsAsync();
                 setShowCameraPermissionCard(false);
                 if (status === 'granted') await launchCameraForCheckIn();
-                else Toast.show({ type: 'info', text1: 'İzin verilmedi', text2: 'Kamerayı kullanmak için ayarlardan izin verebilirsiniz.' });
+                else Toast.show({ type: 'info', text1: 'İzin verilmedi', text2: 'Tekrar "İzin ver" ile deneyebilirsiniz.' });
               }}
               onDismiss={() => setShowCameraPermissionCard(false)}
               dismissLabel="Geri"

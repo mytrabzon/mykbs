@@ -50,7 +50,7 @@ function mapPassportReaderResultToPayload(r) {
   if (!r) return null;
   const birth = (r.birthDate || '').trim();
   const dogumTarihi = birth.includes('-') ? birth.split('-').reverse().join('.') : birth;
-  const docNo = (r.identityNo || r.documentNo || '').trim();
+  const docNo = (r.personalNumber || r.identityNo || r.documentNo || '').trim();
   const isTc = /^\d{11}$/.test(docNo);
   return {
     type: 'id_card',
@@ -339,6 +339,8 @@ export function useIndependentNfcReader() {
       });
       if (fullResult.success && fullResult.data) {
         const data = fullResult.data;
+        const keys = Object.keys(data).filter((k) => k !== 'raw');
+        logger.info('[NFC] readAllDataWhenCardNear başarılı', { keys: keys.slice(0, 15) });
         if (data.raw) {
           const { raw, ...rest } = data;
           setLastResult(rest);

@@ -152,6 +152,8 @@ export default function PrimeHomeView({
   getBackendUrl,
   backendOk,
   headerContent,
+  /** Header'dan ayrı, içerik alanında üstte gösterilecek kart (örn. bildirim izni) — header bölümünden çıkmaz */
+  contentTopCard,
   /** Hamburger menüyü açar (Drawer açıkken kullanılır) */
   onOpenMenu,
   /** Ayarlarda NFC açıksa hızlı işlemler satırında NFC butonu gösterilir */
@@ -371,6 +373,13 @@ export default function PrimeHomeView({
           ))}
         </ScrollView>
       </View>
+
+      {/* İçerik üstü kart (bildirim izni vb.) — header'dan ayrı, ekranda kart olarak */}
+      {contentTopCard ? (
+        <View style={styles.contentTopCardWrap}>
+          {contentTopCard}
+        </View>
+      ) : null}
 
       {/* Odalar Grid */}
       <View style={styles.roomsSection}>
@@ -632,6 +641,7 @@ const styles = StyleSheet.create({
   },
   badgeText: { color: '#fff', fontSize: 10, fontWeight: 'bold' },
   filterRowWrap: { minHeight: 52, marginBottom: 8 },
+  contentTopCardWrap: { marginBottom: 16 },
   filterScroll: { marginBottom: 12 },
   filterScrollContent: { paddingHorizontal: 20, gap: 8, alignItems: 'center', minHeight: 48 },
   filterChip: {

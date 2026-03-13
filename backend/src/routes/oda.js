@@ -257,21 +257,27 @@ router.post('/', async (req, res) => {
 /**
  * Oda güncelle
  */
+const ALLOWED_DURUM = ['bos', 'dolu', 'temizlik', 'bakim'];
+
 router.put('/:odaId', async (req, res) => {
   try {
-    const { odaTipi, kapasite, fotograf, not } = req.body;
+    const { odaTipi, kapasite, fotograf, not, durum } = req.body;
+    const data = {
+      odaTipi,
+      kapasite: kapasite ? parseInt(kapasite) : undefined,
+      fotograf,
+      not
+    };
+    if (durum && ALLOWED_DURUM.includes(durum)) {
+      data.durum = durum;
+    }
 
     const oda = await prisma.oda.update({
       where: {
         id: req.params.odaId,
         tesisId: getTesisId(req)
       },
-      data: {
-        odaTipi,
-        kapasite: kapasite ? parseInt(kapasite) : undefined,
-        fotograf,
-        not
-      }
+      data
     });
 
     // Log

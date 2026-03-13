@@ -1171,10 +1171,14 @@ function mergeMrzAndFront(mrzPayload, parsed) {
     if (mrzUyruk) merged.uyruk = mrzUyruk;
     if (mrzPayload.surname != null && mrzPayload.surname !== '') merged.soyad = String(mrzPayload.surname).trim();
     if (mrzPayload.givenNames != null && mrzPayload.givenNames !== '') merged.ad = String(mrzPayload.givenNames).trim();
-    // Türkiye Cumhuriyeti kimlik kartı: MRZ'de TUR + 11 hane belge no → kimlikNo
+    // Türkiye Cumhuriyeti kimlik kartı: MRZ'de TUR + 11 hane (personalNumber/optional data veya documentNumber) → kimlikNo
     const issuingCountry = (mrzPayload.issuingCountry || '').trim().toUpperCase();
+    const personalNo = String(mrzPayload.personalNumber || '').replace(/\D/g, '');
     const docNo = String(mrzPayload.documentNumber || '').replace(/\D/g, '');
-    if (issuingCountry === 'TUR' && /^\d{11}$/.test(docNo)) {
+    if (issuingCountry === 'TUR' && /^\d{11}$/.test(personalNo)) {
+      merged.kimlikNo = personalNo;
+      merged.pasaportNo = null;
+    } else if (issuingCountry === 'TUR' && /^\d{11}$/.test(docNo)) {
       merged.kimlikNo = docNo;
       merged.pasaportNo = null;
     }

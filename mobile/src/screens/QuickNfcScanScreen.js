@@ -33,6 +33,7 @@ import { getApiBaseUrl } from '../config/api';
 import { api } from '../services/api';
 import { logger } from '../utils/logger';
 import NfcRoundAnimatedButton from '../components/nfc/NfcRoundAnimatedButton';
+import OdaAtamaSheet from '../components/OdaAtamaSheet';
 
 let NfcPassportReader = null;
 try {
@@ -42,7 +43,7 @@ try {
 function mapNfcResultToItem(r) {
   const birth = (r.birthDate || '').trim();
   const dogumTarihi = birth.includes('-') ? birth.split('-').reverse().join('.') : birth;
-  const docNo = (r.identityNo || r.documentNo || '').trim();
+  const docNo = (r.personalNumber || r.identityNo || r.documentNo || '').trim();
   const isTc = /^\d{11}$/.test(docNo);
   return {
     ad: (r.firstName || '').trim(),
@@ -69,12 +70,23 @@ export default function QuickNfcScanScreen() {
   const [misafirTipi, setMisafirTipi] = useState('tc_vatandasi');
   const [bildirLoading, setBildirLoading] = useState(false);
   const [odalarError, setOdalarError] = useState(null);
+  const [showOdaAtamaSheet, setShowOdaAtamaSheet] = useState(false);
+  const [odaAtamaItem, setOdaAtamaItem] = useState(null);
+  const [odaAtamaLoading, setOdaAtamaLoading] = useState(false);
   const isIos = Platform.OS === 'ios';
   const [listening, setListening] = useState(false);
   const [processing, setProcessing] = useState(false);
+  const [nfcDebugLines, setNfcDebugLines] = useState([]);
+  const [hasStoredMrz, setHasStoredMrz] = useState(false);
   const processingRef = useRef(false);
   const mountedRef = useRef(true);
   const { readNfcDirect } = useIndependentNfcReader();
+
+  const addNfcDebug = useCallback((msg) => {
+    const line = `[${new Date().toLocaleTimeString('tr-TR')}] ${msg}`;
+    if (!mountedRef.current) return;
+    setNfcDebugLines((prev) => [...prev.slice(-24), line]);
+  }, []);
 
   const loadOkutulanlar = useCallback(async (options = {}) => {
     const { silent = false } = options;
@@ -92,6 +104,9 @@ export default function QuickNfcScanScreen() {
   useFocusEffect(
     useCallback(() => {
       loadOkutulanlar({ silent: true });
+      getLastMrzForBac().then((bac) => {
+        if (mountedRef.current) setHasStoredMrz(!!(bac?.documentNo && bac?.birthDate && bac?.expiryDate));
+      });
       return () => {
         setOkutulanlar([]);
         setDetail(null);
@@ -148,9 +163,11 @@ export default function QuickNfcScanScreen() {
     if (processingRef.current || !mountedRef.current) return;
     processingRef.current = true;
     setProcessing(true);
+    addNfcDebug('NFC okuma başladı');
     try {
       const bacKey = await getLastMrzForBac();
       if (NfcPassportReader && bacKey?.documentNo && bacKey?.birthDate && bacKey?.expiryDate) {
+        addNfcDebug(`BAC denenecek (MRZ): docNo=${bacKey.documentNo?.slice(0, 6)}...`);
         try {
           const nfcResult = await NfcPassportReader.startReading({
             bacKey: {
@@ -160,12 +177,16 @@ export default function QuickNfcScanScreen() {
             },
             includeImages: true,
           });
-          if (nfcResult && (nfcResult.firstName || nfcResult.lastName || nfcResult.documentNo)) {
+          const hasName = nfcResult && (nfcResult.firstName || nfcResult.lastName);
+          const hasDoc = nfcResult && (nfcResult.documentNo || nfcResult.personalNumber || nfcResult.identityNo);
+          if (nfcResult && (hasName || hasDoc)) {
+            addNfcDebug(`Native OK: ad=${nfcResult.firstName || '-'} soyad=${nfcResult.lastName || '-'} docNo=${nfcResult.documentNo || nfcResult.personalNumber || '-'}`);
             const item = mapNfcResultToItem(nfcResult);
             let res;
             try {
               res = await saveToBackend({ ...item, type: 'id_card' });
             } catch (saveErr) {
+              addNfcDebug('Kayıt hatası: ' + (saveErr?.response?.data?.message || saveErr?.message));
               Toast.show({ type: 'error', text1: 'Kayıt hatası', text2: saveErr?.response?.data?.message || saveErr?.message || 'Sunucuya kaydedilemedi.' });
               return;
             }
@@ -185,18 +206,29 @@ export default function QuickNfcScanScreen() {
             Toast.show({ type: 'success', text1: 'Okundu & kaydedildi', text2: `${item.ad} ${item.soyad}`.trim() || 'Kimlik eklendi.' });
             return;
           }
+          addNfcDebug('Native döndü ama ad/soyad/belge no yok. firstName=' + (nfcResult?.firstName || '') + ' lastName=' + (nfcResult?.lastName || '') + ' documentNo=' + (nfcResult?.documentNo || '') + ' personalNumber=' + (nfcResult?.personalNumber || ''));
         } catch (bacErr) {
           if ((bacErr?.message || '').includes('cancel')) return;
+          addNfcDebug('BAC (MRZ) hata: ' + (bacErr?.message || 'bilinmiyor'));
         }
+      } else {
+        addNfcDebug('Kayıtlı MRZ yok, readNfcDirect (default key\'ler) deneniyor');
       }
       const result = await readNfcDirect();
       if (!mountedRef.current) return;
       if (result?.success && result?.data) {
         const d = result.data;
+        const hasUseful = (d.ad || d.soyad || d.kimlikNo || d.pasaportNo);
+        if (!hasUseful) {
+          addNfcDebug('HATA: Veri geldi ama ad/soyad/kimlikNo/pasaportNo boş. Gelen alanlar: ' + JSON.stringify(Object.keys(d)) + ' | ad=' + (d.ad || '') + ' soyad=' + (d.soyad || '') + ' kimlikNo=' + (d.kimlikNo || '') + ' pasaportNo=' + (d.pasaportNo || ''));
+        } else {
+          addNfcDebug('readNfcDirect OK: ad=' + (d.ad || '-') + ' soyad=' + (d.soyad || '-') + ' kimlikNo=' + (d.kimlikNo || '-') + ' pasaportNo=' + (d.pasaportNo || '-'));
+        }
         let res;
         try {
           res = await saveToBackend(d);
         } catch (saveErr) {
+          addNfcDebug('Kayıt hatası: ' + (saveErr?.response?.data?.message || saveErr?.message));
           Toast.show({ type: 'error', text1: 'Kayıt hatası', text2: saveErr?.response?.data?.message || saveErr?.message || 'Sunucuya kaydedilemedi.' });
           return;
         }
@@ -215,20 +247,26 @@ export default function QuickNfcScanScreen() {
         try { Vibration.vibrate(80); } catch (_) {}
         Toast.show({ type: 'success', text1: 'Okundu & kaydedildi', text2: `${d.ad || ''} ${d.soyad || ''}`.trim() || 'Kimlik eklendi.' });
       } else {
+        addNfcDebug('readNfcDirect BAŞARISIZ: ' + (result?.error || 'bilinmiyor') + (result?.fallback ? ' | fallback=' + result.fallback : ''));
         Toast.show({ type: 'info', text1: 'Okunamadı', text2: result?.error || 'MRZ okutup tekrar deneyin.' });
       }
     } catch (e) {
+      const msg = e?.message?.includes('cancel') ? 'İptal' : (e?.response?.data?.message || e?.message || 'Okunamadı');
+      addNfcDebug('Exception: ' + msg);
       if (mountedRef.current) {
-        Toast.show({ type: 'error', text1: 'Hata', text2: e?.message?.includes('cancel') ? 'İptal' : (e?.response?.data?.message || e?.message || 'Okunamadı') });
+        Toast.show({ type: 'error', text1: 'Hata', text2: msg });
       }
     } finally {
       processingRef.current = false;
       if (mountedRef.current) setProcessing(false);
     }
-  }, [readNfcDirect, saveToBackend, loadOkutulanlar, prependNewItemAndRefresh]);
+  }, [readNfcDirect, saveToBackend, loadOkutulanlar, prependNewItemAndRefresh, addNfcDebug]);
 
   const readOneRef = useRef(readOne);
   readOneRef.current = readOne;
+
+  // Aynı kart yakındayken sürekli tetiklenmesin: okuma bitince bu süre bekleyip sonra tekrar dinlemeye al
+  const NFC_RE_REGISTER_DELAY_MS = 2500;
 
   const handleTagDiscovered = useCallback(() => {
     if (processingRef.current || !mountedRef.current) return;
@@ -254,12 +292,12 @@ export default function QuickNfcScanScreen() {
         fn().finally(() => {
           processingRef.current = false;
           if (mountedRef.current) setProcessing(false);
-          setTimeout(reRegister, 200);
+          setTimeout(reRegister, NFC_RE_REGISTER_DELAY_MS);
         });
       } else {
         processingRef.current = false;
         if (mountedRef.current) setProcessing(false);
-        setTimeout(reRegister, 200);
+        setTimeout(reRegister, NFC_RE_REGISTER_DELAY_MS);
       }
     }, 150);
   }, []);
@@ -368,6 +406,23 @@ export default function QuickNfcScanScreen() {
     Toast.show({ type: 'info', text1: 'Liste yenilendi' });
   }, [loadOkutulanlar]);
 
+  const handleOdaAtamaSelect = useCallback(async (oda) => {
+    if (!odaAtamaItem?.id) return;
+    setOdaAtamaLoading(true);
+    try {
+      await api.put(`/okutulan-belgeler/${odaAtamaItem.id}/oda`, { odaId: oda.id });
+      Toast.show({ type: 'success', text1: 'Oda atandı', text2: `Oda ${oda.odaNumarasi}` });
+      setDetail((prev) => (prev && prev.id === odaAtamaItem.id ? { ...prev, odaNo: oda.odaNumarasi } : prev));
+      setOdaAtamaItem(null);
+      setShowOdaAtamaSheet(false);
+      loadOkutulanlar({ silent: true });
+    } catch (err) {
+      Toast.show({ type: 'error', text1: 'Atanamadı', text2: err?.response?.data?.message || err?.message || 'Oda atanamadı' });
+    } finally {
+      setOdaAtamaLoading(false);
+    }
+  }, [odaAtamaItem, loadOkutulanlar]);
+
   const renderItem = useCallback(({ item }) => {
     const docNo = item.kimlikNo || item.pasaportNo || item.belgeNo || '—';
     const thumb = photoUri(item);
@@ -441,6 +496,23 @@ export default function QuickNfcScanScreen() {
         </TouchableOpacity>
       </View>
 
+      {nfcDebugLines.length > 0 && (
+        <View style={styles.nfcDebugPanel}>
+          <View style={styles.nfcDebugHeader}>
+            <Text style={styles.nfcDebugTitle}>NFC Debug (hatanın nedeni)</Text>
+            <TouchableOpacity onPress={() => setNfcDebugLines([])} hitSlop={8} style={styles.nfcDebugClearBtn}>
+              <Ionicons name="close-circle" size={22} color="#c0392b" />
+              <Text style={styles.nfcDebugClearText}>Temizle</Text>
+            </TouchableOpacity>
+          </View>
+          <ScrollView style={styles.nfcDebugScroll} nestedScrollEnabled showsVerticalScrollIndicator={true}>
+            {nfcDebugLines.map((line, idx) => (
+              <Text key={idx} style={styles.nfcDebugLine} numberOfLines={3}>{line}</Text>
+            ))}
+          </ScrollView>
+        </View>
+      )}
+
       <View style={styles.mainContent}>
         {listening && (
           <View style={[styles.statusPill, { backgroundColor: colors.primary + '18' }]}>
@@ -455,19 +527,40 @@ export default function QuickNfcScanScreen() {
           </View>
         )}
 
+        {!hasStoredMrz && (
+          <View style={[styles.mrzHintCard, { backgroundColor: colors.primary + '12', borderColor: colors.primary + '40' }]}>
+            <Ionicons name="information-circle" size={22} color={colors.primary} />
+            <View style={styles.mrzHintTextWrap}>
+              <Text style={[styles.mrzHintTitle, { color: colors.textPrimary }]}>ID kartı NFC neden okunmuyor?</Text>
+              <Text style={[styles.mrzHintBody, { color: colors.textSecondary }]}>
+                Kimlik/pasaport çipi MRZ ile açılır. Önce kartın arkasındaki MRZ alanını okutun, sonra kartı telefona yaklaştırın.
+              </Text>
+              <TouchableOpacity
+                style={[styles.mrzHintBtn, { backgroundColor: colors.primary }]}
+                onPress={() => navigation.navigate('MrzScan', { fromCheckIn: true })}
+              >
+                <Ionicons name="camera-outline" size={18} color="#fff" />
+                <Text style={styles.mrzHintBtnText}>MRZ oku</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        )}
+
         <NfcRoundAnimatedButton
           onPress={() => {
             if (processing) return;
             NfcManager.setEventListener(NfcEvents.DiscoverTag, null);
             NfcManager.unregisterTagEvent().catch(() => {});
             readOne().finally(() => {
-              if (mountedRef.current && listening && !isIos) {
+              if (!mountedRef.current || !listening || isIos) return;
+              setTimeout(() => {
+                if (!mountedRef.current) return;
                 NfcManager.setEventListener(NfcEvents.DiscoverTag, handleTagDiscovered);
                 NfcManager.registerTagEvent({
                   invalidateAfterFirstRead: false,
                   alertMessage: 'Kimlik veya pasaport kartını yaklaştırın',
                 }).then(() => { if (mountedRef.current) setListening(true); }).catch(() => setListening(false));
-              }
+              }, NFC_RE_REGISTER_DELAY_MS);
             });
           }}
           disabled={processing}
@@ -522,6 +615,14 @@ export default function QuickNfcScanScreen() {
                 <Text style={[styles.detailMeta, { color: colors.textSecondary }]}>Doğum: {detail.dogumTarihi || '—'}</Text>
                 <Text style={[styles.detailMeta, { color: colors.textSecondary }]}>Uyruk: {detail.uyruk || '—'}</Text>
                 <Text style={[styles.detailMeta, { color: colors.textSecondary }]}>Oda: {detail.odaNo ? detail.odaNo : 'Seçilmedi'}</Text>
+                <TouchableOpacity
+                  style={[styles.bildirBtnDetail, { borderColor: colors.primary }]}
+                  onPress={() => { setOdaAtamaItem(detail); setShowOdaAtamaSheet(true); }}
+                  disabled={odaAtamaLoading}
+                >
+                  <Ionicons name="bed-outline" size={20} color={colors.primary} />
+                  <Text style={[styles.bildirBtnDetailText, { color: colors.primary }]}>{detail.odaNo ? 'Oda değiştir' : 'Oda ata'}</Text>
+                </TouchableOpacity>
                 <TouchableOpacity style={[styles.bildirBtnDetail, { borderColor: colors.primary }]} onPress={() => { setDetail(null); setBildirItem(detail); }}>
                   <Ionicons name="send" size={20} color={colors.primary} />
                   <Text style={[styles.bildirBtnDetailText, { color: colors.primary }]}>KBS'ye bildir</Text>
@@ -611,6 +712,15 @@ export default function QuickNfcScanScreen() {
           </TouchableOpacity>
         </TouchableOpacity>
       </Modal>
+
+      <OdaAtamaSheet
+        visible={showOdaAtamaSheet}
+        onClose={() => { setShowOdaAtamaSheet(false); setOdaAtamaItem(null); }}
+        onSelect={handleOdaAtamaSelect}
+        title={odaAtamaItem?.odaNo ? 'Oda değiştir' : 'Oda ata'}
+        currentOdaNo={odaAtamaItem?.odaNo ?? null}
+        onlyEmptyForBildir={false}
+      />
     </View>
   );
 }
@@ -641,6 +751,20 @@ const styles = StyleSheet.create({
   },
   statusDot: { width: 8, height: 8, borderRadius: 4 },
   statusText: { fontSize: 13, fontWeight: '600' },
+  mrzHintCard: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    marginTop: 12,
+    padding: 14,
+    borderRadius: 12,
+    borderWidth: 1,
+    gap: 10,
+  },
+  mrzHintTextWrap: { flex: 1, minWidth: 0 },
+  mrzHintTitle: { fontSize: 14, fontWeight: '700', marginBottom: 4 },
+  mrzHintBody: { fontSize: 13, lineHeight: 18, marginBottom: 10 },
+  mrzHintBtn: { flexDirection: 'row', alignItems: 'center', alignSelf: 'flex-start', gap: 6, paddingVertical: 8, paddingHorizontal: 14, borderRadius: 10 },
+  mrzHintBtnText: { fontSize: 14, fontWeight: '600', color: '#fff' },
   listHead: {
     flexDirection: 'row',
     alignItems: 'baseline',
@@ -724,4 +848,24 @@ const styles = StyleSheet.create({
   bildirSubmitText: { fontSize: 16, fontWeight: '600', color: '#fff' },
   bildirCancelBtn: { paddingVertical: 12, alignItems: 'center', borderWidth: 1, borderRadius: 12 },
   bildirCancelText: { fontSize: 15, fontWeight: '600' },
+  nfcDebugPanel: {
+    backgroundColor: '#2d1f1f',
+    borderBottomWidth: 2,
+    borderBottomColor: '#c0392b',
+    maxHeight: 180,
+  },
+  nfcDebugHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: '#c0392b',
+  },
+  nfcDebugTitle: { fontSize: 12, fontWeight: '700', color: '#e74c3c' },
+  nfcDebugClearBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, padding: 4 },
+  nfcDebugClearText: { fontSize: 12, fontWeight: '600', color: '#c0392b' },
+  nfcDebugScroll: { maxHeight: 130, paddingHorizontal: 12, paddingVertical: 8 },
+  nfcDebugLine: { fontSize: 11, color: '#e74c3c', marginBottom: 2, fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace' },
 });

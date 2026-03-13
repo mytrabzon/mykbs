@@ -3,7 +3,7 @@
  * Kullanım: Bildirim, kamera, konum vb. izin istekleri için tek bileşen.
  */
 import React from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, Platform } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, Platform, ActivityIndicator } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../context/ThemeContext';
 import { theme, spacing } from '../theme';
@@ -16,6 +16,7 @@ import { theme, spacing } from '../theme';
  * @param {() => void} onDismiss - "Şimdi değil" / "Geri" tıklanınca
  * @param {string} [allowLabel='İzin ver']
  * @param {string} [dismissLabel='Şimdi değil']
+ * @param {boolean} [allowLoading=false] - Kabul et tıklanınca yükleme göstergesi
  */
 export default function PermissionCard({
   icon = 'lock-open-outline',
@@ -25,6 +26,7 @@ export default function PermissionCard({
   onDismiss,
   allowLabel = 'İzin ver',
   dismissLabel = 'Şimdi değil',
+  allowLoading = false,
 }) {
   const { colors } = useTheme();
 
@@ -39,8 +41,13 @@ export default function PermissionCard({
         style={[styles.primaryBtn, { backgroundColor: colors.primary || theme.colors.primary }]}
         onPress={onAllow}
         activeOpacity={0.85}
+        disabled={allowLoading}
       >
-        <Text style={styles.primaryBtnText}>{allowLabel}</Text>
+        {allowLoading ? (
+          <ActivityIndicator size="small" color="#FFF" />
+        ) : (
+          <Text style={styles.primaryBtnText}>{allowLabel}</Text>
+        )}
       </TouchableOpacity>
       <TouchableOpacity style={styles.dismissBtn} onPress={onDismiss} activeOpacity={0.7}>
         <Text style={[styles.dismissText, { color: colors.textSecondary }]}>{dismissLabel}</Text>
@@ -58,11 +65,11 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     borderWidth: 1,
     alignItems: 'center',
-    ...(Platform.OS === 'android' ? { elevation: 2 } : {}),
+    ...(Platform.OS === 'android' ? { elevation: 4 } : {}),
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.06,
-    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 12,
   },
   iconWrap: {
     width: 64,

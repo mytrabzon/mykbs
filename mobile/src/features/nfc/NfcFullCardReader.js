@@ -87,7 +87,7 @@ export function mapNativeResultToFullPayload(r) {
   if (!r || typeof r !== 'object') return null;
   const birth = (r.birthDate || '').trim();
   const dogumTarihi = birth.includes('-') ? birth.split('-').reverse().join('.') : birth;
-  const docNo = (r.identityNo ?? r.documentNo ?? '').trim();
+  const docNo = (r.personalNumber ?? r.identityNo ?? r.documentNo ?? '').trim();
   const isTc = /^\d{11}$/.test(docNo);
   const sonKullanma = (r.expiryDate || '').trim();
   const sonKullanmaTr = sonKullanma.includes('-') ? sonKullanma.split('-').reverse().join('.') : sonKullanma;
@@ -172,12 +172,8 @@ export async function readAllDataWhenCardNear(options = {}) {
     const bacKey = keysToTry[i];
     const isStored = i === 0 && (await getLastMrzForBac())?.documentNo === bacKey.documentNo;
     onProgress(`BAC anahtarı deneniyor (${i + 1}/${keysToTry.length})...`);
-    logger.info('[NfcFullCardReader] BAC denemesi', {
-      index: i + 1,
-      total: keysToTry.length,
-      docNoHint: bacKey.documentNo?.slice(0, 3) + '...',
-      fromStored: isStored,
-    });
+    const logCtx = { index: i + 1, total: keysToTry.length, docNo: bacKey.documentNo?.slice(0, 4), fromStored: isStored };
+    logger.info('[NfcFullCardReader] BAC denemesi', logCtx);
     try {
       const payload = await readCardWithBAC(bacKey, { includeImages: options.includeImages !== false });
       if (payload && (payload.ad || payload.soyad || payload.kimlikNo || payload.pasaportNo)) {

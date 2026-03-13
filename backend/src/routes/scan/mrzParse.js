@@ -31,14 +31,18 @@ router.post('/mrz/parse', authenticateTesisOrSupabase, express.json({ limit: '8m
     const result = await runMrzPipeline(filePath, corr, { paperMode: usePaperMode, docTypeHint: docHint === 'id' ? 'id' : undefined });
 
     const fields = { ...(result.fields || {}) };
-    // Türkiye Cumhuriyeti kimlik kartı: TUR + 11 hane belge no → kimlikNo alanı
+    // Türkiye Cumhuriyeti kimlik kartı: TUR + 11 hane (personalNumber veya documentNumber) → kimlikNo
     const issuingCountry = (fields.issuingCountry || '').trim().toUpperCase();
+    const personalNumber = String(fields.personalNumber || '').replace(/\D/g, '');
     const documentNumber = String(fields.documentNumber || '').replace(/\D/g, '');
-    if (issuingCountry === 'TUR' && /^\d{11}$/.test(documentNumber)) {
+    if (issuingCountry === 'TUR' && /^\d{11}$/.test(personalNumber)) {
+      fields.kimlikNo = personalNumber;
+      fields.pasaportNo = null;
+    } else if (issuingCountry === 'TUR' && /^\d{11}$/.test(documentNumber)) {
       fields.kimlikNo = documentNumber;
       fields.pasaportNo = null;
-    } else if (issuingCountry === 'TUR' && documentNumber) {
-      fields.pasaportNo = fields.documentNumber;
+    } else if (issuingCountry === 'TUR' && (fields.documentNumber || fields.personalNumber)) {
+      fields.pasaportNo = fields.documentNumber || fields.personalNumber;
     }
 
     const response = {
