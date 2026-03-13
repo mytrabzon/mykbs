@@ -104,9 +104,9 @@ const ACCEPT_MINIMAL_DOC_NUMBER_ONLY = true; // Sadece belge no ile de hemen kab
 /** Otomatik algılama için periyodik çekim aralığı. Backend rate limit (~1.1s) ile uyumlu; 429 önlenir. */
 const UNIFIED_CAPTURE_INTERVAL_MS = 1300;
 /** İzin verildikten sonra kamera mount gecikmesi (Android siyah ekran önlemi). */
-const UNIFIED_CAMERA_MOUNT_DELAY_MS = Platform.OS === 'android' ? 350 : 150;
+const UNIFIED_CAMERA_MOUNT_DELAY_MS = Platform.OS === 'android' ? 350 : 100;
 /** Kamera bileşenini her zaman bu süre sonra mount et (onLayout'a güvenmeden). */
-const UNIFIED_CAMERA_MOUNT_AFTER_MS = 400;
+const UNIFIED_CAMERA_MOUNT_AFTER_MS = Platform.OS === 'ios' ? 250 : 400;
 /** Kamera açıldı ama onCameraReady gelmezse (siyah ekran) bu süre sonra fallback göster. */
 const UNIFIED_CAMERA_READY_TIMEOUT_MS = 6000;
 /** TD3 pasaport vs TD1 kimlik için varsayılan zoom (piksel yoğunluğu ayarı). */
@@ -1912,9 +1912,9 @@ export default function MrzScanScreen({ navigation }) {
 
   if (useUnifiedMrzFlow) {
     return (
-      <View style={[styles.container, styles.unifiedCameraRoot]}>
+      <View key={`unified-root-${selectedDocType}`} style={[styles.container, styles.unifiedCameraRoot]}>
         <View
-          style={styles.unifiedCameraWrap}
+          style={[styles.unifiedCameraWrap, { minHeight: 200 }]}
           pointerEvents="box-none"
           onLayout={(e) => {
             const { width, height } = e.nativeEvent.layout;
@@ -1990,6 +1990,7 @@ export default function MrzScanScreen({ navigation }) {
                 style={styles.docTypeSwitchCenter}
                 onPress={() => {
                   const next = selectedDocType === DocType.ID ? DocType.Passport : DocType.ID;
+                  if (next === DocType.ID) setUnifiedCameraMountReady(false);
                   setMrzDocType(next);
                   setScanMode(next);
                   if (getMrzVoiceEnabled()) {
@@ -2006,6 +2007,7 @@ export default function MrzScanScreen({ navigation }) {
               <TouchableOpacity
                 style={[styles.docTypeIconBtn, selectedDocType === DocType.ID && styles.docTypeIconBtnActive]}
                 onPress={() => {
+                  setUnifiedCameraMountReady(false);
                   setMrzDocType(DocType.ID);
                   setScanMode(DocType.ID);
                   if (getMrzVoiceEnabled()) speakMrzIdCardIntro();
