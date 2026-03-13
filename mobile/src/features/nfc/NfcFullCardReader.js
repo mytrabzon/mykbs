@@ -11,7 +11,11 @@
  */
 
 import { logger } from '../../utils/logger';
-import { getLastMrzForBac, getDefaultBacKeysForTurkishId, getDefaultBacKeysForPassport } from '../../utils/lastMrzForBac';
+import { getLastMrzForBac } from '../../utils/lastMrzForBac';
+import { getExpandedBACKeys } from './BACBruteForce';
+import { storeSuccessfulKey } from '../../utils/bacCache';
+import { toUserFriendlyNfcError } from '../../utils/nfcErrorMessages';
+import { getNfcAntennaShortHint } from '../../utils/nfcAntennaHint';
 
 let NfcPassportReader = null;
 try {
@@ -47,8 +51,8 @@ export function normalizeBACKey(key) {
 }
 
 /**
- * Denenecek BAC anahtarlarını toplar: son MRZ, ardından opsiyonel ek anahtarlar, sonra varsayılan liste.
- * @param {{ extraKeys?: Array<{ documentNo?: string; birthDate?: string; expiryDate?: string }> }} options
+ * Denenecek BAC anahtarlarını toplar: son MRZ, ek anahtarlar, sonra genişletilmiş liste (Türk kimlik + pasaport + cache).
+ * @param {{ extraKeys?: Array<{ documentNo?: string; birthDate?: string; expiryDate?: string }>; countryCode?: string }} options
  */
 export async function getBACKeysToTry(options = {}) {
   const keys = [];
@@ -68,13 +72,14 @@ export async function getBACKeysToTry(options = {}) {
       }
     }
   }
-  const defaultsId = getDefaultBacKeysForTurkishId();
-  for (const d of defaultsId) {
-    if (!keys.some((e) => e.documentNo === d.documentNo && e.birthDate === d.birthDate && e.expiryDate === d.expiryDate)) keys.push(d);
-  }
-  const defaultsPassport = getDefaultBacKeysForPassport();
-  for (const d of defaultsPassport) {
-    if (!keys.some((e) => e.documentNo === d.documentNo && e.birthDate === d.birthDate && e.expiryDate === d.expiryDate)) keys.push(d);
+  const expanded = await getExpandedBACKeys({ countryCode: options.countryCode });
+  const seen = new Set(keys.map((e) => `${e.documentNo}|${e.birthDate}|${e.expiryDate}`));
+  for (const e of expanded) {
+    const n = normalizeBACKey(e);
+    if (n && !seen.has(`${n.documentNo}|${n.birthDate}|${n.expiryDate}`)) {
+      seen.add(`${n.documentNo}|${n.birthDate}|${n.expiryDate}`);
+      keys.push(n);
+    }
   }
   return keys;
 }
@@ -166,18 +171,25 @@ export async function readAllDataWhenCardNear(options = {}) {
     };
   }
 
-  onProgress('Kartı telefonun arkasına yaklaştırın...');
+  const report = (stage, message, progress = 0) => {
+    const payload = { stage, message: typeof message === 'string' ? message : '', progress };
+    onProgress(payload);
+  };
+  const antennaHint = getNfcAntennaShortHint();
+  report('init', `Kartı telefonun arkasına yaklaştırın. ${antennaHint}`, 0);
 
   for (let i = 0; i < keysToTry.length; i++) {
     const bacKey = keysToTry[i];
     const isStored = i === 0 && (await getLastMrzForBac())?.documentNo === bacKey.documentNo;
-    onProgress(`BAC anahtarı deneniyor (${i + 1}/${keysToTry.length})...`);
+    report('bac', `BAC anahtarı deneniyor (${i + 1}/${keysToTry.length})...`, (i + 1) / keysToTry.length);
     const logCtx = { index: i + 1, total: keysToTry.length, docNo: bacKey.documentNo?.slice(0, 4), fromStored: isStored };
     logger.info('[NfcFullCardReader] BAC denemesi', logCtx);
     try {
       const payload = await readCardWithBAC(bacKey, { includeImages: options.includeImages !== false });
       if (payload && (payload.ad || payload.soyad || payload.kimlikNo || payload.pasaportNo)) {
         logger.info('[NfcFullCardReader] Okuma başarılı', { ad: payload.ad, soyad: payload.soyad });
+        const countryCode = payload.kimlikNo ? 'TUR' : 'PAS';
+        storeSuccessfulKey(countryCode, bacKey).catch(() => {});
         return { success: true, data: payload };
       }
     } catch (e) {
@@ -191,7 +203,7 @@ export async function readAllDataWhenCardNear(options = {}) {
 
   return {
     success: false,
-    error: 'Kart okunamadı. MRZ ile önce belge no / doğum / son kullanma kaydedin veya kartı sabit tutup tekrar deneyin.',
+    error: toUserFriendlyNfcError('Security status not satisfied') || 'Kart okunamadı. MRZ ile önce belge no / doğum / son kullanma kaydedin veya kartı sabit tutup tekrar deneyin.',
     fallback: 'MRZ',
   };
 }

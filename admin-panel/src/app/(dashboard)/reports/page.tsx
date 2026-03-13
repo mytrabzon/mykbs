@@ -30,8 +30,34 @@ export default function ReportsPage() {
       const url = `${baseUrl}/api/rapor/maliye/html?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`
       const res = await fetch(url, { headers })
       if (!res.ok) throw new Error(res.statusText || 'Rapor alınamadı')
-      const html = await res.text()
-      const w = window.open('', '_blank')
+      let html = await res.text()
+      // Önizleme tam ekranda görünsün: viewport + tam genişlik stilleri ve Yazdır butonu
+      const viewport = '<meta name="viewport" content="width=device-width, initial-scale=1">'
+      const fullscreenStyles = `
+    <style id="preview-fullscreen">
+      html, body { min-height: 100%; width: 100%; margin: 0; box-sizing: border-box; overflow-x: auto; }
+      body { padding-bottom: 60px; }
+      #print-toolbar { position: fixed; bottom: 0; left: 0; right: 0; height: 52px; background: #1a237e; color: #fff; display: flex; align-items: center; justify-content: center; gap: 12px; z-index: 9999; box-shadow: 0 -2px 10px rgba(0,0,0,0.2); }
+      #print-toolbar button { background: #fff; color: #1a237e; border: none; padding: 10px 24px; border-radius: 8px; font-weight: 600; cursor: pointer; font-size: 14px; }
+      #print-toolbar button:hover { background: #e8eaf6; }
+      #print-toolbar .title { font-size: 14px; font-weight: 500; }
+    </style>`
+      const printToolbar = `
+    <div id="print-toolbar">
+      <span class="title">Yazdırılacak önizleme</span>
+      <button type="button" onclick="window.print()">Yazdır</button>
+      <button type="button" onclick="window.close()">Kapat</button>
+    </div>`
+      if (!html.includes('viewport')) html = html.replace('<head>', '<head>\n  ' + viewport)
+      html = html.replace('</head>', fullscreenStyles + '\n</head>')
+      html = html.replace('</body>', printToolbar + '\n</body>')
+
+      const width = Math.min(1920, window.screen?.availWidth || 1920)
+      const height = Math.min(1080, window.screen?.availHeight || 1080)
+      const left = 0
+      const top = 0
+      const features = `width=${width},height=${height},left=${left},top=${top},scrollbars=yes,resizable=yes,toolbar=no,menubar=no,location=no`
+      const w = window.open('', '_blank', features)
       if (w) {
         w.document.write(html)
         w.document.close()

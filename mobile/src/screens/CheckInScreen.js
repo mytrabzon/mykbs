@@ -8,42 +8,33 @@ import {
   ScrollView,
   Alert,
   StatusBar,
-  Image
+  Image,
+  ActivityIndicator,
 } from 'react-native';
 // expo-camera Expo Go'da çalışmaz, expo-image-picker kullanıyoruz
 import * as ImagePicker from 'expo-image-picker';
-import NfcManager, { NfcEvents } from 'react-native-nfc-manager';
 import { api } from '../services/api';
 import { getBackendUrl } from '../services/apiSupabase';
 import * as offlineKbs from '../services/offlineKbsDB';
 import { showKimlikBildirimInProgress, dismissKimlikBildirimNotification } from '../services/pushNotifications';
 import Toast from 'react-native-toast-message';
 import { logger } from '../utils/logger';
-import { getNfcEnabled } from '../utils/nfcSetting';
-import { useIndependentNfcReader } from '../features/nfc/IndependentNfcReader';
 import { Ionicons, MaterialIcons } from '@expo/vector-icons';
 import { theme } from '../theme';
 import { useCredits } from '../context/CreditsContext';
 import { useAuth } from '../context/AuthContext';
 import PermissionCard from '../components/PermissionCard';
-import { useFocusEffect } from '@react-navigation/native';
+import { useFocusEffect, useIsFocused } from '@react-navigation/native';
 import {
   feedbackCheckInSuccess,
   feedbackReadSuccess,
   speakApproachPassport,
-  speakApproachId,
   getTtsLocale,
 } from '../utils/feedback';
 import { useLanguage } from '../context/LanguageContext';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { FREQUENT_NATIONALITIES } from '../constants/frequentNationalities';
 import { getVisaWarningFromDate } from '../utils/visaWarning';
-import { getLastMrzForBac, setLastMrzForBac } from '../utils/lastMrzForBac';
-
-let NfcPassportReader = null;
-try {
-  NfcPassportReader = require('react-native-nfc-passport-reader').default;
-} catch (_) {}
 
 const MIN_BUTTON_SIZE = 60; // Eldivenle kullanım için dev butonlar
 
@@ -65,12 +56,7 @@ export default function CheckInScreen({ navigation, route }) {
     uyruk: 'TÜRK',
     misafirTipi: '' // tc_vatandasi | ykn | yabanci — Jandarma/Polis için
   });
-  const [nfcSupported, setNfcSupported] = useState(false);
-  /** Ayarlardan "NFC ile okumayı kullan" açıksa true; kapalıysa öncelik MRZ/kamera */
-  const [nfcEnabledInSettings, setNfcEnabledInSettings] = useState(false);
   const [loading, setLoading] = useState(false);
-  /** Kimlik Okuma (step 2) ekranında otomatik NFC dinlemesi aktif mi */
-  const [nfcListening, setNfcListening] = useState(false);
   /** Step 2'de kamera kullanılacaksa izin verilmediyse bu kart gösterilir; Geri ile kapatılır, tekrar Okut'ta çıkar */
   const [showCameraPermissionCard, setShowCameraPermissionCard] = useState(false);
   /** Step 3'te "Sadece kaydet" yapıldıktan sonra gösterilen başarı alanı */
@@ -78,28 +64,11 @@ export default function CheckInScreen({ navigation, route }) {
   const [savingOkutulan, setSavingOkutulan] = useState(false);
   /** MRZ/belge bitiş tarihi — vize uyarısı göstermek için */
   const [documentExpiryFromMrz, setDocumentExpiryFromMrz] = useState(null);
-  const nfcSessionCancelledRef = useRef(false);
-  const nfcTechRequestedRef = useRef(false);
-  const nfcProcessingRef = useRef(false);
-  const processNfcTagRef = useRef(null);
-  const { readNfcDirect, isReading: nfcChipReading } = useIndependentNfcReader();
+  const isFocused = useIsFocused();
   const insets = useSafeAreaInsets();
   const headerSafeStyle = { paddingTop: insets.top + theme.spacing.lg, paddingBottom: theme.spacing.lg };
   const tcLookupTimeoutRef = useRef(null);
   const tcLookupInProgressRef = useRef(false);
-
-  // Check-in'e MRZ ile gelindiyse BAC için sakla (NFC'de kullanılır)
-  useEffect(() => {
-    const p = route.params?.mrzPayload;
-    if (p && (p.documentNumber || p.passportNumber) && p.birthDate && p.expiryDate) {
-      setLastMrzForBac({
-        documentNumber: p.documentNumber || p.passportNumber,
-        passportNumber: p.passportNumber || p.documentNumber,
-        birthDate: p.birthDate,
-        expiryDate: p.expiryDate,
-      });
-    }
-  }, [route.params?.mrzPayload]);
 
   // TC 11 hane girilince (bu tesiste daha önce check-in yapılmışsa) ad, soyad, doğum tarihi, uyruk otomatik doldurulur
   useEffect(() => {
@@ -144,9 +113,7 @@ export default function CheckInScreen({ navigation, route }) {
 
   useEffect(() => {
     logger.log('CheckInScreen mounted');
-    getNfcEnabled().then(setNfcEnabledInSettings);
     try {
-      checkNFC();
       loadOdalar();
     } catch (error) {
       logger.error('CheckInScreen initialization error', error);
@@ -207,39 +174,6 @@ export default function CheckInScreen({ navigation, route }) {
     }, [route.params?.mrzPayload, route.params?.documentPayload, route.params?.photoUri, route.params?.selectedOda, navigation])
   );
 
-  const checkNFC = async () => {
-    try {
-      logger.log('Checking NFC support');
-      let supported = false;
-      try {
-        supported = await NfcManager.isSupported();
-        logger.log('NFC support check result', { supported });
-        if (supported) {
-          await NfcManager.start();
-          logger.log('NFC Manager started');
-          // Android: NFC açık mı kontrol et (kapalıysa registerTagEvent/requestTechnology çalışmaz)
-          if (NfcManager.isEnabled && typeof NfcManager.isEnabled === 'function') {
-            const enabled = await NfcManager.isEnabled();
-            if (!enabled) {
-              logger.warn('NFC supported but disabled');
-              Toast.show({ type: 'info', text1: 'NFC kapalı', text2: 'Ayarlardan NFC\'yi açın.' });
-            }
-          }
-        }
-      } catch (nfcError) {
-        logger.warn('NFC check failed (expected in Expo Go)', nfcError.message);
-        supported = false;
-      }
-      setNfcSupported(supported);
-      if (!supported) {
-        logger.log('NFC not supported, camera will be used instead');
-      }
-    } catch (error) {
-      logger.error('NFC check error', error);
-      setNfcSupported(false);
-    }
-  };
-
   const loadOdalar = async () => {
     try {
       logger.log('[CheckInScreen] loadOdalar başladı', { filtre: 'bos' });
@@ -264,171 +198,11 @@ export default function CheckInScreen({ navigation, route }) {
     }
   };
 
-  /** NfcPassportReader sonucunu formata çevir (ad, soyad, kimlikNo, dogumTarihi DD.MM.YYYY, uyruk). */
-  const mapNfcResultToForm = (r) => {
-    const birth = (r.birthDate || '').trim();
-    const dogumTarihi = birth.includes('-')
-      ? birth.split('-').reverse().join('.')
-      : birth;
-    const docNo = (r.identityNo || r.documentNo || '').trim();
-    const isTc = /^\d{11}$/.test(docNo);
-    return {
-      ad: (r.firstName || '').trim(),
-      ad2: '',
-      soyad: (r.lastName || '').trim(),
-      kimlikNo: isTc ? docNo : '',
-      pasaportNo: !isTc ? docNo : '',
-      dogumTarihi,
-      uyruk: (r.nationality || 'TÜRK').trim(),
-    };
-  };
-
-  /** Tam NFC çip okuması — varsa son MRZ ile BAC (NfcPassportReader), yoksa doğrudan readNfcDirect. */
-  const processNfcChipRead = async () => {
-    try {
-      const bacKey = await getLastMrzForBac();
-      if (NfcPassportReader && bacKey && bacKey.documentNo && bacKey.birthDate && bacKey.expiryDate) {
-        try {
-          logger.log('NFC: BAC ile okuma deneniyor (son MRZ)', { docNoMask: (bacKey.documentNo || '').slice(0, 2) + '***' });
-          const nfcResult = await NfcPassportReader.startReading({
-            bacKey: {
-              documentNo: bacKey.documentNo,
-              birthDate: bacKey.birthDate,
-              expiryDate: bacKey.expiryDate,
-            },
-          });
-          if (nfcResult && (nfcResult.firstName || nfcResult.lastName || nfcResult.documentNo)) {
-            const d = mapNfcResultToForm(nfcResult);
-            logger.log('NFC BAC okuma başarılı', { ad: d.ad, soyad: d.soyad });
-            setFormData((prev) => ({ ...prev, ...d }));
-            setDocumentExpiryFromMrz(null);
-            setStep(3);
-            setSavedOnly(false);
-            feedbackReadSuccess(ttsLocale);
-            Toast.show({ type: 'success', text1: 'Kimlik okundu', text2: 'Bilgiler dolduruldu.' });
-            return;
-          }
-        } catch (bacErr) {
-          const msg = bacErr?.message || '';
-          if (msg.includes('cancel') || msg.includes('Cancel') || msg.includes('cancelled')) {
-            Toast.show({ type: 'info', text1: 'İptal', text2: 'Okuma iptal edildi.' });
-            return;
-          }
-          logger.warn('NFC BAC okuma başarısız, doğrudan okumaya geçiliyor', msg);
-        }
-      }
-
-      const result = await readNfcDirect();
-      if (result.success && result.data) {
-        const d = result.data;
-        logger.log('NFC chip read successful', { ad: d.ad, soyad: d.soyad });
-        setFormData((prev) => ({
-          ...prev,
-          ad: d.ad || prev.ad,
-          ad2: d.ad2 || prev.ad2,
-          soyad: d.soyad || prev.soyad,
-          kimlikNo: (d.kimlikNo || d.pasaportNo || '').trim() || prev.kimlikNo,
-          pasaportNo: (d.pasaportNo || '').trim() || prev.pasaportNo,
-          dogumTarihi: d.dogumTarihi || prev.dogumTarihi,
-          uyruk: d.uyruk || prev.uyruk,
-        }));
-        setDocumentExpiryFromMrz(null);
-        setStep(3);
-        setSavedOnly(false);
-        feedbackReadSuccess(ttsLocale);
-        Toast.show({ type: 'success', text1: 'Kimlik okundu', text2: 'Bilgiler dolduruldu.' });
-      } else {
-        const errMsg = result?.error || 'Veri çıkarılamadı.';
-        Toast.show({
-          type: 'info',
-          text1: 'NFC okunamadı',
-          text2: errMsg.includes('MRZ') ? errMsg : (errMsg + ' Önce kamerayla MRZ okutun veya manuel girin.'),
-        });
-      }
-    } catch (error) {
-      logger.error('NFC chip read error', error);
-      Toast.show({
-        type: 'error',
-        text1: 'NFC Hatası',
-        text2: error?.message?.includes('cancel') ? 'Okuma iptal edildi.' : (error?.message || 'Kimlik okunamadı. MRZ veya kamera deneyin.'),
-      });
-    }
-  };
-  processNfcTagRef.current = processNfcChipRead;
-
-  // Kimlik Okuma (step 2): registerTagEvent + DiscoverTag ile kimlik yaklaştığında otomatik oku (Android/iOS event tabanlı).
-  useEffect(() => {
-    if (step !== 2 || !nfcSupported || !nfcEnabledInSettings) {
-      setNfcListening(false);
-      return;
-    }
-
-    nfcSessionCancelledRef.current = false;
-
-    const onTagDiscover = (tag) => {
-      if (nfcSessionCancelledRef.current) return;
-      if (nfcProcessingRef.current) return;
-      nfcProcessingRef.current = true;
-      logger.log('NFC tag discovered (event), starting chip read', { tagId: tag?.id });
-      NfcManager.unregisterTagEvent().catch(() => {});
-      const fn = processNfcTagRef.current;
-      if (fn) {
-        fn().finally(() => {
-          nfcProcessingRef.current = false;
-        });
-      } else {
-        nfcProcessingRef.current = false;
-      }
-    };
-
-    const startListening = async () => {
-      try {
-        setNfcListening(true);
-        NfcManager.setEventListener(NfcEvents.DiscoverTag, onTagDiscover);
-        await NfcManager.registerTagEvent({
-          invalidateAfterFirstRead: false,
-          alertMessage: 'Kimliği telefonun arkasına yaklaştırın',
-        });
-        logger.log('NFC registerTagEvent started (step 2), yaklaştırınca otomatik oku');
-      } catch (e) {
-        logger.warn('NFC registerTagEvent failed, falling back to manual only', e?.message);
-        setNfcListening(false);
-      }
-    };
-
-    startListening();
-
-    return () => {
-      nfcSessionCancelledRef.current = true;
-      setNfcListening(false);
-      NfcManager.setEventListener(NfcEvents.DiscoverTag, null);
-      NfcManager.unregisterTagEvent().catch(() => {});
-    };
-  }, [step, nfcSupported, nfcEnabledInSettings]);
-
-  // Step 2: Sesli yönlendirme — seçilen dile göre TTS
+  // Step 2: Sesli yönlendirme — MRZ/kamera ile okutma
   useEffect(() => {
     if (step !== 2) return;
-    if (nfcSupported && nfcEnabledInSettings) {
-      speakApproachId(ttsLocale);
-    } else {
-      speakApproachPassport(ttsLocale);
-    }
-  }, [step, nfcSupported, nfcEnabledInSettings, ttsLocale]);
-
-  const handleNFCRead = async () => {
-    try {
-      logger.log('NFC read started (manual, full chip read)');
-      await processNfcChipRead();
-    } catch (error) {
-      logger.error('NFC read error', error);
-      Toast.show({
-        type: 'error',
-        text1: 'NFC Hatası',
-        text2: error?.message?.includes('cancel') ? 'Okuma iptal edildi.' : (error?.message || 'Kimlik okunamadı. MRZ veya kamera deneyin.'),
-      });
-    }
-  };
+    speakApproachPassport(ttsLocale);
+  }, [step, ttsLocale]);
 
   const handleCameraRead = async () => {
     try {
@@ -519,16 +293,9 @@ export default function CheckInScreen({ navigation, route }) {
 
   const handleOkut = () => {
     try {
-      const useNfc = nfcSupported && nfcEnabledInSettings;
       logger.button('Okut Button', 'clicked');
-      logger.log('Okut button pressed', { nfcSupported, nfcEnabledInSettings, step });
-      if (useNfc) {
-        logger.log('NFC enabled in settings, calling handleNFCRead');
-        handleNFCRead();
-      } else {
-        logger.log('Using MRZ/camera (NFC off or not supported), calling handleCameraRead');
-        handleCameraRead();
-      }
+      logger.log('Okut button pressed', { step });
+      handleCameraRead();
     } catch (error) {
       logger.error('handleOkut error', error);
       Toast.show({
@@ -662,14 +429,14 @@ export default function CheckInScreen({ navigation, route }) {
         
         {/* Header */}
         <View style={[styles.header, headerSafeStyle]}>
-          <View style={styles.headerPlaceholder} />
-          <Text style={styles.headerTitle}>Oda Seçimi</Text>
           <TouchableOpacity
-            style={[styles.backButton, styles.backButtonRight, { minWidth: MIN_BUTTON_SIZE, minHeight: MIN_BUTTON_SIZE }]}
+            style={[styles.backButton, styles.backButtonLeft, { minWidth: MIN_BUTTON_SIZE, minHeight: MIN_BUTTON_SIZE }]}
             onPress={() => navigation.goBack()}
           >
             <Ionicons name="arrow-back" size={24} color={theme.colors.textPrimary} />
           </TouchableOpacity>
+          <Text style={styles.headerTitle}>Oda Seçimi</Text>
+          <View style={styles.headerPlaceholder} />
         </View>
 
         <ScrollView style={styles.scrollView} contentContainerStyle={styles.content}>
@@ -756,14 +523,14 @@ export default function CheckInScreen({ navigation, route }) {
         
         {/* Header */}
         <View style={[styles.header, headerSafeStyle]}>
-          <View style={styles.headerPlaceholder} />
-          <Text style={styles.headerTitle}>Kimlik Okuma</Text>
           <TouchableOpacity
-            style={[styles.backButton, styles.backButtonRight]}
+            style={[styles.backButton, styles.backButtonLeft]}
             onPress={() => setStep(1)}
           >
             <Ionicons name="arrow-back" size={24} color={theme.colors.textPrimary} />
           </TouchableOpacity>
+          <Text style={styles.headerTitle}>Kimlik Okuma</Text>
+          <View style={styles.headerPlaceholder} />
         </View>
 
         <ScrollView style={styles.scrollView} contentContainerStyle={styles.content}>
@@ -795,50 +562,28 @@ export default function CheckInScreen({ navigation, route }) {
           <View style={styles.readerContainer}>
             <View style={styles.readerTopBlock}>
               <View style={styles.readerIconContainer}>
-                {nfcSupported && nfcEnabledInSettings ? (
-                  <View style={[styles.readerIcon, { backgroundColor: theme.colors.primary + '15' }]}>
-                    <Ionicons name="hardware-chip-outline" size={80} color={theme.colors.primary} />
-                  </View>
-                ) : (
-                  <View style={[styles.readerIcon, { backgroundColor: theme.colors.secondary + '15' }]}>
-                    <Ionicons name="camera" size={80} color={theme.colors.secondary} />
-                  </View>
-                )}
+                <View style={[styles.readerIcon, { backgroundColor: theme.colors.secondary + '15' }]}>
+                  <Ionicons name="camera" size={80} color={theme.colors.secondary} />
+                </View>
               </View>
 
-              <Text style={styles.readerTitle}>
-                {nfcSupported && nfcEnabledInSettings ? 'NFC ile Okut' : 'Kamera ile Okut'}
-              </Text>
+              <Text style={styles.readerTitle}>Kamera ile Okut</Text>
 
               <Text style={styles.readerDescription}>
-                {nfcSupported && nfcEnabledInSettings
-                  ? (nfcListening
-                      ? 'Kimliği telefonun arka kısmına yaklaştırın — otomatik okunacak'
-                      : 'Kimlik veya pasaportu yaklaştırın veya aşağıdaki düğmeyle okuyun. İlk kullanımda NFC izni istenebilir.')
-                  : 'Kimliğinizin ön yüzünün fotoğrafını çekin veya MRZ için "MRZ Tara" sekmesine gidin'}
+                Kimliğinizin ön yüzünün fotoğrafını çekin veya MRZ için "MRZ Tara" sekmesine gidin.
               </Text>
 
-              {nfcSupported && nfcEnabledInSettings && nfcListening && (
-                <View style={[styles.nfcListeningBadge, { backgroundColor: theme.colors.primary + '20' }]}>
-                  <Ionicons name="hardware-chip-outline" size={18} color={theme.colors.primary} />
-                  <Text style={[styles.nfcListeningText, { color: theme.colors.primary }]}>Dinleniyor…</Text>
-                </View>
-              )}
-
               <TouchableOpacity 
-                style={[styles.okutButton, (nfcSupported && nfcEnabledInSettings) ? styles.okutButtonNFC : styles.okutButtonCamera, { minHeight: MIN_BUTTON_SIZE, opacity: nfcChipReading ? 0.7 : 1 }]}
+                style={[styles.okutButton, styles.okutButtonCamera, { minHeight: MIN_BUTTON_SIZE }]}
                 onPress={handleOkut}
-                disabled={nfcChipReading}
               >
                 <Ionicons 
-                  name={(nfcSupported && nfcEnabledInSettings) ? "hardware-chip-outline" : "camera"} 
+                  name="camera" 
                   size={24} 
                   color={theme.colors.white} 
                   style={styles.okutButtonIcon}
                 />
-                <Text style={styles.okutButtonText}>
-                  {(nfcSupported && nfcEnabledInSettings) ? (nfcChipReading ? 'Okunuyor…' : (nfcListening ? 'Yeniden oku' : 'NFC ile Okut')) : 'Kamera ile Okut'}
-                </Text>
+                <Text style={styles.okutButtonText}>Kamera ile Okut</Text>
               </TouchableOpacity>
             </View>
 
@@ -859,23 +604,6 @@ export default function CheckInScreen({ navigation, route }) {
               <Ionicons name="create-outline" size={20} color={theme.colors.primary} style={styles.manualButtonIcon} />
               <Text style={styles.manualButtonText}>Manuel Giriş Yap</Text>
             </TouchableOpacity>
-
-            {nfcSupported && !nfcEnabledInSettings && (
-              <View style={styles.nfcInfo}>
-                <Ionicons name="information-circle-outline" size={16} color={theme.colors.warning} />
-                <Text style={styles.nfcInfoText}>
-                  NFC kullanmak için Ayarlar → Kimlik / Pasaport bölümünden "NFC ile okumayı kullan"ı açın.
-                </Text>
-              </View>
-            )}
-            {!nfcSupported && (
-              <View style={styles.nfcInfo}>
-                <Ionicons name="information-circle-outline" size={16} color={theme.colors.warning} />
-                <Text style={styles.nfcInfoText}>
-                  NFC, Expo Go'da çalışmaz; EAS development build veya release build gerekir. Cihazda NFC kapalıysa ayarlardan açın. Şu anda kamera kullanılıyor.
-                </Text>
-              </View>
-            )}
         </View>
       </ScrollView>
     </View>
@@ -917,11 +645,11 @@ export default function CheckInScreen({ navigation, route }) {
       <View style={styles.container}>
         <StatusBar barStyle="dark-content" backgroundColor={theme.colors.background} />
         <View style={[styles.header, headerSafeStyle]}>
-          <View style={styles.headerPlaceholder} />
-          <Text style={styles.headerTitle}>Ne yapmak istiyorsunuz?</Text>
-          <TouchableOpacity style={[styles.backButton, styles.backButtonRight]} onPress={() => setStep(2)}>
+          <TouchableOpacity style={[styles.backButton, styles.backButtonLeft]} onPress={() => setStep(2)}>
             <Ionicons name="arrow-back" size={24} color={theme.colors.textPrimary} />
           </TouchableOpacity>
+          <Text style={styles.headerTitle}>Ne yapmak istiyorsunuz?</Text>
+          <View style={styles.headerPlaceholder} />
         </View>
         <ScrollView style={styles.scrollView} contentContainerStyle={styles.content}>
           <View style={styles.section}>
@@ -1014,14 +742,14 @@ export default function CheckInScreen({ navigation, route }) {
       
       {/* Header */}
       <View style={[styles.header, headerSafeStyle]}>
-        <View style={styles.headerPlaceholder} />
-        <Text style={styles.headerTitle}>Bilgi Onayı</Text>
         <TouchableOpacity
-          style={[styles.backButton, styles.backButtonRight]}
+          style={[styles.backButton, styles.backButtonLeft]}
           onPress={() => setStep(3)}
         >
           <Ionicons name="arrow-back" size={24} color={theme.colors.textPrimary} />
         </TouchableOpacity>
+        <Text style={styles.headerTitle}>Bilgi Onayı</Text>
+        <View style={styles.headerPlaceholder} />
       </View>
 
       <ScrollView style={styles.scrollView} contentContainerStyle={styles.content}>
@@ -1300,6 +1028,9 @@ const styles = StyleSheet.create({
   backButtonRight: {
     marginRight: 0,
   },
+  backButtonLeft: {
+    marginLeft: 0,
+  },
   headerTitle: {
     fontSize: theme.typography.fontSize.lg,
     fontWeight: theme.typography.fontWeight.semibold,
@@ -1544,6 +1275,18 @@ const styles = StyleSheet.create({
   nfcListeningText: {
     fontSize: theme.typography.fontSize.sm,
     fontWeight: '600',
+  },
+  nfcProgressTop: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.sm,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    borderBottomWidth: 1,
+  },
+  nfcProgressText: {
+    fontSize: 14,
+    flex: 1,
   },
   documentPhotoWrap: {
     alignSelf: 'center',

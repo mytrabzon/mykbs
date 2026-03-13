@@ -47,7 +47,6 @@ import {
   requestNotificationPermissionAsync,
   registerPushToken,
 } from '../services/pushNotifications';
-import { getNfcEnabled } from '../utils/nfcSetting';
 
 // Lobi CANLI noktası — nabız animasyonu
 function LiveDotPulse() {
@@ -89,16 +88,9 @@ export default function OdalarScreen() {
   const [notificationCardDismissed, setNotificationCardDismissed] = useState(false);
   const [notificationPermissionRequesting, setNotificationPermissionRequesting] = useState(false);
   const [sonGirenler, setSonGirenler] = useState([]);
-  const [nfcEnabledInSettings, setNfcEnabledInSettings] = useState(false);
   useEffect(() => {
     filtreRef.current = filtre;
   }, [filtre]);
-
-  useFocusEffect(
-    useCallback(() => {
-      getNfcEnabled().then(setNfcEnabledInSettings);
-    }, [])
-  );
 
   const loading = initialLoading || filterLoading;
 
@@ -880,7 +872,6 @@ export default function OdalarScreen() {
           getBackendUrl={getBackendUrl}
           backendOk={backendStatus.isOnline === true}
           onOpenMenu={() => navigation.getParent()?.getParent()?.openDrawer?.()}
-          nfcEnabled={nfcEnabledInSettings}
         />
       )}
 
@@ -980,8 +971,9 @@ export default function OdalarScreen() {
           setShowFabMenu(false);
           if (action?.type === 'navigate' && action.route) {
             if (action.route === 'AddRoom') handleAddRoom();
+            else if (action.route === 'MrzScan') navigation.navigate('MrzScan', action.params || {});
             else if (action.route === 'CheckIn') handleQuickCheckIn();
-            else navigation.navigate(action.route);
+            else navigation.navigate(action.route, action.params);
           } else if (action?.type === 'ariza') {
             setArizaModalVisible(true);
           }

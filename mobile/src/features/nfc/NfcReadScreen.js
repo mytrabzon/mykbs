@@ -130,6 +130,13 @@ export default function NfcReadScreen() {
         <View style={styles.backBtn} />
       </View>
 
+      {progress ? (
+        <View style={[styles.progressWrapTop, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+          <ActivityIndicator size="small" color={colors.primary} />
+          <Text style={[styles.progressText, { color: colors.text }]} numberOfLines={1}>{progress}</Text>
+        </View>
+      ) : null}
+
       <ScrollView
         style={styles.scroll}
         contentContainerStyle={styles.content}
@@ -177,13 +184,6 @@ export default function NfcReadScreen() {
             editable={!isReading}
           />
         </View>
-
-        {progress ? (
-          <View style={styles.progressWrap}>
-            <ActivityIndicator size="small" color={colors.primary} />
-            <Text style={[styles.progressText, { color: colors.textSecondary }]}>{progress}</Text>
-          </View>
-        ) : null}
 
         <TouchableOpacity
           style={[styles.primaryBtn, { backgroundColor: colors.primary }]}
@@ -268,6 +268,14 @@ const styles = StyleSheet.create({
     marginBottom: 24,
     lineHeight: 22,
   },
+  progressWrapTop: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    borderBottomWidth: 1,
+  },
   progressWrap: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -276,6 +284,7 @@ const styles = StyleSheet.create({
   },
   progressText: {
     fontSize: 14,
+    flex: 1,
   },
   primaryBtn: {
     flexDirection: 'row',

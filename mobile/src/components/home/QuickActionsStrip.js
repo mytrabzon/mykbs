@@ -11,19 +11,17 @@ import { spacing, typography } from '../../theme';
 const ACTIONS = [
   { key: 'aileGiris', label: 'Aile Girişi', icon: 'people', nav: 'FamilyCheckIn' },
   { key: 'mrz', label: 'Hızlı MRZ', icon: 'camera', nav: 'MrzScan' },
-  { key: 'checkin', label: 'Check-in', icon: 'log-in-outline', nav: 'CheckIn' },
-  { key: 'odaAta', label: 'Oda Ata', icon: 'bed-outline', nav: 'CheckIn' },
+  { key: 'checkin', label: 'Check-in', icon: 'log-in-outline', nav: 'MrzScan', params: { fromCheckIn: true } },
+  { key: 'odaAta', label: 'Oda Ata', icon: 'bed-outline', nav: 'MrzScan', params: { fromCheckIn: true } },
   { key: 'liste', label: 'Liste', icon: 'list-outline', nav: 'Misafirler' },
 ];
 
-const NFC_ACTION = { key: 'nfcOku', label: 'NFC Oku', icon: 'hardware-chip-outline', nav: 'NfcRead' };
-
-export default function QuickActionsStrip({ onAction, isCompact, nfcEnabled }) {
+export default function QuickActionsStrip({ onAction, isCompact }) {
   const { colors } = useTheme();
-  const actions = nfcEnabled ? [NFC_ACTION, ...ACTIONS] : ACTIONS;
+  const actions = ACTIONS;
 
   const handlePress = (action) => {
-    if (action.nav) onAction?.({ type: 'navigate', route: action.nav });
+    if (action.nav) onAction?.({ type: 'navigate', route: action.nav, params: action.params });
     else onAction?.({ type: action.key });
   };
 

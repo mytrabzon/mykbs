@@ -156,8 +156,6 @@ export default function PrimeHomeView({
   contentTopCard,
   /** Hamburger menüyü açar (Drawer açıkken kullanılır) */
   onOpenMenu,
-  /** Ayarlarda NFC açıksa hızlı işlemler satırında NFC butonu gösterilir */
-  nfcEnabled = false,
 }) {
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
@@ -316,17 +314,8 @@ export default function PrimeHomeView({
           title={t('home.quickAssignRoom')}
           icon="bed"
           color="#10B981"
-          onPress={() => navigation?.navigate('CheckIn')}
+          onPress={() => navigation?.navigate('MrzScan', { fromCheckIn: true })}
         />
-        {/* Ayarlarda NFC açıksa görünür, kapalıysa buton yok */}
-        {nfcEnabled && (
-          <QuickAction
-            title={t('home.quickNfc')}
-            icon="hardware-chip-outline"
-            color="#6366F1"
-            onPress={() => navigation?.navigate('QuickNfcScan')}
-          />
-        )}
         <QuickAction
           title={t('home.quickKaydedilenler')}
           icon="document-text-outline"

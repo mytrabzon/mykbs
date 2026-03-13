@@ -183,12 +183,13 @@ export default function PaymentsScreen() {
         <TouchableOpacity
           hitSlop={HIT_SLOP}
           onPress={() => (navigation.canGoBack() ? navigation.goBack() : navigation.navigate('Main'))}
-          style={[styles.headerBtn, styles.headerBtnBack, { backgroundColor: colors.background }]}
+          style={[styles.headerBackWrap, { backgroundColor: colors.background }]}
         >
           <Ionicons name="arrow-back" size={24} color={colors.textPrimary} />
+          <Text style={[styles.headerBackText, { color: colors.textPrimary }]}>Geri</Text>
         </TouchableOpacity>
         <Text style={[styles.headerTitle, { color: colors.textPrimary }]}>Paketler & Ödemeler</Text>
-        <View style={styles.headerBtn} />
+        <View style={styles.headerSpacer} />
       </View>
 
       {loading && siparisler.length === 0 && (
@@ -241,14 +242,21 @@ const styles = StyleSheet.create({
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
     paddingHorizontal: PADDING,
     paddingBottom: 14,
     borderBottomWidth: 1,
   },
-  headerBtn: { width: 44, height: 44, borderRadius: 22, justifyContent: 'center', alignItems: 'center' },
-  headerBtnBack: { marginLeft: -44 },
-  headerTitle: { fontSize: 18, fontWeight: '600' },
+  headerBackWrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 12,
+    marginRight: 8,
+  },
+  headerBackText: { fontSize: 16, marginLeft: 4, fontWeight: '500' },
+  headerTitle: { fontSize: 18, fontWeight: '600', flex: 1, textAlign: 'center' },
+  headerSpacer: { width: 80, minWidth: 80 },
   centerWrap: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 24 },
   loadingText: { marginTop: 12, fontSize: 15 },
   errorText: { fontSize: 15, textAlign: 'center', marginBottom: 20 },

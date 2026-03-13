@@ -33,7 +33,10 @@ import { getApiBaseUrl } from '../config/api';
 import { api } from '../services/api';
 import { logger } from '../utils/logger';
 import NfcRoundAnimatedButton from '../components/nfc/NfcRoundAnimatedButton';
+import NfcProgress from '../components/nfc/NfcProgress';
 import OdaAtamaSheet from '../components/OdaAtamaSheet';
+import { toUserFriendlyNfcError } from '../utils/nfcErrorMessages';
+import { getNfcAntennaMessage } from '../utils/nfcAntennaHint';
 
 let NfcPassportReader = null;
 try {
@@ -80,7 +83,7 @@ export default function QuickNfcScanScreen() {
   const [hasStoredMrz, setHasStoredMrz] = useState(false);
   const processingRef = useRef(false);
   const mountedRef = useRef(true);
-  const { readNfcDirect } = useIndependentNfcReader();
+  const { readNfcDirect, progressDetail } = useIndependentNfcReader();
 
   const addNfcDebug = useCallback((msg) => {
     const line = `[${new Date().toLocaleTimeString('tr-TR')}] ${msg}`;
@@ -248,11 +251,12 @@ export default function QuickNfcScanScreen() {
         Toast.show({ type: 'success', text1: 'Okundu & kaydedildi', text2: `${d.ad || ''} ${d.soyad || ''}`.trim() || 'Kimlik eklendi.' });
       } else {
         addNfcDebug('readNfcDirect BAŞARISIZ: ' + (result?.error || 'bilinmiyor') + (result?.fallback ? ' | fallback=' + result.fallback : ''));
-        Toast.show({ type: 'info', text1: 'Okunamadı', text2: result?.error || 'MRZ okutup tekrar deneyin.' });
+        Toast.show({ type: 'info', text1: 'Okunamadı', text2: toUserFriendlyNfcError(result?.error) || 'MRZ okutup tekrar deneyin.' });
       }
     } catch (e) {
-      const msg = e?.message?.includes('cancel') ? 'İptal' : (e?.response?.data?.message || e?.message || 'Okunamadı');
-      addNfcDebug('Exception: ' + msg);
+      const rawMsg = e?.response?.data?.message || e?.message || 'Okunamadı';
+      const msg = toUserFriendlyNfcError(rawMsg);
+      addNfcDebug('Exception: ' + rawMsg);
       if (mountedRef.current) {
         Toast.show({ type: 'error', text1: 'Hata', text2: msg });
       }
@@ -302,47 +306,18 @@ export default function QuickNfcScanScreen() {
     }, 150);
   }, []);
 
+  // NFC sadece butona basıldığında çalışsın; ekran açılınca otomatik dinleme başlatma.
   useFocusEffect(
     useCallback(() => {
       mountedRef.current = true;
-      let cancelled = false;
-      if (isIos) {
-        setListening(false);
-        return () => { mountedRef.current = false; };
-      }
-      (async () => {
-        try {
-          const supported = await NfcManager.isSupported();
-          if (!supported) {
-            Toast.show({ type: 'info', text1: 'NFC yok', text2: 'Bu cihazda NFC desteklenmiyor.' });
-            return;
-          }
-          await NfcManager.start();
-          const enabled = await NfcManager.isEnabled().catch(() => false);
-          if (!enabled) {
-            Toast.show({ type: 'info', text1: 'NFC kapalı', text2: 'Ayarlardan NFC\'yi açın.' });
-            return;
-          }
-          if (cancelled || !mountedRef.current) return;
-          setListening(true);
-          NfcManager.setEventListener(NfcEvents.DiscoverTag, handleTagDiscovered);
-          await NfcManager.registerTagEvent({
-            invalidateAfterFirstRead: false,
-            alertMessage: 'Kimlik/pasaport kartını telefonun arkasına yaklaştırın',
-          });
-        } catch (e) {
-          if (mountedRef.current) Toast.show({ type: 'error', text1: 'NFC', text2: e?.message || 'Başlatılamadı' });
-          setListening(false);
-        }
-      })();
+      setListening(false);
       return () => {
-        cancelled = true;
         mountedRef.current = false;
         setListening(false);
         NfcManager.setEventListener(NfcEvents.DiscoverTag, null);
         NfcManager.unregisterTagEvent().catch(() => {});
       };
-    }, [isIos])
+    }, [])
   );
 
   React.useEffect(() => {
@@ -514,7 +489,15 @@ export default function QuickNfcScanScreen() {
       )}
 
       <View style={styles.mainContent}>
-        {listening && (
+        {processing && progressDetail ? (
+          <View style={[styles.progressCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+            <NfcProgress
+              stage={progressDetail.stage}
+              progress={progressDetail.progress}
+              message={progressDetail.message}
+            />
+          </View>
+        ) : (
           <View style={[styles.statusPill, { backgroundColor: colors.primary + '18' }]}>
             {processing ? (
               <ActivityIndicator size="small" color={colors.primary} />
@@ -522,7 +505,7 @@ export default function QuickNfcScanScreen() {
               <View style={[styles.statusDot, { backgroundColor: '#10B981' }]} />
             )}
             <Text style={[styles.statusText, { color: colors.textPrimary }]}>
-              {processing ? 'Okunuyor…' : 'Hazır'}
+              {processing ? 'Okunuyor…' : 'NFC butonuna basarak okuyun'}
             </Text>
           </View>
         )}
@@ -545,23 +528,15 @@ export default function QuickNfcScanScreen() {
             </View>
           </View>
         )}
+        <View style={[styles.antennaHintCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+          <Ionicons name="phone-portrait-outline" size={20} color={colors.primary} />
+          <Text style={[styles.antennaHintText, { color: colors.textSecondary }]}>{getNfcAntennaMessage()}</Text>
+        </View>
 
         <NfcRoundAnimatedButton
           onPress={() => {
             if (processing) return;
-            NfcManager.setEventListener(NfcEvents.DiscoverTag, null);
-            NfcManager.unregisterTagEvent().catch(() => {});
-            readOne().finally(() => {
-              if (!mountedRef.current || !listening || isIos) return;
-              setTimeout(() => {
-                if (!mountedRef.current) return;
-                NfcManager.setEventListener(NfcEvents.DiscoverTag, handleTagDiscovered);
-                NfcManager.registerTagEvent({
-                  invalidateAfterFirstRead: false,
-                  alertMessage: 'Kimlik veya pasaport kartını yaklaştırın',
-                }).then(() => { if (mountedRef.current) setListening(true); }).catch(() => setListening(false));
-              }, NFC_RE_REGISTER_DELAY_MS);
-            });
+            readOne();
           }}
           disabled={processing}
         />
@@ -739,6 +714,12 @@ const styles = StyleSheet.create({
   backBtn: { padding: 8, marginLeft: -44 },
   clearBtn: { padding: 8 },
   mainContent: { flex: 1, paddingHorizontal: 16 },
+  progressCard: {
+    marginTop: 12,
+    borderRadius: 16,
+    borderWidth: 1,
+    overflow: 'hidden',
+  },
   statusPill: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -765,6 +746,16 @@ const styles = StyleSheet.create({
   mrzHintBody: { fontSize: 13, lineHeight: 18, marginBottom: 10 },
   mrzHintBtn: { flexDirection: 'row', alignItems: 'center', alignSelf: 'flex-start', gap: 6, paddingVertical: 8, paddingHorizontal: 14, borderRadius: 10 },
   mrzHintBtnText: { fontSize: 14, fontWeight: '600', color: '#fff' },
+  antennaHintCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 10,
+    padding: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    gap: 10,
+  },
+  antennaHintText: { flex: 1, fontSize: 13, lineHeight: 18 },
   listHead: {
     flexDirection: 'row',
     alignItems: 'baseline',

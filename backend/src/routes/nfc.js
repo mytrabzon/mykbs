@@ -6,6 +6,48 @@ const router = express.Router();
 router.use(authenticateTesisOrSupabase);
 
 /**
+ * BAC anahtarlarını al (opsiyonel: sunucu tarafında bilinen anahtarlar).
+ * Mobil cihazda cache birincil; bu endpoint ek liste için kullanılabilir.
+ */
+router.post('/bac-keys', express.json(), async (req, res) => {
+  try {
+    const { countryCode, knownPatterns } = req.body || {};
+    const code = (countryCode || 'TUR').toString().toUpperCase().slice(0, 3);
+    const keys = [];
+    if (code === 'TUR') {
+      keys.push(
+        { documentNo: '000000000', birthDate: '1990-01-01', expiryDate: '2030-12-31' },
+        { documentNo: '111111111', birthDate: '1990-01-01', expiryDate: '2030-12-31' }
+      );
+    } else {
+      keys.push(
+        { documentNo: '000000000', birthDate: '1990-01-01', expiryDate: '2030-12-31' }
+      );
+    }
+    res.json({ success: true, keys, count: keys.length });
+  } catch (error) {
+    console.error('NFC bac-keys error:', error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+/**
+ * Başarılı BAC anahtarını bildir (cihazda cache birincil; sunucu sadece onay döner).
+ */
+router.post('/bac-success', express.json(), async (req, res) => {
+  try {
+    const { documentNumber, birthDate, expiryDate, countryCode } = req.body || {};
+    if (!documentNumber || !birthDate || !expiryDate) {
+      return res.status(400).json({ success: false, message: 'documentNumber, birthDate, expiryDate gerekli' });
+    }
+    res.json({ success: true });
+  } catch (error) {
+    console.error('NFC bac-success error:', error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+/**
  * NFC okuma endpoint'i
  * Mobil uygulama NFC'den veriyi okuduktan sonra buraya gönderir
  */

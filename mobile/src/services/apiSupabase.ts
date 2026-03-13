@@ -418,6 +418,32 @@ export const api = {
         throwIfNotOk(r, data, 'Sipariş geçmişi alınamadı');
         return toResponse(data);
       }
+      // App-admin (audit, users, pending-users vb.) — backend'e proxy
+      if (pathname.startsWith('/app-admin') || pathname.startsWith('app-admin')) {
+        const backendUrl = getBackendUrl();
+        if (!backendUrl) {
+          const err = new Error('Sunucu adresi tanımlı değil') as Error & { response?: { status: number; data: unknown } };
+          err.response = { status: 503, data: { message: 'EXPO_PUBLIC_BACKEND_URL tanımlayın.' } };
+          throw err;
+        }
+        if (!token) {
+          const err = new Error('Giriş gerekli') as Error & { response?: { status: number; data: unknown } };
+          err.response = { status: 401, data: { message: 'Token bulunamadı' } };
+          throw err;
+        }
+        const qs = path.includes('?') ? path.slice(path.indexOf('?')) : '';
+        const apiPath = pathname.startsWith('/') ? pathname : `/${pathname}`;
+        const url = `${backendUrl}/api${apiPath}${qs}`;
+        const r = await fetchWithLog(url, {
+          method: 'GET',
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        const data = await r.json().catch(() => ({}));
+        if (!r.ok) {
+          throw Object.assign(new Error((data as { message?: string })?.message || 'İstek başarısız'), { response: { status: r.status, data } });
+        }
+        return toResponse(data);
+      }
       logger.warn('[apiSupabase] Unmapped GET', path);
       const res = await callFn('facilities_list', {}, token);
       return toResponse(res);

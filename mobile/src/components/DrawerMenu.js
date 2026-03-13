@@ -10,8 +10,11 @@ import {
   TouchableOpacity,
   ScrollView,
   Image,
+  Dimensions,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+
+const { height: WINDOW_HEIGHT } = Dimensions.get('window');
 import { useNavigation, DrawerActions } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../context/ThemeContext';
@@ -87,7 +90,15 @@ export default function DrawerMenu(props) {
   const avatarUrl = user?.avatar_url || null;
 
   return (
-    <View style={[styles.container, { backgroundColor: colors.background, paddingTop: insets.top + 12, paddingBottom: insets.bottom + 20 }]}>
+    <View style={[
+      styles.container,
+      {
+        backgroundColor: colors.background,
+        paddingTop: insets.top + 12,
+        paddingBottom: insets.bottom,
+        minHeight: WINDOW_HEIGHT,
+      },
+    ]}>
       <View style={[styles.profile, { borderBottomColor: colors.border }]}>
         <View style={[styles.avatar, { backgroundColor: colors.primary }]}>
           {avatarUrl ? (

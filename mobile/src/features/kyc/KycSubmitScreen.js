@@ -17,8 +17,7 @@ export default function KycSubmitScreen({ route, navigation }) {
     try {
       const { data } = await require('../../services/api').api.post('/kyc/mrz-verify', minimal);
       setDone(true);
-      if (data?.next === 'NFC') navigation.replace('NfcIntro');
-      else if (data?.next === 'DONE') navigation.replace('Main');
+      if (data?.next === 'DONE') navigation.replace('Main');
       else navigation.replace('Main');
     } catch (e) {
       setLoading(false);

@@ -25,6 +25,27 @@ Loglara göre sıra şöyle:
 
 ---
 
+## 1.1. "Security status not satisfied" / "Security Not Status Satisfied" uyarısı
+
+Bu mesaj **ePassport/eID çipinden** dönen APDU kodu **0x6982** ile gelir: çip, güvenlik koşullarının sağlanmadığını söylüyor.
+
+**Neden olur?**
+- **BAC (Basic Access Control)** yapılamadı veya yanlış anahtar kullanıldı (belge no + doğum + son kullanma MRZ’den alınır).
+- Çip, BAC olmadan hiçbir veri (DG1, DG2, fotoğraf vb.) vermez.
+
+**Uygulama ne yapıyor?**
+- Bu hata yakalandığında artık **Türkçe** şu mesaj gösteriliyor:  
+  *"Çip güvenlik doğrulaması sağlanamadı. Önce kartın arkasındaki MRZ alanını okutun, sonra kartı tekrar yaklaştırın."*
+
+**Sizin yapmanız gerekenler:**
+1. Kartın **arkasındaki MRZ** alanını (2 veya 3 satırlık metin) **kamerayla okutun** (MRZ oku / KYC ekranı).
+2. Uygulama bu veriyi BAC için kaydetsin.
+3. **Aynı kartı** telefonun arkasına **NFC ile** tekrar yaklaştırın.
+
+Böylece doğru BAC anahtarı kullanılır ve "Security status not satisfied" hatası büyük oranda ortadan kalkar.
+
+---
+
 ## 2. ID kartı NFC neden okunmuyor?
 
 T.C. kimlik (e-Kimlik) ve e-pasaport çipleri **BAC (Basic Access Control)** ile korunur. Çipi açmak için MRZ’den türetilen üç bilgi gerekir:

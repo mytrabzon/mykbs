@@ -17,7 +17,7 @@ export default function OkumaScreen({ navigation }) {
       <View style={styles.header}>
         <Text style={[styles.title, { color: colors.textPrimary }]}>Belge okuma</Text>
         <Text style={[styles.subtitle, { color: colors.textSecondary }]}>
-          Kimlik veya pasaportu kamerayla tarayın veya NFC ile okuyun.
+          Kimlik veya pasaportu kamerayla (MRZ) tarayın.
         </Text>
       </View>
       <View style={styles.cards}>
@@ -38,22 +38,6 @@ export default function OkumaScreen({ navigation }) {
           </View>
         </TouchableOpacity>
 
-        <TouchableOpacity
-          style={[styles.card, { backgroundColor: colors.surface }]}
-          onPress={() => navigation.navigate('NfcIntro')}
-          activeOpacity={0.8}
-        >
-          <View style={[styles.cardIconWrap, { backgroundColor: colors.successSoft || '#E6F4EA' }]}>
-            <Ionicons name="phone-portrait-outline" size={40} color={colors.success} />
-          </View>
-          <Text style={[styles.cardTitle, { color: colors.textPrimary }]}>NFC ile oku</Text>
-          <Text style={[styles.cardDesc, { color: colors.textSecondary }]}>
-            Pasaport çipine telefonu yaklaştırarak güvenli okuma.
-          </Text>
-          <View style={styles.cardArrow}>
-            <Ionicons name="chevron-forward" size={24} color={colors.primary} />
-          </View>
-        </TouchableOpacity>
       </View>
     </SafeAreaView>
   );

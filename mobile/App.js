@@ -59,13 +59,10 @@ import ConsentGateScreen from './src/screens/ConsentGateScreen';
 import AccountDeletionPendingScreen from './src/screens/AccountDeletionPendingScreen';
 import MrzScanScreen from './src/features/kyc/MrzScanScreen';
 import MrzResultScreen from './src/features/kyc/MrzResultScreen';
+import UniversalMrzScreen from './src/features/kyc/UniversalMrzScreen';
 import FamilyCheckInScreen from './src/features/family/FamilyCheckInScreen';
 import KycSubmitScreen from './src/features/kyc/KycSubmitScreen';
 import KycManualEntryScreen from './src/features/kyc/KycManualEntryScreen';
-import NfcIntroScreen from './src/features/kyc/NfcIntroScreen';
-import NfcReadScreen from './src/features/nfc/NfcReadScreen';
-import NfcResultScreen from './src/features/nfc/NfcResultScreen';
-import QuickNfcScanScreen from './src/screens/QuickNfcScanScreen';
 import DocumentHubScreen from './src/features/documentRead/DocumentHubScreen';
 import FrontDocumentScanScreen from './src/features/documentRead/FrontDocumentScanScreen';
 import GallerySingleDocumentScreen from './src/features/documentRead/GallerySingleDocumentScreen';
@@ -397,13 +394,10 @@ function MainStack() {
       <Stack.Screen name="Bildirimler" component={BildirimlerScreen} />
       <Stack.Screen name="ReceptionistPanel" component={ReceptionistPanelScreen} options={{ title: 'KBS Senkronizasyon' }} />
       <Stack.Screen name="MrzScan" component={MrzScanScreen} />
-      <Stack.Screen name="NfcRead" component={NfcReadScreen} />
-      <Stack.Screen name="NfcResult" component={NfcResultScreen} />
-      <Stack.Screen name="QuickNfcScan" component={QuickNfcScanScreen} />
       <Stack.Screen name="MrzResult" component={MrzResultScreen} />
+      <Stack.Screen name="UniversalMrz" component={UniversalMrzScreen} options={{ title: 'Evrensel MRZ' }} />
       <Stack.Screen name="KycSubmit" component={KycSubmitScreen} />
       <Stack.Screen name="KycManualEntry" component={KycManualEntryScreen} />
-      <Stack.Screen name="NfcIntro" component={NfcIntroScreen} />
       <Stack.Screen name="DocumentHub" component={DocumentHubScreen} />
       <Stack.Screen name="FrontDocumentScan" component={FrontDocumentScanScreen} />
       <Stack.Screen name="GallerySingleDocument" component={GallerySingleDocumentScreen} />
@@ -495,7 +489,7 @@ function MainTabs() {
       <Tab.Screen
         name="MRZ"
         component={MrzScanScreen}
-        initialParams={{ passportOnly: true }}
+        initialParams={{ passportOnly: true, setIsScreenFocused: () => {} }}
         options={{ tabBarLabel: t('tabs.idPassport'), tabBarActiveTintColor: colors.primary }}
       />
       <Tab.Screen name="Raporlar" component={RaporlarScreen} options={{ tabBarLabel: t('tabs.reports') }} />
@@ -676,7 +670,7 @@ function AppNavigator() {
                     swipeEdgeWidth: 60,
                   }}
                 >
-                  <Drawer.Screen name="Main" component={MainStack} options={{ drawerLabel: 'Dashboard' }} />
+                  <Drawer.Screen name="Dashboard" component={MainStack} options={{ drawerLabel: 'Dashboard' }} />
                   <Drawer.Screen name="LiveStream" component={LiveStreamScreen} options={{ drawerLabel: 'Canlı Akış' }} />
                   <Drawer.Screen name="Musteriler" component={MusterilerScreen} options={{ drawerLabel: 'Müşteriler (B2B)' }} />
                   <Drawer.Screen name="Lisanslar" component={LisanslarScreen} options={{ drawerLabel: 'Lisanslar' }} />
@@ -684,6 +678,7 @@ function AppNavigator() {
                   <Drawer.Screen name="PendingUsers" component={PendingUsersScreen} options={{ drawerLabel: 'Onay Bekleyenler' }} />
                   <Drawer.Screen name="Users" component={UsersStack} options={{ drawerLabel: 'Kullanıcılar' }} />
                   <Drawer.Screen name="Identity" component={MrzScanScreen} initialParams={{ passportOnly: true }} options={{ drawerLabel: 'Kimlik & Pasaport' }} />
+                  <Drawer.Screen name="UniversalMrz" component={UniversalMrzScreen} options={{ drawerLabel: 'Evrensel MRZ (Galeri/Kamera)' }} />
                   <Drawer.Screen name="Payments" component={PaymentsScreen} options={{ drawerLabel: 'Paketler & Ödemeler' }} />
                   <Drawer.Screen name="Tesisler" component={TesisListScreen} options={{ drawerLabel: 'Tesis Listesi' }} />
                   <Drawer.Screen name="Notifications" component={BildirimlerScreen} options={{ drawerLabel: 'Bildirim & Duyurular' }} />
@@ -722,7 +717,7 @@ function AppNavigator() {
                     swipeEdgeWidth: 60,
                   }}
                 >
-                  <Drawer.Screen name="Main" component={MainStack} options={{ drawerLabel: 'Dashboard' }} />
+                  <Drawer.Screen name="Dashboard" component={MainStack} options={{ drawerLabel: 'Dashboard' }} />
                   <Drawer.Screen name="LiveStream" component={LiveStreamScreen} options={{ drawerLabel: 'Canlı Akış' }} />
                   <Drawer.Screen name="Musteriler" component={MusterilerScreen} options={{ drawerLabel: 'Müşteriler (B2B)' }} />
                   <Drawer.Screen name="Lisanslar" component={LisanslarScreen} options={{ drawerLabel: 'Lisanslar' }} />
@@ -730,6 +725,7 @@ function AppNavigator() {
                   <Drawer.Screen name="PendingUsers" component={PendingUsersScreen} options={{ drawerLabel: 'Onay Bekleyenler' }} />
                   <Drawer.Screen name="Users" component={UsersStack} options={{ drawerLabel: 'Kullanıcılar' }} />
                   <Drawer.Screen name="Identity" component={MrzScanScreen} initialParams={{ passportOnly: true }} options={{ drawerLabel: 'Kimlik & Pasaport' }} />
+                  <Drawer.Screen name="UniversalMrz" component={UniversalMrzScreen} options={{ drawerLabel: 'Evrensel MRZ (Galeri/Kamera)' }} />
                   <Drawer.Screen name="Payments" component={PaymentsScreen} options={{ drawerLabel: 'Paketler & Ödemeler' }} />
                   <Drawer.Screen name="Tesisler" component={TesisListScreen} options={{ drawerLabel: 'Tesis Listesi' }} />
                   <Drawer.Screen name="Notifications" component={BildirimlerScreen} options={{ drawerLabel: 'Bildirim & Duyurular' }} />

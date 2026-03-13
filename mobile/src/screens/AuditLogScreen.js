@@ -10,16 +10,18 @@ import {
   FlatList,
   RefreshControl,
   ActivityIndicator,
-  useWindowDimensions,
+  TouchableOpacity,
+  Platform,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../context/ThemeContext';
-import { useAuth } from '../context/AuthContext';
 import { api } from '../services/api';
-import AppHeader from '../components/AppHeader';
 import Toast from 'react-native-toast-message';
+
+const HIT_SLOP = { top: 12, bottom: 12, left: 12, right: 12 };
+const PADDING = 16;
 
 function formatDate(createdAt) {
   if (!createdAt) return '—';
@@ -53,13 +55,14 @@ function AuditRow({ item, colors }) {
   );
 }
 
-export default function AuditLogScreen({ navigation }) {
+export default function AuditLogScreen() {
+  const navigation = useNavigation();
   const insets = useSafeAreaInsets();
   const { colors } = useTheme();
-  const { tesis } = useAuth();
   const [logs, setLogs] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const headerPaddingTop = Platform.OS === 'ios' ? Math.max(insets.top, 12) : 12;
 
   const load = useCallback(async (isRefresh = false) => {
     if (isRefresh) setRefreshing(true);
@@ -91,13 +94,22 @@ export default function AuditLogScreen({ navigation }) {
 
   if (loading && logs.length === 0) {
     return (
-      <View style={[styles.container, { backgroundColor: colors.background, paddingTop: insets.top }]}>
-        <AppHeader
-          title="Audit Log"
-          tesis={tesis}
-          onNotification={() => navigation.navigate('Bildirimler')}
-          onProfile={() => navigation.navigate('DahaFazla', { screen: 'Ayarlar' })}
-        />
+      <View style={[styles.container, { backgroundColor: colors.background }]}>
+        <View style={[styles.header, { backgroundColor: colors.surface, paddingTop: headerPaddingTop, borderBottomColor: colors.border }]}>
+          <TouchableOpacity
+            hitSlop={HIT_SLOP}
+            onPress={() => {
+              if (navigation.canGoBack()) navigation.goBack();
+              else navigation.navigate('Main');
+            }}
+            style={[styles.headerBackWrap, { backgroundColor: colors.background }]}
+          >
+            <Ionicons name="arrow-back" size={24} color={colors.textPrimary} />
+            <Text style={[styles.headerBackText, { color: colors.textPrimary }]}>Geri</Text>
+          </TouchableOpacity>
+          <Text style={[styles.headerTitle, { color: colors.textPrimary }]}>Audit Log</Text>
+          <View style={styles.headerSpacer} />
+        </View>
         <View style={styles.centered}>
           <ActivityIndicator size="large" color={colors.primary} />
           <Text style={[styles.loadingText, { color: colors.textSecondary }]}>Yükleniyor...</Text>
@@ -107,13 +119,22 @@ export default function AuditLogScreen({ navigation }) {
   }
 
   return (
-    <View style={[styles.container, { backgroundColor: colors.background, paddingTop: insets.top }]}>
-      <AppHeader
-        title="Audit Log"
-        tesis={tesis}
-        onNotification={() => navigation.navigate('Bildirimler')}
-        onProfile={() => navigation.navigate('DahaFazla', { screen: 'Ayarlar' })}
-      />
+    <View style={[styles.container, { backgroundColor: colors.background }]}>
+      <View style={[styles.header, { backgroundColor: colors.surface, paddingTop: headerPaddingTop, borderBottomColor: colors.border }]}>
+        <TouchableOpacity
+          hitSlop={HIT_SLOP}
+          onPress={() => {
+            if (navigation.canGoBack()) navigation.goBack();
+            else navigation.navigate('Main');
+          }}
+          style={[styles.headerBackWrap, { backgroundColor: colors.background }]}
+        >
+          <Ionicons name="arrow-back" size={24} color={colors.textPrimary} />
+          <Text style={[styles.headerBackText, { color: colors.textPrimary }]}>Geri</Text>
+        </TouchableOpacity>
+        <Text style={[styles.headerTitle, { color: colors.textPrimary }]}>Audit Log</Text>
+        <View style={styles.headerSpacer} />
+      </View>
       <Text style={[styles.subtitle, { color: colors.textSecondary }]}>
         Sistem işlem kayıtları. Son 100 kayıt listelenir.
       </Text>
@@ -138,6 +159,27 @@ export default function AuditLogScreen({ navigation }) {
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: PADDING,
+    paddingBottom: 14,
+    borderBottomWidth: 1,
+  },
+  headerBackWrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 10,
+    paddingHorizontal: 4,
+    paddingRight: 12,
+    borderRadius: 22,
+    minWidth: 44,
+    minHeight: 44,
+  },
+  headerBackText: { fontSize: 16, marginLeft: 4, fontWeight: '500' },
+  headerTitle: { fontSize: 18, fontWeight: '600', flex: 1, textAlign: 'center' },
+  headerSpacer: { width: 80, minWidth: 80 },
   subtitle: {
     fontSize: 13,
     marginHorizontal: 16,

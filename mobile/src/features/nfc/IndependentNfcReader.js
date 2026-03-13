@@ -286,6 +286,7 @@ function bytesToBase64(arr) {
 export function useIndependentNfcReader() {
   const [isReading, setIsReading] = useState(false);
   const [progress, setProgress] = useState('');
+  const [progressDetail, setProgressDetail] = useState(null);
   const [lastResult, setLastResult] = useState(null);
   const techRequestedRef = useRef(false);
 
@@ -334,7 +335,15 @@ export function useIndependentNfcReader() {
       const extraKeys = options?.extraKeys ?? [];
       const fullResult = await readAllDataWhenCardNear({
         includeImages: true,
-        onProgress: (msg) => setProgress(msg),
+        onProgress: (arg) => {
+          if (arg && typeof arg === 'object' && arg.message !== undefined) {
+            setProgress(arg.message);
+            setProgressDetail(arg);
+          } else {
+            setProgress(typeof arg === 'string' ? arg : '');
+            setProgressDetail(null);
+          }
+        },
         extraKeys: extraKeys.length > 0 ? extraKeys : undefined,
       });
       if (fullResult.success && fullResult.data) {
@@ -356,6 +365,7 @@ export function useIndependentNfcReader() {
         return { success: false, error: fullResult.error, fallback: null };
       }
 
+      setProgressDetail({ stage: 'detect', message: 'Kimlik veya pasaportu telefonun arkasına yaklaştırın...', progress: 0 });
       setProgress('Kimlik veya pasaportu telefonun arkasına yaklaştırın...');
       logger.info('[NFC] requestTechnology çağrılıyor', { tech: String(tech) });
       await NfcManager.requestTechnology(tech);
@@ -409,6 +419,7 @@ export function useIndependentNfcReader() {
       if (techRequestedRef.current) closeNfc();
       setIsReading(false);
       setProgress('');
+      setProgressDetail(null);
       logger.info('[NFC] readNfcDirect bitti (finally)');
     }
   }, [closeNfc]);

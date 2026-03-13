@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import toast from 'react-hot-toast'
 import { api } from '@/services/api'
@@ -103,6 +104,9 @@ export default function PendingUsersPage() {
 
   return (
     <div className="admin-page">
+      <div className="kbs-admin-mb-16">
+        <Link href="/" className="kbs-page-back">← Ana sayfa</Link>
+      </div>
       <h1 className="kbs-page-title">Onay Bekleyen Kullanıcılar</h1>
       <p className="kbs-page-sub">
         Yeni kayıt olan kullanıcılar onaylanana kadar topluluk paylaşımı ve bazı işlemler yapamaz. Buradan onaylayabilir veya reddedebilirsiniz.

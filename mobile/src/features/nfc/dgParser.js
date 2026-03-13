@@ -69,6 +69,39 @@ function parseDG1(dg1Buffer) {
     }
   }
 
+  // TD2 formatı (Visa / ehliyet / ikamet): 2 satır x 36 karakter (72)
+  if (data.length >= 72 && data.includes('<')) {
+    const line1 = data.substring(0, 36);
+    const line2 = data.substring(36, 72);
+    if (/^[IAVC]/.test(line1) && line2.length >= 22) {
+      const docType = (line1.substring(0, 2) || '').replace(/</g, '');
+      const issuingCountry = (line1.substring(2, 5) || '').replace(/</g, '');
+      const nameBlock = (line1.substring(5, 36) || '').replace(/</g, ' ');
+      const nameParts = nameBlock.split(/\s*<<\s*/).map((s) => s.trim()).filter(Boolean);
+      const surname = nameParts[0] || '';
+      const givenName = nameParts.slice(1).join(' ') || '';
+      const documentNumber = (line2.substring(0, 9) || '').replace(/</g, '').trim();
+      const birthDate = formatDate(line2.substring(9, 15));
+      const sex = (line2.substring(15, 16) || '').replace(/</g, '') || '';
+      const expiryDate = formatDate(line2.substring(16, 22));
+      const nationality = (line2.substring(22, 25) || '').replace(/</g, '') || '';
+      const personalNumber = (line2.substring(25, 36) || '').replace(/</g, '').trim();
+      return {
+        format: 'TD2',
+        documentType: docType,
+        issuingCountry: issuingCountry,
+        documentNumber: documentNumber,
+        personalNumber: personalNumber || undefined,
+        birthDate: birthDate || '',
+        sex,
+        expiryDate: expiryDate || '',
+        nationality: nationality || 'TUR',
+        surname,
+        givenName,
+      };
+    }
+  }
+
   // TD3 formatı (Pasaport): 2 satır x 44 karakter
   if (data.length >= 88) {
     const line1 = data.substring(0, 44);
@@ -86,6 +119,7 @@ function parseDG1(dg1Buffer) {
       const sex = (line2.substring(20, 21) || '').replace(/</g, '') || '';
       const expiryDate = formatDate(line2.substring(21, 27));
       return {
+        format: 'TD3',
         documentType: docType,
         issuingCountry: issuingCountry,
         documentNumber: documentNumber,
@@ -102,7 +136,53 @@ function parseDG1(dg1Buffer) {
   return null;
 }
 
+/**
+ * DG1 ham buffer'ı evrensel parse et: TD1 (kimlik), TD2 (ehliyet/ikamet), TD3 (pasaport).
+ * Çıktıda format alanı eklenir; uygulama tarafında ad/soyad için surname + givenName kullanılır.
+ * @param {Buffer|Uint8Array|number[]|string} dg1Buffer
+ * @returns {{ format: string; documentType: string; issuingCountry: string; documentNumber: string; personalNumber?: string; birthDate: string; sex: string; expiryDate: string; nationality: string; surname: string; givenName: string } | { format: 'UNKNOWN'; raw: string }}
+ */
+function parseDG1Universal(dg1Buffer) {
+  let data;
+  if (typeof dg1Buffer === 'string') {
+    data = dg1Buffer;
+  } else if (dg1Buffer && (Array.isArray(dg1Buffer) || (typeof Uint8Array !== 'undefined' && dg1Buffer instanceof Uint8Array))) {
+    const arr = Array.isArray(dg1Buffer) ? dg1Buffer : Array.from(dg1Buffer);
+    data = arr.map((b) => String.fromCharCode(b & 0xff)).join('');
+  } else if (dg1Buffer && typeof dg1Buffer.toString === 'function') {
+    data = dg1Buffer.toString('ascii');
+  } else {
+    return { format: 'UNKNOWN', raw: '' };
+  }
+  data = data.replace(/\0/g, '').trim();
+  const parsed = parseDG1(dg1Buffer);
+  if (parsed) {
+    if (!parsed.format) parsed.format = data.length >= 88 ? 'TD3' : data.length >= 72 ? 'TD2' : 'TD1';
+    return parsed;
+  }
+  return { format: 'UNKNOWN', raw: data };
+}
+
+/**
+ * DG11 ham baytlarından adres / doğum yeri çıkar (TLV 5F1C, 5F1D vb.).
+ * @param {number[]|Uint8Array} dg11Bytes
+ * @returns {{ placeOfBirth?: string; address?: string; raw?: string }}
+ */
+function parseDG11(dg11Bytes) {
+  const result = {};
+  if (!dg11Bytes || !Array.isArray(dg11Bytes) && !(typeof Uint8Array !== 'undefined' && dg11Bytes instanceof Uint8Array)) return result;
+  const arr = Array.isArray(dg11Bytes) ? dg11Bytes : Array.from(dg11Bytes);
+  try {
+    const { extractFieldFromTLV } = require('./IdCardReader');
+    result.placeOfBirth = extractFieldFromTLV(arr, 0x1c) || undefined;
+    result.address = extractFieldFromTLV(arr, 0x1d) || undefined;
+  } catch (_) {}
+  return result;
+}
+
 module.exports = {
   parseDG1,
+  parseDG1Universal,
+  parseDG11,
   formatDate,
 };

@@ -126,6 +126,18 @@ export function speakApproachId(language = 'tr-TR') {
   speak(phrases[language] || phrases['tr-TR'], { language });
 }
 
+/** "Pasaport veya kimliğin MRZ bölgesini kameraya gösterin" (MRZ kamera okuma) */
+export function speakMrzCameraHint(language = 'tr-TR') {
+  const phrases = {
+    'tr-TR': 'Pasaport veya kimliğin arka yüzündeki MRZ çizgilerini kameraya gösterin.',
+    'en-US': 'Show the MRZ lines on the back of your passport or ID to the camera.',
+    'de-DE': 'Zeigen Sie die MRZ-Zeilen auf der Rückseite von Pass oder Ausweis in die Kamera.',
+    'ru-RU': 'Покажите камере MRZ-линии на обратной стороне паспорта или документа.',
+    'ar-SY': 'اعرض خطوط MRZ في ظهر جواز السفر أو الهوية للكاميرا.',
+  };
+  speak(phrases[language] || phrases['tr-TR'], { language });
+}
+
 /** Başarılı check-in: titreşim + ses */
 export async function feedbackCheckInSuccess(language = 'tr-TR') {
   await hapticSuccess();

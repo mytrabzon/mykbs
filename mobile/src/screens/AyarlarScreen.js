@@ -24,7 +24,6 @@ import { supabase } from '../lib/supabase/supabase';
 import { dataService } from '../services/dataService';
 import { backendHealth } from '../services/backendHealth';
 import { getApiBaseUrl, isSupabaseConfigured } from '../config/api';
-import { getNfcEnabled, setNfcEnabled } from '../utils/nfcSetting';
 import { getTtsEnabled, setTtsEnabled, getHapticEnabled, setHapticEnabled, loadFeedbackSettings } from '../utils/feedback';
 import { useLanguage } from '../context/LanguageContext';
 import { exportGuestsToExcel } from '../utils/exportExcel';
@@ -75,7 +74,6 @@ export default function AyarlarScreen() {
   const [kbsImportLoading, setKbsImportLoading] = useState(false);
   const [kbsImportResult, setKbsImportResult] = useState(null);
   const [kbsServerIp, setKbsServerIp] = useState(null);
-  const [nfcEnabled, setNfcEnabledState] = useState(false);
   const [ttsEnabled, setTtsEnabledState] = useState(true);
   const [hapticEnabled, setHapticEnabledState] = useState(true);
   const [exportLoading, setExportLoading] = useState(false);
@@ -113,7 +111,6 @@ export default function AyarlarScreen() {
   };
 
   useEffect(() => {
-    getNfcEnabled().then(setNfcEnabledState);
     loadFeedbackSettings().then(() => {
       setTtsEnabledState(getTtsEnabled());
       setHapticEnabledState(getHapticEnabled());
@@ -683,21 +680,8 @@ export default function AyarlarScreen() {
         <View style={sectionCard(colors.accent)}>
           {sectionHeader('id-card', 'Kimlik / Pasaport')}
           <Text style={[styles.sectionDesc, { color: colors.textSecondary }]}>
-            Belge okuma için öncelik MRZ (kamera) ile okumadır. İsterseniz NFC ile okumayı açabilirsiniz.
+            Belge okuma MRZ (kamera) ile yapılır.
           </Text>
-          <View style={[styles.switchRow, { borderColor: colors.border }]}>
-            <Text style={[styles.label, { color: colors.textPrimary }]}>NFC ile okumayı kullan</Text>
-            <Switch
-              value={nfcEnabled}
-              onValueChange={async (v) => {
-                await setNfcEnabled(v);
-                setNfcEnabledState(v);
-                Toast.show({ type: 'info', text1: v ? 'NFC açıldı' : 'NFC kapatıldı', text2: v ? 'Kimlik ekranında NFC önce denenecek' : 'Öncelik MRZ (kamera)' });
-              }}
-              trackColor={{ false: colors.border, true: colors.primarySoft }}
-              thumbColor={nfcEnabled ? colors.primary : colors.textSecondary}
-            />
-          </View>
         </View>
 
         <View style={sectionCard(colors.success)}>

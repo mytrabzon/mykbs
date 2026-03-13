@@ -50,6 +50,9 @@ export default function UsersPage() {
 
   return (
     <div className="admin-page">
+      <div className="kbs-admin-mb-16">
+        <Link href="/" className="kbs-page-back">← Ana sayfa</Link>
+      </div>
       <h1 className="kbs-page-title">Kullanıcılar</h1>
       <p className="kbs-page-sub">Supabase Auth kullanıcı listesi. Detaya tıklayarak kullanıcı bilgilerini görebilirsiniz.</p>
       <div className="kbs-card">
