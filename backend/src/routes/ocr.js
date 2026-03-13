@@ -765,11 +765,21 @@ router.post('/document-base64', authenticateTesisOrSupabase, tenantMiddleware, e
       try {
         mrzList = await extractMultipleMRZ(buf);
         if (mrzList.length > 0) {
-          const best = mrzList.sort((a, b) => (b.confidence || 0) - (a.confidence || 0))[0];
+          // Tek pasaport odaklı: docTypeHint id değilse sadece 2 satır (TD3 pasaport) kullan; id ise 3 satır (TD1).
+          const lineCountFor = (text) => (text || '').trim().split('\n').filter(Boolean).length;
+          let candidates = mrzList;
+          if (requestDocTypeHint === 'id') {
+            const td1Only = mrzList.filter((m) => lineCountFor(m.text) >= 3);
+            if (td1Only.length > 0) candidates = td1Only;
+          } else {
+            const td3Only = mrzList.filter((m) => lineCountFor(m.text) === 2);
+            if (td3Only.length > 0) candidates = td3Only;
+          }
+          const best = candidates.sort((a, b) => (b.confidence || 0) - (a.confidence || 0))[0];
           mrzRaw = best.text;
           mrzPayload = parseMrzToPayload(best.text) || null;
           multiple = mrzList.length > 1;
-          console.log(logPrefix, 'çoklu MRZ pipeline', { count: mrzList.length, multiple, bestConf: best.confidence });
+          console.log(logPrefix, 'çoklu MRZ pipeline', { count: mrzList.length, candidates: candidates.length, multiple, bestConf: best.confidence });
         }
       } catch (multiErr) {
         console.warn(logPrefix, 'extractMultipleMRZ atlandı', multiErr.message);

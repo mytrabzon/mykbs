@@ -15,7 +15,11 @@ const APPLE_VERIFY_URL_SANDBOX = 'https://sandbox.itunes.apple.com/verifyReceipt
  */
 async function verifyAppleReceipt(receiptBase64) {
   const sharedSecret = process.env.APPLE_IAP_SHARED_SECRET;
-  if (!sharedSecret || !receiptBase64) {
+  const hasSecret = Boolean(sharedSecret && String(sharedSecret).trim());
+  const hasReceipt = Boolean(receiptBase64 && String(receiptBase64).trim());
+  if (!hasSecret || !hasReceipt) {
+    if (!hasSecret) console.warn('[iapVerify] APPLE_IAP_SHARED_SECRET ortam değişkeni eksik veya boş (Railway’da ekleyip redeploy edin).');
+    if (!hasReceipt) console.warn('[iapVerify] Apple makbuz (receipt) boş veya sadece boşluk.');
     return { valid: false, error: 'Apple IAP yapılandırması eksik (APPLE_IAP_SHARED_SECRET) veya makbuz boş.' };
   }
 
