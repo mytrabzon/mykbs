@@ -528,7 +528,8 @@ export default function MrzScanScreen({ navigation }) {
         }
         if (TorchModule) {
           try {
-            TorchModule.switchState(false);
+            // iOS native BOOL bazen JS boolean kabul etmiyor; 0/1 ile dene
+            TorchModule.switchState(0);
           } catch (_) {}
         }
       };
@@ -1733,8 +1734,8 @@ export default function MrzScanScreen({ navigation }) {
       const next = !prev;
       if (TorchModule) {
         try {
-          // iOS native BOOL bekliyor; JS'ten açık boolean geçir (undefined/string hatası önlemi)
-          TorchModule.switchState(!!next);
+          // iOS: "BOOL is unsupported" hatası önlemi — number (0/1) kullan
+          TorchModule.switchState(next ? 1 : 0);
         } catch (e) {
           logger.debug('Torch switchState', e?.message);
         }

@@ -200,6 +200,10 @@ logDatabaseUrlStatus();
 
 // Graceful shutdown: Railway/PM2 SIGTERM/SIGINT'te bağlantıları temiz kapat (çökme önleme)
 const server = app.listen(PORT, HOST, () => {
+  // OCR /document-base64 uzun sürebilir; 502 önlemek için istek timeout'unu artır (Railway proxy ile uyumlu)
+  const requestTimeoutMs = Number(process.env.REQUEST_TIMEOUT_MS) || 120000; // 2 dakika
+  server.requestTimeout = requestTimeoutMs;
+  server.headersTimeout = Math.max(server.headersTimeout || 0, requestTimeoutMs + 1000);
   console.log(`Server running on http://${HOST}:${PORT}`);
   console.log(`Local: http://localhost:${PORT}`);
   console.log(`Health: GET http://localhost:${PORT}/health  |  DB: GET http://localhost:${PORT}/health/db`);

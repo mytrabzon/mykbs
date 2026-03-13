@@ -702,6 +702,8 @@ router.post('/document', authenticateTesisOrSupabase, upload.single('image'), as
 
 /** Galeriden seçilen görsel: base64 ile gönder (Android content URI FormData sorununu aşar). MRZ için runMrzPipeline kullan (kimlik MRZ canavarı). paperMode: true ile kağıt/fotokopi ön işlemi öncelikli. */
 router.post('/document-base64', authenticateTesisOrSupabase, tenantMiddleware, express.json({ limit: '8mb' }), async (req, res) => {
+  // OCR uzun sürebilir; 502 "Application failed to respond" önlemek için bu istek için timeout artır (2 dk)
+  res.setTimeout(120000);
   const base64 = req.body?.imageBase64;
   const paperMode = !!req.body?.paperMode;
   let filePath = null;

@@ -441,12 +441,20 @@ export const AuthProvider = ({ children }) => {
     return () => subscription?.remove?.();
   }, []);
 
-  // Önce canlı Supabase oturumunu kullan; yoksa storage'daki SUPABASE_TOKEN (backend sadece Supabase token dönmüşse geçerli).
-  // Edge me/upload_community_image vb. sadece Supabase Auth JWT ile çalışır; backend JWT 401 (INVALID_TOKEN) döner.
+  // Önce canlı Supabase oturumunu kullan; süresi dolmuş veya 5 dk içinde dolacaksa önce refresh et (Edge 401 önlemi).
   const getSupabaseToken = async () => {
     if (supabase?.auth) {
       const { data: { session } } = await supabase.auth.getSession();
-      if (session?.access_token) return session.access_token;
+      if (session?.access_token) {
+        const nowSec = Math.floor(Date.now() / 1000);
+        const expiresAt = session.expires_at;
+        const bufferSec = 5 * 60;
+        if (!expiresAt || expiresAt <= nowSec + bufferSec) {
+          const { data: { session: refreshed } } = await refreshSessionWithRetry();
+          if (refreshed?.access_token) return refreshed.access_token;
+        }
+        return session.access_token;
+      }
     }
     return await AsyncStorage.getItem(AUTH_STORAGE_KEYS.SUPABASE_TOKEN);
   };
