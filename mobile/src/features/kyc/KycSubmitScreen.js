@@ -1,5 +1,7 @@
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { Ionicons } from '@expo/vector-icons';
 import { theme } from '../../theme';
 
 /**
@@ -7,6 +9,7 @@ import { theme } from '../../theme';
  * Roadmap: verification_id, status, next döner.
  */
 export default function KycSubmitScreen({ route, navigation }) {
+  const insets = useSafeAreaInsets();
   const minimal = route?.params?.minimal ?? null;
   const [loading, setLoading] = useState(false);
   const [done, setDone] = useState(false);
@@ -42,7 +45,14 @@ export default function KycSubmitScreen({ route, navigation }) {
   }
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { paddingTop: insets.top }]}>
+      <TouchableOpacity
+        style={[styles.backBtn, { top: insets.top + 8 }]}
+        onPress={() => navigation.goBack()}
+        hitSlop={12}
+      >
+        <Ionicons name="arrow-back" size={24} color={theme.colors.textPrimary} />
+      </TouchableOpacity>
       <Text style={styles.title}>Doğrulamayı gönder</Text>
       <Text style={styles.subtitle}>Sadece belge no, doğum ve son kullanma tarihi sunucuya iletilecek.</Text>
       {done ? (
@@ -59,6 +69,7 @@ export default function KycSubmitScreen({ route, navigation }) {
 const styles = StyleSheet.create({
   container: { flex: 1, padding: theme.spacing.lg, justifyContent: 'center' },
   center: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: theme.spacing.lg },
+  backBtn: { position: 'absolute', left: theme.spacing.md, zIndex: 10, padding: 8 },
   title: { fontSize: theme.typography.fontSize.xl, fontWeight: theme.typography.fontWeight.bold, marginBottom: theme.spacing.sm },
   subtitle: { fontSize: theme.typography.fontSize.sm, color: theme.colors.textSecondary, marginBottom: theme.spacing.xl },
   text: { marginBottom: theme.spacing.lg },

@@ -70,7 +70,8 @@ app.use((req, res, next) => {
   const limit =
     req.path.startsWith('/api/ocr') ||
     req.path.startsWith('/api/universal-mrz') ||
-    req.path.startsWith('/api/universal-ocr')
+    req.path.startsWith('/api/universal-ocr') ||
+    req.path.startsWith('/api/paper-mrz')
       ? '20mb'
       : '2mb';
   express.json({ limit })(req, res, next);
@@ -108,6 +109,7 @@ app.use('/api/supabase', require('./routes/supabase'));
 app.use('/api/kyc', require('./routes/kyc'));
 app.use('/api/universal-mrz', require('./routes/universalMrz'));
 app.use('/api/universal-ocr', require('./routes/universalOcr'));
+app.use('/api/paper-mrz', require('./routes/paperMrz'));
 app.use('/api/okutulan-belgeler', require('./routes/okutulanBelgeler'));
 app.use('/api/app-admin', require('./routes/appAdmin'));
 app.use('/api/siparis', require('./routes/siparis'));

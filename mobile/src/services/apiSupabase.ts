@@ -1129,6 +1129,19 @@ export const api = {
         if (!r.ok) throw Object.assign(new Error((data as { message?: string })?.message || 'Manuel bildirim gönderilemedi'), { response: { status: r.status, data } });
         return toResponse(data);
       }
+      // Kağıt/fotokopi MRZ (HMS benzeri çoklu strateji) — backend POST /api/paper-mrz
+      if (pathname === '/paper-mrz' || pathname === 'paper-mrz') {
+        const backendUrl = getBackendUrl();
+        if (!backendUrl || !token) throw Object.assign(new Error('Giriş gerekli'), { response: { status: 401, data: {} } });
+        const r = await fetchWithLog(`${backendUrl}/api/paper-mrz`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+          body: JSON.stringify(body || {}),
+        });
+        const data = await r.json().catch(() => ({}));
+        if (!r.ok) throw Object.assign(new Error((data as { message?: string })?.message || (data as { error?: string })?.error || 'Kağıt MRZ okunamadı'), { response: { status: r.status, data } });
+        return toResponse(data);
+      }
       logger.warn('[apiSupabase] Unmapped POST', path);
       return toResponse(await callFn(pathname.replace(/^\//, '').replace(/\//g, '_'), payload, token));
     } catch (e) {

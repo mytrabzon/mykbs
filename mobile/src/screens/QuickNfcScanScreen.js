@@ -64,7 +64,8 @@ export default function QuickNfcScanScreen() {
   const route = useRoute();
   const insets = useSafeAreaInsets();
   const { colors } = useTheme();
-  const autoStart = !!route.params?.autoStart;
+  // Otomatik okuma kapatıldı: kullanıcı sadece butona basınca okuma başlar
+  const autoStart = false;
   const [okutulanlar, setOkutulanlar] = useState([]);
   const [listLoading, setListLoading] = useState(false);
   const [detail, setDetail] = useState(null);
@@ -85,6 +86,8 @@ export default function QuickNfcScanScreen() {
   const [hasStoredMrz, setHasStoredMrz] = useState(false);
   const processingRef = useRef(false);
   const mountedRef = useRef(true);
+  /** Kullanıcı "Vazgeç" dediyse bir daha NFC diyaloğu açılmasın, sadece butona basınca açılsın */
+  const cancelledByUserRef = useRef(false);
   const { readNfcDirect, progressDetail } = useIndependentNfcReader();
 
   const addNfcDebug = useCallback((msg) => {
@@ -166,6 +169,7 @@ export default function QuickNfcScanScreen() {
 
   const readOne = useCallback(async () => {
     if (processingRef.current || !mountedRef.current) return;
+    cancelledByUserRef.current = false;
     processingRef.current = true;
     setProcessing(true);
     addNfcDebug('NFC okuma başladı');
@@ -213,7 +217,10 @@ export default function QuickNfcScanScreen() {
           }
           addNfcDebug('Native döndü ama ad/soyad/belge no yok. firstName=' + (nfcResult?.firstName || '') + ' lastName=' + (nfcResult?.lastName || '') + ' documentNo=' + (nfcResult?.documentNo || '') + ' personalNumber=' + (nfcResult?.personalNumber || ''));
         } catch (bacErr) {
-          if ((bacErr?.message || '').includes('cancel')) return;
+          if ((bacErr?.message || '').includes('cancel')) {
+            cancelledByUserRef.current = true;
+            return;
+          }
           addNfcDebug('BAC (MRZ) hata: ' + (bacErr?.message || 'bilinmiyor'));
         }
       } else {
@@ -252,11 +259,13 @@ export default function QuickNfcScanScreen() {
         try { Vibration.vibrate(80); } catch (_) {}
         Toast.show({ type: 'success', text1: 'Okundu & kaydedildi', text2: `${d.ad || ''} ${d.soyad || ''}`.trim() || 'Kimlik eklendi.' });
       } else {
+        if (result?.error && /iptal|cancel/i.test(String(result.error))) cancelledByUserRef.current = true;
         addNfcDebug('readNfcDirect BAŞARISIZ: ' + (result?.error || 'bilinmiyor') + (result?.fallback ? ' | fallback=' + result.fallback : ''));
         Toast.show({ type: 'info', text1: 'Okunamadı', text2: toUserFriendlyNfcError(result?.error) || 'MRZ okutup tekrar deneyin.' });
       }
     } catch (e) {
       const rawMsg = e?.response?.data?.message || e?.message || 'Okunamadı';
+      if (/cancel|iptal|cancelled/i.test(rawMsg)) cancelledByUserRef.current = true;
       const msg = toUserFriendlyNfcError(rawMsg);
       addNfcDebug('Exception: ' + rawMsg);
       if (mountedRef.current) {
@@ -298,33 +307,21 @@ export default function QuickNfcScanScreen() {
         fn().finally(() => {
           processingRef.current = false;
           if (mountedRef.current) setProcessing(false);
-          setTimeout(reRegister, NFC_RE_REGISTER_DELAY_MS);
+          // Kullanıcı vazgeç ettiyse diyaloğu tekrar açma, sadece butona basınca açılsın
+          if (!cancelledByUserRef.current) setTimeout(reRegister, NFC_RE_REGISTER_DELAY_MS);
         });
       } else {
         processingRef.current = false;
         if (mountedRef.current) setProcessing(false);
-        setTimeout(reRegister, NFC_RE_REGISTER_DELAY_MS);
+        if (!cancelledByUserRef.current) setTimeout(reRegister, NFC_RE_REGISTER_DELAY_MS);
       }
     }, 150);
   }, []);
 
-  // Ana sayfadan autoStart ile gelindiyse kısa gecikmeyle tek okuma başlat (kimlik/pasaport yaklaştırılsın).
   useFocusEffect(
     useCallback(() => {
       mountedRef.current = true;
       setListening(false);
-      if (autoStart && NfcManager && !processingRef.current) {
-        const t = setTimeout(() => {
-          if (mountedRef.current && readOneRef.current) readOneRef.current();
-        }, 600);
-        return () => {
-          clearTimeout(t);
-          mountedRef.current = false;
-          setListening(false);
-          NfcManager.setEventListener(NfcEvents.DiscoverTag, null);
-          NfcManager.unregisterTagEvent().catch(() => {});
-        };
-      }
       return () => {
         mountedRef.current = false;
         setListening(false);
@@ -333,7 +330,7 @@ export default function QuickNfcScanScreen() {
           NfcManager.unregisterTagEvent().catch(() => {});
         }
       };
-    }, [autoStart])
+    }, [])
   );
 
   React.useEffect(() => {
