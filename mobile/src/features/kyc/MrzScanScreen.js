@@ -662,21 +662,10 @@ export default function MrzScanScreen({ navigation }) {
           setScanDurationMs(scanStartTimeRef.current ? Date.now() - scanStartTimeRef.current : 0);
         };
 
+        // Tek pasaport: birden fazla MRZ bulunsa bile ilkini kullan; çoklu seçim kaldırıldı (aynı ekranda tek pasaport okuma).
         if (data?.multiple && data?.mrzList?.length > 1) {
-          const buttons = data.mrzList.map((item, index) => ({
-            text: `Pasaport ${index + 1}`,
-            onPress: () => {
-              const p = item?.payload;
-              if (p) processSingleMRZFromPayload(p);
-            },
-          }));
-          buttons.push({ text: 'İptal', style: 'cancel' });
-          Alert.alert(
-            'Birden fazla pasaport bulundu',
-            'Hangi pasaportu okutmak istiyorsunuz?',
-            buttons,
-            { cancelable: true }
-          );
+          const first = data.mrzList[0];
+          if (first?.payload) processSingleMRZFromPayload(first.payload);
           return;
         }
 
