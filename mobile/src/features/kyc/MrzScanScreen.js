@@ -29,6 +29,7 @@ import { setLastMrzForBac } from '../../utils/lastMrzForBac';
 import { useFamilyCheckIn } from '../../context/FamilyCheckInContext';
 import { scanWithFallback, toMrzResultPayload, isDocumentReaderAvailable } from './UniversalDocumentScanner';
 import { validateICAO } from '../../lib/documentValidation';
+import { MRZ_PASSPORT_ONLY } from '../../config/appMode';
 
 /** Okutulan belgeyi backend'e kaydet (arka planda; hata sessiz). photoUri: belge fotoğrafı, portraitBase64: belgeden kırpılan kimlik resmi. */
 async function saveOkutulanBelgeAsync(payload, photoUri, portraitBase64) {
@@ -172,6 +173,8 @@ export default function MrzScanScreen({ navigation }) {
   const route = useRoute();
   const { tesis } = useAuth();
   const fromCheckIn = !!route.params?.fromCheckIn;
+  /** Sadece pasaport MRZ: kimlik kartı kapalı, belge seçici gizlenir. Config veya route ile. */
+  const passportOnly = route.params?.passportOnly ?? MRZ_PASSPORT_ONLY;
   // Kamera hiçbir zaman üyelik/tesis onayına bağlı değildir; onay bekleyen kullanıcı da tarama ekranını ve kamerayı görür.
   const [timeoutWarning, setTimeoutWarning] = useState(false);
   const [failCount, setFailCount] = useState(0);
@@ -189,8 +192,8 @@ export default function MrzScanScreen({ navigation }) {
   const [mergedPayload, setMergedPayload] = useState(null);
   const [frontLoading, setFrontLoading] = useState(false);
   const [torchOn, setTorchOn] = useState(false);
-  const [mrzDocType, setMrzDocType] = useState(Platform.OS === 'android' ? DocType.ID : DocType.Passport);
-  const [scanMode, setScanMode] = useState(Platform.OS === 'android' ? DocType.ID : DocType.Passport); // Android: kimlik (3 satır), iOS: kütüphane sadece pasaport destekliyor
+  const [mrzDocType, setMrzDocType] = useState(passportOnly ? DocType.Passport : (Platform.OS === 'android' ? DocType.ID : DocType.Passport));
+  const [scanMode, setScanMode] = useState(passportOnly ? DocType.Passport : (Platform.OS === 'android' ? DocType.ID : DocType.Passport)); // passportOnly: her zaman pasaport
   const [mrzLocked, setMrzLocked] = useState(false); // Sonuç gelince true, toggle durur
   const [cameraKey, setCameraKey] = useState(0); // Ekrana her girişte artır → kamera yeniden mount (siyah ekran önlemi)
   const [scanDurationMs, setScanDurationMs] = useState(0); // Milisaniye cinsinden tarama süresi
@@ -214,11 +217,11 @@ export default function MrzScanScreen({ navigation }) {
   const stableCountRef = useRef(0);
   const acceptedRawRef = useRef(''); // Aynı MRZ ile çift tetiklemeyi engelle (anlık kabul)
   const mrzLockedRef = useRef(false);
-  const lockedDocTypeRef = useRef(DocType.ID);
+  const lockedDocTypeRef = useRef(passportOnly ? DocType.Passport : DocType.ID);
   /** MrzResult'a fotoğraf taşımak için ref'ler (acceptAndNavigate callback içinde güncel değer lazım) */
   const frontImageUriRef = useRef(null);
   const portraitBase64Ref = useRef(null);
-  const selectedDocTypeRef = useRef(DocType.ID);
+  const selectedDocTypeRef = useRef(passportOnly ? DocType.Passport : DocType.ID);
   const hasLeftScreenRef = useRef(false);
   const scanStartTimeRef = useRef(0);
   const frontCameraRef = useRef(null);
@@ -229,6 +232,14 @@ export default function MrzScanScreen({ navigation }) {
   /** iOS siyah ekran önlemi: kamera sadece layout ölçüldükten sonra mount edilir. Android'de Activity hazır olsun diye kısa gecikme. */
   const [unifiedCameraMountReady, setUnifiedCameraMountReady] = useState(false);
   const unifiedMountDelayRef = useRef(null);
+
+  /** passportOnly modunda ref'leri her zaman Pasaport tut */
+  useEffect(() => {
+    if (passportOnly) {
+      lockedDocTypeRef.current = DocType.Passport;
+      selectedDocTypeRef.current = DocType.Passport;
+    }
+  }, [passportOnly]);
 
   /** Son okunan MRZ'yi BAC (NFC) için sakla — Check-in'de "NFC ile Okut" bunu kullanır */
   useEffect(() => {
@@ -547,12 +558,67 @@ export default function MrzScanScreen({ navigation }) {
         logger.info('[MRZ okuma] document-base64 cevabı', {
           hasMrz: !!mrzRaw,
           mrzLen: mrzRaw?.length,
+          multiple: data?.multiple,
+          mrzListLen: data?.mrzList?.length,
           hasMerged: !!(merged?.ad || merged?.soyad),
           hasFront: !!(front?.ad || front?.soyad),
           failureReason: data?.mrzFailureReason ? data.mrzFailureReason.slice(0, 120) : null,
           success: data?.success,
           error: data?.error || data?.message,
         });
+
+        const processSingleMRZFromPayload = (payload, sourceMerged = merged) => {
+          const docNum = payload?.documentNumber || '';
+          const minimalPayload = {
+            passportNumber: docNum,
+            birthDate: payload?.birthDate || (sourceMerged?.dogumTarihi || '').split('.').reverse().join('-') || '',
+            givenNames: (payload?.givenNames || sourceMerged?.ad || '').trim(),
+            surname: (payload?.surname || sourceMerged?.soyad || '').trim(),
+            nationality: (payload?.nationality || payload?.issuingCountry || sourceMerged?.uyruk || 'TÜRK').trim(),
+          };
+          const enriched = processNewMrz(minimalPayload, { source: 'unified' });
+          if (!enriched) {
+            Toast.show({ type: 'info', text1: 'Aynı belge', text2: 'Bu belge zaten okundu' });
+            return;
+          }
+          hasAcceptedForUnifiedRef.current = true;
+          triggerReadSuccessFeedback();
+          setFrontImageUri(photo?.uri || null);
+          setPortraitBase64(data?.portraitBase64 || null);
+          setMergedPayload(sourceMerged || {
+            ad: minimalPayload.givenNames,
+            soyad: minimalPayload.surname,
+            kimlikNo: /^\d{11}$/.test(minimalPayload.passportNumber) ? minimalPayload.passportNumber : null,
+            pasaportNo: /^\d{11}$/.test(minimalPayload.passportNumber) ? null : minimalPayload.passportNumber,
+            dogumTarihi: minimalPayload.birthDate ? minimalPayload.birthDate.split('-').reverse().join('.') : null,
+            uyruk: minimalPayload.nationality,
+          });
+          setInstantPayload({
+            ...minimalPayload,
+            scanId: enriched.scanId,
+            scannedAt: enriched.scannedAt,
+          });
+          setScanDurationMs(scanStartTimeRef.current ? Date.now() - scanStartTimeRef.current : 0);
+        };
+
+        if (data?.multiple && data?.mrzList?.length > 1) {
+          const buttons = data.mrzList.map((item, index) => ({
+            text: `Pasaport ${index + 1}`,
+            onPress: () => {
+              const p = item?.payload;
+              if (p) processSingleMRZFromPayload(p);
+            },
+          }));
+          buttons.push({ text: 'İptal', style: 'cancel' });
+          Alert.alert(
+            'Birden fazla pasaport bulundu',
+            'Hangi pasaportu okutmak istiyorsunuz?',
+            buttons,
+            { cancelable: true }
+          );
+          return;
+        }
+
         if (mrzRaw) {
           const minimalPayload = {
             passportNumber: (mrzPayload?.documentNumber || merged?.pasaportNo || merged?.kimlikNo || '').trim(),
@@ -1547,6 +1613,22 @@ export default function MrzScanScreen({ navigation }) {
     setUnifiedCameraMountReady(true);
   }, [useUnifiedMrzFlow, permission?.granted, permissionGrantedLocal]);
 
+  // Yedek: izin var ama kamera hâlâ mount değilse 500ms sonra tekrar dene (açılmama sorunu).
+  useEffect(() => {
+    const hasPerm = permission?.granted || permissionGrantedLocal;
+    if (!useUnifiedMrzFlow || !hasPerm) return;
+    const t = setTimeout(() => {
+      setUnifiedCameraMountReady((prev) => {
+        if (!prev && mounted.current) {
+          logger.info('[MRZ-KAMERA] Yedek timer → setUnifiedCameraMountReady(true)');
+          return true;
+        }
+        return prev;
+      });
+    }, 500);
+    return () => clearTimeout(t);
+  }, [useUnifiedMrzFlow, permission?.granted, permissionGrantedLocal]);
+
   // Siyah ekran: onCameraReady belirli sürede gelmezse "Kamera açılamadı" fallback göster (Galeriden seç / Tekrar dene).
   useEffect(() => {
     if (!useUnifiedMrzFlow || !unifiedCameraMountReady || unifiedCameraReady || unifiedCameraError) return;
@@ -1633,7 +1715,7 @@ export default function MrzScanScreen({ navigation }) {
       <SafeAreaView style={whiteResultStyles.container} edges={['top']}>
         <ScrollView contentContainerStyle={whiteResultStyles.scroll}>
           <View style={whiteResultStyles.header}>
-            <TouchableOpacity onPress={() => { acceptedRawRef.current = ''; mrzLockedRef.current = false; setMrzLocked(false); setScanMode(DocType.ID); setInstantPayload(null); setMergedPayload(null); setFrontImageUri(null); setPortraitBase64(null); setMrzCheckFailed(false); setSavedToOkutulan(false); setScanDurationMs(0); }} style={whiteResultStyles.backBtn} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
+            <TouchableOpacity onPress={() => { acceptedRawRef.current = ''; mrzLockedRef.current = false; setMrzLocked(false); const nextDoc = passportOnly ? DocType.Passport : DocType.ID; setMrzDocType(nextDoc); setScanMode(nextDoc); setInstantPayload(null); setMergedPayload(null); setFrontImageUri(null); setPortraitBase64(null); setMrzCheckFailed(false); setSavedToOkutulan(false); setScanDurationMs(0); }} style={whiteResultStyles.backBtn} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
               <Ionicons name="arrow-back" size={24} color="#111" />
               <Text style={whiteResultStyles.backBtnText}>Geri</Text>
             </TouchableOpacity>
@@ -1863,7 +1945,7 @@ export default function MrzScanScreen({ navigation }) {
   }
 
   if (useUnifiedMrzFlow) {
-    const showCameraView = unifiedCameraMountReady || permission?.granted || permissionGrantedLocal;
+    const showCameraView = unifiedCameraMountReady;
     logger.info('[MRZ-KAMERA] RENDER: Unified flow', {
       unifiedCameraMountReady,
       unifiedCameraError,
@@ -1988,27 +2070,29 @@ export default function MrzScanScreen({ navigation }) {
           <TouchableOpacity onPress={goBack} style={styles.overlayBackBtn} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }} activeOpacity={0.8}>
             <Ionicons name="arrow-back" size={26} color="#fff" />
           </TouchableOpacity>
-          <View style={styles.docTypeWrap} pointerEvents="box-none">
-            <Text style={styles.docTypeTitle}>Okutacağınız belgeyi seçin</Text>
-            <View style={styles.docTypeRow}>
-              <TouchableOpacity
-                style={[styles.docTypeBtn, selectedDocType === DocType.Passport && styles.docTypeBtnActive]}
-                onPress={() => { setMrzDocType(DocType.Passport); setScanMode(DocType.Passport); }}
-              >
-                <Ionicons name="document-text-outline" size={18} color={selectedDocType === DocType.Passport ? '#fff' : 'rgba(255,255,255,0.9)'} style={{ marginBottom: 2 }} />
-                <Text style={[styles.docTypeBtnText, selectedDocType === DocType.Passport && styles.docTypeBtnTextActive]}>Pasaport</Text>
-                <Text style={styles.docTypeHint}>2 satır MRZ</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.docTypeBtn, selectedDocType === DocType.ID && styles.docTypeBtnActive]}
-                onPress={() => { setMrzDocType(DocType.ID); setScanMode(DocType.ID); }}
-              >
-                <Ionicons name="id-card-outline" size={18} color={selectedDocType === DocType.ID ? '#fff' : 'rgba(255,255,255,0.9)'} style={{ marginBottom: 2 }} />
-                <Text style={[styles.docTypeBtnText, selectedDocType === DocType.ID && styles.docTypeBtnTextActive]}>TC Kimlik Kartı</Text>
-                <Text style={styles.docTypeHint}>3 satır MRZ (arka yüz)</Text>
-              </TouchableOpacity>
+          {!passportOnly && (
+            <View style={styles.docTypeWrap} pointerEvents="box-none">
+              <Text style={styles.docTypeTitle}>Okutacağınız belgeyi seçin</Text>
+              <View style={styles.docTypeRow}>
+                <TouchableOpacity
+                  style={[styles.docTypeBtn, selectedDocType === DocType.Passport && styles.docTypeBtnActive]}
+                  onPress={() => { setMrzDocType(DocType.Passport); setScanMode(DocType.Passport); }}
+                >
+                  <Ionicons name="document-text-outline" size={18} color={selectedDocType === DocType.Passport ? '#fff' : 'rgba(255,255,255,0.9)'} style={{ marginBottom: 2 }} />
+                  <Text style={[styles.docTypeBtnText, selectedDocType === DocType.Passport && styles.docTypeBtnTextActive]}>Pasaport</Text>
+                  <Text style={styles.docTypeHint}>2 satır MRZ</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.docTypeBtn, selectedDocType === DocType.ID && styles.docTypeBtnActive]}
+                  onPress={() => { setMrzDocType(DocType.ID); setScanMode(DocType.ID); }}
+                >
+                  <Ionicons name="id-card-outline" size={18} color={selectedDocType === DocType.ID ? '#fff' : 'rgba(255,255,255,0.9)'} style={{ marginBottom: 2 }} />
+                  <Text style={[styles.docTypeBtnText, selectedDocType === DocType.ID && styles.docTypeBtnTextActive]}>TC Kimlik Kartı</Text>
+                  <Text style={styles.docTypeHint}>3 satır MRZ (arka yüz)</Text>
+                </TouchableOpacity>
+              </View>
             </View>
-          </View>
+          )}
           <View style={{ width: 44 }} />
         </View>
         <View style={[styles.overlayBottom, styles.overlayBottomZIndex, { paddingBottom: insets.bottom + 20 }]} pointerEvents="box-none">
@@ -2028,17 +2112,24 @@ export default function MrzScanScreen({ navigation }) {
         )}
         <View style={[StyleSheet.absoluteFill, styles.mrzBandOverlay]} pointerEvents="none">
           <View style={[styles.mrzBandFrame, selectedDocType === DocType.ID && styles.mrzBandFrameKimlik]}>
+            <View style={styles.mrzFrame}>
+              <View style={styles.mrzLine1} />
+              <View style={styles.mrzLine2} />
+              {selectedDocType === DocType.ID ? <View style={styles.mrzLine3} /> : null}
+            </View>
             <Text style={styles.mrzBandLabel}>
               {selectedDocType === DocType.ID
                 ? 'TC Kimlik Kartı – arka yüzdeki 3 satır MRZ\'yi çerçeveye hizalayın'
                 : 'Pasaport – 2 satır MRZ bandını çerçeveye hizalayın'}
             </Text>
+            <Text style={styles.guideText}>MRZ'yi çizgilerin arasına yerleştirin</Text>
+            <Text style={styles.guideSubtext}>Birden fazla pasaport varsa her birini ayrı ayrı çerçeveleyin</Text>
           </View>
         </View>
         <View style={[styles.androidFallbackBar, styles.overlayZIndex, { bottom: insets.bottom + 72 }]} pointerEvents="box-none">
           <Text style={styles.androidFallbackLabel}>Algılanmazsa</Text>
           <View style={styles.androidFallbackRow}>
-            {isDocumentReaderAvailable() ? (
+            {!passportOnly && isDocumentReaderAvailable() ? (
               <TouchableOpacity style={styles.androidFallbackBtn} onPress={handleProfessionalScan} disabled={ocrLoading || professionalScanLoading} activeOpacity={0.8}>
                 {professionalScanLoading ? <ActivityIndicator size="small" color="#fff" /> : <Ionicons name="document-text-outline" size={20} color="#fff" />}
                 <Text style={styles.androidFallbackBtnText}>{professionalScanLoading ? 'Taranıyor…' : 'Tüm belgeler'}</Text>
@@ -2079,27 +2170,29 @@ export default function MrzScanScreen({ navigation }) {
         <TouchableOpacity onPress={goBack} style={styles.overlayBackBtn} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }} activeOpacity={0.8}>
           <Ionicons name="arrow-back" size={26} color="#fff" />
         </TouchableOpacity>
-        <View style={styles.docTypeWrap} pointerEvents="box-none">
-          <Text style={styles.docTypeTitle}>Okutacağınız belgeyi seçin</Text>
-          <View style={styles.docTypeRow}>
-            <TouchableOpacity
-              style={[styles.docTypeBtn, selectedDocType === DocType.Passport && styles.docTypeBtnActive]}
-              onPress={() => { setMrzDocType(DocType.Passport); setScanMode(DocType.Passport); }}
-            >
-              <Ionicons name="document-text-outline" size={18} color={selectedDocType === DocType.Passport ? '#fff' : 'rgba(255,255,255,0.9)'} style={{ marginBottom: 2 }} />
-              <Text style={[styles.docTypeBtnText, selectedDocType === DocType.Passport && styles.docTypeBtnTextActive]}>Pasaport</Text>
-              <Text style={styles.docTypeHint}>2 satır MRZ</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.docTypeBtn, selectedDocType === DocType.ID && styles.docTypeBtnActive]}
-              onPress={() => { setMrzDocType(DocType.ID); setScanMode(DocType.ID); }}
-            >
-              <Ionicons name="id-card-outline" size={18} color={selectedDocType === DocType.ID ? '#fff' : 'rgba(255,255,255,0.9)'} style={{ marginBottom: 2 }} />
-              <Text style={[styles.docTypeBtnText, selectedDocType === DocType.ID && styles.docTypeBtnTextActive]}>TC Kimlik Kartı</Text>
-              <Text style={styles.docTypeHint}>3 satır MRZ (arka yüz)</Text>
-            </TouchableOpacity>
+        {!passportOnly && (
+          <View style={styles.docTypeWrap} pointerEvents="box-none">
+            <Text style={styles.docTypeTitle}>Okutacağınız belgeyi seçin</Text>
+            <View style={styles.docTypeRow}>
+              <TouchableOpacity
+                style={[styles.docTypeBtn, selectedDocType === DocType.Passport && styles.docTypeBtnActive]}
+                onPress={() => { setMrzDocType(DocType.Passport); setScanMode(DocType.Passport); }}
+              >
+                <Ionicons name="document-text-outline" size={18} color={selectedDocType === DocType.Passport ? '#fff' : 'rgba(255,255,255,0.9)'} style={{ marginBottom: 2 }} />
+                <Text style={[styles.docTypeBtnText, selectedDocType === DocType.Passport && styles.docTypeBtnTextActive]}>Pasaport</Text>
+                <Text style={styles.docTypeHint}>2 satır MRZ</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.docTypeBtn, selectedDocType === DocType.ID && styles.docTypeBtnActive]}
+                onPress={() => { setMrzDocType(DocType.ID); setScanMode(DocType.ID); }}
+              >
+                <Ionicons name="id-card-outline" size={18} color={selectedDocType === DocType.ID ? '#fff' : 'rgba(255,255,255,0.9)'} style={{ marginBottom: 2 }} />
+                <Text style={[styles.docTypeBtnText, selectedDocType === DocType.ID && styles.docTypeBtnTextActive]}>TC Kimlik Kartı</Text>
+                <Text style={styles.docTypeHint}>3 satır MRZ (arka yüz)</Text>
+              </TouchableOpacity>
+            </View>
           </View>
-        </View>
+        )}
         <View style={{ width: 44 }} />
       </View>
       <View style={[styles.overlayBottom, styles.overlayBottomZIndex, { paddingBottom: insets.bottom + 20 }]} pointerEvents="box-none">
@@ -2113,14 +2206,21 @@ export default function MrzScanScreen({ navigation }) {
       </View>
       <View style={[StyleSheet.absoluteFill, styles.mrzBandOverlay]} pointerEvents="none">
         <View style={[styles.mrzBandFrame, selectedDocType === DocType.ID && styles.mrzBandFrameKimlik]}>
+          <View style={styles.mrzFrame}>
+            <View style={styles.mrzLine1} />
+            <View style={styles.mrzLine2} />
+            {selectedDocType === DocType.ID ? <View style={styles.mrzLine3} /> : null}
+          </View>
           <Text style={styles.mrzBandLabel}>
             {selectedDocType === DocType.ID
               ? 'TC Kimlik Kartı – arka yüzdeki 3 satır MRZ\'yi çerçeveye hizalayın'
               : 'Pasaport – 2 satır MRZ bandını çerçeveye hizalayın'}
           </Text>
+          <Text style={styles.guideText}>MRZ'yi çizgilerin arasına yerleştirin</Text>
+          <Text style={styles.guideSubtext}>Birden fazla pasaport varsa her birini ayrı ayrı çerçeveleyin</Text>
         </View>
       </View>
-      {Platform.OS === 'android' && selectedDocType === DocType.Passport && (
+      {Platform.OS === 'android' && (passportOnly || selectedDocType === DocType.Passport) && (
         <View style={[styles.androidFallbackBar, { bottom: insets.bottom + 72 }]} pointerEvents="box-none">
           <Text style={styles.androidFallbackLabel}>Algılanmazsa</Text>
           <View style={styles.androidFallbackRow}>
@@ -2319,6 +2419,12 @@ const styles = StyleSheet.create({
     borderWidth: 2.5,
   },
   mrzBandLabel: { color: 'rgba(255,255,255,0.9)', fontSize: 13, textAlign: 'center', paddingHorizontal: 16 },
+  mrzFrame: { width: '80%', marginBottom: 8 },
+  mrzLine1: { height: 2, backgroundColor: 'rgba(255,255,255,0.5)', marginVertical: 4, borderRadius: 1 },
+  mrzLine2: { height: 2, backgroundColor: 'rgba(255,255,255,0.5)', marginVertical: 4, borderRadius: 1 },
+  mrzLine3: { height: 2, backgroundColor: 'rgba(255,255,255,0.5)', marginVertical: 4, borderRadius: 1 },
+  guideText: { color: 'rgba(255,255,255,0.85)', fontSize: 12, textAlign: 'center', marginTop: 4 },
+  guideSubtext: { color: 'rgba(255,255,255,0.6)', fontSize: 11, textAlign: 'center', marginTop: 2, paddingHorizontal: 16 },
   bannerFloating: { position: 'absolute', left: 12, right: 12, flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.75)', padding: 10, borderRadius: 8 },
   bannerText: { marginLeft: theme.spacing.sm, color: '#fff', fontSize: theme.typography.fontSize.sm, flex: 1 },
   androidFallbackBar: { position: 'absolute', left: 12, right: 12, alignItems: 'center', zIndex: 20, elevation: 20 },

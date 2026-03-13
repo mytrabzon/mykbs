@@ -332,6 +332,138 @@ function runOcr(imagePath) {
   return Tesseract.recognize(imagePath, 'eng', TESSERACT_MRZ_OPTIONS).then((r) => r.data.text);
 }
 
+/** Buffer üzerinde OCR (çoklu deneme için). */
+function runOcrOnBuffer(imageBuffer) {
+  return Tesseract.recognize(imageBuffer, 'eng', TESSERACT_MRZ_OPTIONS).then((r) => r.data.text);
+}
+
+/**
+ * OCR metninin MRZ'ye ne kadar benzediğini puanla (2/3 satır, P/I ile başlama, uzunluk, < sayısı, rakam/harf).
+ * @param {string} text
+ * @returns {number}
+ */
+function calculateMrzScore(text) {
+  if (!text || typeof text !== 'string') return 0;
+  let score = 0;
+  const lines = text.split(/\r\n|\r|\n/).map((l) => l.trim().replace(/\s/g, '')).filter((l) => l.length > 20);
+  if (lines.length === 2 || lines.length === 3) score += 20;
+  if (lines[0] && /^[PI]/.test(lines[0])) score += 10;
+  lines.forEach((line) => {
+    if (line.length >= 30) score += 5;
+    if (line.length >= 44) score += 5;
+    const fillerCount = (line.match(/</g) || []).length;
+    if (fillerCount > 5) score += 5;
+  });
+  const digitCount = (text.match(/[0-9]/g) || []).length;
+  const letterCount = (text.match(/[A-Z]/g) || []).length;
+  if (digitCount > 10) score += 10;
+  if (letterCount > 10) score += 10;
+  return score;
+}
+
+/**
+ * Kağıt/fotokopi/düşük kalite için çoklu ön işleme dene, en iyi skorlu MRZ metnini döndür.
+ * @param {Buffer} imageBuffer
+ * @returns {Promise<{ text: string, confidence: number, attemptName?: string } | null>}
+ */
+async function extractMrzWithMultipleAttempts(imageBuffer) {
+  const { preprocessForMRZ } = require('./preprocess');
+  const Jimp = (await import('jimp')).default;
+  const attempts = [];
+
+  try {
+    const processed1 = await preprocessForMRZ(imageBuffer);
+    const buf1 = await processed1.getBufferAsync(Jimp.MIME_JPEG);
+    attempts.push({ name: 'Normal kontrast', getBuffer: () => Promise.resolve(buf1) });
+  } catch (_) {}
+
+  try {
+    const image = await Jimp.read(imageBuffer);
+    const w = image.bitmap.width;
+    const h = image.bitmap.height;
+    const mrzH = Math.floor(h * 0.4);
+    const y = Math.max(0, h - mrzH);
+    const highContrast = image.clone().crop(0, y, w, mrzH).greyscale().normalize().contrast(0.8);
+    const buf2 = await highContrast.getBufferAsync(Jimp.MIME_JPEG);
+    attempts.push({ name: 'Yüksek kontrast', getBuffer: () => Promise.resolve(buf2) });
+  } catch (_) {}
+
+  try {
+    const image = await Jimp.read(imageBuffer);
+    const w = image.bitmap.width;
+    const h = image.bitmap.height;
+    const mrzH = Math.floor(h * 0.4);
+    const y = Math.max(0, h - mrzH);
+    const negative = image.clone().crop(0, y, w, mrzH).greyscale().normalize().contrast(0.5).invert();
+    const buf3 = await negative.getBufferAsync(Jimp.MIME_JPEG);
+    attempts.push({ name: 'Negatif', getBuffer: () => Promise.resolve(buf3) });
+  } catch (_) {}
+
+  try {
+    const image = await Jimp.read(imageBuffer);
+    const w = image.bitmap.width;
+    const h = image.bitmap.height;
+    const mrzH = Math.floor(h * 0.4);
+    const y = Math.max(0, h - mrzH);
+    const sharp = image.clone().crop(0, y, w, mrzH).greyscale().normalize().contrast(0.4).convolute([
+      [0, -1, 0],
+      [-1, 5, -1],
+      [0, -1, 0],
+    ]);
+    const buf4 = await sharp.getBufferAsync(Jimp.MIME_JPEG);
+    attempts.push({ name: 'Keskin', getBuffer: () => Promise.resolve(buf4) });
+  } catch (_) {}
+
+  let bestResult = null;
+  let bestScore = 0;
+  for (const attempt of attempts) {
+    try {
+      const buf = await attempt.getBuffer();
+      const text = await runOcrOnBuffer(buf);
+      const raw = extractMrzFromOcr(text);
+      if (!raw) continue;
+      const score = calculateMrzScore(raw);
+      const parsed = parseMrzRaw(raw);
+      if (parsed && parsed.checks && parsed.checks.compositeCheck) {
+        return { text: raw, confidence: 97, attemptName: attempt.name };
+      }
+      if (score > bestScore) {
+        bestScore = score;
+        bestResult = { text: raw, confidence: Math.min(90, 50 + score), attemptName: attempt.name };
+      }
+    } catch (_) {}
+  }
+  return bestResult;
+}
+
+/**
+ * Görüntüyü yatay 3 dilime bölüp her dilimde MRZ ara (iki pasaport yan yana vb.).
+ * @param {Buffer} imageBuffer
+ * @returns {Promise<Array<{ position: number, text: string, confidence: number }>>}
+ */
+async function extractMultipleMRZ(imageBuffer) {
+  const Jimp = (await import('jimp')).default;
+  const image = await Jimp.read(imageBuffer);
+  const w = image.bitmap.width;
+  const h = image.bitmap.height;
+  const sliceHeight = Math.floor(h / 3);
+  const mrzList = [];
+  for (let i = 0; i < 3; i++) {
+    const yStart = i * sliceHeight;
+    const slice = image.clone().crop(0, yStart, w, sliceHeight);
+    const buf = await slice.getBufferAsync(Jimp.MIME_JPEG);
+    const result = await extractMrzWithMultipleAttempts(buf);
+    if (result && result.text && result.text.length > 50) {
+      mrzList.push({
+        position: i,
+        text: result.text,
+        confidence: result.confidence || 0,
+      });
+    }
+  }
+  return mrzList;
+}
+
 /**
  * Run MRZ pipeline: preprocessed image path -> OCR -> extract -> parse -> result.
  * Tesseract PSM 6 + MRZ whitelist for speed and accuracy. On failure, paper mode retries with stronger preprocessing.
@@ -434,6 +566,10 @@ module.exports = {
   parseMrzRaw,
   confidenceFromChecks,
   runMrzPipeline,
+  runOcrOnBuffer,
+  calculateMrzScore,
+  extractMrzWithMultipleAttempts,
+  extractMultipleMRZ,
   checkDigit,
   normalizeMrzLines,
 };

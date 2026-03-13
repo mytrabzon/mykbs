@@ -490,34 +490,16 @@ function MainTabs() {
       }
     }
     >
-      <Tab.Screen 
-        name="Odalar" 
-        component={OdalarScreen}
-        options={{ tabBarLabel: t('tabs.rooms') }}
-      />
-      <Tab.Screen 
-        name="Misafirler" 
-        component={MisafirlerScreen}
-        options={{ tabBarLabel: t('tabs.guests') }}
-      />
+      <Tab.Screen name="Odalar" component={OdalarScreen} options={{ tabBarLabel: t('tabs.rooms') }} />
+      <Tab.Screen name="Misafirler" component={MisafirlerScreen} options={{ tabBarLabel: t('tabs.guests') }} />
       <Tab.Screen
         name="MRZ"
         component={MrzScanScreen}
-        options={{
-          tabBarLabel: t('tabs.idPassport'),
-          tabBarActiveTintColor: colors.primary,
-        }}
+        initialParams={{ passportOnly: true }}
+        options={{ tabBarLabel: t('tabs.idPassport'), tabBarActiveTintColor: colors.primary }}
       />
-      <Tab.Screen 
-        name="Raporlar" 
-        component={RaporlarScreen}
-        options={{ tabBarLabel: t('tabs.reports') }}
-      />
-      <Tab.Screen
-        name="DahaFazla"
-        component={DahaFazlaStack}
-        options={{ tabBarLabel: t('tabs.more') }}
-      />
+      <Tab.Screen name="Raporlar" component={RaporlarScreen} options={{ tabBarLabel: t('tabs.reports') }} />
+      <Tab.Screen name="DahaFazla" component={DahaFazlaStack} options={{ tabBarLabel: t('tabs.more') }} />
     </Tab.Navigator>
     </View>
   );
@@ -701,7 +683,7 @@ function AppNavigator() {
                   <Drawer.Screen name="Destek" component={DestekScreen} options={{ drawerLabel: 'Destek' }} />
                   <Drawer.Screen name="PendingUsers" component={PendingUsersScreen} options={{ drawerLabel: 'Onay Bekleyenler' }} />
                   <Drawer.Screen name="Users" component={UsersStack} options={{ drawerLabel: 'Kullanıcılar' }} />
-                  <Drawer.Screen name="Identity" component={MrzScanScreen} options={{ drawerLabel: 'Kimlik & Pasaport' }} />
+                  <Drawer.Screen name="Identity" component={MrzScanScreen} initialParams={{ passportOnly: true }} options={{ drawerLabel: 'Kimlik & Pasaport' }} />
                   <Drawer.Screen name="Payments" component={PaymentsScreen} options={{ drawerLabel: 'Paketler & Ödemeler' }} />
                   <Drawer.Screen name="Tesisler" component={TesisListScreen} options={{ drawerLabel: 'Tesis Listesi' }} />
                   <Drawer.Screen name="Notifications" component={BildirimlerScreen} options={{ drawerLabel: 'Bildirim & Duyurular' }} />
@@ -747,7 +729,7 @@ function AppNavigator() {
                   <Drawer.Screen name="Destek" component={DestekScreen} options={{ drawerLabel: 'Destek' }} />
                   <Drawer.Screen name="PendingUsers" component={PendingUsersScreen} options={{ drawerLabel: 'Onay Bekleyenler' }} />
                   <Drawer.Screen name="Users" component={UsersStack} options={{ drawerLabel: 'Kullanıcılar' }} />
-                  <Drawer.Screen name="Identity" component={MrzScanScreen} options={{ drawerLabel: 'Kimlik & Pasaport' }} />
+                  <Drawer.Screen name="Identity" component={MrzScanScreen} initialParams={{ passportOnly: true }} options={{ drawerLabel: 'Kimlik & Pasaport' }} />
                   <Drawer.Screen name="Payments" component={PaymentsScreen} options={{ drawerLabel: 'Paketler & Ödemeler' }} />
                   <Drawer.Screen name="Tesisler" component={TesisListScreen} options={{ drawerLabel: 'Tesis Listesi' }} />
                   <Drawer.Screen name="Notifications" component={BildirimlerScreen} options={{ drawerLabel: 'Bildirim & Duyurular' }} />

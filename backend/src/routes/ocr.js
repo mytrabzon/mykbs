@@ -18,11 +18,12 @@ const {
   preprocessForFadedMrz,
   preprocessForInvertedMrz,
   preprocessMrzImage,
+  preprocessForMRZ,
   cropMrzCandidates,
   rotateImage,
   cropPortraitFromDocument,
 } = require('../lib/vision/preprocess');
-const { parseMrzRaw } = require('../lib/vision/mrz');
+const { parseMrzRaw, extractMultipleMRZ, extractMrzWithMultipleAttempts } = require('../lib/vision/mrz');
 
 const router = express.Router();
 const KIMLIK_UPLOAD_DIR = path.join(__dirname, '../../uploads/kimlikler');
@@ -368,6 +369,7 @@ async function runMrzPipeline(filePath, opts = {}) {
   const qualityHints = { needMoreZoom: false, glareHigh: false, blurry: false, suggestTorch: 'keep' };
 
   const allVariants = [
+    { fn: async (p) => { const buf = fs.readFileSync(p); const img = await preprocessForMRZ(buf); await img.writeAsync(p); }, name: 'mrzStrong' },
     { fn: (p) => preprocessMrzImage(p, { mrzFraction: 0.3, contrast: 0.3, brightness: 0.2 }), name: 'mrzCrop' },
     { fn: preprocessForPhotocopyMrz, name: 'photocopy' },
     { fn: preprocessForPaperMrz, name: 'paper' },
@@ -552,6 +554,47 @@ function mrzFieldsToPayload(fields) {
   };
 }
 
+/** Çoklu MRZ: görüntüde birden fazla pasaport/kimlik (yan yana) varsa hepsini döndürür. */
+router.post('/mrz-multi', authenticateTesisOrSupabase, express.json({ limit: '8mb' }), async (req, res) => {
+  try {
+    const base64 = req.body?.imageBase64;
+    if (!base64 || typeof base64 !== 'string') {
+      return res.status(400).json({ error: 'imageBase64 gerekli' });
+    }
+    const imageBuffer = Buffer.from(base64, 'base64');
+    if (imageBuffer.length === 0) {
+      return res.status(400).json({ error: 'Geçersiz görüntü' });
+    }
+    const mrzList = await extractMultipleMRZ(imageBuffer);
+    if (mrzList.length === 0) {
+      const singleResult = await extractMrzWithMultipleAttempts(imageBuffer);
+      return res.json({
+        success: true,
+        multiple: false,
+        mrz: singleResult?.text || null,
+        mrzPayload: singleResult?.text ? parseMrzToPayload(singleResult.text) : null,
+        mrzList: [],
+      });
+    }
+    const docTypeHint = req.body?.docTypeHint === 'id' ? 'id' : undefined;
+    const listWithPayload = mrzList.map((m) => ({
+      text: m.text,
+      confidence: m.confidence,
+      payload: parseMrzToPayload(m.text) || undefined,
+    }));
+    res.json({
+      success: true,
+      multiple: mrzList.length > 1,
+      mrzList: listWithPayload,
+      mrz: mrzList.length === 1 ? mrzList[0].text : null,
+      mrzPayload: mrzList.length === 1 ? parseMrzToPayload(mrzList[0].text) : null,
+    });
+  } catch (error) {
+    console.error('[mrz-multi] hata:', error.message);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 /** MRZ: runMrzPipeline ile multi-preprocess/PSM/score; cevap ok, mrzRaw, payload, score, attemptsUsed, qualityHints. */
 router.post('/mrz', authenticateTesisOrSupabase, upload.single('image'), async (req, res) => {
   const filePath = req.file?.path;
@@ -709,16 +752,40 @@ router.post('/document-base64', authenticateTesisOrSupabase, tenantMiddleware, e
       }
     }
     const requestDocTypeHint = req.body?.docTypeHint === 'id' ? 'id' : undefined;
-    console.log(logPrefix, 'runMrzPipeline başlıyor', { paperMode, docTypeHint: requestDocTypeHint });
-    const mrzResult = await runMrzPipeline(filePath, { paperMode, docTypeHint: requestDocTypeHint });
-    let mrzRaw = mrzResult.mrzRaw || null;
-    let mrzPayload = mrzResult.payload || null;
-    if (!mrzPayload && mrzRaw) mrzPayload = parseMrzToPayload(mrzRaw);
-    const mrzFailureReason = !mrzRaw ? buildMrzFailureReason(mrzResult, false) : null;
-    const lineCount = mrzRaw ? mrzRaw.trim().split('\n').filter(Boolean).length : 0;
-    const inferredDocType = mrzRaw ? (lineCount >= 3 ? 'TC_KIMLIK (TD1, 3 satır)' : 'PASAPORT (TD3, 2 satır)') : null;
-    console.log(logPrefix, 'runMrzPipeline bitti', { ok: mrzResult.ok, hasMrzRaw: !!mrzRaw, docType: inferredDocType, score: mrzResult.score, attemptsUsed: mrzResult.attemptsUsed });
-    if (!mrzRaw && mrzFailureReason) console.log(logPrefix, 'MRZ bulunamadı', { reason: mrzFailureReason.slice(0, 120) });
+    let mrzRaw = null;
+    let mrzPayload = null;
+    let mrzFailureReason = null;
+    let mrzResult = { ok: false, attemptsUsed: 0, score: 0 };
+    let mrzList = [];
+    let multiple = false;
+
+    if (paperMode && buf && buf.length > 0) {
+      try {
+        mrzList = await extractMultipleMRZ(buf);
+        if (mrzList.length > 0) {
+          const best = mrzList.sort((a, b) => (b.confidence || 0) - (a.confidence || 0))[0];
+          mrzRaw = best.text;
+          mrzPayload = parseMrzToPayload(best.text) || null;
+          multiple = mrzList.length > 1;
+          console.log(logPrefix, 'çoklu MRZ pipeline', { count: mrzList.length, multiple, bestConf: best.confidence });
+        }
+      } catch (multiErr) {
+        console.warn(logPrefix, 'extractMultipleMRZ atlandı', multiErr.message);
+      }
+    }
+
+    if (!mrzRaw) {
+      console.log(logPrefix, 'runMrzPipeline başlıyor', { paperMode, docTypeHint: requestDocTypeHint });
+      mrzResult = await runMrzPipeline(filePath, { paperMode, docTypeHint: requestDocTypeHint });
+      mrzRaw = mrzResult.mrzRaw || null;
+      mrzPayload = mrzResult.payload || null;
+      if (!mrzPayload && mrzRaw) mrzPayload = parseMrzToPayload(mrzRaw);
+      mrzFailureReason = !mrzRaw ? buildMrzFailureReason(mrzResult, false) : null;
+      const lineCount = mrzRaw ? mrzRaw.trim().split('\n').filter(Boolean).length : 0;
+      const inferredDocType = mrzRaw ? (lineCount >= 3 ? 'TC_KIMLIK (TD1, 3 satır)' : 'PASAPORT (TD3, 2 satır)') : null;
+      console.log(logPrefix, 'runMrzPipeline bitti', { ok: mrzResult.ok, hasMrzRaw: !!mrzRaw, docType: inferredDocType, score: mrzResult.score, attemptsUsed: mrzResult.attemptsUsed });
+      if (!mrzRaw && mrzFailureReason) console.log(logPrefix, 'MRZ bulunamadı', { reason: mrzFailureReason.slice(0, 120) });
+    }
     let text = '';
     let front = {};
     try {
@@ -739,8 +806,8 @@ router.post('/document-base64', authenticateTesisOrSupabase, tenantMiddleware, e
     }
     const scanId = Date.now();
     const timestamp = new Date().toISOString();
-    console.log(logPrefix, 'tamamlandı', { mrzRawLen: mrzRaw?.length ?? 0, mergedKeys: Object.keys(merged || {}), scanId });
-    res.json({
+    console.log(logPrefix, 'tamamlandı', { mrzRawLen: mrzRaw?.length ?? 0, mergedKeys: Object.keys(merged || {}), scanId, multiple: !!multiple });
+    const responsePayload = {
       success: true,
       rawText: text,
       mrz: mrzRaw || null,
@@ -751,7 +818,17 @@ router.post('/document-base64', authenticateTesisOrSupabase, tenantMiddleware, e
       portraitBase64: portraitBase64 || undefined,
       scanId,
       timestamp,
-    });
+    };
+    if (multiple && mrzList.length > 1) {
+      responsePayload.multiple = true;
+      responsePayload.mrzCount = mrzList.length;
+      responsePayload.mrzList = mrzList.map((m) => ({
+        text: m.text,
+        confidence: m.confidence,
+        payload: parseMrzToPayload(m.text) || undefined,
+      }));
+    }
+    res.json(responsePayload);
   } catch (error) {
     console.error(logPrefix, 'hata:', error.message);
     console.error(logPrefix, 'stack:', error.stack);

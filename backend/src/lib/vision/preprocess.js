@@ -335,6 +335,61 @@ async function preprocessForInvertedMrz(filePath) {
 }
 
 /**
+ * Piksel verisi üzerinde basit eşik (threshold) uygula: gri < max ise siyah, değilse beyaz.
+ * Fotokopi/düşük kalite MRZ için siyah-beyaz okunabilirliği artırır.
+ * @param {Jimp} image - Jimp örneği (greyscale olmalı)
+ * @param {number} max - 0..255, eşik değeri (fotokopi için 150 önerilir)
+ */
+function applyThreshold(image, max = 150) {
+  if (!image || !image.bitmap) return image;
+  const { width, height, data } = image.bitmap;
+  for (let i = 0; i < width * height; i++) {
+    const idx = i * 4;
+    const g = (data[idx] + data[idx + 1] + data[idx + 2]) / 3;
+    const v = g < max ? 0 : 255;
+    data[idx] = data[idx + 1] = data[idx + 2] = v;
+  }
+  return image;
+}
+
+/**
+ * Kağıt/fotokopi/düşük kalite MRZ için güçlü ön işleme: buffer alır, Jimp örneği döner.
+ * MRZ bölgesi (alt %40) kırpılır, kontrast/parlaklık/keskinleştirme/threshold uygulanır.
+ * @param {Buffer} imageBuffer - JPEG/PNG buffer
+ * @returns {Promise<Jimp>} Ön işlenmiş Jimp görüntüsü (getBufferAsync ile OCR'a verilebilir)
+ */
+async function preprocessForMRZ(imageBuffer) {
+  const Jimp = (await import('jimp')).default;
+  const image = await Jimp.read(imageBuffer);
+  const height = image.bitmap.height;
+  const width = image.bitmap.width;
+  const mrzHeight = Math.floor(height * 0.4);
+  const mrzY = Math.max(0, height - mrzHeight);
+  image.crop(0, mrzY, width, mrzHeight);
+  image.contrast(0.5);
+  image.brightness(0.2);
+  image.convolute([
+    [0, -1, 0],
+    [-1, 5, -1],
+    [0, -1, 0],
+  ]);
+  image.greyscale();
+  image.normalize();
+  applyThreshold(image, 150);
+  return image;
+}
+
+/**
+ * Eğiklik düzeltme (deskew) – şimdilik passthrough.
+ * Gelişmiş deskew için OpenCV veya Hough transform eklenebilir.
+ * @param {Jimp} image
+ * @returns {Promise<Jimp>}
+ */
+async function deskewImage(image) {
+  return image;
+}
+
+/**
  * MRZ bölgesi ön işleme: alt kısım crop, kontrast/parlaklık artır, gri ton, keskinleştir.
  * Gölge ve yansımayı azaltıp OCR okunabilirliğini artırır.
  * @param {string} filePath - Görüntü dosya yolu
@@ -475,6 +530,9 @@ module.exports = {
   preprocessForFadedMrz,
   preprocessForInvertedMrz,
   preprocessMrzImage,
+  preprocessForMRZ,
+  deskewImage,
+  applyThreshold,
   cropMrzCandidates,
   rotateImage,
   applyOrientationRotation,
