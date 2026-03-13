@@ -75,6 +75,7 @@ import CameraTestScreen from './src/features/documentRead/CameraTestScreen';
 import ScanHome from './src/features/scan/ScanHome';
 import ScanCameraScreen from './src/features/scan/ScanCameraScreen';
 import ScanReviewScreen from './src/features/scan/ScanReviewScreen';
+import QuickNfcScanScreen from './src/screens/QuickNfcScanScreen';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { LanguageProvider } from './src/context/LanguageContext';
 import { loadFeedbackSettings } from './src/utils/feedback';
@@ -411,6 +412,7 @@ function MainStack() {
       <Stack.Screen name="ScanHome" component={ScanHome} />
       <Stack.Screen name="ScanCamera" component={ScanCameraScreen} />
       <Stack.Screen name="ScanReview" component={ScanReviewScreen} />
+      <Stack.Screen name="QuickNfcScan" component={QuickNfcScanScreen} options={{ title: 'NFC ile Kimlik / Pasaport' }} />
       <Stack.Screen name="PrivacyConsent" component={PrivacyConsentScreen} />
       <Stack.Screen name="TermsConsent" component={TermsConsentScreen} />
     </Stack.Navigator>

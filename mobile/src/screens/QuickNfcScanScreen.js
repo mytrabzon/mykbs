@@ -22,7 +22,7 @@ if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental
   UIManager.setLayoutAnimationEnabledExperimental(true);
 }
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useNavigation, useFocusEffect } from '@react-navigation/native';
+import { useNavigation, useFocusEffect, useRoute } from '@react-navigation/native';
 import NfcManager, { NfcEvents } from 'react-native-nfc-manager';
 import Toast from 'react-native-toast-message';
 import { Ionicons } from '@expo/vector-icons';
@@ -61,8 +61,10 @@ function mapNfcResultToItem(r) {
 
 export default function QuickNfcScanScreen() {
   const navigation = useNavigation();
+  const route = useRoute();
   const insets = useSafeAreaInsets();
   const { colors } = useTheme();
+  const autoStart = !!route.params?.autoStart;
   const [okutulanlar, setOkutulanlar] = useState([]);
   const [listLoading, setListLoading] = useState(false);
   const [detail, setDetail] = useState(null);
@@ -306,18 +308,32 @@ export default function QuickNfcScanScreen() {
     }, 150);
   }, []);
 
-  // NFC sadece butona basıldığında çalışsın; ekran açılınca otomatik dinleme başlatma.
+  // Ana sayfadan autoStart ile gelindiyse kısa gecikmeyle tek okuma başlat (kimlik/pasaport yaklaştırılsın).
   useFocusEffect(
     useCallback(() => {
       mountedRef.current = true;
       setListening(false);
+      if (autoStart && NfcManager && !processingRef.current) {
+        const t = setTimeout(() => {
+          if (mountedRef.current && readOneRef.current) readOneRef.current();
+        }, 600);
+        return () => {
+          clearTimeout(t);
+          mountedRef.current = false;
+          setListening(false);
+          NfcManager.setEventListener(NfcEvents.DiscoverTag, null);
+          NfcManager.unregisterTagEvent().catch(() => {});
+        };
+      }
       return () => {
         mountedRef.current = false;
         setListening(false);
-        NfcManager.setEventListener(NfcEvents.DiscoverTag, null);
-        NfcManager.unregisterTagEvent().catch(() => {});
+        if (NfcManager) {
+          NfcManager.setEventListener(NfcEvents.DiscoverTag, null);
+          NfcManager.unregisterTagEvent().catch(() => {});
+        }
       };
-    }, [])
+    }, [autoStart])
   );
 
   React.useEffect(() => {

@@ -106,7 +106,8 @@ const UNIFIED_CAPTURE_INTERVAL_MS = 1300;
 /** İzin verildikten sonra kamera mount gecikmesi (Android siyah ekran önlemi). */
 const UNIFIED_CAMERA_MOUNT_DELAY_MS = Platform.OS === 'android' ? 350 : 100;
 /** Kamera bileşenini her zaman bu süre sonra mount et (onLayout'a güvenmeden). */
-const UNIFIED_CAMERA_MOUNT_AFTER_MS = Platform.OS === 'ios' ? 250 : 400;
+/** iOS: Pasaport→Kimlik geçişinde native kameranın bırakılması için ek süre (kamera açılmıyor görünümü önlemi). */
+const UNIFIED_CAMERA_MOUNT_AFTER_MS = Platform.OS === 'ios' ? 450 : 400;
 /** Kamera açıldı ama onCameraReady gelmezse (siyah ekran) bu süre sonra fallback göster. */
 const UNIFIED_CAMERA_READY_TIMEOUT_MS = 6000;
 /** TD3 pasaport vs TD1 kimlik için varsayılan zoom (piksel yoğunluğu ayarı). */
@@ -236,6 +237,8 @@ export default function MrzScanScreen({ navigation }) {
   const mrzCameraRef = useRef(null);
   const unifiedCameraRef = useRef(null);
   const hasAcceptedForUnifiedRef = useRef(false);
+  /** Her yeni çekimde artırılır; geciken cevaplar eski runId ile gelirse uygulanmaz (ikinci pasaport önceki bilgiyi göstermesin). */
+  const captureRunIdRef = useRef(0);
   const [unifiedCameraReady, setUnifiedCameraReady] = useState(false);
   /** iOS siyah ekran önlemi: kamera sadece layout ölçüldükten sonra mount edilir. Android'de Activity hazır olsun diye kısa gecikme. */
   const [unifiedCameraMountReady, setUnifiedCameraMountReady] = useState(false);
@@ -523,6 +526,8 @@ export default function MrzScanScreen({ navigation }) {
       if (hasAcceptedForUnifiedRef.current || ocrLoading) return;
       const cam = unifiedCameraRef.current;
       if (!cam || typeof cam.takePictureAsync !== 'function') return;
+      const thisRunId = Date.now();
+      captureRunIdRef.current = thisRunId;
       try {
         if (selectedDocTypeRef.current === DocType.ID) {
           logger.info('[MRZ ID DEBUG] unified runCapture start', {
@@ -535,6 +540,7 @@ export default function MrzScanScreen({ navigation }) {
         const photo = await cam.takePictureAsync({ quality: 0.9, base64: true, skipProcessing: true });
         if (!photo?.base64 || !mounted.current) return;
         if (hasAcceptedForUnifiedRef.current) return;
+        if (thisRunId !== captureRunIdRef.current) return;
         // Belge tipi seçimi yok: backend hem 2 satır (pasaport ~90 karakter) hem 3 satır (kimlik) MRZ otomatik algılasın.
         const docTypeHint = undefined;
         logger.info('[MRZ okuma] unified capture → document-base64', { base64Len: photo.base64?.length });
@@ -545,6 +551,7 @@ export default function MrzScanScreen({ navigation }) {
           logger.warn('[MRZ okuma] document-base64 istek hatası', { status: err?.response?.status, data: err?.response?.data, message: err?.message });
           throw err;
         }
+        if (thisRunId !== captureRunIdRef.current) return;
         const data = res?.data;
         if (!mounted.current || hasAcceptedForUnifiedRef.current) return;
         const mrzRaw = data?.mrz;
@@ -1704,7 +1711,7 @@ export default function MrzScanScreen({ navigation }) {
       <SafeAreaView style={whiteResultStyles.container} edges={['top']}>
         <ScrollView contentContainerStyle={whiteResultStyles.scroll}>
           <View style={whiteResultStyles.header}>
-            <TouchableOpacity onPress={() => { acceptedRawRef.current = ''; mrzLockedRef.current = false; setMrzLocked(false); setScanMode(DocType.ID); setInstantPayload(null); setMergedPayload(null); setFrontImageUri(null); setPortraitBase64(null); setMrzCheckFailed(false); setSavedToOkutulan(false); setScanDurationMs(0); }} style={whiteResultStyles.backBtn} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
+            <TouchableOpacity onPress={() => { acceptedRawRef.current = ''; mrzLockedRef.current = false; setMrzLocked(false); hasAcceptedForUnifiedRef.current = false; setScanMode(DocType.ID); setInstantPayload(null); setMergedPayload(null); setFrontImageUri(null); setPortraitBase64(null); setMrzCheckFailed(false); setSavedToOkutulan(false); setScanDurationMs(0); }} style={whiteResultStyles.backBtn} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
               <Ionicons name="arrow-back" size={24} color="#111" />
               <Text style={whiteResultStyles.backBtnText}>Geri</Text>
             </TouchableOpacity>
@@ -1770,6 +1777,32 @@ export default function MrzScanScreen({ navigation }) {
             <Text style={whiteResultStyles.secondaryBtnText}>
               {savedToOkutulan ? 'Kaydedildi' : 'Kaydet (Okutulan kimlikler)'}
             </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[whiteResultStyles.primaryBtn, { backgroundColor: theme.colors.primary, marginBottom: 12 }]}
+            onPress={() => {
+              const p = mergedPayload || instantPayload;
+              if (!p) return;
+              const payloadForResult = {
+                ...p,
+                passportNumber: p.passportNumber || (display.kimlikNo || display.pasaportNo || ''),
+                givenNames: p.givenNames || display.ad,
+                surname: p.surname || display.soyad,
+                birthDate: p.birthDate || (display.dogumTarihi ? display.dogumTarihi.split('.').reverse().join('-') : ''),
+                expiryDate: p.expiryDate || null,
+                nationality: p.nationality || display.uyruk,
+                chipPhotoBase64: display.chipPhotoBase64 || p.chipPhotoBase64 || null,
+              };
+              navigation.replace('MrzResult', {
+                payload: payloadForResult,
+                scanDurationMs,
+                photoUri: frontImageUri || undefined,
+                portraitBase64: portraitBase64 || undefined,
+              });
+            }}
+            activeOpacity={0.8}
+          >
+            <Text style={[whiteResultStyles.primaryBtnText, { color: '#fff' }]}>İleri – Bilgi / doğrulama</Text>
           </TouchableOpacity>
           <TouchableOpacity
             style={[whiteResultStyles.primaryBtn, whiteResultStyles.secondaryBtn]}
@@ -1931,7 +1964,7 @@ export default function MrzScanScreen({ navigation }) {
             <CameraView
               key={`unified-cam-${unifiedCameraMountKey}`}
               ref={unifiedCameraRef}
-              style={[StyleSheet.absoluteFill, styles.unifiedCameraSize]}
+              style={styles.unifiedCameraSize}
               facing="back"
               zoom={unifiedZoom}
               enableTorch={unifiedCameraReady && torchOn}
@@ -2243,19 +2276,18 @@ const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#000' },
   mrzCameraWrap: { minHeight: SCREEN_HEIGHT * 0.5, width: SCREEN_WIDTH },
-  /** Unified kamera: root flex 1, wrap sabit boyut (siyah ekran önlemi) */
+  /** Unified kamera: root flex 1, wrap flex ile doldur (layout 0 yükseklik önlemi) */
   unifiedCameraRoot: { flex: 1 },
   unifiedCameraWrap: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    width: SCREEN_WIDTH,
-    height: SCREEN_HEIGHT,
+    flex: 1,
+    width: '100%',
+    minHeight: 200,
   },
-  /** Native kamera view'a açıkça boyut ver (0x0 = siyah ekran) */
+  /** Kamera view wrap'ı doldursun (flex layout ile boyut garanti) */
   unifiedCameraSize: {
-    width: SCREEN_WIDTH,
-    height: SCREEN_HEIGHT,
+    flex: 1,
+    width: '100%',
+    height: '100%',
   },
   unifiedCameraPlaceholder: {
     backgroundColor: '#000',

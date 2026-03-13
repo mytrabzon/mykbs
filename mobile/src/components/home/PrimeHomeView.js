@@ -312,6 +312,12 @@ export default function PrimeHomeView({
           onPress={() => navigation?.navigate('MrzScan', { fromCheckIn: true })}
         />
         <QuickAction
+          title={t('home.quickNfc')}
+          icon="card-outline"
+          color="#EC4899"
+          onPress={() => navigation?.navigate('QuickNfcScan', { autoStart: true })}
+        />
+        <QuickAction
           title={t('home.quickAssignRoom')}
           icon="bed"
           color="#10B981"

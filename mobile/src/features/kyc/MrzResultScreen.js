@@ -53,8 +53,17 @@ export default function MrzResultScreen({ route, navigation }) {
       : toMinimalPayload(payload))
     : null;
 
+  /** Kontrol hanesi hatalı olsa bile belge no + tarih + ad/soyad varsa bilgi ekranına (KycSubmit) geçilebilir. */
+  const hasMinimalData =
+    minimal &&
+    (minimal.passportNumber || '').trim() &&
+    (payload?.birthDate || payload?.dogumTarihi) &&
+    (payload?.expiryDate || payload?.sonKullanma) &&
+    ((payload?.givenNames || payload?.ad || '').trim() || (payload?.surname || payload?.soyad || '').trim());
+  const canProceed = !!minimal && (validation.valid || hasMinimalData);
+
   const handleConfirm = () => {
-    if (!minimal || !validation.valid) return;
+    if (!minimal || !canProceed) return;
     navigation.replace('KycSubmit', { minimal, fromMrz: true });
   };
 
@@ -170,8 +179,8 @@ export default function MrzResultScreen({ route, navigation }) {
           {savedToOkutulan ? 'Kaydedildi' : 'Kaydet (Okutulan kimlikler)'}
         </Text>
       </TouchableOpacity>
-      <TouchableOpacity style={[styles.button, styles.primary]} onPress={handleConfirm} disabled={!validation.valid} activeOpacity={0.8}>
-        <Text style={[styles.buttonText, !validation.valid && styles.buttonTextDisabled]}>Onayla ve devam et</Text>
+      <TouchableOpacity style={[styles.button, styles.primary]} onPress={handleConfirm} disabled={!canProceed} activeOpacity={0.8}>
+        <Text style={[styles.buttonText, !canProceed && styles.buttonTextDisabled]}>{validation.valid ? 'Onayla ve devam et' : 'Bilgi / doğrulama ekranına geç'}</Text>
       </TouchableOpacity>
       <TouchableOpacity style={styles.tekrarTaraButton} onPress={handleRetry} activeOpacity={0.8}>
         <Ionicons name="scan-outline" size={22} color={theme.colors.primary} />
