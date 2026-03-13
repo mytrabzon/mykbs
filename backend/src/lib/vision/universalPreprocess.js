@@ -129,15 +129,15 @@ class UniversalPreprocessor {
    * Görüntüyü yatay dilimlere bölüp MRZ içeren bölgeleri döndür (çoklu belge).
    */
   async detectMultipleMrz(image) {
-    const image = await Jimp.read(image);
-    const h = image.bitmap.height;
-    const w = image.bitmap.width;
+    const jimpImage = await Jimp.read(image);
+    const h = jimpImage.bitmap.height;
+    const w = jimpImage.bitmap.width;
     const sliceHeight = Math.floor(h / 4);
     const mrzRegions = [];
 
     for (let i = 0; i < 4; i++) {
       const y = i * sliceHeight;
-      const slice = image.clone().crop(0, y, w, sliceHeight);
+      const slice = jimpImage.clone().crop(0, y, w, sliceHeight);
       if (this.hasMrz(slice)) {
         mrzRegions.push({ y, height: sliceHeight });
       }
