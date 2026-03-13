@@ -1134,8 +1134,27 @@ export default function MrzScanScreen({ navigation }) {
           }
         }
         const docTypeHint = selectedDocTypeRef.current === DocType.ID ? 'id' : undefined;
-        logger.info('[MRZ okuma] galeri → document-base64', { base64Len: base64?.length ?? 0, docTypeHint });
-        const res = await api.post('/ocr/document-base64', { imageBase64: base64, paperMode: true, docTypeHint });
+        const DOCUMENT_BASE64_TIMEOUT_MS = 60000;
+        const timeoutPromise = new Promise((_, reject) => {
+          setTimeout(() => reject(new Error('DOCUMENT_OCR_TIMEOUT')), DOCUMENT_BASE64_TIMEOUT_MS);
+        });
+        let res;
+        try {
+          res = await Promise.race([
+            api.post('/ocr/document-base64', { imageBase64: base64, paperMode: true, docTypeHint }),
+            timeoutPromise,
+          ]);
+        } catch (postErr) {
+          if (postErr?.message === 'DOCUMENT_OCR_TIMEOUT') {
+            Toast.show({ type: 'error', text1: 'Zaman aşımı', text2: 'Sunucu yanıt vermedi. İnterneti kontrol edin.' });
+            return;
+          }
+          if (postErr?.response?.status === 401 || (postErr?.message && String(postErr.message).includes('giriş gerekli'))) {
+            Toast.show({ type: 'error', text1: 'Giriş gerekli', text2: 'Belge okumak için giriş yapın.' });
+            return;
+          }
+          throw postErr;
+        }
         const data = res?.data;
         if (!mounted.current) return;
         logger.info('[MRZ okuma] galeri cevabı', {

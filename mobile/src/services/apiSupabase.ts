@@ -769,12 +769,16 @@ export const api = {
       }
       if (pathname === '/ocr/document-base64' || pathname === 'ocr/document-base64') {
         const backendUrl = getBackendUrl();
-        const payload = body as { imageBase64?: string };
+        const payload = body as { imageBase64?: string; paperMode?: boolean; docTypeHint?: string };
         if (backendUrl && token && payload && typeof payload.imageBase64 === 'string') {
           const r = await fetchWithLog(`${backendUrl}/api/ocr/document-base64`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-            body: JSON.stringify({ imageBase64: payload.imageBase64 }),
+            body: JSON.stringify({
+              imageBase64: payload.imageBase64,
+              paperMode: payload.paperMode ?? true,
+              docTypeHint: payload.docTypeHint ?? undefined,
+            }),
           });
           const data = await r.json().catch(() => ({}));
           if (!r.ok) {
