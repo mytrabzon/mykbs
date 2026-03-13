@@ -10,6 +10,7 @@
     "migrate:deploy": "prisma migrate deploy",
     "generate": "prisma generate",
     "postinstall": "prisma generate",
+    "tess:install-langs": "node scripts/tess-preload-langs.js",
     "db:push": "prisma db push",
     "deploy": "node scripts/deploy-railway.js"
   },

@@ -278,8 +278,8 @@ export default function MrzScanScreen({ navigation }) {
 
   const selectedDocType = mrzLockedRef.current ? lockedDocTypeRef.current : scanMode;
   selectedDocTypeRef.current = selectedDocType;
-  // Kullanıcı için tek MRZ modu: Android'de her zaman unified (expo-camera + backend OCR) akışı kullan.
-  const useUnifiedMrzFlow = Platform.OS === 'android';
+  // Android: her zaman unified (expo-camera + backend). iOS: native sadece pasaport desteklediği için kimlik (3 satır TD1) seçiliyse unified + backend kullan (TD1 okunur).
+  const useUnifiedMrzFlow = Platform.OS === 'android' || (Platform.OS === 'ios' && selectedDocType === DocType.ID);
 
   // Belge tipi değiştiğinde unified kamera zoom'unu ayarla (TD1 kimlikte daha yakın).
   useEffect(() => {
@@ -1625,7 +1625,8 @@ export default function MrzScanScreen({ navigation }) {
     };
   }, [mrzCameraMountReady, permission?.granted, cameraPreviewReady]);
 
-  const docTypeForReader = Platform.OS === 'ios' ? DocType.Passport : selectedDocType;
+  // iOS: unified flow (kimlik) kullanılmıyorsa native reader sadece pasaport modunda; kimlik seçiliyse ekran zaten unified flow'da.
+  const docTypeForReader = selectedDocType;
 
   const toggleTorch = useCallback(() => {
     setTorchOn((prev) => {
@@ -1971,9 +1972,55 @@ export default function MrzScanScreen({ navigation }) {
         <TouchableOpacity onPress={goBack} style={styles.overlayBackBtn} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }} activeOpacity={0.8}>
           <Ionicons name="arrow-back" size={26} color="#fff" />
         </TouchableOpacity>
-        <View style={styles.docTypeWrap}>
-          <Text style={styles.overlayTitle}>MRZ Okuma</Text>
-        </View>
+        {Platform.OS === 'ios' ? (
+          <View style={styles.docTypeWrap} pointerEvents="box-none">
+            <View style={styles.docTypeRow}>
+              <TouchableOpacity
+                style={[styles.docTypeIconBtn, selectedDocType === DocType.Passport && styles.docTypeIconBtnActive]}
+                onPress={() => {
+                  setMrzDocType(DocType.Passport);
+                  setScanMode(DocType.Passport);
+                  if (getMrzVoiceEnabled()) speakMrzPassportIntro();
+                  Toast.show({ type: 'info', text1: 'Pasaport moduna geçtiniz' });
+                }}
+              >
+                <Ionicons name="book-outline" size={22} color="#fff" />
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.docTypeSwitchCenter}
+                onPress={() => {
+                  const next = selectedDocType === DocType.ID ? DocType.Passport : DocType.ID;
+                  setMrzDocType(next);
+                  setScanMode(next);
+                  if (getMrzVoiceEnabled()) {
+                    next === DocType.ID ? speakMrzIdCardIntro() : speakMrzPassportIntro();
+                  }
+                  Toast.show({
+                    type: 'info',
+                    text1: next === DocType.ID ? 'T.C. kimlik kartı moduna geçtiniz' : 'Pasaport moduna geçtiniz',
+                  });
+                }}
+              >
+                <Ionicons name="swap-horizontal" size={22} color="#fff" />
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.docTypeIconBtn, selectedDocType === DocType.ID && styles.docTypeIconBtnActive]}
+                onPress={() => {
+                  setMrzDocType(DocType.ID);
+                  setScanMode(DocType.ID);
+                  if (getMrzVoiceEnabled()) speakMrzIdCardIntro();
+                  Toast.show({ type: 'info', text1: 'T.C. kimlik kartı moduna geçtiniz' });
+                }}
+              >
+                <Ionicons name="card-outline" size={22} color="#fff" />
+              </TouchableOpacity>
+            </View>
+          </View>
+        ) : (
+          <View style={styles.docTypeWrap}>
+            <Text style={styles.overlayTitle}>MRZ Okuma</Text>
+          </View>
+        )}
         <View style={styles.overlayBackBtn} />
       </View>
         <View style={[styles.overlayBottom, styles.overlayZIndex, { paddingBottom: insets.bottom + 20 }]} pointerEvents="box-none">

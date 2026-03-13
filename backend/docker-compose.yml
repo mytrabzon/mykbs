@@ -1,0 +1,42 @@
+# Backend + Python MRZ servisi (production / lokal test)
+# Kullanım: cd backend && docker-compose up --build
+version: "3.8"
+
+services:
+  node-backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8080:8080"
+    environment:
+      - NODE_ENV=production
+      - PYTHON_MRZ_URL=http://python-mrz:5001
+      - DATABASE_URL=${DATABASE_URL}
+      - SUPABASE_URL=${SUPABASE_URL}
+      - SUPABASE_SERVICE_ROLE_KEY=${SUPABASE_SERVICE_ROLE_KEY}
+    env_file: .env
+    depends_on:
+      - python-mrz
+    restart: unless-stopped
+
+  python-mrz:
+    build:
+      context: ./python-mrz-service
+      dockerfile: Dockerfile
+    ports:
+      - "5001:5001"
+    environment:
+      - FLASK_ENV=production
+    volumes:
+      - mrz-cache:/app/cache
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+        reservations:
+          memory: 512M
+
+volumes:
+  mrz-cache:

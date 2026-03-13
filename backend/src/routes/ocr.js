@@ -29,6 +29,7 @@ const {
   cropPortraitFromDocument,
 } = require('../lib/vision/preprocess');
 const { parseMrzRaw, extractMultipleMRZ, extractMrzWithMultipleAttempts, runOcrOnBuffer } = require('../lib/vision/mrz');
+const pythonMrzClient = require('../services/pythonMrzClient');
 
 const router = express.Router();
 const KIMLIK_UPLOAD_DIR = path.join(__dirname, '../../uploads/kimlikler');
@@ -709,7 +710,20 @@ router.post('/document', authenticateTesisOrSupabase, upload.single('image'), as
   }
 });
 
-/** Galeriden seçilen görsel: base64 ile gönder (Android content URI FormData sorununu aşar). MRZ için runMrzPipeline kullan (kimlik MRZ canavarı). paperMode: true ile kağıt/fotokopi ön işlemi öncelikli. */
+/** Python MRZ servisi sağlık kontrolü (OmniMRZ çalışıyor mu). */
+router.get('/mrz-service/health', async (req, res) => {
+  try {
+    const pythonHealthy = await pythonMrzClient.healthCheck();
+    res.json({
+      pythonService: pythonHealthy ? 'healthy' : 'unreachable',
+      tesseract: 'available',
+    });
+  } catch (e) {
+    res.json({ pythonService: 'unreachable', tesseract: 'available' });
+  }
+});
+
+/** Galeriden seçilen görsel: base64 ile gönder (Android content URI FormData sorununu aşar). Önce Python OmniMRZ denenir, başarısızsa runMrzPipeline (Tesseract). paperMode: true ile kağıt/fotokopi ön işlemi öncelikli. */
 router.post('/document-base64', authenticateTesisOrSupabase, tenantMiddleware, express.json({ limit: '8mb' }), async (req, res) => {
   // OCR uzun sürebilir; 502 "Application failed to respond" önlemek için bu istek için timeout artır (2 dk)
   res.setTimeout(120000);
@@ -769,8 +783,25 @@ router.post('/document-base64', authenticateTesisOrSupabase, tenantMiddleware, e
     let mrzResult = { ok: false, attemptsUsed: 0, score: 0 };
     let mrzList = [];
     let multiple = false;
+    let mrzSource = null; // 'python-omnimrz' | 'tesseract-fallback'
 
-    if (paperMode && buf && buf.length > 0) {
+    // Önce Python OmniMRZ servisini dene (yoksa veya hata olursa aşağıda Tesseract kullanılır)
+    try {
+      const pythonResult = await pythonMrzClient.processImage(base64);
+      if (pythonResult.success && pythonResult.data?.success && pythonResult.data?.mrzPayload) {
+        mrzRaw = pythonResult.data.mrz || null;
+        mrzPayload = pythonResult.data.mrzPayload || null;
+        mrzSource = 'python-omnimrz';
+        console.log(logPrefix, 'Python OmniMRZ başarılı', {
+          validation: pythonResult.data.validation,
+          docType: pythonResult.data.parsed_data?.data?.document_type,
+        });
+      }
+    } catch (pythonErr) {
+      console.warn(logPrefix, 'Python MRZ atlandı:', pythonErr?.message);
+    }
+
+    if (paperMode && buf && buf.length > 0 && !mrzRaw) {
       try {
         mrzList = await extractMultipleMRZ(buf);
         if (mrzList.length > 0) {
@@ -788,6 +819,7 @@ router.post('/document-base64', authenticateTesisOrSupabase, tenantMiddleware, e
           mrzRaw = best.text;
           mrzPayload = parseMrzToPayload(best.text) || null;
           multiple = mrzList.length > 1;
+          if (!mrzSource) mrzSource = 'tesseract-fallback';
           console.log(logPrefix, 'çoklu MRZ pipeline', { count: mrzList.length, candidates: candidates.length, multiple, bestConf: best.confidence });
         }
       } catch (multiErr) {
@@ -807,6 +839,7 @@ router.post('/document-base64', authenticateTesisOrSupabase, tenantMiddleware, e
               if (payload) {
                 mrzRaw = raw;
                 mrzPayload = payload;
+                if (!mrzSource) mrzSource = 'tesseract-fallback';
                 console.log(logPrefix, 'fotokopi buffer path ile MRZ bulundu');
                 break;
               }
@@ -825,6 +858,7 @@ router.post('/document-base64', authenticateTesisOrSupabase, tenantMiddleware, e
         mrzFailureReason = !mrzRaw ? buildMrzFailureReason(mrzResult, false) : null;
         const lineCount = mrzRaw ? mrzRaw.trim().split('\n').filter(Boolean).length : 0;
         const inferredDocType = mrzRaw ? (lineCount >= 3 ? 'TC_KIMLIK (TD1, 3 satır)' : 'PASAPORT (TD3, 2 satır)') : null;
+        if (!mrzSource) mrzSource = 'tesseract-fallback';
         console.log(logPrefix, 'runMrzPipeline bitti', { ok: mrzResult.ok, hasMrzRaw: !!mrzRaw, docType: inferredDocType, score: mrzResult.score, attemptsUsed: mrzResult.attemptsUsed });
         if (!mrzRaw && mrzFailureReason) console.log(logPrefix, 'MRZ bulunamadı', { reason: mrzFailureReason.slice(0, 120) });
       }
@@ -856,6 +890,7 @@ router.post('/document-base64', authenticateTesisOrSupabase, tenantMiddleware, e
       mrz: mrzRaw || null,
       mrzPayload: mrzPayload || null,
       mrzFailureReason: mrzFailureReason || undefined,
+      mrzSource: mrzSource || undefined,
       front,
       merged,
       portraitBase64: portraitBase64 || undefined,

@@ -68,7 +68,11 @@ app.use(cors(corsOptions));
 // Body parser: OCR / evrensel MRZ base64 için 20mb, diğer API için 2mb
 app.use((req, res, next) => {
   const limit =
-    req.path.startsWith('/api/ocr') || req.path.startsWith('/api/universal-mrz') ? '20mb' : '2mb';
+    req.path.startsWith('/api/ocr') ||
+    req.path.startsWith('/api/universal-mrz') ||
+    req.path.startsWith('/api/universal-ocr')
+      ? '20mb'
+      : '2mb';
   express.json({ limit })(req, res, next);
 });
 app.use(express.urlencoded({ extended: true }));
@@ -103,6 +107,7 @@ app.use('/api/nfc', require('./routes/nfc'));
 app.use('/api/supabase', require('./routes/supabase'));
 app.use('/api/kyc', require('./routes/kyc'));
 app.use('/api/universal-mrz', require('./routes/universalMrz'));
+app.use('/api/universal-ocr', require('./routes/universalOcr'));
 app.use('/api/okutulan-belgeler', require('./routes/okutulanBelgeler'));
 app.use('/api/app-admin', require('./routes/appAdmin'));
 app.use('/api/siparis', require('./routes/siparis'));
