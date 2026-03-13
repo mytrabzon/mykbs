@@ -77,6 +77,100 @@ async function preprocessForPhotocopyMrzStrong(filePath) {
 }
 
 /**
+ * A4 fotokopi MRZ: ölçekleme (küçük görüntü/satır) + tam görüntü üzerinde yüksek kontrast, güçlü keskinleştirme, eşik.
+ * Kırpma yapılmaz; Tesseract MRZ bloğunu tüm sayfada bulabilsin diye tam sayfa işlenir.
+ */
+async function preprocessForPhotocopyA4(filePath) {
+  if (!filePath || !fs.existsSync(filePath)) return filePath;
+  try {
+    const Jimp = (await import('jimp')).default;
+    let image = await Jimp.read(filePath);
+    image = detectAndScaleForPhotocopy(image);
+    image = image.greyscale().normalize().contrast(0.88).brightness(0.04);
+    image = applyStrongSharpenKernel(image);
+    applyThreshold(image, 138);
+    await image.write(filePath);
+    return filePath;
+  } catch (e) {
+    return filePath;
+  }
+}
+
+/** A4 fotokopi – tam sayfa + invert (beyaz zemin / siyah yazı taramaları). */
+async function preprocessForPhotocopyA4Invert(filePath) {
+  if (!filePath || !fs.existsSync(filePath)) return filePath;
+  try {
+    const Jimp = (await import('jimp')).default;
+    let image = await Jimp.read(filePath);
+    image = detectAndScaleForPhotocopy(image);
+    image = image.greyscale().normalize().contrast(0.82).invert();
+    image = applyStrongSharpenKernel(image);
+    applyThreshold(image, 118);
+    await image.write(filePath);
+    return filePath;
+  } catch (e) {
+    return filePath;
+  }
+}
+
+/** A4 fotokopi – tam sayfa, aşırı kontrast (1.0) + eşik 128. */
+async function preprocessForPhotocopyA4Strong(filePath) {
+  if (!filePath || !fs.existsSync(filePath)) return filePath;
+  try {
+    const Jimp = (await import('jimp')).default;
+    let image = await Jimp.read(filePath);
+    image = detectAndScaleForPhotocopy(image);
+    image = image.greyscale().normalize().contrast(1.0).brightness(0.02);
+    image = applyStrongSharpenKernel(image);
+    applyThreshold(image, 128);
+    await image.write(filePath);
+    return filePath;
+  } catch (e) {
+    return filePath;
+  }
+}
+
+/** A4 fotokopi – tam sayfa, orta kontrast (0.8), normal keskinleştirme, eşik yok (yumuşak). */
+async function preprocessForPhotocopyA4Scale(filePath) {
+  if (!filePath || !fs.existsSync(filePath)) return filePath;
+  try {
+    const Jimp = (await import('jimp')).default;
+    let image = await Jimp.read(filePath);
+    image = detectAndScaleForPhotocopy(image);
+    image = image.greyscale().normalize().contrast(0.8);
+    image = applySharpenKernel(image);
+    await image.write(filePath);
+    return filePath;
+  } catch (e) {
+    return filePath;
+  }
+}
+
+/**
+ * Buffer üzerinde A4 fotokopi ön işleme (ölçekleme + kontrast/keskinleştirme/eşik). OCR öncesi deneme için.
+ * @param {Buffer} imageBuffer - JPEG/PNG buffer
+ * @param {{ invert?: boolean, contrast?: number, threshold?: number }} [options]
+ * @returns {Promise<Buffer>} JPEG buffer
+ */
+async function preprocessBufferForPhotocopyA4(imageBuffer, options = {}) {
+  const Jimp = (await import('jimp')).default;
+  let image = await Jimp.read(imageBuffer);
+  image = detectAndScaleForPhotocopy(image);
+  if (options.invert) {
+    image = image.greyscale().normalize().contrast(0.82).invert();
+    image = applyStrongSharpenKernel(image);
+    applyThreshold(image, 118);
+  } else {
+    const contrast = options.contrast ?? 0.88;
+    const thresh = options.threshold ?? 138;
+    image = image.greyscale().normalize().contrast(contrast).brightness(0.04);
+    image = applyStrongSharpenKernel(image);
+    applyThreshold(image, thresh);
+  }
+  return image.getBufferAsync(Jimp.MIME_JPEG);
+}
+
+/**
  * Load image from base64, preprocess, and optionally save to temp file.
  * @param {string} imageBase64 - JPEG/PNG base64 string
  * @param {string} [tempDir] - Directory for temp file (optional; if not set, returns buffer in memory is not implemented - we write to temp)
@@ -204,6 +298,73 @@ async function preprocessForKimlikMrz(filePath, options = {}) {
   } catch (e) {
     return filePath;
   }
+}
+
+/** A4 fotokopi: satır yüksekliği bu değerin altındaysa ölçekle (Tesseract için ~50px hedef). */
+const PHOTOCOPY_TARGET_LINE_HEIGHT_PX = 55;
+const PHOTOCOPY_MIN_LINE_HEIGHT_TO_SCALE_PX = 55;
+const PHOTOCOPY_MAX_SCALE = 2.8;
+/** Görüntü yüksekliği bu değerin altındaysa fotokopi için en az bu çarpanla büyüt (küçük çözünürlük). */
+const PHOTOCOPY_MIN_HEIGHT_PX = 700;
+const PHOTOCOPY_MIN_SCALE_SMALL_IMAGE = 1.35;
+
+/**
+ * Görüntüde MRZ bölgesi (alt ~%40) satır yüksekliğini tahmin et; küçükse (fotokopi) hedef piksel yüksekliğine ölçekle.
+ * Mutates image. Ayrıca çok küçük görüntülerde (h < 700) her zaman en az 1.35x büyütme uygular.
+ */
+function detectAndScaleForPhotocopy(image) {
+  if (!image || !image.bitmap) return image;
+  const w = image.bitmap.width;
+  const h = image.bitmap.height;
+  const mrzHeight = Math.floor(h * 0.4);
+  if (mrzHeight < 15) return image;
+  const estimatedLineHeightPx = mrzHeight / 3;
+  let scaleFactor = 1;
+  if (h < PHOTOCOPY_MIN_HEIGHT_PX) {
+    scaleFactor = Math.max(scaleFactor, PHOTOCOPY_MIN_SCALE_SMALL_IMAGE);
+  }
+  if (estimatedLineHeightPx < PHOTOCOPY_MIN_LINE_HEIGHT_TO_SCALE_PX) {
+    const need = PHOTOCOPY_TARGET_LINE_HEIGHT_PX / Math.max(1, estimatedLineHeightPx);
+    scaleFactor = Math.max(scaleFactor, Math.min(PHOTOCOPY_MAX_SCALE, need));
+  }
+  if (scaleFactor <= 1.05) return image;
+  const newW = Math.round(w * scaleFactor);
+  const newH = Math.round(h * scaleFactor);
+  image.resize(newW, newH);
+  return image;
+}
+
+/** Fotokopi için güçlü 3x3 keskinleştirme (kenar netliği). */
+function applyStrongSharpenKernel(image) {
+  if (!image || !image.bitmap) return image;
+  const w = image.bitmap.width;
+  const h = image.bitmap.height;
+  const src = image.bitmap.data;
+  const out = Buffer.alloc(src.length);
+  const kernel = [0, -2, 0, -2, 9, -2, 0, -2, 0];
+  for (let y = 1; y < h - 1; y++) {
+    for (let x = 1; x < w - 1; x++) {
+      const idx = (y * w + x) * 4;
+      let g = 0;
+      for (let dy = -1; dy <= 1; dy++) {
+        for (let dx = -1; dx <= 1; dx++) {
+          const i = ((y + dy) * w + (x + dx)) * 4;
+          g += ((src[i] + src[i + 1] + src[i + 2]) / 3) * kernel[(dy + 1) * 3 + (dx + 1)];
+        }
+      }
+      const v = Math.max(0, Math.min(255, Math.round(g)));
+      out[idx] = out[idx + 1] = out[idx + 2] = v;
+      out[idx + 3] = src[idx + 3];
+    }
+  }
+  for (let i = 0; i < src.length; i += 4) {
+    if (out[i] === 0 && out[i + 1] === 0 && out[i + 2] === 0) {
+      out[i] = out[i + 1] = out[i + 2] = (src[i] + src[i + 1] + src[i + 2]) / 3;
+      out[i + 3] = src[i + 3];
+    }
+  }
+  image.bitmap.data = out;
+  return image;
 }
 
 /** Basit 3x3 keskinleştirme çekirdeği (Jimp ile convolution benzeri). */
@@ -521,6 +682,11 @@ module.exports = {
   preprocessFromBase64,
   preprocessForPhotocopyMrz,
   preprocessForPhotocopyMrzStrong,
+  preprocessForPhotocopyA4,
+  preprocessForPhotocopyA4Invert,
+  preprocessForPhotocopyA4Strong,
+  preprocessForPhotocopyA4Scale,
+  preprocessBufferForPhotocopyA4,
   cropBottomFraction,
   cropTopFraction,
   cropCenterFraction,

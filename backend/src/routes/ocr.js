@@ -15,6 +15,11 @@ const {
   preprocessForPaperMrz,
   preprocessForPhotocopyMrz,
   preprocessForPhotocopyMrzStrong,
+  preprocessForPhotocopyA4,
+  preprocessForPhotocopyA4Invert,
+  preprocessForPhotocopyA4Strong,
+  preprocessForPhotocopyA4Scale,
+  preprocessBufferForPhotocopyA4,
   preprocessForFadedMrz,
   preprocessForInvertedMrz,
   preprocessMrzImage,
@@ -23,7 +28,7 @@ const {
   rotateImage,
   cropPortraitFromDocument,
 } = require('../lib/vision/preprocess');
-const { parseMrzRaw, extractMultipleMRZ, extractMrzWithMultipleAttempts } = require('../lib/vision/mrz');
+const { parseMrzRaw, extractMultipleMRZ, extractMrzWithMultipleAttempts, runOcrOnBuffer } = require('../lib/vision/mrz');
 
 const router = express.Router();
 const KIMLIK_UPLOAD_DIR = path.join(__dirname, '../../uploads/kimlikler');
@@ -386,6 +391,10 @@ async function runMrzPipeline(filePath, opts = {}) {
   const preprocessVariants = paperMode
     ? [
         ...(docTypeHint === 'id' ? [{ fn: preprocessForTurkishIdMrz, name: 'turkishId' }] : []),
+        { fn: preprocessForPhotocopyA4, name: 'photocopyA4' },
+        { fn: preprocessForPhotocopyA4Invert, name: 'photocopyA4Invert' },
+        { fn: preprocessForPhotocopyA4Strong, name: 'photocopyA4Strong' },
+        { fn: preprocessForPhotocopyA4Scale, name: 'photocopyA4Scale' },
         { fn: preprocessForPaperMrz, name: 'paper' },
         { fn: preprocessForPhotocopyMrzStrong, name: 'photocopyStrong' },
         { fn: preprocessForFadedMrz, name: 'faded' },
@@ -787,16 +796,38 @@ router.post('/document-base64', authenticateTesisOrSupabase, tenantMiddleware, e
     }
 
     if (!mrzRaw) {
-      console.log(logPrefix, 'runMrzPipeline başlıyor', { paperMode, docTypeHint: requestDocTypeHint });
-      mrzResult = await runMrzPipeline(filePath, { paperMode, docTypeHint: requestDocTypeHint });
-      mrzRaw = mrzResult.mrzRaw || null;
-      mrzPayload = mrzResult.payload || null;
-      if (!mrzPayload && mrzRaw) mrzPayload = parseMrzToPayload(mrzRaw);
-      mrzFailureReason = !mrzRaw ? buildMrzFailureReason(mrzResult, false) : null;
-      const lineCount = mrzRaw ? mrzRaw.trim().split('\n').filter(Boolean).length : 0;
-      const inferredDocType = mrzRaw ? (lineCount >= 3 ? 'TC_KIMLIK (TD1, 3 satır)' : 'PASAPORT (TD3, 2 satır)') : null;
-      console.log(logPrefix, 'runMrzPipeline bitti', { ok: mrzResult.ok, hasMrzRaw: !!mrzRaw, docType: inferredDocType, score: mrzResult.score, attemptsUsed: mrzResult.attemptsUsed });
-      if (!mrzRaw && mrzFailureReason) console.log(logPrefix, 'MRZ bulunamadı', { reason: mrzFailureReason.slice(0, 120) });
+      if (paperMode && buf && buf.length > 0) {
+        try {
+          for (const opts of [{}, { invert: true }, { contrast: 1.0, threshold: 128 }]) {
+            const enhancedBuf = await preprocessBufferForPhotocopyA4(buf, opts);
+            const text = await runOcrOnBuffer(enhancedBuf);
+            const raw = extractMrzFromOcr(text);
+            if (raw) {
+              const payload = parseMrzToPayload(raw);
+              if (payload) {
+                mrzRaw = raw;
+                mrzPayload = payload;
+                console.log(logPrefix, 'fotokopi buffer path ile MRZ bulundu');
+                break;
+              }
+            }
+          }
+        } catch (photoErr) {
+          console.warn(logPrefix, 'fotokopi buffer path hatası', photoErr?.message);
+        }
+      }
+      if (!mrzRaw) {
+        console.log(logPrefix, 'runMrzPipeline başlıyor', { paperMode, docTypeHint: requestDocTypeHint });
+        mrzResult = await runMrzPipeline(filePath, { paperMode, docTypeHint: requestDocTypeHint });
+        mrzRaw = mrzResult.mrzRaw || null;
+        mrzPayload = mrzResult.payload || null;
+        if (!mrzPayload && mrzRaw) mrzPayload = parseMrzToPayload(mrzRaw);
+        mrzFailureReason = !mrzRaw ? buildMrzFailureReason(mrzResult, false) : null;
+        const lineCount = mrzRaw ? mrzRaw.trim().split('\n').filter(Boolean).length : 0;
+        const inferredDocType = mrzRaw ? (lineCount >= 3 ? 'TC_KIMLIK (TD1, 3 satır)' : 'PASAPORT (TD3, 2 satır)') : null;
+        console.log(logPrefix, 'runMrzPipeline bitti', { ok: mrzResult.ok, hasMrzRaw: !!mrzRaw, docType: inferredDocType, score: mrzResult.score, attemptsUsed: mrzResult.attemptsUsed });
+        if (!mrzRaw && mrzFailureReason) console.log(logPrefix, 'MRZ bulunamadı', { reason: mrzFailureReason.slice(0, 120) });
+      }
     }
     let text = '';
     let front = {};

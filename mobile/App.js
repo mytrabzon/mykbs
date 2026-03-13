@@ -489,7 +489,6 @@ function MainTabs() {
       <Tab.Screen
         name="MRZ"
         component={MrzScanScreen}
-        initialParams={{ passportOnly: true }}
         options={{ tabBarLabel: t('tabs.idPassport'), tabBarActiveTintColor: colors.primary }}
       />
       <Tab.Screen name="Raporlar" component={RaporlarScreen} options={{ tabBarLabel: t('tabs.reports') }} />
@@ -677,7 +676,7 @@ function AppNavigator() {
                   <Drawer.Screen name="Destek" component={DestekScreen} options={{ drawerLabel: 'Destek' }} />
                   <Drawer.Screen name="PendingUsers" component={PendingUsersScreen} options={{ drawerLabel: 'Onay Bekleyenler' }} />
                   <Drawer.Screen name="Users" component={UsersStack} options={{ drawerLabel: 'Kullanıcılar' }} />
-                  <Drawer.Screen name="Identity" component={MrzScanScreen} initialParams={{ passportOnly: true }} options={{ drawerLabel: 'Kimlik & Pasaport' }} />
+                  <Drawer.Screen name="Identity" component={MrzScanScreen} options={{ drawerLabel: 'Kimlik & Pasaport' }} />
                   <Drawer.Screen name="UniversalMrz" component={UniversalMrzScreen} options={{ drawerLabel: 'Evrensel MRZ (Galeri/Kamera)' }} />
                   <Drawer.Screen name="Payments" component={PaymentsScreen} options={{ drawerLabel: 'Paketler & Ödemeler' }} />
                   <Drawer.Screen name="Tesisler" component={TesisListScreen} options={{ drawerLabel: 'Tesis Listesi' }} />
@@ -724,7 +723,7 @@ function AppNavigator() {
                   <Drawer.Screen name="Destek" component={DestekScreen} options={{ drawerLabel: 'Destek' }} />
                   <Drawer.Screen name="PendingUsers" component={PendingUsersScreen} options={{ drawerLabel: 'Onay Bekleyenler' }} />
                   <Drawer.Screen name="Users" component={UsersStack} options={{ drawerLabel: 'Kullanıcılar' }} />
-                  <Drawer.Screen name="Identity" component={MrzScanScreen} initialParams={{ passportOnly: true }} options={{ drawerLabel: 'Kimlik & Pasaport' }} />
+                  <Drawer.Screen name="Identity" component={MrzScanScreen} options={{ drawerLabel: 'Kimlik & Pasaport' }} />
                   <Drawer.Screen name="UniversalMrz" component={UniversalMrzScreen} options={{ drawerLabel: 'Evrensel MRZ (Galeri/Kamera)' }} />
                   <Drawer.Screen name="Payments" component={PaymentsScreen} options={{ drawerLabel: 'Paketler & Ödemeler' }} />
                   <Drawer.Screen name="Tesisler" component={TesisListScreen} options={{ drawerLabel: 'Tesis Listesi' }} />

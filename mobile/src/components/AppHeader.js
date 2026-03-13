@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Platform } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
@@ -121,6 +121,7 @@ export default function AppHeader({
 const styles = StyleSheet.create({
   wrap: {
     borderBottomWidth: 0,
+    ...(Platform.OS === 'android' ? { elevation: 0 } : {}),
   },
   row: {
     flexDirection: 'row',

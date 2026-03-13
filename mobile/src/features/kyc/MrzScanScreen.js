@@ -4,12 +4,13 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useRoute, useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 
-/** Belge okunduğunda kullanıcıya bildir: toast + kısa titreşim */
+/** Belge okunduğunda kullanıcıya bildir: toast + titreşim + MRZ sesli "Okundu" (ayar açıksa) */
 function triggerReadSuccessFeedback() {
   Toast.show({ type: 'success', text1: 'Okundu!', text2: 'Belge bilgileri alındı.' });
   try {
     Vibration.vibrate(100);
   } catch (_) {}
+  if (getMrzVoiceEnabled()) speakMrzReadSuccess();
 }
 
 import * as ImagePicker from 'expo-image-picker';
@@ -27,6 +28,16 @@ import { useIndependentNfcReader } from '../nfc/IndependentNfcReader';
 import { getNfcEnabled } from '../../utils/nfcSetting';
 import { setLastMrzForBac } from '../../utils/lastMrzForBac';
 import { useFamilyCheckIn } from '../../context/FamilyCheckInContext';
+import {
+  loadFeedbackSettings,
+  getMrzVoiceEnabled,
+  speakMrzIdCardIntro,
+  speakMrzPassportIntro,
+  speakMrzMoveCloser,
+  speakMrzUseFlash,
+  speakMrzReadSuccess,
+  stopMrzSpeaking,
+} from '../../utils/feedback';
 
 /** Okutulan belgeyi backend'e kaydet (arka planda; hata sessiz). photoUri: belge fotoğrafı, portraitBase64: belgeden kırpılan kimlik resmi. */
 async function saveOkutulanBelgeAsync(payload, photoUri, portraitBase64) {
@@ -89,8 +100,7 @@ const SHOW_INSTANT_RESULT = true;
 const ACCEPT_ON_CHECK_FAIL = true;
 const ACCEPT_MINIMAL_DOC_NUMBER_ONLY = true; // Sadece belge no ile de hemen kabul (eksik alanlar sonuç ekranında düzeltilir)
 
-/** Android: otomatik algılama — expo-camera + backend OCR. iOS: native MrzReaderView. */
-const USE_UNIFIED_AUTO_SCAN = Platform.OS === 'android';
+/** Android: otomatik algılama — expo-camera + backend OCR sadece T.C. kimlik kartı için. Pasaportta native okuyucu kullanılır. */
 /** Otomatik algılama için periyodik çekim aralığı. Backend rate limit (~1.1s) ile uyumlu; 429 önlenir. */
 const UNIFIED_CAPTURE_INTERVAL_MS = 1800;
 /** İzin verildikten sonra kamera mount gecikmesi (Android siyah ekran önlemi). */
@@ -99,6 +109,9 @@ const UNIFIED_CAMERA_MOUNT_DELAY_MS = Platform.OS === 'android' ? 350 : 150;
 const UNIFIED_CAMERA_MOUNT_AFTER_MS = 400;
 /** Kamera açıldı ama onCameraReady gelmezse (siyah ekran) bu süre sonra fallback göster. */
 const UNIFIED_CAMERA_READY_TIMEOUT_MS = 6000;
+/** TD3 pasaport vs TD1 kimlik için varsayılan zoom (piksel yoğunluğu ayarı). */
+const PASSPORT_DEFAULT_ZOOM = 0;
+const ID_CARD_DEFAULT_ZOOM = 0.25;
 
 function Row({ label, value }) {
   const v = value != null && value !== '' ? String(value) : '—';
@@ -227,6 +240,8 @@ export default function MrzScanScreen({ navigation }) {
   /** iOS siyah ekran önlemi: kamera sadece layout ölçüldükten sonra mount edilir. Android'de Activity hazır olsun diye kısa gecikme. */
   const [unifiedCameraMountReady, setUnifiedCameraMountReady] = useState(false);
   const unifiedMountDelayRef = useRef(null);
+  /** Android: her focus'ta kamera mount'u tekrar planla (ikinci açılışta kamera açılsın) */
+  const unifiedMountOnFocusRef = useRef(null);
 
   /** Son okunan MRZ'yi BAC (NFC) için sakla — Check-in'de "NFC ile Okut" bunu kullanır */
   useEffect(() => {
@@ -253,10 +268,31 @@ export default function MrzScanScreen({ navigation }) {
   const unifiedCameraReadyTimeoutRef = useRef(null);
   const nfcHandlerRef = useRef(null);
   const familyCheckIn = useFamilyCheckIn();
+  /** Unified CameraView için dinamik zoom (kimlikte pasaporta göre daha yakın). */
+  const [unifiedZoom, setUnifiedZoom] = useState(PASSPORT_DEFAULT_ZOOM);
+  /** Unified akışta art arda başarısız okuma sayacı (yakınlık / ışık uyarıları için). */
+  const unifiedFailCountRef = useRef(0);
+  const distanceHintShownRef = useRef(false);
+  const lightHintShownRef = useRef(false);
+  const mrzIntroTimeoutRef = useRef(null);
 
   const selectedDocType = mrzLockedRef.current ? lockedDocTypeRef.current : scanMode;
   selectedDocTypeRef.current = selectedDocType;
-  const useUnifiedMrzFlow = USE_UNIFIED_AUTO_SCAN || (Platform.OS === 'ios' && selectedDocType === DocType.ID);
+  // Android'de sadece T.C. kimlik kartı için unified (expo-camera + backend OCR) akışını kullan; pasaportta native okuyucu açılsın.
+  const useUnifiedMrzFlow = Platform.OS === 'android' && selectedDocType === DocType.ID;
+
+  // Belge tipi değiştiğinde unified kamera zoom'unu ayarla (TD1 kimlikte daha yakın).
+  useEffect(() => {
+    if (!useUnifiedMrzFlow) {
+      setUnifiedZoom(PASSPORT_DEFAULT_ZOOM);
+      return;
+    }
+    if (selectedDocType === DocType.ID) {
+      setUnifiedZoom(ID_CARD_DEFAULT_ZOOM);
+    } else {
+      setUnifiedZoom(PASSPORT_DEFAULT_ZOOM);
+    }
+  }, [useUnifiedMrzFlow, selectedDocType]);
 
   const { processNewMrz, isProcessing: mrzStateProcessing, clearCurrent: clearMrzState, startNewScanSession } = useMrzState();
 
@@ -320,10 +356,18 @@ export default function MrzScanScreen({ navigation }) {
 
   useFocusEffect(
     useCallback(() => {
+      const params = route.params || {};
+      const passportOnly = !!params.passportOnly;
+      const docTypeParam = params.docType; // 'passport' | 'tr_id' (ScanHome'tan gelince)
+      const initialMode = passportOnly
+        ? DocType.Passport
+        : (docTypeParam === 'tr_id' ? DocType.ID : docTypeParam === 'passport' ? DocType.Passport : (Platform.OS === 'android' ? DocType.ID : DocType.Passport));
+
       logger.info('[MRZ] useFocusEffect: ekran odaklandı (focus gain)', {
         permissionGranted: !!permission?.granted,
         hasMrzReader: !!MrzReaderView,
         platform: Platform.OS,
+        initialMode: initialMode === DocType.ID ? 'ID' : 'Passport',
       });
       mounted.current = true;
       hasLeftScreenRef.current = false;
@@ -335,7 +379,8 @@ export default function MrzScanScreen({ navigation }) {
       hasAcceptedForUnifiedRef.current = false;
       setUnifiedCameraReady(false);
       setUnifiedCameraMountReady(false);
-      setScanMode(DocType.Passport);
+      setScanMode(initialMode);
+      setMrzDocType(initialMode);
       setFailCount(0);
       setLastMrzChecksReason('');
       setInstantPayload(null);
@@ -346,6 +391,23 @@ export default function MrzScanScreen({ navigation }) {
       getNfcEnabled().then((v) => { if (mounted.current) setNfcEnabledInSettings(!!v); });
       startNewScanSession();
       scanStartTimeRef.current = Date.now();
+      unifiedFailCountRef.current = 0;
+      distanceHintShownRef.current = false;
+      lightHintShownRef.current = false;
+      if (mrzIntroTimeoutRef.current) {
+        clearTimeout(mrzIntroTimeoutRef.current);
+        mrzIntroTimeoutRef.current = null;
+      }
+      mrzIntroTimeoutRef.current = setTimeout(() => {
+        mrzIntroTimeoutRef.current = null;
+        if (!mounted.current) return;
+        loadFeedbackSettings().then(() => {
+          if (!mounted.current || !getMrzVoiceEnabled()) return;
+          // Android’de çoğunlukla kimlik okunur; ilk sesli yönlendirme buna göre.
+          if (Platform.OS === 'android') speakMrzIdCardIntro();
+          else speakMrzPassportIntro();
+        });
+      }, 1500);
 
       setCameraOpenFailed(false);
       setCameraPreviewReady(false);
@@ -353,7 +415,7 @@ export default function MrzScanScreen({ navigation }) {
       setCameraMountDelayDone(false);
       setUnifiedCameraMountKey(0);
       setUnifiedCameraError(false);
-      if (USE_UNIFIED_AUTO_SCAN && permission?.granted) setTorchOn(true);
+      if (useUnifiedMrzFlow && permission?.granted) setTorchOn(true);
       if (permission?.granted) {
         setMrzCameraMountReady(true);
         setCameraLayoutReady(true);
@@ -368,8 +430,26 @@ export default function MrzScanScreen({ navigation }) {
         }
       }
 
+      // Android unified flow: her focus'ta kamera mount'unu kısa gecikmeyle planla (ikinci açılışta da kamera açılsın).
+      if (useUnifiedMrzFlow && (permission?.granted || permissionGrantedLocal)) {
+        if (unifiedMountOnFocusRef.current) clearTimeout(unifiedMountOnFocusRef.current);
+        unifiedMountOnFocusRef.current = setTimeout(() => {
+          unifiedMountOnFocusRef.current = null;
+          if (mounted.current) setUnifiedCameraMountReady(true);
+        }, 280);
+      }
+
       return () => {
         logger.info('[MRZ] useFocusEffect: ekran odaktan çıktı (focus loss / cleanup)');
+        stopMrzSpeaking();
+        if (mrzIntroTimeoutRef.current) {
+          clearTimeout(mrzIntroTimeoutRef.current);
+          mrzIntroTimeoutRef.current = null;
+        }
+        if (unifiedMountOnFocusRef.current) {
+          clearTimeout(unifiedMountOnFocusRef.current);
+          unifiedMountOnFocusRef.current = null;
+        }
         if (unifiedFallbackTimerRef.current) {
           clearTimeout(unifiedFallbackTimerRef.current);
           unifiedFallbackTimerRef.current = null;
@@ -406,7 +486,7 @@ export default function MrzScanScreen({ navigation }) {
           } catch (e) {}
         }
       };
-    }, [permission?.granted, startNewScanSession])
+    }, [route.params, permission?.granted, permissionGrantedLocal, startNewScanSession])
   );
 
   const goBack = useCallback(() => {
@@ -583,6 +663,30 @@ export default function MrzScanScreen({ navigation }) {
         if (failureReason && mounted.current && !hasAcceptedForUnifiedRef.current) {
           Toast.show({ type: 'info', text1: 'MRZ tespit edilemedi', text2: failureReason.length > 70 ? failureReason.slice(0, 67) + '…' : failureReason });
         }
+        // TD1 kimlikte MRZ tespit edilemezse kullanıcıya yakınlık + ışık konusunda rehberlik et
+        if (mounted.current && !hasAcceptedForUnifiedRef.current && selectedDocTypeRef.current === DocType.ID) {
+          unifiedFailCountRef.current += 1;
+          // 2+ başarısız unified denemeden sonra yalnızca bir kez yakınlık uyarısı göster
+          if (unifiedFailCountRef.current >= 2 && !distanceHintShownRef.current) {
+            distanceHintShownRef.current = true;
+            Toast.show({
+              type: 'info',
+              text1: 'Kimliği daha yaklaştırın',
+              text2: 'TC kimlik MRZ\'si pasaporttan daha küçük. Kartı kameraya PASAPORTTAN DAHA YAKIN tutun ve MRZ bandını çerçeveye tam hizalayın.',
+            });
+            if (getMrzVoiceEnabled()) speakMrzMoveCloser();
+          }
+          // Işık kapalıysa ve henüz gösterilmediyse flaş öner
+          if (!torchOn && !lightHintShownRef.current) {
+            lightHintShownRef.current = true;
+            Toast.show({
+              type: 'info',
+              text1: 'Işık yeterli mi?',
+              text2: 'MRZ çizgileri silik görünüyor olabilir. Gerekirse sağ alttaki flaş ikonundan ışığı açın.',
+            });
+            if (getMrzVoiceEnabled()) speakMrzUseFlash();
+          }
+        }
       } catch (e) {
         if (mounted.current && !hasAcceptedForUnifiedRef.current) {
           logger.warn('[Unified scan] document-base64 hatası', {
@@ -605,7 +709,7 @@ export default function MrzScanScreen({ navigation }) {
     const id = setInterval(runCapture, UNIFIED_CAPTURE_INTERVAL_MS);
     runCapture();
     return () => clearInterval(id);
-  }, [useUnifiedMrzFlow, permission?.granted, unifiedCameraReady, ocrLoading, processMrzRaw, processNewMrz]);
+  }, [useUnifiedMrzFlow, permission?.granted, unifiedCameraReady, ocrLoading, processMrzRaw, processNewMrz, torchOn]);
 
   /** NFC tag algılandığında tam çip okuma (readNfcDirect); tüm alanlar + fotoğraf çekilir, "yakında" kaldırıldı */
   useEffect(() => {
@@ -1426,7 +1530,7 @@ export default function MrzScanScreen({ navigation }) {
 
   // Native kamera: onCameraReady gelmezse bile ekran değiştirme; kamera açık kalır.
   useEffect(() => {
-    if (useUnifiedMrzFlow || (Platform.OS === 'android' && !USE_UNIFIED_AUTO_SCAN) || !mrzCameraMountReady || !permission?.granted || cameraPreviewReady) return;
+    if (useUnifiedMrzFlow || !mrzCameraMountReady || !permission?.granted || cameraPreviewReady) return;
     cameraReadyTimeoutRef.current = setTimeout(() => {
       cameraReadyTimeoutRef.current = null;
       if (mounted.current) logger.info('[MRZ] Native kamera onCameraReady gecikti (ekran değişmedi)');
@@ -1729,6 +1833,7 @@ export default function MrzScanScreen({ navigation }) {
               ref={unifiedCameraRef}
               style={[StyleSheet.absoluteFill, styles.unifiedCameraSize]}
               facing="back"
+              zoom={unifiedZoom}
               enableTorch={unifiedCameraReady && torchOn}
               onCameraReady={() => {
                 if (unifiedCameraReadyTimeoutRef.current) {
@@ -1771,13 +1876,13 @@ export default function MrzScanScreen({ navigation }) {
             <View style={styles.docTypeRow}>
               <TouchableOpacity
                 style={[styles.docTypeBtn, selectedDocType === DocType.Passport && styles.docTypeBtnActive]}
-                onPress={() => { setMrzDocType(DocType.Passport); setScanMode(DocType.Passport); }}
+                onPress={() => { setMrzDocType(DocType.Passport); setScanMode(DocType.Passport); if (getMrzVoiceEnabled()) speakMrzPassportIntro(); }}
               >
                 <Text style={[styles.docTypeBtnText, selectedDocType === DocType.Passport && styles.docTypeBtnTextActive]}>Pasaport</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={[styles.docTypeBtn, selectedDocType === DocType.ID && styles.docTypeBtnActive]}
-                onPress={() => { setMrzDocType(DocType.ID); setScanMode(DocType.ID); }}
+                onPress={() => { setMrzDocType(DocType.ID); setScanMode(DocType.ID); if (getMrzVoiceEnabled()) speakMrzIdCardIntro(); }}
               >
                 <Text style={[styles.docTypeBtnText, selectedDocType === DocType.ID && styles.docTypeBtnTextActive]}>TC Kimlik Kartı</Text>
                 {selectedDocType === DocType.ID && <Text style={styles.docTypeHint}>3 satır MRZ (arka yüz)</Text>}
@@ -1857,13 +1962,13 @@ export default function MrzScanScreen({ navigation }) {
           <View style={styles.docTypeRow}>
             <TouchableOpacity
               style={[styles.docTypeBtn, selectedDocType === DocType.Passport && styles.docTypeBtnActive]}
-              onPress={() => { setMrzDocType(DocType.Passport); setScanMode(DocType.Passport); }}
+              onPress={() => { setMrzDocType(DocType.Passport); setScanMode(DocType.Passport); if (getMrzVoiceEnabled()) speakMrzPassportIntro(); }}
             >
               <Text style={[styles.docTypeBtnText, selectedDocType === DocType.Passport && styles.docTypeBtnTextActive]}>Pasaport</Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={[styles.docTypeBtn, selectedDocType === DocType.ID && styles.docTypeBtnActive]}
-              onPress={() => { setMrzDocType(DocType.ID); setScanMode(DocType.ID); }}
+              onPress={() => { setMrzDocType(DocType.ID); setScanMode(DocType.ID); if (getMrzVoiceEnabled()) speakMrzIdCardIntro(); }}
             >
               <Text style={[styles.docTypeBtnText, selectedDocType === DocType.ID && styles.docTypeBtnTextActive]}>TC Kimlik Kartı</Text>
               {selectedDocType === DocType.ID && (

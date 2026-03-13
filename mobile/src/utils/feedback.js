@@ -6,14 +6,25 @@ import * as Haptics from 'expo-haptics';
 import * as Speech from 'expo-speech';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-const STORAGE_KEYS = { TTS: '@mykbs:settings:ttsEnabled', HAPTIC: '@mykbs:settings:hapticEnabled' };
+const STORAGE_KEYS = {
+  TTS: '@mykbs:settings:ttsEnabled',
+  HAPTIC: '@mykbs:settings:hapticEnabled',
+  MRZ_VOICE: '@mykbs:settings:mrzVoiceEnabled',
+};
 
 let ttsEnabled = true;
 let hapticEnabled = true;
+/** MRZ ekranında çekim esnasında sesli yönlendirme (kimlik/pasaport, yaklaştır, flaş, okundu). Hızlı kısa cümleler. */
+let mrzVoiceEnabled = true;
 
 export function setTtsEnabled(enabled) {
   ttsEnabled = !!enabled;
   AsyncStorage.setItem(STORAGE_KEYS.TTS, enabled ? '1' : '0').catch(() => {});
+}
+
+export function setMrzVoiceEnabled(enabled) {
+  mrzVoiceEnabled = !!enabled;
+  AsyncStorage.setItem(STORAGE_KEYS.MRZ_VOICE, enabled ? '1' : '0').catch(() => {});
 }
 
 export function setHapticEnabled(enabled) {
@@ -23,14 +34,23 @@ export function setHapticEnabled(enabled) {
 
 export async function loadFeedbackSettings() {
   try {
-    const [tts, haptic] = await Promise.all([AsyncStorage.getItem(STORAGE_KEYS.TTS), AsyncStorage.getItem(STORAGE_KEYS.HAPTIC)]);
+    const [tts, haptic, mrzVoice] = await Promise.all([
+      AsyncStorage.getItem(STORAGE_KEYS.TTS),
+      AsyncStorage.getItem(STORAGE_KEYS.HAPTIC),
+      AsyncStorage.getItem(STORAGE_KEYS.MRZ_VOICE),
+    ]);
     if (tts !== null) ttsEnabled = tts === '1';
     if (haptic !== null) hapticEnabled = haptic === '1';
+    if (mrzVoice !== null) mrzVoiceEnabled = mrzVoice === '1';
   } catch (_) {}
 }
 
 export function getTtsEnabled() {
   return ttsEnabled;
+}
+
+export function getMrzVoiceEnabled() {
+  return mrzVoiceEnabled;
 }
 
 export function getHapticEnabled() {
@@ -124,6 +144,49 @@ export function speakApproachId(language = 'tr-TR') {
     'ar-SY': 'قرّب الهوية من ظهر الهاتف.',
   };
   speak(phrases[language] || phrases['tr-TR'], { language });
+}
+
+/** Hızlı MRZ seslendirme: önce mevcut konuşmayı keser, kısa cümle, biraz hızlı rate. Sadece MRZ ses açıksa. */
+const MRZ_SPEECH_OPTS = { language: 'tr-TR', rate: 1.1 };
+
+function speakMrzShort(text) {
+  if (!mrzVoiceEnabled || !text || typeof text !== 'string') return;
+  try {
+    Speech.stop();
+    Speech.speak(text.trim(), { ...MRZ_SPEECH_OPTS, rate: 1.15 });
+  } catch (_) {}
+}
+
+/** Kimlik kartı modu — giriş: "Kimlik kartı. MRZ'yi hizalayın, yakın tutun." */
+export function speakMrzIdCardIntro() {
+  speakMrzShort('Kimlik kartı. Arka yüzdeki üç satır MRZ\'yi çerçeveye hizalayın. Kartı yakın tutun.');
+}
+
+/** Pasaport modu — giriş */
+export function speakMrzPassportIntro() {
+  speakMrzShort('Pasaport. MRZ bandını çerçeveye hizalayın.');
+}
+
+/** "Kimliği daha yaklaştırın" (çekim esnasında) */
+export function speakMrzMoveCloser() {
+  speakMrzShort('Kimliği daha yaklaştırın.');
+}
+
+/** "Işık / flaş" uyarısı */
+export function speakMrzUseFlash() {
+  speakMrzShort('Işık yetersiz olabilir. Flaşı açın.');
+}
+
+/** MRZ okundu — çok kısa */
+export function speakMrzReadSuccess() {
+  speakMrzShort('Okundu.');
+}
+
+/** MRZ ekranından çıkarken sesi kes */
+export function stopMrzSpeaking() {
+  try {
+    Speech.stop();
+  } catch (_) {}
 }
 
 /** "Pasaport veya kimliğin MRZ bölgesini kameraya gösterin" (MRZ kamera okuma) */

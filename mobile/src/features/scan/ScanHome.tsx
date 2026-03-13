@@ -28,7 +28,8 @@ export default function ScanHome({ navigation }: { navigation: any }) {
     scanStore.reset();
     scanStore.setCorrelationId(correlationId);
     scanLogger.scan_opened({ correlationId, docType });
-    navigation.navigate('ScanCamera', { docType });
+    // Tek kamera ekranı: MrzScan hem pasaport hem kimlik kartı (Pasaport / TC Kimlik toggle ile).
+    navigation.navigate('MrzScan', { docType: docType === 'tr_dl' ? 'tr_id' : docType });
   };
 
   return (

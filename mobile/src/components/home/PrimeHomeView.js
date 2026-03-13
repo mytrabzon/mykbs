@@ -13,6 +13,7 @@ import {
   RefreshControl,
   Dimensions,
   Image,
+  Platform,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../context/ThemeContext';
@@ -45,10 +46,10 @@ const FILTER_KEYS = [
 function StatCard({ title, value, icon, color, subtitle }) {
   return (
     <LinearGradient
-      colors={[color, color + 'CC']}
+      colors={[color, color]}
       start={{ x: 0, y: 0 }}
       end={{ x: 1, y: 1 }}
-      style={styles.statCard}
+      style={[styles.statCard, { backgroundColor: color }]}
     >
       <View style={styles.statIcon}>
         <Ionicons name={icon} size={24} color="#fff" />
@@ -469,7 +470,7 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.12,
     shadowRadius: 12,
-    elevation: 6,
+    elevation: Platform.OS === 'android' ? 0 : 6,
     overflow: 'hidden',
     backgroundColor: '#06B6D4',
   },
@@ -599,8 +600,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   statValue: { fontSize: 28, fontWeight: 'bold', color: '#fff' },
-  statTitle: { fontSize: 12, color: '#fff', opacity: 0.95 },
-  statSubtitle: { fontSize: 10, color: '#fff', opacity: 0.8, marginTop: 2 },
+  statTitle: { fontSize: 12, color: '#fff' },
+  statSubtitle: { fontSize: 10, color: '#fff', marginTop: 2 },
   quickActions: {
     flexDirection: 'row',
     justifyContent: 'space-around',

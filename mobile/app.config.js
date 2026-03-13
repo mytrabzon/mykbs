@@ -29,6 +29,7 @@ export default {
     scheme: "kbsprime",
     version: "1.0.6",
     orientation: "default",
+    // Uygulama ikonu: 1024x1024 px kare PNG olmalı (Android'de dikdörtgen ikon görünmeyebilir). Detay: docs/APP_ICON_ANDROID.md
     icon: "./assets/icon.png",
     userInterfaceStyle: "light",
     splash: {

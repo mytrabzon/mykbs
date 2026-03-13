@@ -24,7 +24,7 @@ import { supabase } from '../lib/supabase/supabase';
 import { dataService } from '../services/dataService';
 import { backendHealth } from '../services/backendHealth';
 import { getApiBaseUrl, isSupabaseConfigured } from '../config/api';
-import { getTtsEnabled, setTtsEnabled, getHapticEnabled, setHapticEnabled, loadFeedbackSettings } from '../utils/feedback';
+import { getTtsEnabled, setTtsEnabled, getHapticEnabled, setHapticEnabled, getMrzVoiceEnabled, setMrzVoiceEnabled, loadFeedbackSettings } from '../utils/feedback';
 import { useLanguage } from '../context/LanguageContext';
 import { exportGuestsToExcel } from '../utils/exportExcel';
 import { createBackup } from '../utils/backup';
@@ -76,6 +76,7 @@ export default function AyarlarScreen() {
   const [kbsServerIp, setKbsServerIp] = useState(null);
   const [ttsEnabled, setTtsEnabledState] = useState(true);
   const [hapticEnabled, setHapticEnabledState] = useState(true);
+  const [mrzVoiceEnabled, setMrzVoiceEnabledState] = useState(true);
   const [exportLoading, setExportLoading] = useState(false);
   const [backupLoading, setBackupLoading] = useState(false);
   const { language, setLanguage, t, languageLabels } = useLanguage();
@@ -114,6 +115,7 @@ export default function AyarlarScreen() {
     loadFeedbackSettings().then(() => {
       setTtsEnabledState(getTtsEnabled());
       setHapticEnabledState(getHapticEnabled());
+      setMrzVoiceEnabledState(getMrzVoiceEnabled());
     });
   }, []);
 
@@ -704,6 +706,18 @@ export default function AyarlarScreen() {
               thumbColor={ttsEnabled ? colors.primary : colors.textSecondary}
             />
           </View>
+          <View style={[styles.switchRow, { borderColor: colors.border }]}>
+            <Text style={[styles.label, { color: colors.textPrimary }]}>MRZ sesli yönlendirme</Text>
+            <Switch
+              value={mrzVoiceEnabled}
+              onValueChange={(v) => { setMrzVoiceEnabled(v); setMrzVoiceEnabledState(v); }}
+              trackColor={{ false: colors.border, true: colors.primarySoft }}
+              thumbColor={mrzVoiceEnabled ? colors.primary : colors.textSecondary}
+            />
+          </View>
+          <Text style={[styles.sectionDesc, { color: colors.textSecondary, marginTop: -8, marginBottom: 8 }]}>
+            Çekim esnasında kısa sesli uyarılar: kimlik/pasaport, yaklaştırın, flaş, okundu.
+          </Text>
           <View style={[styles.menuRow, styles.menuRowNoBorder]}>
             <Text style={[styles.label, { color: colors.textPrimary }]}>{t('settings.language')}</Text>
             <View style={styles.langChipRow}>
