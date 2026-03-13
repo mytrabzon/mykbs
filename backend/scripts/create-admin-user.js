@@ -1,6 +1,7 @@
 /**
  * Admin panel için özel e-posta + şifre hesabı oluşturur.
- * Kullanım: cd backend && node scripts/create-admin-user.js
+ * Kullanım: ADMIN_SEED_PASSWORD=YourSecurePass node scripts/create-admin-user.js
+ * (veya ADMIN_EMAIL, ADMIN_NAME ile özelleştirin)
  *
  * Oluşan kullanıcı id'sini backend .env dosyasına ADMIN_KULLANICI_ID=... olarak ekleyin.
  */
@@ -10,12 +11,17 @@ const bcrypt = require('bcryptjs');
 
 const prisma = new PrismaClient();
 
-const ADMIN_EMAIL = 'admin@kbsprime.local';
-const ADMIN_PASSWORD = 'KbsAdmin2025!';
-const ADMIN_NAME = 'KBS Admin';
+// Ortam değişkenlerinden al; production'da asla hardcode kullanmayın.
+const ADMIN_EMAIL = (process.env.ADMIN_SEED_EMAIL || process.env.ADMIN_EMAIL || 'admin@kbsprime.local').trim().toLowerCase();
+const ADMIN_NAME = (process.env.ADMIN_SEED_NAME || process.env.ADMIN_NAME || 'KBS Admin').trim();
+const plainPassword = process.env.ADMIN_SEED_PASSWORD || process.env.ADMIN_PASSWORD;
 
 async function main() {
-  const emailNorm = ADMIN_EMAIL.trim().toLowerCase();
+  if (!plainPassword || plainPassword.length < 6) {
+    console.error('ADMIN_SEED_PASSWORD veya ADMIN_PASSWORD ortam değişkeni gerekli (en az 6 karakter). Örnek: ADMIN_SEED_PASSWORD=YourSecurePass node scripts/create-admin-user.js');
+    process.exit(1);
+  }
+  const emailNorm = ADMIN_EMAIL;
 
   let tesis = await prisma.tesis.findFirst({ where: { tesisKodu: 'MYKBS-ADMIN' } });
   if (!tesis) {
@@ -46,7 +52,7 @@ async function main() {
     include: { tesis: true },
   });
 
-  const hashedSifre = await bcrypt.hash(ADMIN_PASSWORD, 10);
+  const hashedSifre = await bcrypt.hash(plainPassword, 10);
 
   if (kullanici) {
     await prisma.kullanici.update({
@@ -75,8 +81,8 @@ async function main() {
   console.log('\n========================================');
   console.log('ADMIN PANEL GİRİŞ BİLGİLERİ');
   console.log('========================================');
-  console.log('E-posta:', ADMIN_EMAIL);
-  console.log('Şifre:  ', ADMIN_PASSWORD);
+  console.log('E-posta:', emailNorm);
+  console.log('Şifre:   (env ile verdiğiniz değer)');
   console.log('========================================');
   console.log('\nBackend .env dosyasına ekleyin (admin yetkisi için):');
   console.log('ADMIN_KULLANICI_ID=' + kullanici.id);

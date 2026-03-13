@@ -489,7 +489,7 @@ function MainTabs() {
       <Tab.Screen
         name="MRZ"
         component={MrzScanScreen}
-        initialParams={{ passportOnly: true, setIsScreenFocused: () => {} }}
+        initialParams={{ passportOnly: true }}
         options={{ tabBarLabel: t('tabs.idPassport'), tabBarActiveTintColor: colors.primary }}
       />
       <Tab.Screen name="Raporlar" component={RaporlarScreen} options={{ tabBarLabel: t('tabs.reports') }} />

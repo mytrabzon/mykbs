@@ -13,6 +13,8 @@ import {
   Platform,
 } from 'react-native';
 import { useTheme } from '../context/ThemeContext';
+import { useAuth } from '../context/AuthContext';
+import { dataService } from '../services/dataService';
 import { Ionicons } from '@expo/vector-icons';
 import {
   PAYWALL_PACKAGES,
@@ -35,6 +37,7 @@ const CARD_WIDTH = (CONTENT_WIDTH - CARD_GAP) / 2;
  */
 export default function PaywallModal({ visible, onClose, reason = 'no_credits' }) {
   const { colors, isDark } = useTheme();
+  const { refreshMe } = useAuth();
   const [loading, setLoading] = useState(false);
   const [loadingPackageId, setLoadingPackageId] = useState(null);
   const [success, setSuccess] = useState(null);
@@ -108,15 +111,20 @@ export default function PaywallModal({ visible, onClose, reason = 'no_credits' }
           return;
         }
         const { data } = await api.post('/siparis/iap-verify', body);
+        const ozet = data?.ozet || {};
+        const kalanKredi = ozet.kalanKredi ?? (ozet.toplamKota != null ? Math.max(0, (ozet.toplamKota ?? 0) - (ozet.kullanilanKredi ?? 0)) : null);
         setSuccess({
           iap: true,
           siparisNo: data.siparisNo,
           kredi: data.kredi,
-          kalanKredi: data.ozet?.kalanKredi,
+          kalanKredi,
         });
         try {
           await RNIap.finishTransaction?.({ purchase }, true);
         } catch (_) {}
+        // Kontur hesaba tanımlandı; header ve tüm ekranlarda güncel kota görünsün diye tesis verisini yenile.
+        refreshMe?.().catch(() => {});
+        dataService.getTesis?.(true).catch(() => {});
       } catch (err) {
         Alert.alert('Doğrulama hatası', getApiErrorMessage(err));
       } finally {
@@ -152,8 +160,25 @@ export default function PaywallModal({ visible, onClose, reason = 'no_credits' }
         try {
           await RNIap.initConnection?.();
           connected = true;
-        } catch (_) {}
+        } catch (connErr) {
+          const msg = connErr?.message || String(connErr);
+          throw new Error(`Mağaza bağlantısı kurulamadı. (${msg})`);
+        }
         if (!connected) throw new Error('Mağaza bağlantısı kurulamadı.');
+
+        // Apple/Google'da ödeme ekranının çıkması için ürünün önce getProducts ile yüklenmesi gerekir.
+        if (RNIap.getProducts) {
+          const products = await RNIap.getProducts({ skus: [productId] });
+          const found = Array.isArray(products) && products.some((p) => (p?.productId || p?.productIdentifier) === productId);
+          if (!found) {
+            throw new Error(
+              platform === 'ios'
+                ? 'Bu ürün App Store\'da bulunamadı. App Store Connect\'te In-App Purchase ürünlerini oluşturup "Ready to Submit" yaptığınızdan ve uygulamayı gerçek cihazda (TestFlight veya yayın) test ettiğinizden emin olun. Simülatörde IAP çalışmaz.'
+                : 'Bu ürün mağazada bulunamadı. Google Play Console\'da in-app ürünleri oluşturup aktif ettiğinizden emin olun.'
+            );
+          }
+        }
+
         pendingIapRef.current = { pkg };
         await RNIap.requestPurchase({ sku: productId });
         return;
