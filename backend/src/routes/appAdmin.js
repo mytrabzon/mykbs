@@ -3,6 +3,7 @@ const jwt = require('jsonwebtoken');
 const { prisma } = require('../lib/prisma');
 const { supabaseAdmin } = require('../lib/supabaseAdmin');
 const { encrypt } = require('../utils/kbsEncrypt');
+const emailService = require('../services/email');
 
 const router = express.Router();
 
@@ -1038,6 +1039,99 @@ router.get('/kullanicilar/:id/activity', async (req, res) => {
   } catch (err) {
     console.error('[appAdmin] kullanici activity', err);
     res.status(500).json({ message: 'Aktivite alınamadı', error: err.message });
+  }
+});
+
+/**
+ * POST /app-admin/kontor/yukle — Kullanıcıya kontör yükle (admin panel).
+ * Body: { miktar: number, aciklama?: string }
+ */
+router.post('/kontor/yukle/:kullaniciId', express.json(), async (req, res) => {
+  try {
+    const { kullaniciId } = req.params;
+    const { miktar, aciklama } = req.body || {};
+    const adminId = req.adminUserId || req.user?.id || null;
+
+    const parsedMiktar = parseInt(miktar, 10);
+    if (!Number.isFinite(parsedMiktar) || parsedMiktar <= 0) {
+      return res.status(400).json({ message: 'Miktar pozitif bir sayı olmalı' });
+    }
+
+    const result = await prisma.$transaction(async (tx) => {
+      const kullanici = await tx.kullanici.update({
+        where: { id: kullaniciId },
+        data: {
+          kontor: { increment: parsedMiktar },
+        },
+      });
+
+      const islem = await tx.kontorIslem.create({
+        data: {
+          kullaniciId,
+          miktar: parsedMiktar,
+          islemTipi: 'yukleme',
+          adminId: adminId || null,
+          aciklama: aciklama && String(aciklama).trim() ? String(aciklama).trim().slice(0, 500) : 'Admin panelden yükleme',
+        },
+      });
+
+      return { kullanici, islem };
+    });
+
+    // Push + email bildirimleri (Supabase push token üzerinden)
+    if (supabaseAdmin) {
+      try {
+        // Varsayım: Kontör, Supabase user ile de ilişkilendirilecekse burada user mapping eklenebilir.
+        // Şimdilik sadece email bildirimi gönderiyoruz (varsa).
+      } catch (e) {
+        console.warn('[appAdmin] kontor yukle push', e?.message || e);
+      }
+    }
+
+    if (result.kullanici.email) {
+      try {
+        const subject = 'KBS Prime - Kontör Yükleme Bildirimi';
+        const html = `
+          <h2>Kontör Yüklendi</h2>
+          <p>Hesabınıza <strong>${parsedMiktar}</strong> kontör eklenmiştir.</p>
+          <p>Güncel kontör bakiyeniz: <strong>${result.kullanici.kontor}</strong></p>
+          ${aciklama ? `<p>Açıklama: ${String(aciklama).trim()}</p>` : ''}
+        `;
+        await emailService.sendEmail(result.kullanici.email, subject, html);
+      } catch (e) {
+        console.warn('[appAdmin] kontor yukle email', e?.message || e);
+      }
+    }
+
+    return res.json({
+      message: `${parsedMiktar} kontör başarıyla yüklendi`,
+      yeniBakiye: result.kullanici.kontor,
+    });
+  } catch (err) {
+    console.error('[appAdmin] kontor yukle', err);
+    return res.status(500).json({ message: 'Kontör yüklenemedi', error: err.message });
+  }
+});
+
+/**
+ * GET /app-admin/kontor/islemler/:kullaniciId — Kullanıcının son 50 kontör işlemi.
+ */
+router.get('/kontor/islemler/:kullaniciId', async (req, res) => {
+  try {
+    const { kullaniciId } = req.params;
+    const islemler = await prisma.kontorIslem.findMany({
+      where: { kullaniciId },
+      orderBy: { createdAt: 'desc' },
+      take: 50,
+      include: {
+        kullanici: { select: { adSoyad: true } },
+        admin: { select: { adSoyad: true } },
+      },
+    });
+    res.json({ islemler });
+  } catch (err) {
+    console.error('[appAdmin] kontor islemler', err);
+    res.status(500).json({ message: 'İşlemler alınamadı', error: err.message });
   }
 });
 

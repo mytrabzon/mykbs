@@ -11,6 +11,7 @@ interface Kullanici {
   adSoyad: string
   telefon: string
   email: string | null
+  kontor?: number
   rol: string
   biyometriAktif: boolean
   checkInYetki: boolean
@@ -79,6 +80,7 @@ export default function TesisKullanicilarPage() {
                 <th>Ad Soyad</th>
                 <th>Telefon</th>
                 <th>E-posta</th>
+                <th>Kontör</th>
                 <th>Rol</th>
                 <th>Check-in</th>
                 <th>Oda değişim</th>
@@ -97,6 +99,7 @@ export default function TesisKullanicilarPage() {
                   <td className="kbs-table-cell-link">{k.adSoyad}</td>
                   <td>{k.telefon}</td>
                   <td>{k.email || '—'}</td>
+                  <td>{k.kontor ?? 0}</td>
                   <td>{k.rol}</td>
                   <td>{k.checkInYetki ? 'Evet' : 'Hayır'}</td>
                   <td>{k.odaDegistirmeYetki ? 'Evet' : 'Hayır'}</td>

@@ -71,3 +71,38 @@ WHERE NOT EXISTS (SELECT 1 FROM "_prisma_migrations" WHERE migration_name = '202
 INSERT INTO "_prisma_migrations" (id, checksum, finished_at, migration_name, logs, rolled_back_at, started_at, applied_steps_count)
 SELECT gen_random_uuid()::text, '460446d2d75285d46e25e2a807a27b4c0855f3cd54a08d23e6b76d298786d42d', now(), '20260227150000_siparis_tablosu', NULL, NULL, now(), 1
 WHERE NOT EXISTS (SELECT 1 FROM "_prisma_migrations" WHERE migration_name = '20260227150000_siparis_tablosu');
+
+-- 5) Kullanici kontor alanı ve KontorIslem tablosu
+ALTER TABLE "Kullanici" ADD COLUMN IF NOT EXISTS "kontor" INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE "Kullanici" ADD COLUMN IF NOT EXISTS "bildirimTercihi" BOOLEAN NOT NULL DEFAULT true;
+
+CREATE TABLE IF NOT EXISTS "KontorIslem" (
+    "id" TEXT NOT NULL,
+    "kullaniciId" TEXT NOT NULL,
+    "miktar" INTEGER NOT NULL,
+    "islemTipi" TEXT NOT NULL,
+    "adminId" TEXT,
+    "aciklama" TEXT,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT "KontorIslem_pkey" PRIMARY KEY ("id")
+);
+
+CREATE INDEX IF NOT EXISTS "KontorIslem_kullaniciId_idx" ON "KontorIslem"("kullaniciId");
+CREATE INDEX IF NOT EXISTS "KontorIslem_adminId_idx" ON "KontorIslem"("adminId");
+
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint WHERE conname = 'KontorIslem_kullaniciId_fkey'
+    ) THEN
+        ALTER TABLE "KontorIslem" ADD CONSTRAINT "KontorIslem_kullaniciId_fkey"
+            FOREIGN KEY ("kullaniciId") REFERENCES "Kullanici"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+    END IF;
+
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint WHERE conname = 'KontorIslem_adminId_fkey'
+    ) THEN
+        ALTER TABLE "KontorIslem" ADD CONSTRAINT "KontorIslem_adminId_fkey"
+            FOREIGN KEY ("adminId") REFERENCES "Kullanici"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+    END IF;
+END $$;

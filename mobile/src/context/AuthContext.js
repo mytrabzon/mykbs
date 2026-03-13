@@ -79,7 +79,7 @@ async function fetchMeAndSetState(accessToken, setUser, setTesis, setToken, getT
     const res = await api.get('/auth/me', { timeout: 10000 });
     const { kullanici, tesis: tesisData, privacyPolicyAcceptedAt, termsOfServiceAcceptedAt, accountPendingDeletion, deletionAt } = res.data || {};
     if (kullanici) {
-      const userWithAdmin = { ...kullanici, isAdmin: getIsAdminPanelUser(kullanici) };
+      const userWithAdmin = { ...kullanici, isAdmin: getIsAdminPanelUser(kullanici), kontor: kullanici.kontor ?? 0 };
       setUser(userWithAdmin);
       await AsyncStorage.setItem(AUTH_STORAGE_KEYS.USER, JSON.stringify(userWithAdmin));
     }
@@ -263,15 +263,15 @@ export const AuthProvider = ({ children }) => {
     setAuthError(null);
     setApiTokenProvider(null);
     setDataServiceTokenProvider(null);
-    // Storage ve cache arka planda temizlensin (çıkışı yavaşlatmasın)
-    Promise.all([
+    // Storage ve cache tam temizlensin; başka hesap bilgisi kalmasın
+    await Promise.all([
       AsyncStorage.removeItem(AUTH_STORAGE_KEYS.TOKEN),
       AsyncStorage.removeItem(AUTH_STORAGE_KEYS.USER),
       AsyncStorage.removeItem(AUTH_STORAGE_KEYS.TESIS),
       AsyncStorage.removeItem(AUTH_STORAGE_KEYS.SUPABASE_TOKEN),
       AsyncStorage.removeItem(AUTH_STORAGE_KEYS.LAST_TAB),
     ]).catch(() => {});
-    dataService.clearCache().catch((e) => logger.error('Cache clear on logout error', e));
+    await dataService.clearCache().catch((e) => logger.error('Cache clear on logout error', e));
   };
 
   useEffect(() => {
@@ -441,7 +441,8 @@ export const AuthProvider = ({ children }) => {
     return () => subscription?.remove?.();
   }, []);
 
-  // Önce canlı Supabase oturumunu kullan; süresi dolmuş veya 5 dk içinde dolacaksa önce refresh et (Edge 401 önlemi).
+  // Edge Function'lar (bildirimler vb.) sadece Supabase Auth JWT kabul eder; backend JWT ile 401 döner.
+  // Bu yüzden sadece canlı Supabase oturumundan token dön; AsyncStorage fallback yok (başka hesabın veya backend JWT'si gitmesin).
   const getSupabaseToken = async () => {
     if (supabase?.auth) {
       const { data: { session } } = await supabase.auth.getSession();
@@ -456,7 +457,7 @@ export const AuthProvider = ({ children }) => {
         return session.access_token;
       }
     }
-    return await AsyncStorage.getItem(AUTH_STORAGE_KEYS.SUPABASE_TOKEN);
+    return null;
   };
 
   const refreshMe = useCallback(async () => {
@@ -516,8 +517,8 @@ export const AuthProvider = ({ children }) => {
       const getToken = async () => tokenForApi;
       setApiTokenProvider(getToken);
       setDataServiceTokenProvider(getToken);
-      if (kullanici) {
-        const userWithAdmin = { ...kullanici, isAdmin: getIsAdminPanelUser(kullanici) };
+    if (kullanici) {
+        const userWithAdmin = { ...kullanici, isAdmin: getIsAdminPanelUser(kullanici), kontor: kullanici.kontor ?? 0 };
         setUser(userWithAdmin);
         await AsyncStorage.setItem(AUTH_STORAGE_KEYS.USER, JSON.stringify(userWithAdmin));
       }

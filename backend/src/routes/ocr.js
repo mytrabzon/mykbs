@@ -390,7 +390,7 @@ async function runMrzPipeline(filePath, opts = {}) {
   const docTypeHint = opts.docTypeHint === 'id' ? 'id' : undefined;
   const preprocessVariants = paperMode
     ? [
-        ...(docTypeHint === 'id' ? [{ fn: preprocessForTurkishIdMrz, name: 'turkishId' }] : []),
+        ...(docTypeHint === 'id' || docTypeHint === undefined ? [{ fn: preprocessForTurkishIdMrz, name: 'turkishId' }] : []),
         { fn: preprocessForPhotocopyA4, name: 'photocopyA4' },
         { fn: preprocessForPhotocopyA4Invert, name: 'photocopyA4Invert' },
         { fn: preprocessForPhotocopyA4Strong, name: 'photocopyA4Strong' },
@@ -774,13 +774,13 @@ router.post('/document-base64', authenticateTesisOrSupabase, tenantMiddleware, e
       try {
         mrzList = await extractMultipleMRZ(buf);
         if (mrzList.length > 0) {
-          // Tek pasaport odaklı: docTypeHint id değilse sadece 2 satır (TD3 pasaport) kullan; id ise 3 satır (TD1).
+          // Hint yoksa hem 2 satır (pasaport) hem 3 satır (kimlik) aday; en yüksek güvenilirlik seçilir. Hint varsa o tipe öncelik.
           const lineCountFor = (text) => (text || '').trim().split('\n').filter(Boolean).length;
           let candidates = mrzList;
           if (requestDocTypeHint === 'id') {
             const td1Only = mrzList.filter((m) => lineCountFor(m.text) >= 3);
             if (td1Only.length > 0) candidates = td1Only;
-          } else {
+          } else if (requestDocTypeHint === 'passport') {
             const td3Only = mrzList.filter((m) => lineCountFor(m.text) === 2);
             if (td3Only.length > 0) candidates = td3Only;
           }

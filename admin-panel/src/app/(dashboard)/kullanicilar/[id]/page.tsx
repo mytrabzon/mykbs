@@ -19,6 +19,7 @@ interface Kullanici {
   telefon: string
   email: string | null
   rol: string
+  kontor?: number
   biyometriAktif: boolean
   checkInYetki: boolean
   odaDegistirmeYetki: boolean
@@ -58,6 +59,11 @@ export default function KullaniciDuzenlePage() {
   const [activityLoading, setActivityLoading] = useState(false)
   const [deleting, setDeleting] = useState(false)
   const [banning, setBanning] = useState(false)
+  const [kontorLoading, setKontorLoading] = useState(false)
+  const [kontorMiktar, setKontorMiktar] = useState(100)
+  const [kontorAciklama, setKontorAciklama] = useState('')
+  const [kontorIslemler, setKontorIslemler] = useState<Array<{ id: string; miktar: number; islemTipi: string; admin?: { adSoyad: string | null } | null; createdAt: string; aciklama: string | null }>>([])
+  const [kontorHistoryOpen, setKontorHistoryOpen] = useState(false)
   const [form, setForm] = useState({
     adSoyad: '',
     telefon: '',
@@ -187,6 +193,44 @@ export default function KullaniciDuzenlePage() {
     }
   }
 
+  const loadKontorHistory = async () => {
+    if (!id) return
+    setKontorLoading(true)
+    try {
+      const res = await api.get<{ islemler: typeof kontorIslemler }>(`/app-admin/kontor/islemler/${id}`)
+      setKontorIslemler(res.data.islemler || [])
+      setKontorHistoryOpen(true)
+    } catch (e) {
+      toast.error('Kontör geçmişi yüklenemedi')
+    } finally {
+      setKontorLoading(false)
+    }
+  }
+
+  const handleKontorYukle = async () => {
+    if (!id) return
+    if (!kontorMiktar || kontorMiktar <= 0) {
+      toast.error('Miktar pozitif olmalı')
+      return
+    }
+    setKontorLoading(true)
+    try {
+      const res = await api.post<{ yeniBakiye: number; message: string }>(`/app-admin/kontor/yukle/${id}`, {
+        miktar: kontorMiktar,
+        aciklama: kontorAciklama,
+      })
+      toast.success(res.data?.message || 'Kontör yüklendi')
+      setKontorAciklama('')
+      await load()
+      await loadKontorHistory()
+    } catch (err: unknown) {
+      const e = err as { response?: { data?: { message?: string } } }
+      toast.error(e.response?.data?.message || 'Kontör yüklenemedi')
+    } finally {
+      setKontorLoading(false)
+    }
+  }
+
   const handleDeleteKullanici = async () => {
     if (!id || !k) return
     if (!confirm(`"${k.adSoyad}" kullanıcısını tesis listesinden kalıcı olarak kaldırmak istediğinize emin misiniz? Bu işlem geri alınamaz.`)) return
@@ -276,6 +320,8 @@ export default function KullaniciDuzenlePage() {
           <dd className="admin-tesis-info-dd">{k.title || '—'}</dd>
           <dt className="admin-tesis-info-dt">Rol</dt>
           <dd className="admin-tesis-info-dd">{k.rol}</dd>
+          <dt className="admin-tesis-info-dt">Kontör</dt>
+          <dd className="admin-tesis-info-dd"><strong>{k.kontor ?? 0}</strong></dd>
           <dt className="admin-tesis-info-dt">Otel / Tesis adı</dt>
           <dd className="admin-tesis-info-dd">
             {k.tesisId ? <Link href={`/tesisler/${k.tesisId}`} className="kbs-link-accent">{k.tesis?.tesisAdi || k.tesisId}</Link> : '—'}
@@ -311,6 +357,84 @@ export default function KullaniciDuzenlePage() {
           <dt className="admin-tesis-info-dt">Giriş talebi (son)</dt>
           <dd className="admin-tesis-info-dd">{k.girisTalepAt ? new Date(k.girisTalepAt).toLocaleString('tr-TR') : '—'}</dd>
         </dl>
+        <div className="kbs-card" style={{ marginTop: '1rem' }}>
+          <h3 className="kbs-card-title">Kontör yönetimi</h3>
+          <p className="kbs-page-sub">Bu kullanıcı için kontör yükleyebilir ve son işlemleri görebilirsiniz.</p>
+          <div className="kbs-form-grid">
+            <label className="kbs-field-label">
+              Yüklenecek miktar
+              <input
+                type="number"
+                className="kbs-input"
+                value={kontorMiktar}
+                min={1}
+                onChange={(e) => setKontorMiktar(parseInt(e.target.value || '0', 10))}
+              />
+            </label>
+            <label className="kbs-field-label">
+              Açıklama (opsiyonel)
+              <input
+                type="text"
+                className="kbs-input"
+                value={kontorAciklama}
+                onChange={(e) => setKontorAciklama(e.target.value)}
+                placeholder="Örn: Kampanya yüklemesi"
+              />
+            </label>
+          </div>
+          <div style={{ display: 'flex', gap: '0.75rem', marginTop: '0.75rem', flexWrap: 'wrap' }}>
+            <button
+              type="button"
+              className="kbs-btn-primary"
+              onClick={handleKontorYukle}
+              disabled={kontorLoading}
+            >
+              {kontorLoading ? 'Yükleniyor...' : 'Kontör Yükle'}
+            </button>
+            <button
+              type="button"
+              className="admin-btn secondary"
+              onClick={loadKontorHistory}
+              disabled={kontorLoading}
+            >
+              Kontör geçmişini göster
+            </button>
+          </div>
+          {kontorHistoryOpen && (
+            <div style={{ marginTop: '1rem' }}>
+              <h4 className="kbs-card-title" style={{ marginBottom: '0.5rem' }}>Son kontör işlemleri</h4>
+              <div className="kbs-table-wrap">
+                <table className="kbs-table">
+                  <thead>
+                    <tr>
+                      <th>Tarih</th>
+                      <th>İşlem</th>
+                      <th>Miktar</th>
+                      <th>Admin</th>
+                      <th>Açıklama</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {kontorIslemler.length === 0 && (
+                      <tr>
+                        <td colSpan={5}>Kayıt yok.</td>
+                      </tr>
+                    )}
+                    {kontorIslemler.map((i) => (
+                      <tr key={i.id}>
+                        <td>{new Date(i.createdAt).toLocaleString('tr-TR')}</td>
+                        <td>{i.islemTipi === 'yukleme' ? 'Yükleme' : i.islemTipi}</td>
+                        <td>{i.miktar}</td>
+                        <td>{i.admin?.adSoyad || '—'}</td>
+                        <td>{i.aciklama || '—'}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+        </div>
         <div className="kbs-card" style={{ marginTop: '1rem' }}>
           <h3 className="kbs-card-title">Aktivite &amp; hata logu</h3>
           <p className="kbs-page-sub">Bu kullanıcının yaptığı işlemler (başarılı/başarısız) ve tesise ait hatalar.</p>

@@ -1642,8 +1642,8 @@ export default function MrzScanScreen({ navigation }) {
           return prev; // UI'de de değişmesin
         }
         try {
-          // iOS tarafında BOOL bekleniyor; her iki platformda da boolean kullan.
-          TorchModule.switchState(next);
+          // iOS bridge BOOL'u desteklemiyor; sayı 0/1 gönder (native NSNumber→BOOL).
+          TorchModule.switchState(Platform.OS === 'ios' ? (next ? 1 : 0) : next);
         } catch (e) {
           logger.debug('Torch switchState error', e?.message);
           Toast.show({
