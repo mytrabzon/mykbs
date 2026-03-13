@@ -17,8 +17,8 @@
    - İzin **varsa**: `permissionGrantedLocal` / `permission.granted` true, `setUnifiedCameraMountReady(true)` çağrılır (focus’ta ve/veya 400 ms sonra).
 
 3. **Kamera bileşeninin gösterilmesi**  
-   - `showCameraView = unifiedCameraMountReady`.  
-   - `true` ise `<CameraView>` render edilir; `false` ise “Kamera hazırlanıyor…” placeholder’ı gösterilir.
+   - `showCameraView = unifiedCameraMountReady && unifiedWrapLaidOut`.  
+   - true ise CameraView render edilir; false ise Kamera hazırlanıyor placeholder gösterilir. `showCameraView` true olduğunda “Kamera hazırlanıyor…” gösterilir.
 
 4. **Layout**  
    - `unifiedCameraWrap` için `onLayout` tetiklenir.  

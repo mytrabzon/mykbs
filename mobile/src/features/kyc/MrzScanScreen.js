@@ -239,6 +239,9 @@ export default function MrzScanScreen({ navigation }) {
   const [unifiedCameraMountReady, setUnifiedCameraMountReady] = useState(false);
   /** Siyah ekran önlemi: CameraView sadece container geçerli boyutta layout aldıktan sonra gösterilir. */
   const [unifiedWrapLaidOut, setUnifiedWrapLaidOut] = useState(false);
+  /** Eski 300ms gecikme kaldırıldı; referans hatalarını önlemek için tanımlı bırakıldı (her zaman true = gecikme yok). */
+  const [unifiedCameraViewAllowRender] = useState(true);
+  const unifiedCameraViewDelayRef = useRef(null);
   const unifiedMountDelayRef = useRef(null);
   const focusUnifiedWrapTimerRef = useRef(null);
 
@@ -354,6 +357,31 @@ export default function MrzScanScreen({ navigation }) {
     return () => { cancelled = true; };
   }, []);
 
+  // İzin ekranı gösterilirken sistem iznini tekrar kontrol et (expo-camera hook bazen gecikmeli/yanlış döner; izin verilmiş olsa bile "verilmedi" gösterebilir)
+  useEffect(() => {
+    if (permission?.granted || permissionGrantedLocal) return;
+    let cancelled = false;
+    const syncWithSystem = () => {
+      ImagePicker.getCameraPermissionsAsync()
+        .then(({ status }) => {
+          if (cancelled || !mounted.current) return;
+          if (status === 'granted') {
+            logger.info('[MRZ-KAMERA] İzin ekranındayken sistem izni granted bulundu → senkronize ediliyor');
+            setPermissionGrantedLocal(true);
+            setMrzCameraMountReady(true);
+            setUnifiedCameraMountReady(true);
+          }
+        })
+        .catch((e) => logger.warn('[MRZ-KAMERA] İzin senkron kontrolü hata', e?.message));
+    };
+    syncWithSystem();
+    const t = setTimeout(syncWithSystem, 800);
+    return () => {
+      cancelled = true;
+      clearTimeout(t);
+    };
+  }, [permission?.granted, permissionGrantedLocal]);
+
   // İzin verilir verilmez kamera mount — gecikme yok (tıklar tıklamaz açılsın)
   const [mrzCameraMountReady, setMrzCameraMountReady] = useState(false);
   const [cameraPreviewReady, setCameraPreviewReady] = useState(false);
@@ -361,14 +389,15 @@ export default function MrzScanScreen({ navigation }) {
   const cameraReadyTimeoutRef = useRef(null);
 
   useEffect(() => {
-    if (!permission?.granted) {
+    const hasPerm = permission?.granted || permissionGrantedLocal;
+    if (hasPerm) {
+      setPermissionGrantedLocal(true);
+      setMrzCameraMountReady(true);
+    } else {
       setMrzCameraMountReady(false);
       setCameraPreviewReady(false);
-      return;
     }
-    setPermissionGrantedLocal(true);
-    setMrzCameraMountReady(true);
-  }, [permission?.granted]);
+  }, [permission?.granted, permissionGrantedLocal]);
 
   useFocusEffect(
     useCallback(() => {
@@ -422,7 +451,7 @@ export default function MrzScanScreen({ navigation }) {
       setUnifiedCameraError(false);
       setUnifiedWrapLaidOut(false);
       setTorchOn(false);
-      if (permission?.granted) {
+      if (permission?.granted || permissionGrantedLocal) {
         setMrzCameraMountReady(true);
         setCameraLayoutReady(true);
         // iOS: CameraView layout'tan sonra mount. Android: kısa gecikme ile mount (kamera başlatma sorununu azaltır).
@@ -457,6 +486,10 @@ export default function MrzScanScreen({ navigation }) {
         if (focusUnifiedWrapTimerRef.current) {
           clearTimeout(focusUnifiedWrapTimerRef.current);
           focusUnifiedWrapTimerRef.current = null;
+        }
+        if (unifiedCameraViewDelayRef.current) {
+          clearTimeout(unifiedCameraViewDelayRef.current);
+          unifiedCameraViewDelayRef.current = null;
         }
         hasLeftScreenRef.current = true;
         setMrzCameraMountReady(false);
@@ -520,7 +553,8 @@ export default function MrzScanScreen({ navigation }) {
 
   /** Tek kamera otomatik tarama: belge MRZ veya ön yüz göründüğünde backend hem MRZ hem OCR yapar. Ref kontrolü + hata toast. Sadece ekran odaktayken çalışır (siyah ekranda ref null olur). */
   useEffect(() => {
-    if (!useUnifiedMrzFlow || !permission?.granted || !unifiedCameraReady || !isScreenFocused) return;
+    const hasPerm = permission?.granted || permissionGrantedLocal;
+    if (!useUnifiedMrzFlow || !hasPerm || !unifiedCameraReady || !isScreenFocused) return;
     const runCapture = async () => {
       if (hasAcceptedForUnifiedRef.current || ocrLoading) return;
       const cam = unifiedCameraRef.current;
@@ -762,7 +796,7 @@ export default function MrzScanScreen({ navigation }) {
       clearInterval(id);
       clearTimeout(initialDelay);
     };
-  }, [useUnifiedMrzFlow, permission?.granted, unifiedCameraReady, isScreenFocused, ocrLoading, processMrzRaw, processNewMrz]);
+  }, [useUnifiedMrzFlow, permission?.granted, permissionGrantedLocal, unifiedCameraReady, isScreenFocused, ocrLoading, processMrzRaw, processNewMrz]);
 
   const handleMRZRead = useCallback(
     (data) => {
@@ -1516,7 +1550,8 @@ export default function MrzScanScreen({ navigation }) {
 
   // iOS: Layout geç gelirse 500ms sonra CameraView mount et (fallback)
   useEffect(() => {
-    if (Platform.OS !== 'ios' || !permission?.granted) return;
+    const hasPerm = permission?.granted || permissionGrantedLocal;
+    if (Platform.OS !== 'ios' || !hasPerm) return;
     const t = setTimeout(() => {
       if (mounted.current) {
         setCameraLayoutReady(true);
@@ -1527,7 +1562,7 @@ export default function MrzScanScreen({ navigation }) {
       }
     }, 500);
     return () => clearTimeout(t);
-  }, [permission?.granted, Platform.OS]);
+  }, [permission?.granted, permissionGrantedLocal, Platform.OS]);
 
   // Unified kamera: izin varsa hemen mount et (gecikme yok – kamera açılsın).
   useEffect(() => {
@@ -1606,7 +1641,8 @@ export default function MrzScanScreen({ navigation }) {
 
   // Native kamera: onCameraReady gelmezse bile ekran değiştirme; kamera açık kalır.
   useEffect(() => {
-    if (useUnifiedMrzFlow || (Platform.OS === 'android' && !USE_UNIFIED_AUTO_SCAN) || !mrzCameraMountReady || !permission?.granted || cameraPreviewReady) return;
+    const hasPerm = permission?.granted || permissionGrantedLocal;
+    if (useUnifiedMrzFlow || (Platform.OS === 'android' && !USE_UNIFIED_AUTO_SCAN) || !mrzCameraMountReady || !hasPerm || cameraPreviewReady) return;
     cameraReadyTimeoutRef.current = setTimeout(() => {
       cameraReadyTimeoutRef.current = null;
       if (mounted.current) logger.info('[MRZ] Native kamera onCameraReady gecikti (ekran değişmedi)');
@@ -1617,7 +1653,7 @@ export default function MrzScanScreen({ navigation }) {
         cameraReadyTimeoutRef.current = null;
       }
     };
-  }, [mrzCameraMountReady, permission?.granted, cameraPreviewReady]);
+  }, [mrzCameraMountReady, permission?.granted, permissionGrantedLocal, cameraPreviewReady]);
 
   const docTypeForReader = Platform.OS === 'ios' ? DocType.Passport : selectedDocType;
 
