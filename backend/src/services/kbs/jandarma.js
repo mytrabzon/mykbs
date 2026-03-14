@@ -3,6 +3,9 @@ const axios = require('axios');
 const KBS_TIMEOUT_MS = 10000; // 10 saniye
 const KBS_RETRY_COUNT = 3;
 
+/** Jandarma KBS resmi namespace (tempuri.org geçici/örnek, kullanılmaz) */
+const JANDARMA_KBS_NS = 'http://jandarma.gov.tr/kbs';
+
 /** XML içinde kullanılacak metinleri escape et */
 function escapeXml(s) {
   if (s == null || s === '') return '';
@@ -23,22 +26,21 @@ function buildParametreListeleSoapEnvelope(tesisKodu, webServisSifre) {
   const s = escapeXml(webServisSifre);
   return [
     '<?xml version="1.0" encoding="utf-8"?>',
-    '<soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/" xmlns:tns="http://tempuri.org/">',
+    '<soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/">',
     '  <soap:Body>',
-    '    <tns:ParametreListele>',
-    '      <tns:TesisKodu>' + t + '</tns:TesisKodu>',
-    '      <tns:Sifre>' + s + '</tns:Sifre>',
-    '    </tns:ParametreListele>',
+    '    <ParametreListele xmlns="' + JANDARMA_KBS_NS + '">',
+    '      <TesisKodu>' + t + '</TesisKodu>',
+    '      <Sifre>' + s + '</Sifre>',
+    '    </ParametreListele>',
     '  </soap:Body>',
     '</soap:Envelope>'
   ].join('\n');
 }
 
 /**
- * Jandarma KBS – Misafir giriş bildirimi (SOAP). WSDL'deki operasyon adı dokümana göre ayarlanabilir.
+ * Jandarma KBS – Misafir giriş bildirimi (SOAP). Namespace: http://jandarma.gov.tr/kbs (tempuri.org kullanılmaz).
  */
 function buildMisafirGirisSoapEnvelope(tesisKodu, webServisSifre, misafir) {
-  const ns = 'http://tempuri.org/';
   const t = escapeXml(tesisKodu);
   const s = escapeXml(webServisSifre);
   const ad = escapeXml(misafir.ad);
@@ -52,31 +54,30 @@ function buildMisafirGirisSoapEnvelope(tesisKodu, webServisSifre, misafir) {
   const odaNo = escapeXml(misafir.odaNumarasi || '');
   return [
     '<?xml version="1.0" encoding="utf-8"?>',
-    '<soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/" xmlns:tns="' + ns + '">',
+    '<soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/">',
     '  <soap:Body>',
-    '    <tns:MisafirGiris>',
-    '      <tns:TesisKodu>' + t + '</tns:TesisKodu>',
-    '      <tns:Sifre>' + s + '</tns:Sifre>',
-    '      <tns:Ad>' + ad + '</tns:Ad>',
-    '      <tns:Ad2>' + ad2 + '</tns:Ad2>',
-    '      <tns:Soyad>' + soyad + '</tns:Soyad>',
-    '      <tns:TcKimlikNo>' + tcKimlikNo + '</tns:TcKimlikNo>',
-    '      <tns:PasaportNo>' + pasaportNo + '</tns:PasaportNo>',
-    '      <tns:DogumTarihi>' + dogumTarihi + '</tns:DogumTarihi>',
-    '      <tns:Uyruk>' + uyruk + '</tns:Uyruk>',
-    '      <tns:GirisTarihi>' + girisTarihi + '</tns:GirisTarihi>',
-    '      <tns:OdaNo>' + odaNo + '</tns:OdaNo>',
-    '    </tns:MisafirGiris>',
+    '    <MisafirGiris xmlns="' + JANDARMA_KBS_NS + '">',
+    '      <TesisKodu>' + t + '</TesisKodu>',
+    '      <Sifre>' + s + '</Sifre>',
+    '      <Ad>' + ad + '</Ad>',
+    '      <Ad2>' + ad2 + '</Ad2>',
+    '      <Soyad>' + soyad + '</Soyad>',
+    '      <TcKimlikNo>' + tcKimlikNo + '</TcKimlikNo>',
+    '      <PasaportNo>' + pasaportNo + '</PasaportNo>',
+    '      <DogumTarihi>' + dogumTarihi + '</DogumTarihi>',
+    '      <Uyruk>' + uyruk + '</Uyruk>',
+    '      <GirisTarihi>' + girisTarihi + '</GirisTarihi>',
+    '      <OdaNo>' + odaNo + '</OdaNo>',
+    '    </MisafirGiris>',
     '  </soap:Body>',
     '</soap:Envelope>'
   ].join('\n');
 }
 
 /**
- * Jandarma KBS – Misafir çıkış bildirimi (SOAP).
+ * Jandarma KBS – Misafir çıkış bildirimi (SOAP). Namespace: http://jandarma.gov.tr/kbs
  */
 function buildMisafirCikisSoapEnvelope(tesisKodu, webServisSifre, misafir) {
-  const ns = 'http://tempuri.org/';
   const t = escapeXml(tesisKodu);
   const s = escapeXml(webServisSifre);
   const tcKimlikNo = escapeXml(misafir.kimlikNo || '');
@@ -84,15 +85,15 @@ function buildMisafirCikisSoapEnvelope(tesisKodu, webServisSifre, misafir) {
   const cikisTarihi = escapeXml(misafir.cikisTarihi || '');
   return [
     '<?xml version="1.0" encoding="utf-8"?>',
-    '<soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/" xmlns:tns="' + ns + '">',
+    '<soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/">',
     '  <soap:Body>',
-    '    <tns:MisafirCikis>',
-    '      <tns:TesisKodu>' + t + '</tns:TesisKodu>',
-    '      <tns:Sifre>' + s + '</tns:Sifre>',
-    '      <tns:TcKimlikNo>' + tcKimlikNo + '</tns:TcKimlikNo>',
-    '      <tns:PasaportNo>' + pasaportNo + '</tns:PasaportNo>',
-    '      <tns:CikisTarihi>' + cikisTarihi + '</tns:CikisTarihi>',
-    '    </tns:MisafirCikis>',
+    '    <MisafirCikis xmlns="' + JANDARMA_KBS_NS + '">',
+    '      <TesisKodu>' + t + '</TesisKodu>',
+    '      <Sifre>' + s + '</Sifre>',
+    '      <TcKimlikNo>' + tcKimlikNo + '</TcKimlikNo>',
+    '      <PasaportNo>' + pasaportNo + '</PasaportNo>',
+    '      <CikisTarihi>' + cikisTarihi + '</CikisTarihi>',
+    '    </MisafirCikis>',
     '  </soap:Body>',
     '</soap:Envelope>'
   ].join('\n');
@@ -143,7 +144,7 @@ class JandarmaKBS {
     if (!this.baseURL) {
       return { success: false, message: 'JANDARMA_KBS_URL ortam değişkeni tanımlı değil. .env veya sunucu ayarlarında gerçek KBS adresini ekleyin.' };
     }
-    const soapAction = 'http://tempuri.org/ISrvShsYtkTml/ParametreListele';
+    const soapAction = JANDARMA_KBS_NS + '/IParametreListele';
     const body = buildParametreListeleSoapEnvelope(this.tesisKodu, this.webServisSifre);
     try {
       const response = await soapPost(this.baseURL, body, soapAction);
@@ -204,7 +205,7 @@ class JandarmaKBS {
     if (!this.baseURL) {
       return { success: false, durum: 'hatali', hataMesaji: 'JANDARMA_KBS_URL ortam değişkeni tanımlı değil.' };
     }
-    const soapAction = 'http://tempuri.org/ISrvShsYtkTml/MisafirGiris';
+    const soapAction = JANDARMA_KBS_NS + '/IMisafirGiris';
     const body = buildMisafirGirisSoapEnvelope(this.tesisKodu, this.webServisSifre, {
       ad: misafirData.ad,
       ad2: misafirData.ad2 || null,
@@ -253,7 +254,7 @@ class JandarmaKBS {
     if (!this.baseURL) {
       return { success: false, hataMesaji: 'JANDARMA_KBS_URL ortam değişkeni tanımlı değil.' };
     }
-    const soapAction = 'http://tempuri.org/ISrvShsYtkTml/MisafirCikis';
+    const soapAction = JANDARMA_KBS_NS + '/IMisafirCikis';
     const body = buildMisafirCikisSoapEnvelope(this.tesisKodu, this.webServisSifre, {
       kimlikNo: misafirData.kimlikNo || '',
       pasaportNo: misafirData.pasaportNo || '',
