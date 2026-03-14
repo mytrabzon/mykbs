@@ -16,6 +16,11 @@ function getTesisId(req) {
   return req.authSource === 'supabase' ? req.branchId : req.tesis.id;
 }
 
+function serializeKbsYanit(yanit) {
+  if (yanit == null) return null;
+  return typeof yanit === 'string' ? yanit : JSON.stringify(yanit);
+}
+
 function getTesisOrBranch(req) {
   if (req.authSource === 'supabase' && req.branch) {
     return {
@@ -148,7 +153,7 @@ router.post('/toplu-gonder', async (req, res) => {
               hataMesaji: kbsResult.hataMesaji || null,
               denemeSayisi: { increment: 1 },
               sonDenemeTarihi: new Date(),
-              kbsYanit: kbsResult.yanit || null
+              kbsYanit: serializeKbsYanit(kbsResult.yanit)
             }
           });
         } else {
@@ -159,7 +164,7 @@ router.post('/toplu-gonder', async (req, res) => {
               durum: kbsResult.durum,
               hataMesaji: kbsResult.hataMesaji || null,
               kbsTuru: getTesisOrBranch(req).kbsTuru,
-              kbsYanit: kbsResult.yanit || null
+              kbsYanit: serializeKbsYanit(kbsResult.yanit)
             }
           });
         }
@@ -260,7 +265,7 @@ router.post('/:bildirimId/tekrar-dene', async (req, res) => {
             hataMesaji: kbsResult.hataMesaji || null,
             denemeSayisi: { increment: 1 },
             sonDenemeTarihi: new Date(),
-            kbsYanit: kbsResult.yanit || null
+            kbsYanit: serializeKbsYanit(kbsResult.yanit)
           }
         });
 
