@@ -89,13 +89,23 @@ export default function KaydedilenlerScreen({ navigation, route }) {
     }
     setBildirLoading(true);
     try {
-      await api.post(`/okutulan-belgeler/${bildirItem.id}/bildir`, {
+      const res = await api.post(`/okutulan-belgeler/${bildirItem.id}/bildir`, {
         odaId: selectedOda.id,
         misafirTipi,
       });
+      const data = res?.data || {};
       const odaNo = selectedOda.odaNumarasi;
       dataService.invalidateOdalarCache?.();
-      Toast.show({ type: 'success', text1: 'KBS\'ye gönderildi', text2: `${bildirItem.ad} ${bildirItem.soyad} · Oda ${odaNo}` });
+      if (data.kbsGonderilemedi) {
+        Toast.show({
+          type: 'error',
+          text1: 'KBS\'ye iletilemedi',
+          text2: data.kbsBildirimi || data.message || 'Sunucuda KBS adresi tanımlı değil. Railway\'e JANDARMA_KBS_URL ekleyin.',
+          visibilityTime: 6000,
+        });
+      } else {
+        Toast.show({ type: 'success', text1: 'KBS\'ye gönderildi', text2: `${bildirItem.ad} ${bildirItem.soyad} · Oda ${odaNo}` });
+      }
       setBildirItem(null);
       load(true);
       navigation.navigate('MainTabs', { screen: 'Odalar', params: { filtre: 'dolu' } });

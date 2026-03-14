@@ -106,7 +106,7 @@ function throwIfNotOk(r: Response, data: Record<string, unknown> | null, default
   throw Object.assign(new Error(message), { response: { status, data: data ?? {} } });
 }
 
-const KBS_REQUEST_TIMEOUT_MS = 28000;
+const KBS_REQUEST_TIMEOUT_MS = 15000;
 
 /** Timeout ile fetch: süre aşımında abort eder, axios-benzeri hata fırlatır (loading kalkar). fetchWithLog ile log korunur. */
 async function fetchWithTimeout(url: string, opts: RequestInit, timeoutMs: number = KBS_REQUEST_TIMEOUT_MS): Promise<Response> {

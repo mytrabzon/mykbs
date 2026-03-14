@@ -379,22 +379,30 @@ export default function AyarlarScreen() {
     const kbsTuru = kbsSettings.kbsTuru || 'jandarma';
     const kbsTesisKodu = (kbsSettings.kbsTesisKodu || '').trim();
     const kbsWebServisSifre = (kbsSettings.kbsWebServisSifre || '').trim();
-    if (!kbsTesisKodu || !kbsWebServisSifre) {
-      Toast.show({ type: 'error', text1: 'Eksik alan', text2: 'KBS tesis kodu ve web servis şifresini girin.' });
+    if (!kbsTesisKodu) {
+      Toast.show({ type: 'error', text1: 'Eksik alan', text2: 'KBS tesis kodunu girin.' });
       return;
     }
-    if (kbsWebServisSifre === '********') {
-      Toast.show({ type: 'error', text1: 'Şifre gerekli', text2: 'Bağlantı testi için web servis şifresini yeniden yazın (kayıtlı şifre ile test yapılamaz).' });
+    if (!kbsWebServisSifre) {
+      Toast.show({ type: 'error', text1: 'Eksik alan', text2: 'Web servis şifresini girin veya önce Kaydet ile kaydedin.' });
       return;
     }
     kbsTestInProgressRef.current = true;
     setTestLoading(true);
     setTestResult(null);
+    const loadingGuard = setTimeout(() => {
+      if (kbsTestInProgressRef.current) {
+        kbsTestInProgressRef.current = false;
+        setTestLoading(false);
+        setTestResult({ success: false, message: 'İstek zaman aşımına uğradı. Sunucu veya interneti kontrol edin.' });
+        Toast.show({ type: 'error', text1: 'Zaman aşımı', text2: 'Bağlantı testi yanıt vermedi (15 sn).' });
+      }
+    }, 16000);
     try {
       const response = await api.post('/tesis/kbs/test', {
         kbsTuru,
         kbsTesisKodu,
-        kbsWebServisSifre,
+        kbsWebServisSifre: kbsWebServisSifre === '********' ? '********' : kbsWebServisSifre,
       });
       setTestResult(response.data);
       if (response.data.success) {
@@ -404,13 +412,14 @@ export default function AyarlarScreen() {
       }
     } catch (e) {
       const msg = e?.response?.data?.message || e?.message || '';
-      const isNetwork = /network|fetch|bağlantı|connection|failed/i.test(msg) || (e?.message && !e?.response);
+      const isNetwork = /network|fetch|bağlantı|connection|failed|zaman aşımı|timeout|abort/i.test(msg) || (e?.message && !e?.response);
       const userMsg = isNetwork
-        ? 'Backend\'e ulaşılamadı. EXPO_PUBLIC_BACKEND_URL ve interneti kontrol edin.'
+        ? (msg || 'Backend\'e ulaşılamadı. EXPO_PUBLIC_BACKEND_URL ve interneti kontrol edin.')
         : (msg || 'Test başarısız');
       Toast.show({ type: 'error', text1: isNetwork ? 'Bağlantı hatası' : 'Hata', text2: userMsg });
       setTestResult({ success: false, message: userMsg });
     } finally {
+      clearTimeout(loadingGuard);
       kbsTestInProgressRef.current = false;
       setTestLoading(false);
     }
@@ -422,22 +431,30 @@ export default function AyarlarScreen() {
     const kbsTuru = kbsSettings.kbsTuru || 'jandarma';
     const kbsTesisKodu = (kbsSettings.kbsTesisKodu || '').trim();
     const kbsWebServisSifre = (kbsSettings.kbsWebServisSifre || '').trim();
-    if (!kbsTesisKodu || !kbsWebServisSifre) {
-      Toast.show({ type: 'error', text1: 'Eksik alan', text2: 'KBS tesis kodu ve web servis şifresini girin.' });
+    if (!kbsTesisKodu) {
+      Toast.show({ type: 'error', text1: 'Eksik alan', text2: 'KBS tesis kodunu girin.' });
       return;
     }
-    if (kbsWebServisSifre === '********') {
-      Toast.show({ type: 'error', text1: 'Şifre gerekli', text2: 'Senkronizasyon için web servis şifresini yeniden yazın.' });
+    if (!kbsWebServisSifre) {
+      Toast.show({ type: 'error', text1: 'Eksik alan', text2: 'Web servis şifresini girin veya önce Kaydet ile kaydedin.' });
       return;
     }
     kbsImportInProgressRef.current = true;
     setKbsImportLoading(true);
     setKbsImportResult(null);
+    const loadingGuard = setTimeout(() => {
+      if (kbsImportInProgressRef.current) {
+        kbsImportInProgressRef.current = false;
+        setKbsImportLoading(false);
+        setKbsImportResult({ error: 'İstek zaman aşımına uğradı.' });
+        Toast.show({ type: 'error', text1: 'Zaman aşımı', text2: 'Senkronizasyon yanıt vermedi (15 sn).' });
+      }
+    }, 16000);
     try {
       const response = await api.post('/tesis/kbs/import', {
         kbsTuru,
         kbsTesisKodu,
-        kbsWebServisSifre,
+        kbsWebServisSifre: kbsWebServisSifre === '********' ? '********' : kbsWebServisSifre,
       });
       const data = response.data || {};
       setKbsImportResult(data);
@@ -454,6 +471,7 @@ export default function AyarlarScreen() {
       setKbsImportResult({ error: errMsg });
       Toast.show({ type: 'error', text1: 'KBS aktarımı', text2: errMsg, visibilityTime: 5000 });
     } finally {
+      clearTimeout(loadingGuard);
       kbsImportInProgressRef.current = false;
       setKbsImportLoading(false);
     }
@@ -467,6 +485,10 @@ export default function AyarlarScreen() {
       return;
     }
     setLoading(true);
+    const loadingGuard = setTimeout(() => {
+      setLoading(false);
+      Toast.show({ type: 'error', text1: 'Zaman aşımı', text2: 'Kaydetme yanıt vermedi (15 sn). Sunucu ve interneti kontrol edin.' });
+    }, 16000);
     try {
       await api.put('/tesis/kbs', {
         ...kbsSettings,
@@ -479,6 +501,7 @@ export default function AyarlarScreen() {
     } catch (e) {
       Toast.show({ type: 'error', text1: 'Hata', text2: e?.response?.data?.message || 'İşlem başarısız' });
     } finally {
+      clearTimeout(loadingGuard);
       setLoading(false);
     }
   };

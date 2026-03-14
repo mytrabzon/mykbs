@@ -372,7 +372,9 @@ router.post('/kbs/talebi', async (req, res) => {
 router.post('/kbs/test', async (req, res) => {
   try {
     const bodyKbs = req.body && typeof req.body === 'object' ? req.body : {};
-    const fromBody = bodyKbs.kbsTuru && bodyKbs.kbsTesisKodu && bodyKbs.kbsWebServisSifre;
+    const sifreFromBody = (bodyKbs.kbsWebServisSifre || '').toString().trim();
+    const useStoredPassword = !sifreFromBody || sifreFromBody === '********';
+    const fromBody = bodyKbs.kbsTuru && bodyKbs.kbsTesisKodu && bodyKbs.kbsWebServisSifre && !useStoredPassword;
 
     let tesisLike;
     if (req.authSource === 'supabase') {
@@ -451,7 +453,9 @@ router.post('/kbs/import', async (req, res) => {
     }
 
     const bodyKbs = req.body && typeof req.body === 'object' ? req.body : {};
-    const fromBody = bodyKbs.kbsTuru && bodyKbs.kbsTesisKodu && bodyKbs.kbsWebServisSifre;
+    const sifreFromBody = (bodyKbs.kbsWebServisSifre || '').toString().trim();
+    const useStoredPassword = !sifreFromBody || sifreFromBody === '********';
+    const fromBody = bodyKbs.kbsTuru && bodyKbs.kbsTesisKodu && bodyKbs.kbsWebServisSifre && !useStoredPassword;
 
     const tesisId = req.authSource === 'supabase' ? req.branchId : req.tesis.id;
     let tesisLike;

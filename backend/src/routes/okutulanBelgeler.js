@@ -37,6 +37,14 @@ function getKullaniciId(req) {
   return req.user?.id ?? req.user?.sub ?? null;
 }
 
+/** Sunucuda ilgili KBS URL tanımlı mı? (jandarma -> JANDARMA_KBS_URL, polis -> POLIS_KBS_URL) */
+function isKbsUrlConfigured(kbsTuru) {
+  const t = (kbsTuru || '').toString().trim().toLowerCase();
+  if (t === 'jandarma') return !!(process.env.JANDARMA_KBS_URL || '').trim();
+  if (t === 'polis') return !!(process.env.POLIS_KBS_URL || '').trim();
+  return false;
+}
+
 /** KBS / paket kontrolleri için tesis veya branch. */
 function getTesisOrBranch(req) {
   if (req.authSource === 'supabase' && req.branch) {
@@ -332,7 +340,8 @@ router.post('/:id/bildir', express.json(), async (req, res) => {
     });
 
     const tesisSnapshot = getTesisOrBranch(req);
-    if (tesisSnapshot.kbsTuru && tesisSnapshot.kbsTesisKodu && tesisSnapshot.kbsWebServisSifre) {
+    const kbsUrlConfigured = isKbsUrlConfigured(tesisSnapshot.kbsTuru);
+    if (tesisSnapshot.kbsTuru && tesisSnapshot.kbsTesisKodu && tesisSnapshot.kbsWebServisSifre && kbsUrlConfigured) {
       setImmediate(async () => {
         try {
           const kbsService = createKBSService(tesisSnapshot);
@@ -377,6 +386,17 @@ router.post('/:id/bildir', express.json(), async (req, res) => {
           });
         }
       });
+    } else if (tesisSnapshot.kbsTuru && tesisSnapshot.kbsTesisKodu && tesisSnapshot.kbsWebServisSifre && !kbsUrlConfigured) {
+      const urlVar = (tesisSnapshot.kbsTuru || '').toString().trim().toLowerCase() === 'polis' ? 'POLIS_KBS_URL' : 'JANDARMA_KBS_URL';
+      await prisma.bildirim.update({
+        where: { id: bildirim.id },
+        data: {
+          durum: 'hatali',
+          hataMesaji: `Sunucuda ${urlVar} tanımlı değil. Railway Variables'a ekleyip servisi yeniden başlatın.`,
+          denemeSayisi: 1,
+          sonDenemeTarihi: new Date(),
+        },
+      });
     }
 
     await prisma.okutulanBelge.update({
@@ -384,13 +404,20 @@ router.post('/:id/bildir', express.json(), async (req, res) => {
       data: { bildirildi: true, odaNo: oda.odaNumarasi },
     });
 
+    const kbsMessage = !tesisSnapshot.kbsTuru
+      ? 'KBS yapılandırılmamış'
+      : !kbsUrlConfigured
+        ? `Bildirim kaydedildi ancak sunucuda KBS adresi (${(tesisSnapshot.kbsTuru || '').toString().toLowerCase() === 'polis' ? 'POLIS_KBS_URL' : 'JANDARMA_KBS_URL'}) tanımlı değil; KBS'ye iletilemedi. Railway Variables'a ekleyip yeniden başlatın.`
+        : 'Bildirim arka planda gönderiliyor';
+
     return res.status(201).json({
       ok: true,
-      message: 'KBS\'ye bildirim gönderildi',
+      message: kbsUrlConfigured ? 'KBS\'ye bildirim gönderildi' : 'Bildirim kaydedildi; KBS\'ye iletilemedi (sunucu ayarı eksik).',
       misafirId: misafir.id,
       bildirimId: bildirim.id,
       odaNumarasi: oda.odaNumarasi,
-      kbsBildirimi: tesisSnapshot.kbsTuru ? 'Bildirim arka planda gönderiliyor' : 'KBS yapılandırılmamış'
+      kbsBildirimi: kbsMessage,
+      kbsGonderilemedi: !kbsUrlConfigured && !!tesisSnapshot.kbsTuru,
     });
   } catch (e) {
     console.error('[okutulan-belgeler] bildir error:', e);
