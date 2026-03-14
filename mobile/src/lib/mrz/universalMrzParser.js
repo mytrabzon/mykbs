@@ -70,7 +70,12 @@ export class UniversalMrzParser {
     const line1 = (lines[0] || '').padEnd(30, '<').substring(0, 30);
     const line2 = (lines[1] || '').padEnd(30, '<').substring(0, 30);
     const line3 = (lines[2] || '').padEnd(30, '<').substring(0, 30);
-    const nameParts = line3.split(/<+/).map((s) => s.replace(/</g, ' ').trim()).filter(Boolean);
+    // TD1 satır 3: SOYAD<<AD<<BABA<<ANA (<< ile ayrı; baba/ana ayrı tutulur, karıştırılmaz)
+    const nameParts = line3.split('<<').map((s) => s.replace(/</g, ' ').trim());
+    const surname = (nameParts[0] || '').trim();
+    const ad = (nameParts[1] || '').trim();
+    const babaAdi = (nameParts[2] || '').trim();
+    const anaAdi = (nameParts[3] || '').trim();
     const personalNumber = line2.substring(18, 29).replace(/</g, '').trim() || null;
     return {
       format: 'TD1',
@@ -82,8 +87,10 @@ export class UniversalMrzParser {
       sex: line2.substring(7, 8),
       expiryDate: this.formatDate(line2.substring(8, 14)),
       nationality: line2.substring(15, 18).replace(/</g, '').trim(),
-      surname: (nameParts[0] || '').trim(),
-      givenName: (nameParts.slice(1).join(' ') || '').trim(),
+      surname,
+      givenName: ad,
+      babaAdi: babaAdi || undefined,
+      anaAdi: anaAdi || undefined,
     };
   }
 
@@ -142,6 +149,8 @@ export function universalParsedToPayload(parsed, rawMrz = '') {
     soyad: parsed.surname,
     givenNames: parsed.givenName,
     ad: parsed.givenName,
+    babaAdi: parsed.babaAdi ?? '',
+    anaAdi: parsed.anaAdi ?? '',
     birthDate: parsed.birthDate,
     expiryDate: parsed.expiryDate,
     sonKullanma: parsed.expiryDate,

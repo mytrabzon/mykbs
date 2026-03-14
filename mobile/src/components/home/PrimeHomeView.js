@@ -180,7 +180,13 @@ export default function PrimeHomeView({
       nestedScrollEnabled
       refreshControl={
         onRefresh ? (
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[colors.primary]} tintColor={colors.primary} />
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            colors={[colors.primary]}
+            tintColor="#FFF"
+            progressBackgroundColor="rgba(255,255,255,0.3)"
+          />
         ) : undefined
       }
       showsVerticalScrollIndicator={false}
@@ -233,6 +239,17 @@ export default function PrimeHomeView({
                 <View style={styles.adminBadge}>
                   <Text style={styles.adminBadgeText}>A</Text>
                 </View>
+              </TouchableOpacity>
+            )}
+            {typeof onRefresh === 'function' && (
+              <TouchableOpacity
+                style={styles.iconButtonHeader}
+                onPress={onRefresh}
+                activeOpacity={0.7}
+                disabled={refreshing}
+                accessibilityLabel={t('home.refresh') || 'Yenile'}
+              >
+                <Ionicons name="refresh" size={22} color="#FFF" />
               </TouchableOpacity>
             )}
             <TouchableOpacity

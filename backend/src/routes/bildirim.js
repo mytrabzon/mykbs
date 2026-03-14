@@ -133,6 +133,7 @@ router.post('/toplu-gonder', async (req, res) => {
         const kbsResult = await kbsService.bildirimGonder({
           ad: misafir.ad,
           ad2: misafir.ad2 || null,
+          anaAdi: misafir.anaAdi || null,
           soyad: misafir.soyad,
           kimlikNo: misafir.kimlikNo,
           pasaportNo: misafir.pasaportNo,
@@ -248,6 +249,7 @@ router.post('/:bildirimId/tekrar-dene', async (req, res) => {
         const kbsResult = await kbsService.bildirimGonder({
           ad: bildirim.misafir.ad,
           ad2: bildirim.misafir.ad2 || null,
+          anaAdi: bildirim.misafir.anaAdi || null,
           soyad: bildirim.misafir.soyad,
           kimlikNo: bildirim.misafir.kimlikNo,
           pasaportNo: bildirim.misafir.pasaportNo,

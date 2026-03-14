@@ -48,7 +48,8 @@ export default function CheckInScreen({ navigation, route }) {
   const [selectedOda, setSelectedOda] = useState(null);
   const [formData, setFormData] = useState({
     ad: '',
-    ad2: '',
+    ad2: '', // baba adı (MRZ/KBS için ayrı, karıştırma)
+    anaAdi: '',
     soyad: '',
     kimlikNo: '',
     pasaportNo: '',
@@ -136,7 +137,8 @@ export default function CheckInScreen({ navigation, route }) {
         setFormData(prev => ({
           ...prev,
           ad: (doc.ad || '').trim() || prev.ad,
-          ad2: (doc.ad2 || '').trim() || prev.ad2,
+          ad2: (doc.ad2 || doc.babaAdi || '').trim() || prev.ad2,
+          anaAdi: (doc.anaAdi || '').trim() || prev.anaAdi,
           soyad: (doc.soyad || '').trim() || prev.soyad,
           kimlikNo: (doc.kimlikNo || '').trim() || prev.kimlikNo,
           pasaportNo: (doc.pasaportNo || '').trim() || prev.pasaportNo,
@@ -166,8 +168,9 @@ export default function CheckInScreen({ navigation, route }) {
       const nameParts = givenNames ? givenNames.split(/\s+/) : [];
       setFormData(prev => ({
         ...prev,
-        ad: nameParts[0] || '',
-        ad2: nameParts.length > 1 ? nameParts.slice(1).join(' ') : prev.ad2,
+        ad: (p.ad || nameParts[0] || '').trim(),
+        ad2: (p.babaAdi ?? (nameParts.length > 1 ? nameParts.slice(1).join(' ') : '')).trim() || prev.ad2,
+        anaAdi: (p.anaAdi ?? '').trim() || prev.anaAdi,
         soyad: (p.surname || '').trim(),
         pasaportNo: (p.passportNumber || '').trim(),
         kimlikNo: /^\d{11}$/.test((p.passportNumber || '').trim()) ? (p.passportNumber || '').trim() : prev.kimlikNo,
@@ -374,6 +377,7 @@ export default function CheckInScreen({ navigation, route }) {
         room_number: odaNo,
         ad: formData.ad,
         ad2: formData.ad2 || undefined,
+        anaAdi: formData.anaAdi || undefined,
         soyad: formData.soyad,
         kimlikNo: formData.kimlikNo || undefined,
         pasaportNo: formData.pasaportNo || undefined,
@@ -788,8 +792,12 @@ export default function CheckInScreen({ navigation, route }) {
             <Text style={styles.transparentInfoValue}>{formData.ad || '—'}</Text>
           </View>
           <View style={styles.transparentInfoRow}>
-            <Text style={styles.transparentInfoLabel}>2. Ad</Text>
+            <Text style={styles.transparentInfoLabel}>Baba adı</Text>
             <Text style={styles.transparentInfoValue}>{formData.ad2 || '—'}</Text>
+          </View>
+          <View style={styles.transparentInfoRow}>
+            <Text style={styles.transparentInfoLabel}>Ana adı</Text>
+            <Text style={styles.transparentInfoValue}>{formData.anaAdi || '—'}</Text>
           </View>
           <View style={styles.transparentInfoRow}>
             <Text style={styles.transparentInfoLabel}>Soyad</Text>
@@ -839,14 +847,27 @@ export default function CheckInScreen({ navigation, route }) {
 
           <View style={styles.inputGroup}>
             <Text style={styles.inputLabel}>
-              <Ionicons name="person-outline" size={16} color={theme.colors.textSecondary} /> 2. Ad
+              <Ionicons name="person-outline" size={16} color={theme.colors.textSecondary} /> Baba adı
             </Text>
             <TextInput
               style={styles.input}
-              placeholder="İkinci ad (opsiyonel)"
+              placeholder="Baba adı (MRZ’den gelir)"
               placeholderTextColor={theme.colors.textDisabled}
               value={formData.ad2}
               onChangeText={(text) => setFormData({ ...formData, ad2: text })}
+            />
+          </View>
+
+          <View style={styles.inputGroup}>
+            <Text style={styles.inputLabel}>
+              <Ionicons name="person-outline" size={16} color={theme.colors.textSecondary} /> Ana adı
+            </Text>
+            <TextInput
+              style={styles.input}
+              placeholder="Ana adı (MRZ’den gelir)"
+              placeholderTextColor={theme.colors.textDisabled}
+              value={formData.anaAdi}
+              onChangeText={(text) => setFormData({ ...formData, anaAdi: text })}
             />
           </View>
 

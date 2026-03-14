@@ -34,6 +34,7 @@ function createKBSClient(branch) {
       const result = await kbsService.bildirimGonder({
         ad: payload.ad,
         ad2: payload.ad2 || null,
+        anaAdi: payload.anaAdi || null,
         soyad: payload.soyad,
         kimlikNo: payload.kimlikNo || null,
         pasaportNo: payload.pasaportNo || null,

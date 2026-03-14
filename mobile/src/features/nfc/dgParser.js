@@ -51,9 +51,11 @@ function parseDG1(dg1Buffer) {
       const nationality = (line2.substring(15, 18) || '').replace(/</g, '') || 'TUR';
       const personalNumber = (line2.substring(18, 30) || '').replace(/</g, '').trim(); // TC No
       const nameBlock = (line3 || '').replace(/</g, ' ');
-      const nameParts = nameBlock.split(/\s*<<\s*/).map((s) => s.trim()).filter(Boolean);
+      const nameParts = nameBlock.split(/\s*<<\s*/).map((s) => s.trim());
       const surname = nameParts[0] || '';
-      const givenName = nameParts.slice(1).join(' ') || '';
+      const ad = nameParts[1] || '';
+      const babaAdi = nameParts[2] || '';
+      const anaAdi = nameParts[3] || '';
       return {
         documentType: docType,
         issuingCountry: issuingCountry,
@@ -64,7 +66,9 @@ function parseDG1(dg1Buffer) {
         expiryDate: expiryDate || '',
         nationality,
         surname,
-        givenName,
+        givenName: ad,
+        babaAdi: babaAdi || undefined,
+        anaAdi: anaAdi || undefined,
       };
     }
   }

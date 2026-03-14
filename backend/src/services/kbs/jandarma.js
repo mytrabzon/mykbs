@@ -61,12 +61,14 @@ function buildParametreListeleSoapEnvelope(tesisKodu, webServisSifre) {
 
 /**
  * Jandarma KBS – Misafir giriş bildirimi (SOAP). Namespace: http://jandarma.gov.tr/kbs (tempuri.org kullanılmaz).
+ * Ad = ad, Ad2 = baba adı, AnaAdi = ana adı (ayrı; karıştırılmaz).
  */
 function buildMisafirGirisSoapEnvelope(tesisKodu, webServisSifre, misafir) {
   const t = escapeXml(tesisKodu);
   const s = escapeXml(webServisSifre);
   const ad = escapeXml(misafir.ad);
   const ad2 = escapeXml(misafir.ad2 || '');
+  const anaAdi = escapeXml(misafir.anaAdi || '');
   const soyad = escapeXml(misafir.soyad);
   const tcKimlikNo = escapeXml(misafir.kimlikNo || '');
   const pasaportNo = escapeXml(misafir.pasaportNo || '');
@@ -83,6 +85,7 @@ function buildMisafirGirisSoapEnvelope(tesisKodu, webServisSifre, misafir) {
     '      <Sifre>' + s + '</Sifre>',
     '      <Ad>' + ad + '</Ad>',
     '      <Ad2>' + ad2 + '</Ad2>',
+    '      <AnaAdi>' + anaAdi + '</AnaAdi>',
     '      <Soyad>' + soyad + '</Soyad>',
     '      <TcKimlikNo>' + tcKimlikNo + '</TcKimlikNo>',
     '      <PasaportNo>' + pasaportNo + '</PasaportNo>',
@@ -244,10 +247,12 @@ class JandarmaKBS {
     if (!misafirData.girisTarihi) {
       return { success: false, durum: 'hatali', hataMesaji: 'Jandarma KBS için giriş tarihi zorunludur.' };
     }
-    const soapAction = JANDARMA_KBS_NS + '/IMisafirGiris';
+    // ContractFilter mismatch hatası alırsanız WCF bazen operasyon adı bekler: /MisafirGiris. Eski: /IMisafirGiris
+    const soapAction = JANDARMA_KBS_NS + '/MisafirGiris';
     const body = buildMisafirGirisSoapEnvelope(this.tesisKodu, this.webServisSifre, {
       ad: misafirData.ad,
       ad2: misafirData.ad2 || null,
+      anaAdi: misafirData.anaAdi || null,
       soyad: misafirData.soyad,
       kimlikNo: misafirData.kimlikNo || null,
       pasaportNo: misafirData.pasaportNo || null,

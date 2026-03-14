@@ -380,7 +380,7 @@ export default function OdalarScreen({ route }) {
     });
   };
 
-  const loadData = useCallback(async (isInitial = false) => {
+  const loadData = useCallback(async (isInitial = false, forceRefresh = false) => {
     const LOAD_STEP = { START: 'start', TESIS_CACHE: 'tesis_cache', ODALAR_CACHE: 'odalar_cache', TESIS_FRESH: 'tesis_fresh', ODALAR_FRESH: 'odalar_fresh', APPLY: 'apply' };
     let lastLoadStep = LOAD_STEP.START;
     try {
@@ -394,40 +394,19 @@ export default function OdalarScreen({ route }) {
           setRefreshing(false);
           logger.warn('[OdalarScreen] loadData timeout – showing screen so user is not stuck');
         }, 10000);
-      } else {
+      } else if (!forceRefresh) {
         setFilterLoading(true);
       }
       const apiFiltre = filtre === 'cikisaYakin' ? 'dolu' : filtre;
-      logger.log('[OdalarScreen] loadData başladı', { filtre, apiFiltre, isInitial });
+      logger.log('[OdalarScreen] loadData başladı', { filtre, apiFiltre, isInitial, forceRefresh });
 
       let tesis = null;
       let odalar = [];
 
       try {
-        lastLoadStep = LOAD_STEP.TESIS_CACHE;
-        logger.log('[OdalarScreen] adım: tesis (cache)', { step: lastLoadStep });
-        tesis = await dataService.getTesis(false);
-        lastLoadStep = LOAD_STEP.ODALAR_CACHE;
-        logger.log('[OdalarScreen] adım: odalar (cache)', { step: lastLoadStep, apiFiltre });
-        odalar = await dataService.getOdalar(apiFiltre, false);
-
-        if (tesis && odalar.length > 0) {
-          logger.log('[OdalarScreen] cache dolu, ekranda gösteriliyor; arka planda taze veri çekiliyor', { odaCount: odalar.length });
-          setOzet(tesis.ozet);
-          setOdalar(odalar);
-          Promise.all([
-            dataService.getTesis(true).catch((e) => { logger.warn('[OdalarScreen] silent refresh tesis hatası', e?.message || e); }),
-            dataService.getOdalar(apiFiltre, true).catch((e) => { logger.warn('[OdalarScreen] silent refresh odalar hatası', e?.message || e, e?.step); })
-          ]).then(([freshTesis, freshOdalar]) => {
-            if (freshTesis && freshOdalar) {
-              logger.log('[OdalarScreen] silent refresh tamamlandı', { odaCount: freshOdalar.length });
-              setOzet(freshTesis.ozet);
-              setOdalar(freshOdalar);
-            }
-          }).catch((e) => { logger.warn('[OdalarScreen] silent refresh genel hata', e?.message || e); });
-        } else {
+        if (forceRefresh) {
           lastLoadStep = LOAD_STEP.TESIS_FRESH;
-          logger.log('[OdalarScreen] cache yok/boş, API ile taze veri', { step: lastLoadStep });
+          logger.log('[OdalarScreen] manuel yenileme: doğrudan taze veri', { step: lastLoadStep });
           const [freshTesis, freshOdalar] = await Promise.all([
             dataService.getTesis(true),
             dataService.getOdalar(apiFiltre, true)
@@ -436,6 +415,40 @@ export default function OdalarScreen({ route }) {
           tesis = freshTesis;
           odalar = freshOdalar || [];
           logger.log('[OdalarScreen] taze veri alındı', { step: lastLoadStep, odaCount: odalar?.length ?? 0 });
+        } else {
+          lastLoadStep = LOAD_STEP.TESIS_CACHE;
+          logger.log('[OdalarScreen] adım: tesis (cache)', { step: lastLoadStep });
+          tesis = await dataService.getTesis(false);
+          lastLoadStep = LOAD_STEP.ODALAR_CACHE;
+          logger.log('[OdalarScreen] adım: odalar (cache)', { step: lastLoadStep, apiFiltre });
+          odalar = await dataService.getOdalar(apiFiltre, false);
+
+          if (tesis && odalar.length > 0) {
+            logger.log('[OdalarScreen] cache dolu, ekranda gösteriliyor; arka planda taze veri çekiliyor', { odaCount: odalar.length });
+            setOzet(tesis.ozet);
+            setOdalar(odalar);
+            Promise.all([
+              dataService.getTesis(true).catch((e) => { logger.warn('[OdalarScreen] silent refresh tesis hatası', e?.message || e); }),
+              dataService.getOdalar(apiFiltre, true).catch((e) => { logger.warn('[OdalarScreen] silent refresh odalar hatası', e?.message || e, e?.step); })
+            ]).then(([freshTesis, freshOdalar]) => {
+              if (freshTesis && freshOdalar) {
+                logger.log('[OdalarScreen] silent refresh tamamlandı', { odaCount: freshOdalar.length });
+                setOzet(freshTesis.ozet);
+                setOdalar(freshOdalar);
+              }
+            }).catch((e) => { logger.warn('[OdalarScreen] silent refresh genel hata', e?.message || e); });
+          } else {
+            lastLoadStep = LOAD_STEP.TESIS_FRESH;
+            logger.log('[OdalarScreen] cache yok/boş, API ile taze veri', { step: lastLoadStep });
+            const [freshTesis, freshOdalar] = await Promise.all([
+              dataService.getTesis(true),
+              dataService.getOdalar(apiFiltre, true)
+            ]);
+            lastLoadStep = LOAD_STEP.ODALAR_FRESH;
+            tesis = freshTesis;
+            odalar = freshOdalar || [];
+            logger.log('[OdalarScreen] taze veri alındı', { step: lastLoadStep, odaCount: odalar?.length ?? 0 });
+          }
         }
       } catch (apiError) {
         const step = apiError?.step ?? lastLoadStep;
@@ -551,7 +564,7 @@ export default function OdalarScreen({ route }) {
 
   const onRefresh = useCallback(() => {
     setRefreshing(true);
-    loadData(false);
+    loadData(false, true);
   }, [loadData]);
 
   // Memoized helper functions

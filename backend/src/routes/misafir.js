@@ -103,7 +103,7 @@ router.post('/checkin', async (req, res) => {
       return res.status(403).json({ message: 'Check-in yetkiniz yok' });
     }
 
-    const { odaId, ad, ad2, soyad, kimlikNo, pasaportNo, dogumTarihi, uyruk, misafirTipi } = req.body;
+    const { odaId, ad, ad2, anaAdi, soyad, kimlikNo, pasaportNo, dogumTarihi, uyruk, misafirTipi } = req.body;
     const tesisId = getTesisId(req);
 
     if (!odaId || !ad || !soyad || !dogumTarihi || !uyruk) {
@@ -141,6 +141,7 @@ router.post('/checkin', async (req, res) => {
         odaId,
         ad,
         ad2: ad2 || null,
+        anaAdi: anaAdi || null,
         soyad,
         kimlikNo: kimlikNo || null,
         pasaportNo: pasaportNo || null,
@@ -177,6 +178,7 @@ router.post('/checkin', async (req, res) => {
           const kbsResult = await kbsService.bildirimGonder({
             ad: misafir.ad,
             ad2: misafir.ad2 || null,
+            anaAdi: misafir.anaAdi || null,
             soyad: misafir.soyad,
             kimlikNo: misafir.kimlikNo,
             pasaportNo: misafir.pasaportNo,
@@ -369,6 +371,7 @@ router.post('/manuel-bildirim', async (req, res) => {
           const kbsResult = await kbsService.bildirimGonder({
             ad: misafir.ad,
             ad2: misafir.ad2 || null,
+            anaAdi: misafir.anaAdi || null,
             soyad: misafir.soyad,
             kimlikNo: misafir.kimlikNo,
             pasaportNo: misafir.pasaportNo,
