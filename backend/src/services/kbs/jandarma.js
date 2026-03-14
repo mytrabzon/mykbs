@@ -17,6 +17,28 @@ function escapeXml(s) {
     .replace(/'/g, '&apos;');
 }
 
+/** Jandarma KBS tarih formatı: DD.MM.YYYY (doğum tarihi vb.) */
+function formatDateForKbs(value) {
+  if (value == null || value === '') return '';
+  const d = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(d.getTime())) return String(value).trim();
+  const day = String(d.getDate()).padStart(2, '0');
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const year = d.getFullYear();
+  return `${day}.${month}.${year}`;
+}
+
+/** Jandarma KBS tarih-saat formatı: DD.MM.YYYY HH:mm (giriş/çıkış) */
+function formatDateTimeForKbs(value) {
+  if (value == null || value === '') return '';
+  const d = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(d.getTime())) return String(value).trim();
+  const datePart = formatDateForKbs(d);
+  const hours = String(d.getHours()).padStart(2, '0');
+  const minutes = String(d.getMinutes()).padStart(2, '0');
+  return `${datePart} ${hours}:${minutes}`;
+}
+
 /**
  * Jandarma KBS SOAP servisi – bağlantı testi için ParametreListele SOAP isteği.
  * Resmi servis: https://vatandas.jandarma.gov.tr/KBS_Tesis_Servis/SrvShsYtkTml.svc (SOAP/WCF)
@@ -48,9 +70,9 @@ function buildMisafirGirisSoapEnvelope(tesisKodu, webServisSifre, misafir) {
   const soyad = escapeXml(misafir.soyad);
   const tcKimlikNo = escapeXml(misafir.kimlikNo || '');
   const pasaportNo = escapeXml(misafir.pasaportNo || '');
-  const dogumTarihi = escapeXml(misafir.dogumTarihi || '');
+  const dogumTarihi = escapeXml(formatDateForKbs(misafir.dogumTarihi) || '');
   const uyruk = escapeXml(misafir.uyruk || 'TÜRK');
-  const girisTarihi = escapeXml(misafir.girisTarihi || '');
+  const girisTarihi = escapeXml(formatDateTimeForKbs(misafir.girisTarihi) || '');
   const odaNo = escapeXml(misafir.odaNumarasi || '');
   return [
     '<?xml version="1.0" encoding="utf-8"?>',
@@ -82,7 +104,7 @@ function buildMisafirCikisSoapEnvelope(tesisKodu, webServisSifre, misafir) {
   const s = escapeXml(webServisSifre);
   const tcKimlikNo = escapeXml(misafir.kimlikNo || '');
   const pasaportNo = escapeXml(misafir.pasaportNo || '');
-  const cikisTarihi = escapeXml(misafir.cikisTarihi || '');
+  const cikisTarihi = escapeXml(formatDateTimeForKbs(misafir.cikisTarihi) || '');
   return [
     '<?xml version="1.0" encoding="utf-8"?>',
     '<soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/">',
@@ -200,10 +222,27 @@ class JandarmaKBS {
 
   /**
    * Misafir bildirimi gönder (SOAP MisafirGiris). 3 deneme, 10 sn timeout.
+   * Jandarma KBS zorunlu alanlar: Ad, Soyad; TcKimlikNo veya PasaportNo (en az biri); Doğum Tarihi; Giriş Tarihi.
    */
   async bildirimGonder(misafirData) {
     if (!this.baseURL) {
       return { success: false, durum: 'hatali', hataMesaji: 'JANDARMA_KBS_URL ortam değişkeni tanımlı değil.' };
+    }
+    const ad = (misafirData.ad && String(misafirData.ad).trim()) || '';
+    const soyad = (misafirData.soyad && String(misafirData.soyad).trim()) || '';
+    const kimlikNo = (misafirData.kimlikNo && String(misafirData.kimlikNo).trim()) || '';
+    const pasaportNo = (misafirData.pasaportNo && String(misafirData.pasaportNo).trim()) || '';
+    if (!ad || !soyad) {
+      return { success: false, durum: 'hatali', hataMesaji: 'Jandarma KBS için ad ve soyad zorunludur.' };
+    }
+    if (!kimlikNo && !pasaportNo) {
+      return { success: false, durum: 'hatali', hataMesaji: 'Jandarma KBS için TC kimlik no veya pasaport no zorunludur (en az biri).' };
+    }
+    if (!misafirData.dogumTarihi) {
+      return { success: false, durum: 'hatali', hataMesaji: 'Jandarma KBS için doğum tarihi zorunludur.' };
+    }
+    if (!misafirData.girisTarihi) {
+      return { success: false, durum: 'hatali', hataMesaji: 'Jandarma KBS için giriş tarihi zorunludur.' };
     }
     const soapAction = JANDARMA_KBS_NS + '/IMisafirGiris';
     const body = buildMisafirGirisSoapEnvelope(this.tesisKodu, this.webServisSifre, {
